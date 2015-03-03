@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "dependencies": {
+    "bower": "*",
+    "grunt-purescript": "*",
+    "grunt-cli": "*",
+    "jquery": "*"
+  }
+}

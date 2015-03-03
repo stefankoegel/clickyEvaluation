@@ -1,0 +1,26 @@
+{
+  "private": true,
+  "name": "clickyEvaluation",
+  "version": "0.1.0",
+  "description": "Visual tool for stepwise evaluation of simple Haskell expressions",
+  "main": "src/Main.purs",
+  "authors": [
+    "Stefan Kögel"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "html/dist/*"
+  ],
+  "dependencies": {
+    "purescript-arrays": "*",
+    "purescript-jquery": "*",
+    "purescript-foreign": "*",
+    "purescript-parsing": "*",
+    "purescript-globals": "*",
+    "purescript-math": "*",
+    "purescript-maps": "*"
+  }
+}
