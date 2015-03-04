@@ -11,7 +11,7 @@ data Atom = Num Number
 
 data Expr = Atom Atom
           | List [Expr]
-          | Infix Expr Op Expr
+          | Binary Op Expr Expr
           | SectL Expr Op
           | SectR Op Expr
           | App String [Expr]
@@ -40,12 +40,12 @@ instance showAtom :: Show Atom where
 
 instance showExpr :: Show Expr where
   show expr = case expr of
-    Atom atom      -> "(Atom " ++ show atom ++ ")"
-    List ls        -> "(List [" ++ joinWith ", " (show <$> ls) ++ "])"
-    Infix e1 op e2 -> "(Infix " ++ show e1 ++ " " ++ show op ++ " " ++ show e2 ++ ")"
-    SectL expr op  -> "(SectL" ++ show expr ++ " " ++ show op ++ ")"
-    SectR op expr  -> "(SectR" ++ show op ++ " " ++ show expr ++ ")"
-    App name args  -> "(App " ++ name ++ " [" ++ joinWith ", " (show <$> args) ++ "])"
+    Atom atom       -> "(Atom " ++ show atom ++ ")"
+    List ls         -> "(List [" ++ joinWith ", " (show <$> ls) ++ "])"
+    Binary op e1 e2 -> "(Binary " ++ show e1 ++ " " ++ show op ++ " " ++ show e2 ++ ")"
+    SectL expr op   -> "(SectL" ++ show expr ++ " " ++ show op ++ ")"
+    SectR op expr   -> "(SectR" ++ show op ++ " " ++ show expr ++ ")"
+    App name args   -> "(App " ++ name ++ " [" ++ joinWith ", " (show <$> args) ++ "])"
 
 instance showBinding :: Show Binding where
   show binding = case binding of
