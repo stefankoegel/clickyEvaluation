@@ -43,8 +43,8 @@ instance showExpr :: Show Expr where
     Atom atom       -> "(Atom " ++ show atom ++ ")"
     List ls         -> "(List [" ++ joinWith ", " (show <$> ls) ++ "])"
     Binary op e1 e2 -> "(Binary " ++ show e1 ++ " " ++ show op ++ " " ++ show e2 ++ ")"
-    SectL expr op   -> "(SectL" ++ show expr ++ " " ++ show op ++ ")"
-    SectR op expr   -> "(SectR" ++ show op ++ " " ++ show expr ++ ")"
+    SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"
+    SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
     App name args   -> "(App " ++ name ++ " [" ++ joinWith ", " (show <$> args) ++ "])"
 
 instance showBinding :: Show Binding where
