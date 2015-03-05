@@ -177,3 +177,17 @@ consLit binding = bracket recurse
 
 binding :: Parser String Binding
 binding = fix1 $ \binding -> lit <|> consLit binding <|> listLit binding
+
+---------------------------------------
+-- Parsers for the 'Definition' type
+---------------------------------------
+
+def :: Parser String Definition
+def = do
+  defName <- name
+  eatSpaces
+  binds <- binding `sepEndBy` eatSpaces
+  string "="
+  eatSpaces
+  body <- expr
+  return $ Def defName binds body

@@ -57,4 +57,4 @@ instance showBinding :: Show Binding where
     ListLit bs   -> "(ListLit [" ++ joinWith ", " (show <$> bs) ++ "])"
 
 instance showDefinition :: Show Definition where
-  show (Def name bindings body) = "(Def " ++ name ++ " " ++ show bindings ++ show body ++ ")"
+  show (Def name bindings body) = "(Def " ++ name ++ " " ++ show bindings ++ " " ++ show body ++ ")"
