@@ -64,7 +64,7 @@ list :: forall a. Parser String a -> Parser String [a]
 list p = do
   string "["
   eatSpaces
-  ls <- p `sepBy` (try (eatSpaces *> string ","))
+  ls <- p `sepBy` (try (eatSpaces *> string "," *> eatSpaces))
   eatSpaces
   string "]"
   return ls
