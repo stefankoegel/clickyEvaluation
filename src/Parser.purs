@@ -24,10 +24,8 @@ eatSpaces = void $ many $ string " " <|> string "\t"
 
 num :: Parser String Atom
 num = do
-  sign <- option "" (string "-")
-  eatSpaces
   str <- string "0" <|> nat
-  return $ Num $ readInt 10 $ sign ++ str
+  return $ Num $ readInt 10 str
   where
   nat = do
     d <- oneOf $ split "" "123456789"
@@ -125,8 +123,17 @@ term7l expr = chainl1 (termApp expr) (mulP <|> divP)
   mulP = Binary <$> opP (string "*") Mul
   divP = Binary <$> opP (string "`div`") Div
 
+term6neg :: Parser String Expr -> Parser String Expr
+term6neg expr = try negation <|> (term7l expr)
+  where
+  negation = do
+    string "-"
+    eatSpaces
+    e <- (term7l expr)
+    return $ Unary Sub e
+
 term6l :: Parser String Expr -> Parser String Expr
-term6l expr = chainl1 (term7l expr) (addP <|> subP)
+term6l expr = chainl1 (term6neg expr) (addP <|> subP)
   where
   addP = Binary <$> opP (string "+" *> notFollowedBy (string "+")) Add
   subP = Binary <$> opP (string "-") Sub

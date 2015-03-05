@@ -12,6 +12,7 @@ data Atom = Num Number
 data Expr = Atom Atom
           | List [Expr]
           | Binary Op Expr Expr
+          | Unary Op Expr
           | SectL Expr Op
           | SectR Op Expr
           | App String [Expr]
@@ -44,6 +45,7 @@ instance showExpr :: Show Expr where
     Atom atom       -> "(Atom " ++ show atom ++ ")"
     List ls         -> "(List [" ++ joinWith ", " (show <$> ls) ++ "])"
     Binary op e1 e2 -> "(Binary " ++ show e1 ++ " " ++ show op ++ " " ++ show e2 ++ ")"
+    Unary op e      -> "(Unary " ++ show op ++ " " ++ show e ++ ")"
     SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"
     SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
     App name args   -> "(App " ++ name ++ " [" ++ joinWith ", " (show <$> args) ++ "])"
