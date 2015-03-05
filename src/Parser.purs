@@ -190,8 +190,8 @@ binding = fix1 $ \binding -> lit <|> consLit binding <|> listLit binding
 -- Parsers for the 'Definition' type
 ---------------------------------------
 
-parseDef :: String -> Either String Definition
-parseDef = parse def
+parseDefs :: String -> Either String [Definition]
+parseDefs = parse defs
 
 def :: Parser String Definition
 def = do
@@ -202,3 +202,6 @@ def = do
   eatSpaces
   body <- expr
   return $ Def defName binds body
+
+defs :: Parser String [Definition]
+defs = def `sepEndBy` skipSpaces
