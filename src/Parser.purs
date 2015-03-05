@@ -3,7 +3,7 @@ module Parser where
 import Global              (readInt)
 import Data.String         (joinWith, split)
 import Data.Identity       (Identity())
-import Data.Maybe
+import Data.Either
 import Control.Alt         ((<|>))
 import Control.Apply       ((*>))
 import Control.Alternative (some, many)
@@ -17,6 +17,11 @@ import AST
 
 eatSpaces :: Parser String Unit
 eatSpaces = void $ many $ string " " <|> string "\t"
+
+parse :: forall a. Parser String a -> String -> Either String a
+parse p s = case runParser s p of
+  Left err -> Left $ show err
+  Right a  -> Right a
 
 ---------------------------------------
 -- Parsers for the 'Atom' type
@@ -51,6 +56,9 @@ atom = do
 ---------------------------------------
 -- Parsers for the 'Expr' type
 ---------------------------------------
+
+parseExpr :: String -> Either String Expr
+parseExpr = parse expr
 
 list :: forall a. Parser String a -> Parser String [a]
 list p = do
@@ -181,6 +189,9 @@ binding = fix1 $ \binding -> lit <|> consLit binding <|> listLit binding
 ---------------------------------------
 -- Parsers for the 'Definition' type
 ---------------------------------------
+
+parseDef :: String -> Either String Definition
+parseDef = parse def
 
 def :: Parser String Definition
 def = do
