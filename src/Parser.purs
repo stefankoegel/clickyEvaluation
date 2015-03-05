@@ -58,7 +58,7 @@ atom = do
 ---------------------------------------
 
 parseExpr :: String -> Either String Expr
-parseExpr = parse expr
+parseExpr = parse (eatSpaces *> expr)
 
 list :: forall a. Parser String a -> Parser String [a]
 list p = do
@@ -191,7 +191,7 @@ binding = fix1 $ \binding -> lit <|> consLit binding <|> listLit binding
 ---------------------------------------
 
 parseDefs :: String -> Either String [Definition]
-parseDefs = parse defs
+parseDefs = parse (skipSpaces *> defs)
 
 def :: Parser String Definition
 def = do
