@@ -18,6 +18,10 @@ import AST
 eatSpaces :: Parser String Unit
 eatSpaces = void $ many $ string " " <|> string "\t"
 
+---------------------------------------
+-- Parsers for the 'Atom' type
+---------------------------------------
+
 num :: Parser String Atom
 num = do
   sign <- option "" (string "-")
@@ -44,17 +48,20 @@ name = do
 
 atom :: Parser String Atom
 atom = do
-  eatSpaces
   num <|> try bool <|> (Name <$> name) <?> "Atom (Number, Boolean, Name)"
 
-list :: Parser String Expr -> Parser String Expr
-list expr = do
+---------------------------------------
+-- Parsers for the 'Expr' type
+---------------------------------------
+
+list :: forall a. Parser String a -> Parser String [a]
+list p = do
   string "["
   eatSpaces
-  ls <- expr `sepBy` (try (eatSpaces *> string ","))
+  ls <- p `sepBy` (try (eatSpaces *> string ","))
   eatSpaces
   string "]"
-  return $ List ls
+  return ls
 
 app :: Parser String Expr -> Parser String Expr
 app expr = do
@@ -62,11 +69,11 @@ app expr = do
   exprs <- some (try $ eatSpaces *> expr)
   return $ App str exprs
 
-bracket :: Parser String Expr -> Parser String Expr
-bracket expr = do
+bracket :: forall a. Parser String a -> Parser String a
+bracket p = do
   string "("
   eatSpaces
-  e <- expr
+  e <- p
   eatSpaces
   string ")"
   return e
@@ -97,7 +104,7 @@ section expr = do
     ]
 
 base :: Parser String Expr -> Parser String Expr
-base expr =  list expr
+base expr =  (List <$> list expr)
          <|> (bracket $ section expr)
          <|> (Atom <$> atom)
 
@@ -134,3 +141,28 @@ term2r expr = chainr1 (term3r expr) (Binary <$> op (string "||") Or)
 
 expr :: Parser String Expr
 expr = fix1 $ \expr -> term2r expr
+
+---------------------------------------
+-- Parsers for the 'Binding' type
+---------------------------------------
+
+lit :: Parser String Binding
+lit = Lit <$> atom
+
+listLit :: Parser String Binding -> Parser String Binding
+listLit binding = ListLit <$> list binding
+
+consLit :: Parser String Binding -> Parser String Binding
+consLit binding = bracket recurse
+  where
+  recurse = fix1 $ \recurse -> try (cons recurse) <|> binding
+  cons recurse = do
+    b <- binding
+    eatSpaces
+    string ":"
+    eatSpaces
+    bs <- recurse
+    return $ ConsLit b bs
+
+binding :: Parser String Binding
+binding = fix1 $ \binding -> lit <|> consLit binding <|> listLit binding

@@ -17,7 +17,8 @@ data Expr = Atom Atom
           | App String [Expr]
 
 data Binding = Lit Atom
-             | ListLit Atom Binding
+             | ConsLit Binding Binding
+             | ListLit [Binding]
 
 data Definition = Def String [Binding] Expr
 
@@ -49,8 +50,9 @@ instance showExpr :: Show Expr where
 
 instance showBinding :: Show Binding where
   show binding = case binding of
-    Lit atom              -> "(Lit " ++ show atom ++ ")"
-    ListLit atom bindings -> "(ListLit " ++ show atom ++ " " ++ show bindings ++ ")"
+    Lit atom     -> "(Lit " ++ show atom ++ ")"
+    ConsLit b bs -> "(ConsLit " ++ show b ++ ":" ++ show bs ++ ")"
+    ListLit bs   -> "(ListLit [" ++ joinWith ", " (show <$> bs) ++ "])"
 
 instance showDefinition :: Show Definition where
   show (Def name bindings body) = "(Def " ++ name ++ " " ++ show bindings ++ show body ++ ")"
