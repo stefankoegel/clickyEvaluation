@@ -1,6 +1,7 @@
 module Evaluator where
 
-import Data.StrMap
+import Data.Array    (head, mapMaybe)
+import Data.StrMap   (StrMap(), empty, lookup, insert)
 import Data.Tuple
 import Data.Maybe
 import Data.Foldable (foldl)
@@ -23,11 +24,43 @@ insertDef env (Def name bindings body) = case lookup name env of
   Nothing   -> insert name [Tuple bindings body] env
   Just defs -> insert name (defs ++ [Tuple bindings body]) env
 
-eval1 :: Env -> Expr -> Expr
-eval1 _ _ = Atom $ Name $ "not_implemented"
+eval1 :: Env -> Expr -> Maybe Expr
+eval1 env expr = case expr of
+  (Binary op e1 e2) -> binary op e1 e2
+  (Unary op e)      -> unary op e
+  (App name args)   -> apply env name args
+  _                 -> Nothing
+
+binary :: Op -> Expr -> Expr -> Maybe Expr
+binary = go
+  where
+  go Add (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i + j
+  go Sub (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i - j
+  go Mul (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i * j
+  go Div (Atom (Num i)) (Atom (Num 0)) = Nothing
+  go Div (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ Math.floor (i / j)
+
+  go And (Atom (Bool true))  b = Just b
+  go And (Atom (Bool false)) _ = Just $ Atom $ Bool $ false
+  go Or  (Atom (Bool true))  _ = Just $ Atom $ Bool $ true
+  go Or  (Atom (Bool false)) b = Just b
+
+  go Cons   e          (List es)  = Just $ List $ e:es
+  go Append (List es1) (List es2) = Just $ List $ es1 ++ es2
+
+  go _       _               _               = Nothing
+
+unary :: Op -> Expr -> Maybe Expr
+unary Sub (Atom (Num i)) = Just $ Atom $ Num (-i)
+unary _   _              = Nothing
 
 apply :: Env -> String -> [Expr] -> Maybe Expr
-apply _ _ _ = Nothing
+apply env name args = case lookup name env of
+  Nothing    -> Nothing
+  Just cases -> head $ mapMaybe app cases
+    where
+    app :: Tuple [Binding] Expr -> Maybe Expr
+    app (Tuple binds body) = matchls binds args body
 
 matchls :: [Binding] -> [Expr] -> Expr -> Maybe Expr
 matchls []     []     expr = Just expr
