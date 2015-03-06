@@ -1,6 +1,7 @@
 module Tests where
 
 import Data.Either
+import Data.Maybe
 
 import AST
 import Parser
@@ -20,3 +21,6 @@ testEnv = defsToEnv $ case (Parser.parseDefs defs) of Right env -> env
 
 testExpr :: String -> Expr
 testExpr str = case (Parser.parseExpr str) of Right expr -> expr
+
+test :: String -> Path -> Maybe Expr
+test str path = evalPath1 testEnv path (testExpr str)

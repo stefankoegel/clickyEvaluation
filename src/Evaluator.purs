@@ -1,6 +1,6 @@
 module Evaluator where
 
-import Data.Array    (head, mapMaybe)
+import Data.Array    (head, mapMaybe, (!!), updateAt)
 import Data.StrMap   (StrMap(), empty, lookup, insert)
 import Data.Tuple
 import Data.Maybe
@@ -13,6 +13,35 @@ import Control.Monad.State.Class
 import Control.Monad.Trans
 
 import AST
+
+data Path = Start Path | Nth Number Path | Fst Path | Snd Path | End
+
+select :: Path -> (Expr -> Maybe Expr) -> Expr -> Maybe Expr
+select (Start p) eval expr = select p eval expr
+select End       eval expr = eval expr
+
+select (Fst p) eval expr = case expr of
+  Binary op e1 e2 -> Binary op <$> (select p eval e1) <*> Just e2
+  Unary op e      -> Unary op <$> select p eval e
+  SectL e op      -> SectL <$> (select p eval e) <*> Just op
+  SectR op e      -> SectR op <$> (select p eval) e
+  App e es        -> App <$> (select p eval e) <*> Just es
+  _               -> Nothing
+select (Snd p) eval expr = case expr of
+  Binary op e1 e2 -> Binary op e1 <$> select p eval e2
+  _               -> Nothing
+select (Nth n p) eval expr = case expr of
+  List es  -> List <$> mapMIndex n (select p eval) es
+  App e es -> App e <$> mapMIndex n (select p eval) es
+  _        -> Nothing
+
+mapMIndex :: forall m a. Number -> (a -> Maybe a) -> [a] -> Maybe [a]
+mapMIndex i f as = do
+  a <- (as !! i) >>= f
+  return $ updateAt i a as
+
+evalPath1 :: Env -> Path -> Expr -> Maybe Expr
+evalPath1 env path expr = select path (eval1 env) expr
 
 type Env = StrMap [Tuple [Binding] Expr]
 
