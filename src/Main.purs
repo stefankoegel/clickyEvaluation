@@ -16,7 +16,7 @@ import Debug.Trace
 
 main = J.ready $ do
   print "Hello world!"
-  let expr = case parseExpr "1 + 2 * 3 + 4 * 5 * 6" of Right e -> e
+  let expr = case parseExpr "1 : (1 + 2) : [3 * 4, 9 `div` 3]" of Right e -> e
   let env = defsToEnv $ case parseDefs "double x = x + x" of Right d -> d
   showExpr expr
   return unit
