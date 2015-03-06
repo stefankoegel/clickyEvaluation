@@ -35,12 +35,12 @@ atom (Name s) = makeDiv s        ["atom", "name"]
 
 binary :: forall eff. Op -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 binary op j1 j2 = do
- dBin <- makeDiv "" ["binary"]
- J.append j1 dBin
- dOp <- makeDiv (show op) ["op"]
- J.append dOp dBin
- J.append j2 dBin
- return dBin
+  dBin <- makeDiv "" ["binary"]
+  J.append j1 dBin
+  dOp <- makeDiv (show op) ["op"]
+  J.append dOp dBin
+  J.append j2 dBin
+  return dBin
 
 type Class = String
 
