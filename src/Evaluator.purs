@@ -26,9 +26,11 @@ insertDef env (Def name bindings body) = case lookup name env of
 
 eval1 :: Env -> Expr -> Maybe Expr
 eval1 env expr = case expr of
-  (Binary op e1 e2) -> binary op e1 e2
-  (Unary op e)      -> unary op e
-  (App name args)   -> apply env name args
+  (Binary op e1 e2)             -> binary op e1 e2
+  (Unary op e)                  -> unary op e
+  (App (SectL e1 op) [e2])      -> binary op e1 e2
+  (App (SectR op e2) [e1])      -> binary op e1 e2
+  (App (Atom (Name name)) args) -> apply env name args
   _                 -> Nothing
 
 binary :: Op -> Expr -> Expr -> Maybe Expr

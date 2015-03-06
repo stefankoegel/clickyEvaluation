@@ -15,7 +15,7 @@ data Expr = Atom Atom
           | Unary Op Expr
           | SectL Expr Op
           | SectR Op Expr
-          | App String [Expr]
+          | App Expr [Expr]
 
 data Binding = Lit Atom
              | ConsLit Binding Binding
@@ -48,7 +48,7 @@ instance showExpr :: Show Expr where
     Unary op e      -> "(Unary " ++ show op ++ " " ++ show e ++ ")"
     SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"
     SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
-    App name args   -> "(App " ++ name ++ " [" ++ joinWith ", " (show <$> args) ++ "])"
+    App func args   -> "(App " ++ show func ++ " [" ++ joinWith ", " (show <$> args) ++ "])"
 
 instance showBinding :: Show Binding where
   show binding = case binding of

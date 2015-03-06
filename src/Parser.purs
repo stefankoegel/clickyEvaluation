@@ -71,9 +71,9 @@ list p = do
 
 app :: Parser String Expr -> Parser String Expr
 app expr = do
-  str <- name
+  func <- expr
   exprs <- some (try $ eatSpaces *> expr)
-  return $ App str exprs
+  return $ App func exprs
 
 bracket :: forall a. Parser String a -> Parser String a
 bracket p = do
