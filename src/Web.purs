@@ -7,8 +7,10 @@ import Control.Monad.Eff
 import qualified Control.Monad.JQuery as J
 import DOM
 
-import Data.Traversable (for)
+import Data.Traversable (for, zipWithA)
 import Data.Maybe
+import Data.Array ((..), length)
+import Control.Apply ((*>))
 
 import AST
 import Evaluator
@@ -27,6 +29,9 @@ exprToJQuery expr handler = go Start expr
       j1 <- go (p <<< Fst) e1
       j2 <- go (p <<< Snd) e2
       binary op j1 j2 >>= addHandler (p End)
+    List es -> do
+      js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
+      list js >>= addHandler (p End)
 
 atom :: forall eff. Atom -> Eff (dom :: DOM | eff) J.JQuery
 atom (Num n)  = makeDiv (show n) ["atom", "num"]
@@ -41,6 +46,12 @@ binary op j1 j2 = do
   J.append dOp dBin
   J.append j2 dBin
   return dBin
+
+list :: forall eff. [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
+list js = do
+  dls <- makeDiv "List" ["list"]
+  for js (flip J.append dls)
+  return dls
 
 type Class = String
 
