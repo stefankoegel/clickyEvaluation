@@ -1,4 +1,9 @@
-module Evaluator where
+module Evaluator
+  ( Path(..)
+  , Env()
+  , evalPath1
+  , defsToEnv
+  ) where
 
 import Data.Array    (head, mapMaybe, (!!), updateAt)
 import Data.StrMap   (StrMap(), empty, lookup, insert)
