@@ -33,7 +33,7 @@ exprToJQuery expr handler = go Start expr
       binary op j1 j2 >>= addHandler (p End)
     List es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
-      list js >>= addHandler (p End)
+      list js
     App func args -> do
       jFunc <- go (p <<< Fst) func
       jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args
@@ -64,6 +64,7 @@ list js = do
   return dls
   where
   sep []     dls = return unit
+  sep [j]    dls = void $ J.append j dls
   sep (j:js) dls = do
     J.append j dls
     comma <- makeDiv "," ["listComma"]
