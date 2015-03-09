@@ -34,6 +34,14 @@ exprToJQuery expr handler = go Start expr
     List es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
       list js
+    SectL e op -> do
+      j <- go (p <<< Fst) e
+      jop <- makeDiv (show op) ["op"]
+      section j jop
+    SectR op e -> do
+      jop <- makeDiv (show op) ["op"]
+      j <- go (p <<< Fst) e
+      section jop j
     Prefix op -> makeDiv ("(" ++ show op ++ ")") ["prefix", "op"]
     App func args -> do
       jFunc <- go (p <<< Fst) func
@@ -53,6 +61,17 @@ binary op j1 j2 = do
   J.append dOp dBin
   J.append j2 dBin
   return dBin
+
+section :: forall eff. J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+section j1 j2 = do
+  jSect <- makeDiv "" ["section"]
+  open <- makeDiv "(" ["brace"]
+  J.append open jSect
+  J.append j1 jSect
+  J.append j2 jSect
+  close <- makeDiv ")" ["brace"]
+  J.append close jSect
+  return jSect
 
 list :: forall eff. [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
 list js = do
