@@ -21,7 +21,9 @@ exprToJQuery :: forall eff. Expr -> Handler -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery expr handler = go Start expr
   where
   addHandler :: Path -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-  addHandler p j = J.on "click" (\je _ -> J.stopImmediatePropagation je *> handler expr p) j
+  addHandler p j = do
+    J.on "click" (\je _ -> J.stopImmediatePropagation je *> handler expr p) j
+    J.addClass "clickable" j
   go :: (Path -> Path) -> Expr -> Eff (dom :: DOM | eff) J.JQuery
   go p expr = case expr of
     Atom a          -> atom a
