@@ -124,5 +124,5 @@ replace name value = go
     (Unary op e)        -> Unary op (go e)
     (SectL e op)        -> SectL (go e) op
     (SectR op e)        -> SectR op (go e)
-    (App appName exprs) -> App appName (go <$> exprs)
+    (App func exprs)    -> App (go func) (go <$> exprs)
     e                   -> e
