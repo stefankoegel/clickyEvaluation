@@ -32,6 +32,10 @@ exprToJQuery expr handler = go Start expr
     List es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
       list js >>= addHandler (p End)
+    App func args -> do
+      jFunc <- go (p <<< Fst) func
+      jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args
+      app jFunc jArgs >>= addHandler (p End)
 
 atom :: forall eff. Atom -> Eff (dom :: DOM | eff) J.JQuery
 atom (Num n)  = makeDiv (show n) ["atom", "num"]
@@ -52,6 +56,14 @@ list js = do
   dls <- makeDiv "List" ["list"]
   for js (flip J.append dls)
   return dls
+
+app :: forall eff. J.JQuery -> [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
+app jFunc jArgs = do
+  dApp <- makeDiv "" ["app"]
+  J.addClass "func" jFunc
+  J.append jFunc dApp
+  for jArgs (flip J.append dApp)
+  return dApp
 
 type Class = String
 
