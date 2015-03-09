@@ -12,13 +12,23 @@
       PS.Main.main();
     </script>
 
-    <h3>Definitions</h3>
-    <textarea id="definitions" cols="80" rows="12"></textarea>
-
     <h3>Expression</h3>
-    <input type="text" id="input" size="80"></input>
+    <input type="text" id="input" size="120" value="1 + (2 * 3) + sum (map square [1, 2, 3, 4])">
 
-    <div id="output"></div>
+    <div id="output-container">
+      <div id="output"></div>
+    </div>
+
+    <h3>Definitions</h3>
+    <textarea id="definitions" cols="120" rows="15">foldr f b []     = b
+foldr f b (x:xs) = f x (foldr f b xs)
+
+map f []     = []
+map f (x:xs) = f x : map f xs
+
+sum = foldr (+) 0
+
+square x = x * x</textarea>
 
     <div id="info"></div>
   </body>

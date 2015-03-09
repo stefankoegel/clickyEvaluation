@@ -1,13 +1,58 @@
 body {
-  background: #888;
+  background: #999;
+}
+
+h3 {
+  text-align: center;
+  font-family: 'Helvetica Neue', 'Verdana', 'Ubuntu', sans-serif;
+  font-size: 22px;
+  color: #333;
+}
+
+#input, #definitions, #output, #output .clickable{
+  border: none;
+  background: #ddd;
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 3px 3px 10px 0 #333;
+  transition: background .25s ease-in-out;
+}
+
+#input:hover, #definitions:hover, #output .clickable.mouse-over{
+  background: #fff;
+  transition: background .25s ease-in-out;
+}
+
+#definitions, #input, #output-container, #info {
+  font-family: monospace;
+  font-size: 15px;
+  display: block;
+  margin: 0px auto 50px auto;
+}
+
+#output-container {
+  text-align: center;
+}
+
+#output {
+  display: inline-block;
+  font-weight: bold;
+  padding: 15px;
 }
 
 #output div {
   display: inline-block;
-  margin: 5px;
-  padding: 5px;
+  margin: 0px 5px;
 }
 
 #output div.clickable {
-  border: 1px solid black;
+  padding: 15px;
+}
+
+#output .num, .bool {
+  color: #e4e;
+}
+
+#output .name {
+  color: #f62;
 }
