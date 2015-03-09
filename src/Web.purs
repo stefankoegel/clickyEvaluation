@@ -53,9 +53,21 @@ binary op j1 j2 = do
 
 list :: forall eff. [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
 list js = do
-  dls <- makeDiv "List" ["list"]
-  for js (flip J.append dls)
+  dls <- makeDiv "" ["list"]
+  open <- makeDiv "[" ["openBrace"]
+  J.append open dls
+  sep js dls
+  close <- makeDiv "]" ["closeBrace"]
+  J.append close dls
   return dls
+  where
+  sep []     dls = return unit
+  sep (j:js) dls = do
+    J.append j dls
+    comma <- makeDiv "," ["listComma"]
+    J.append comma dls
+    sep js dls
+
 
 app :: forall eff. J.JQuery -> [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
 app jFunc jArgs = do
