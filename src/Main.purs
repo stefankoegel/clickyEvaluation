@@ -24,19 +24,23 @@ main = J.ready $ do
 
   let expr = case parseExpr input of Right e -> e
   let env = defsToEnv $ case parseDefs definitions of Right d -> d
-  showExpr env expr End
+  showExpr env expr
   return unit
 
-showExpr :: forall eff. Env -> Expr -> Path -> Eff (dom :: DOM | eff) Unit
-showExpr env expr path =
+showExpr :: forall eff. Env -> Expr -> Eff (dom :: DOM | eff) Unit
+showExpr env expr = do
+  test <- J.select "#output"
+  J.clear test
+  jexpr <- exprToJQuery expr (evalExpr env)
+  J.append jexpr test
+  return unit
+
+evalExpr :: forall eff. Env -> Expr -> Path -> Eff (dom :: DOM | eff) Unit
+evalExpr env expr path =
   case evalPath1 env path expr of
     Nothing    -> return unit
     Just expr' -> do
-      test <- J.select "#output"
-      J.clear test
-      jexpr <- exprToJQuery expr' (showExpr env)
-      J.append jexpr test
-      return unit
+      showExpr env expr'
 
 getValue :: forall eff. J.JQuery -> Eff (dom :: DOM | eff) String
 getValue j = do
