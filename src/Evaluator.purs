@@ -66,6 +66,7 @@ eval1 env expr = case expr of
   (App (SectR op e2) [e1])      -> binary op e1 e2
   (App (Prefix op) [e1, e2])    -> binary op e1 e2
   (App (Atom (Name name)) args) -> apply env name args
+  (App (App func es) es')       -> Just $ App func (es ++ es')
   _                 -> Nothing
 
 binary :: Op -> Expr -> Expr -> Maybe Expr
@@ -104,6 +105,7 @@ matchls []     []     expr = Just expr
 matchls (b:bs) (e:es) expr = do
   expr' <- execStateT (match b e) expr
   matchls bs es expr'
+matchls []     es     expr = Just $ App expr es
 matchls _ _ _ = Nothing
 
 match :: Binding -> Expr -> StateT Expr Maybe Unit
@@ -111,8 +113,10 @@ match (Lit (Name x))   e                = modify (replace x e)
 match (Lit (Num i))    (Atom (Num j))   | i == j  = return unit
 match (Lit (Bool b))   (Atom (Bool b')) | b == b' = return unit
 match (ConsLit b bs)   (List (e:es))    = match b e *> match bs (List es)
+match (ConsLit b bs)   (Binary Cons e es) = match b e *> match bs es
 match (ListLit [])     (List [])        = return unit
 match (ListLit (b:bs)) (List (e:es))    = match b e *> match (ListLit bs) (List es)
+match (ListLit (b:bs)) (Binary Cons e es) = match b e *> match (ListLit bs) es
 match _                _                = lift Nothing
 
 replace :: String -> Expr -> Expr -> Expr
