@@ -110,13 +110,19 @@ opList =
   , opP (string "||")    Or
   ]
 
+prefixOp :: Parser String Expr
+prefixOp = bracket $ Prefix <$> choice opList
+
 base :: Parser String Expr -> Parser String Expr
 base expr =  (List <$> list expr)
          <|> bracket expr
          <|> (Atom <$> atom)
 
+termPrefixOp :: Parser String Expr -> Parser String Expr
+termPrefixOp expr = try prefixOp <|> base expr
+
 termSect :: Parser String Expr -> Parser String Expr
-termSect expr = try (section (base expr)) <|> base expr
+termSect expr = try (section (termPrefixOp expr)) <|> termPrefixOp expr
 
 termApp :: Parser String Expr -> Parser String Expr
 termApp expr = try (app (termSect expr)) <|> termSect expr

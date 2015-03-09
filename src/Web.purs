@@ -34,6 +34,7 @@ exprToJQuery expr handler = go Start expr
     List es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
       list js
+    Prefix op -> makeDiv ("(" ++ show op ++ ")") ["prefix", "op"]
     App func args -> do
       jFunc <- go (p <<< Fst) func
       jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args

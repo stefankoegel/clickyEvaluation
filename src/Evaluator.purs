@@ -64,6 +64,7 @@ eval1 env expr = case expr of
   (Unary op e)                  -> unary op e
   (App (SectL e1 op) [e2])      -> binary op e1 e2
   (App (SectR op e2) [e1])      -> binary op e1 e2
+  (App (Prefix op) [e1, e2])    -> binary op e1 e2
   (App (Atom (Name name)) args) -> apply env name args
   _                 -> Nothing
 

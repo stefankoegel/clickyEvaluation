@@ -15,6 +15,7 @@ data Expr = Atom Atom
           | Unary Op Expr
           | SectL Expr Op
           | SectR Op Expr
+          | Prefix Op
           | App Expr [Expr]
 
 data Binding = Lit Atom
