@@ -15,13 +15,13 @@ import Control.Apply ((*>))
 import AST
 import Evaluator
 
-type Handler = forall eff. Expr -> Eff (dom :: DOM | eff) Unit
+type Handler = forall eff. Expr -> Path -> Eff (dom :: DOM | eff) Unit
 
 exprToJQuery :: forall eff. Expr -> Handler -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery expr handler = go Start expr
   where
   addHandler :: Path -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-  addHandler p j = J.on "click" (\je _ -> J.stopImmediatePropagation je *> evaluate p expr handler) j
+  addHandler p j = J.on "click" (\je _ -> J.stopImmediatePropagation je *> handler expr p) j
   go :: (Path -> Path) -> Expr -> Eff (dom :: DOM | eff) J.JQuery
   go p expr = case expr of
     Atom a          -> atom a
@@ -73,8 +73,3 @@ makeDiv text classes = do
   J.setText text d
   for classes (flip J.addClass d)
   return d
-
-evaluate :: forall eff. Path -> Expr -> Handler -> Eff (dom :: DOM | eff) Unit
-evaluate p expr handler = case evalPath1 Data.StrMap.empty p expr of
-  Nothing    -> return unit
-  Just expr' -> handler expr'
