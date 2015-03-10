@@ -48,6 +48,9 @@ map f (x:xs) = f x : map f xs
 if True  a b = a
 if False a b = b
 
+not True  = False
+not False = True
+
 filter p (x:xs) = if (p x) (x : filter p xs) (filter p xs)
 filter p []     = []
 
