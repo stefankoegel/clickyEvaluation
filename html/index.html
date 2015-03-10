@@ -21,6 +21,12 @@
 
     <h3>Definitions</h3>
     <textarea id="definitions" cols="120" rows="15">
+and = foldl (&&) True
+or = foldl (||) False
+
+all p = and . map p
+any p = or . map p
+
 head (x:xs) = x
 tail (x:xs) = xs
 
@@ -29,6 +35,15 @@ take n (x:xs) = x : take (n - 1) xs
 
 drop 0 xs     = xs
 drop n (x:xs) = drop (n - 1) xs
+
+elem e []     = False
+elem e (x:xs) = if (e == x) True (elem e xs)
+
+max a b = if (a >= b) a b
+min a b = if (b >= a) a b
+
+maximum (x:xs) = foldl max x xs
+minimum (x:xs) = foldl min x xs
 
 length []     = 0
 length (x:xs) = 1 + length xs
@@ -67,13 +82,10 @@ id x = x
 
 flip f x y = f y x
 
-even 0 = True
-even 1 = False
-even n = even (n - 2)
+even n = (n `mod` 2) == 0
+odd n = (n `mod` 2) == 1
 
-odd 0 = False
-odd 1 = True
-odd n = odd (n - 2)
+fix f = f (fix f)
 </textarea>
 
     <div id="info"></div>
