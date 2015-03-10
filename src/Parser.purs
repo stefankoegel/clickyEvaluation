@@ -41,8 +41,8 @@ bool :: Parser String Atom
 bool = do
   f <|> t
   where
-  f = string "false" *> return (Bool false)
-  t = string "true" *> return (Bool true)
+  f = string "False" *> return (Bool false)
+  t = string "True" *> return (Bool true)
 
 name :: Parser String String
 name = do

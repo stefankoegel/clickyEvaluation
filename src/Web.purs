@@ -29,7 +29,8 @@ exprToJQuery env expr handler = go Start expr
   go :: (Path -> Path) -> Expr -> Eff (dom :: DOM | eff) J.JQuery
   go p expr = case expr of
     Atom (Num n)     -> makeDiv (show n) ["atom", "num"]
-    Atom (Bool b)    -> makeDiv (show b) ["atom", "bool"]
+    Atom (Bool true)  -> makeDiv "True"  ["atom", "bool"]
+    Atom (Bool false) -> makeDiv "False" ["atom", "bool"]
     Atom (Name name) -> do
       jName <- makeDiv name ["atom", "name"]
       case lookup name env of
