@@ -100,14 +100,24 @@ section expr = bracket (try sectR <|> sectL)
 
 opList :: [Parser String Op]
 opList =
-  [ opP (string "+" *> notFollowedBy (string "+")) Add
-  , opP (string "-" *> notFollowedBy (eatSpaces *> num)) Sub
+  [ opP (string ".")     Composition
+  , opP (string "^")     Power
   , opP (string "*")     Mul
-  , opP (string "`div`") Div
+  , opP (try $ string "`div`") Div
+  , opP (string "`mod`") Mod
+  , opP (string "+" *> notFollowedBy (string "+")) Add
+  , opP (string "-" *> notFollowedBy (eatSpaces *> num)) Sub
   , opP (string ":")     Cons
   , opP (string "++")    Append
+  , opP (string "==")    Eq
+  , opP (string "/=")    Neq
+  , opP (string "<=")    Leq
+  , opP (string "<")     Lt
+  , opP (string ">=")    Geq
+  , opP (string ">")     Gt
   , opP (string "&&")    And
   , opP (string "||")    Or
+  , opP (string "$")     Dollar
   ]
 
 prefixOp :: Parser String Expr
