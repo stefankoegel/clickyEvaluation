@@ -62,6 +62,7 @@ eval1 :: Env -> Expr -> Maybe Expr
 eval1 env expr = case expr of
   (Binary op e1 e2)             -> binary op e1 e2
   (Unary op e)                  -> unary op e
+  (Atom (Name name))            -> apply env name []
   (App (SectL e1 op) [e2])      -> binary op e1 e2
   (App (SectR op e2) [e1])      -> binary op e1 e2
   (App (Prefix op) [e1, e2])    -> binary op e1 e2

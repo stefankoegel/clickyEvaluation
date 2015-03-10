@@ -31,7 +31,7 @@ showExpr :: forall eff. Env -> Expr -> Eff (dom :: DOM | eff) Unit
 showExpr env expr = do
   test <- J.select "#output"
   J.clear test
-  jexpr <- exprToJQuery expr (evalExpr env)
+  jexpr <- exprToJQuery env expr (evalExpr env)
   J.append jexpr test
   return unit
 

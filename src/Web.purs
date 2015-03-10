@@ -10,6 +10,8 @@ import DOM
 import Data.Traversable (for, zipWithA)
 import Data.Maybe
 import Data.Array ((..), length)
+import Data.StrMap (lookup)
+import Data.Tuple
 import Control.Apply ((*>))
 
 import AST
@@ -17,8 +19,8 @@ import Evaluator
 
 type Handler = forall eff. Expr -> Path -> Eff (dom :: DOM | eff) Unit
 
-exprToJQuery :: forall eff. Expr -> Handler -> Eff (dom :: DOM | eff) J.JQuery
-exprToJQuery expr handler = go Start expr
+exprToJQuery :: forall eff. Env -> Expr -> Handler -> Eff (dom :: DOM | eff) J.JQuery
+exprToJQuery env expr handler = go Start expr
   where
   addHandler :: Path -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
   addHandler p j = do
@@ -26,7 +28,13 @@ exprToJQuery expr handler = go Start expr
     J.addClass "clickable" j
   go :: (Path -> Path) -> Expr -> Eff (dom :: DOM | eff) J.JQuery
   go p expr = case expr of
-    Atom a          -> atom a
+    Atom (Num n)     -> makeDiv (show n) ["atom", "num"]
+    Atom (Bool b)    -> makeDiv (show b) ["atom", "bool"]
+    Atom (Name name) -> do
+      jName <- makeDiv name ["atom", "name"]
+      case lookup name env of
+        Just [Tuple [] _] -> addHandler (p End) jName
+        _                 -> return jName
     Binary op e1 e2 -> do
       j1 <- go (p <<< Fst) e1
       j2 <- go (p <<< Snd) e2
@@ -47,11 +55,6 @@ exprToJQuery expr handler = go Start expr
       jFunc <- go (p <<< Fst) func
       jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args
       app jFunc jArgs >>= addHandler (p End)
-
-atom :: forall eff. Atom -> Eff (dom :: DOM | eff) J.JQuery
-atom (Num n)  = makeDiv (show n) ["atom", "num"]
-atom (Bool b) = makeDiv (show b) ["atom", "bool"]
-atom (Name s) = makeDiv s        ["atom", "name"]
 
 binary :: forall eff. Op -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 binary op j1 j2 = do
