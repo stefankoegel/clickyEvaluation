@@ -63,9 +63,9 @@ eval1 env expr = case expr of
   (Binary op e1 e2)             -> binary op e1 e2
   (Unary op e)                  -> unary op e
   (Atom (Name name))            -> apply env name []
-  (App (SectL e1 op) [e2])      -> binary op e1 e2
-  (App (SectR op e2) [e1])      -> binary op e1 e2
-  (App (Prefix op) [e1, e2])    -> binary op e1 e2
+  (App (SectL e1 op) [e2])      -> Just $ Binary op e1 e2
+  (App (SectR op e2) [e1])      -> Just $ Binary op e1 e2
+  (App (Prefix op) [e1, e2])    -> Just $ Binary op e1 e2
   (App (Atom (Name name)) args) -> apply env name args
   (App (App func es) es')       -> Just $ App func (es ++ es')
   _                 -> Nothing
