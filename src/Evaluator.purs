@@ -5,11 +5,11 @@ module Evaluator
   , defsToEnv
   ) where
 
-import Data.Array    (head, mapMaybe, (!!), updateAt)
+import Data.Array    (head, mapMaybe, (!!), updateAt, elemIndex)
 import Data.StrMap   (StrMap(), empty, lookup, insert)
 import Data.Tuple
 import Data.Maybe
-import Data.Foldable (foldl)
+import Data.Foldable (foldl, foldMap, any)
 
 import Math (pow)
 
@@ -32,6 +32,7 @@ select (Fst p) eval expr = case expr of
   Unary op e      -> Unary op <$> select p eval e
   SectL e op      -> SectL <$> (select p eval e) <*> Just op
   SectR op e      -> SectR op <$> (select p eval) e
+  Lambda bs body  -> Lambda bs <$> select p eval body
   App e es        -> App <$> (select p eval e) <*> Just es
   _               -> Nothing
 select (Snd p) eval expr = case expr of
@@ -139,6 +140,16 @@ match (ListLit (b:bs)) (List (e:es))    = match b e *> match (ListLit bs) (List 
 match (ListLit (b:bs)) (Binary Cons e es) = match b e *> match (ListLit bs) es
 match _                _                = lift Nothing
 
+boundNames :: Binding -> [String]
+boundNames = go
+  where
+  go (Lit (Name name)) = [name]
+  go (ConsLit b1 b2)   = go b1 ++ go b2
+  go (ListLit bs)      = foldMap go bs
+
+isNameBound :: String -> Binding -> Boolean
+isNameBound name binding = (elemIndex name $ boundNames binding) >= 0
+
 replace :: String -> Expr -> Expr -> Expr
 replace name value = go
   where
@@ -149,5 +160,8 @@ replace name value = go
     (Unary op e)        -> Unary op (go e)
     (SectL e op)        -> SectL (go e) op
     (SectR op e)        -> SectR op (go e)
+    l@(Lambda binds body) -> if any (isNameBound name) binds
+                               then l
+                               else Lambda binds (go body)
     (App func exprs)    -> App (go func) (go <$> exprs)
     e                   -> e
