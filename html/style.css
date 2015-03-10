@@ -56,3 +56,7 @@ h3 {
 #output .name {
   color: #f62;
 }
+
+#output div.op, #output div.brace, #output div.comma {
+  margin: 0px;
+}

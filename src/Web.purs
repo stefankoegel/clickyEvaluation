@@ -79,10 +79,10 @@ section j1 j2 = do
 list :: forall eff. [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
 list js = do
   dls <- makeDiv "" ["list"]
-  open <- makeDiv "[" ["openBrace"]
+  open <- makeDiv "[" ["brace"]
   J.append open dls
   sep js dls
-  close <- makeDiv "]" ["closeBrace"]
+  close <- makeDiv "]" ["brace"]
   J.append close dls
   return dls
   where
@@ -90,7 +90,7 @@ list js = do
   sep [j]    dls = void $ J.append j dls
   sep (j:js) dls = do
     J.append j dls
-    comma <- makeDiv "," ["listComma"]
+    comma <- makeDiv "," ["comma"]
     J.append comma dls
     sep js dls
 
