@@ -3,7 +3,15 @@ module AST where
 import Data.String (joinWith)
 import Data.Array  ()
 
-data Op = Add | Sub | Mul | Div | And | Or | Cons | Append
+data Op = Composition
+        | Power
+        | Mul | Div | Mod
+        | Add | Sub
+        | Cons | Append
+        | Eq | Neq | Lt | Leq | Gt | Geq
+        | And
+        | Or
+        | Dollar
 
 data Atom = Num Number
           | Bool Boolean
@@ -26,14 +34,24 @@ data Definition = Def String [Binding] Expr
 
 instance showOp :: Show Op where
   show op = case op of
-    Add    -> "+"
-    Sub    -> "-"
+    Composition -> "."
+    Power  -> "^"
     Mul    -> "*"
     Div    -> "`div`"
-    And    -> "&&"
-    Or     -> "||"
+    Mod    -> "`mod`"
+    Add    -> "+"
+    Sub    -> "-"
     Cons   -> ":"
     Append -> "++"
+    Eq     -> "=="
+    Neq    -> "/="
+    Lt     -> "<"
+    Leq    -> "<="
+    Gt     -> ">"
+    Geq    -> ">="
+    And    -> "&&"
+    Or     -> "||"
+    Dollar -> "$"
 
 instance showAtom :: Show Atom where
   show atom = case atom of

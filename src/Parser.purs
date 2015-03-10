@@ -131,11 +131,18 @@ opP :: forall a. Parser String a -> Op -> Parser String Op
 opP strP opConstructor = try $
   (eatSpaces *> strP *> eatSpaces *> return opConstructor)
 
+term9r :: Parser String Expr -> Parser String Expr
+term9r expr = chainr1 (termApp expr) (Binary <$> opP (string ".") Composition)
+
+term8r :: Parser String Expr -> Parser String Expr
+term8r expr = chainr1 (term9r expr) (Binary <$> opP (string "^") Power)
+
 term7l :: Parser String Expr -> Parser String Expr
-term7l expr = chainl1 (termApp expr) (mulP <|> divP)
+term7l expr = chainl1 (term8r expr) (mulP <|> try divP <|> modP)
   where
   mulP = Binary <$> opP (string "*") Mul
   divP = Binary <$> opP (string "`div`") Div
+  modP = Binary <$> opP (string "`mod`") Mod
 
 term6neg :: Parser String Expr -> Parser String Expr
 term6neg expr = try negation <|> (term7l expr)
@@ -158,14 +165,32 @@ term5r expr = chainr1 (term6l expr) (consP <|> appendP)
   consP = Binary <$> opP (string ":") Cons
   appendP = Binary <$> opP (string "++") Append
 
+term4 :: Parser String Expr -> Parser String Expr
+term4 expr = try comparison <|> term5r expr
+  where
+  comparison = do
+    e1 <- term5r expr
+    op <- choice [eq, neq, leq, lt, geq, gt]
+    e2 <- term5r expr
+    return $ Binary op e1 e2
+  eq  = opP (string "==") Eq
+  neq = opP (string "/=") Neq
+  leq = opP (string "<=") Leq
+  lt  = opP (string "<")  Lt
+  geq = opP (string ">=") Geq
+  gt  = opP (string ">")  Gt
+
 term3r :: Parser String Expr -> Parser String Expr
-term3r expr = chainr1 (term5r expr) (Binary <$> opP (string "&&") And)
+term3r expr = chainr1 (term4 expr) (Binary <$> opP (string "&&") And)
 
 term2r :: Parser String Expr -> Parser String Expr
 term2r expr = chainr1 (term3r expr) (Binary <$> opP (string "||") Or)
 
+term0r :: Parser String Expr -> Parser String Expr
+term0r expr = chainr1 (term2r expr) (Binary <$> opP (string "$") Dollar)
+
 expr :: Parser String Expr
-expr = fix1 $ \expr -> term2r expr
+expr = fix1 $ \expr -> term0r expr
 
 ---------------------------------------
 -- Parsers for the 'Binding' type
