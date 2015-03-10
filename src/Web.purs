@@ -52,10 +52,33 @@ exprToJQuery env expr handler = go Start expr
       j <- go (p <<< Fst) e
       section jop j
     Prefix op -> makeDiv ("(" ++ show op ++ ")") ["prefix", "op"]
+    Lambda binds body -> do
+      jBinds <- for binds binding
+      jBody <- go (p <<< Fst) body
+      lambda jBinds jBody
     App func args -> do
       jFunc <- go (p <<< Fst) func
       jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args
       app jFunc jArgs >>= addHandler (p End)
+
+binding :: forall eff. Binding -> Eff (dom :: DOM | eff) J.JQuery
+binding b = case b of
+  Lit (Name name) -> makeDiv name ["atom", "name"]
+
+lambda :: forall eff. [J.JQuery] -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+lambda jBinds jBody = do
+  jLam <- makeDiv "" ["lambda"]
+  open <- makeDiv "(" ["brace"]
+  J.append open jLam
+  bs <- makeDiv "\\" ["backslash"]
+  J.append bs jLam
+  for jBinds (flip J.append jLam)
+  arrow <- makeDiv "->" ["arrow"]
+  J.append arrow jLam
+  J.append jBody jLam
+  close <- makeDiv ")" ["brace"]
+  J.append close jLam
+  return jLam
 
 binary :: forall eff. Op -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 binary op j1 j2 = do

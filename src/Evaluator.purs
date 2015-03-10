@@ -66,6 +66,7 @@ eval1 env expr = case expr of
   (Unary op e)                  -> unary op e
   (Atom (Name name))            -> apply env name []
   (App (Binary Composition f g) [e]) -> Just $ App f [App g [e]]
+  (App (Lambda binds body) args) -> matchls binds args body
   (App (SectL e1 op) [e2])      -> Just $ Binary op e1 e2
   (App (SectR op e2) [e1])      -> Just $ Binary op e1 e2
   (App (Prefix op) [e1, e2])    -> Just $ Binary op e1 e2
