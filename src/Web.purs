@@ -55,7 +55,7 @@ exprToJQuery env expr handler = go Start expr
     Lambda binds body -> do
       jBinds <- for binds binding
       jBody <- go (p <<< Fst) body
-      lambda jBinds jBody
+      lambda jBinds jBody >>= addHandler (p End)
     App func args -> do
       jFunc <- go (p <<< Fst) func
       jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args
@@ -63,7 +63,24 @@ exprToJQuery env expr handler = go Start expr
 
 binding :: forall eff. Binding -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
+  Lit (Num n)     -> makeDiv (show n) ["atom", "name"]
+  Lit (Bool true) -> makeDiv "True" ["atom", "name"]
+  Lit (Bool false)-> makeDiv "False" ["atom", "name"]
   Lit (Name name) -> makeDiv name ["atom", "name"]
+  ConsLit b bs -> do
+    jCons <- makeDiv "" []
+    makeDiv "(" ["brace"] >>= flip J.append jCons
+    binding b             >>= flip J.append jCons
+    makeDiv ":" ["brace"] >>= flip J.append jCons
+    binding bs            >>= flip J.append jCons
+    makeDiv ")" ["brace"] >>= flip J.append jCons
+  ListLit bs -> do
+    jList <- makeDiv "" []
+    makeDiv "[" ["brace"] >>= flip J.append jList
+    for bs $ \b -> do
+      binding b >>= flip J.append jList
+      makeDiv "," ["comma"] >>= flip J.append jList
+    makeDiv "]" ["brace"] >>= flip J.append jList
 
 lambda :: forall eff. [J.JQuery] -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 lambda jBinds jBody = do
