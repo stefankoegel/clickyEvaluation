@@ -7,6 +7,7 @@ import Data.Foreign (readString)
 
 import Data.Either
 import Data.Maybe
+import Control.Apply ((*>))
 
 import Web
 import Parser
@@ -29,10 +30,19 @@ main = J.ready $ do
 
 showExpr :: forall eff. Env -> Expr -> Eff (dom :: DOM | eff) Unit
 showExpr env expr = do
-  test <- J.select "#output"
-  J.clear test
+  output <- J.select "#output"
+  J.clear output
   jexpr <- exprToJQuery env expr (evalExpr env)
-  J.append jexpr test
+  J.append jexpr output
+
+  J.select "#output .clickable"
+    >>= J.on "mouseover" (\je j -> do
+      J.stopImmediatePropagation je
+      J.select "#output .mouseOver"
+        >>= J.removeClass "mouseOver"
+      J.addClass "mouseOver" j)
+  J.body
+    >>= J.on "mouseover" (\_ _ -> J.select "#output .mouseOver" >>= J.removeClass "mouseOver")
   return unit
 
 evalExpr :: forall eff. Env -> Expr -> Path -> Eff (dom :: DOM | eff) Unit

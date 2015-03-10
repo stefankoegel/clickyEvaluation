@@ -9,7 +9,7 @@ h3 {
   color: #333;
 }
 
-#input, #definitions, #output, #output .clickable{
+#input, #definitions, #output, #output div.clickable{
   border: none;
   background: #ddd;
   padding: 10px;
@@ -18,7 +18,7 @@ h3 {
   transition: background .25s ease-in-out;
 }
 
-#input:hover, #definitions:hover, #output .clickable.mouse-over{
+#input:hover, #definitions:hover, #output div.clickable.mouseOver{
   background: #fff;
   transition: background .25s ease-in-out;
 }
@@ -37,7 +37,17 @@ h3 {
 #output {
   display: inline-block;
   font-weight: bold;
-  padding: 15px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #bbb;
+  box-shadow: 2px 2px 5px 0 #333;
+}
+
+#output .binary, #output .app {
+  background: #bbb;
+  padding: 5px;
+  border-radius: 5px;
+  box-shadow: 2px 2px 5px 0 #333;
 }
 
 #output div {

@@ -22,24 +22,19 @@ type Handler = forall eff. Expr -> Path -> Eff (dom :: DOM | eff) Unit
 exprToJQuery :: forall eff. Env -> Expr -> Handler -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery env expr handler = go Start expr
   where
-  addHandler :: Path -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-  addHandler p j = do
-    J.on "click" (\je _ -> J.stopImmediatePropagation je *> handler expr p) j
-    J.addClass "clickable" j
+  addHandler :: Path -> Expr-> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+  addHandler p e j = case eval1 env e of
+    Nothing -> return j
+    Just _  -> do
+      J.on "click" (\je _ -> J.stopImmediatePropagation je *> handler expr p) j
+      J.addClass "clickable" j
   go :: (Path -> Path) -> Expr -> Eff (dom :: DOM | eff) J.JQuery
   go p expr = case expr of
-    Atom (Num n)     -> makeDiv (show n) ["atom", "num"]
-    Atom (Bool true)  -> makeDiv "True"  ["atom", "bool"]
-    Atom (Bool false) -> makeDiv "False" ["atom", "bool"]
-    Atom (Name name) -> do
-      jName <- makeDiv name ["atom", "name"]
-      case lookup name env of
-        Just [Tuple [] _] -> addHandler (p End) jName
-        _                 -> return jName
+    Atom a -> atom a >>= addHandler (p End) expr
     Binary op e1 e2 -> do
       j1 <- go (p <<< Fst) e1
       j2 <- go (p <<< Snd) e2
-      binary op j1 j2 >>= addHandler (p End)
+      binary op j1 j2 >>= addHandler (p End) expr
     List es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
       list js
@@ -55,11 +50,17 @@ exprToJQuery env expr handler = go Start expr
     Lambda binds body -> do
       jBinds <- for binds binding
       jBody <- go (p <<< Fst) body
-      lambda jBinds jBody >>= addHandler (p End)
+      lambda jBinds jBody >>= addHandler (p End) expr
     App func args -> do
       jFunc <- go (p <<< Fst) func
       jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args
-      app jFunc jArgs >>= addHandler (p End)
+      app jFunc jArgs >>= addHandler (p End) expr
+
+atom :: forall eff. Atom -> Eff (dom :: DOM | eff) J.JQuery
+atom (Num n)      = makeDiv (show n) ["atom", "num"]
+atom (Bool true)  = makeDiv "True"  ["atom", "bool"]
+atom (Bool false) = makeDiv "False" ["atom", "bool"]
+atom (Name name)  = makeDiv name ["atom", "name"]
 
 binding :: forall eff. Binding -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
