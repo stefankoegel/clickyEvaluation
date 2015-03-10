@@ -32,6 +32,7 @@ h3 {
 
 #output-container {
   text-align: center;
+  cursor: default;
 }
 
 #output {
@@ -45,7 +46,7 @@ h3 {
 
 #output .binary, #output .app {
   background: #bbb;
-  padding: 5px;
+  padding: 10px;
   border-radius: 5px;
   box-shadow: 2px 2px 5px 0 #333;
 }
