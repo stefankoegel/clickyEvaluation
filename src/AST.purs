@@ -17,6 +17,13 @@ data Atom = Num Number
           | Bool Boolean
           | Name String
 
+instance eqAtom :: Eq Atom where
+  (==) (Num i)   (Num j)   = i == j
+  (==) (Bool b1) (Bool b2) = b1 == b2
+  (==) (Name s1) (Name s2) = s1 == s2
+  (==) _ _ = false
+  (/=) a b = not (a == b)
+
 data Expr = Atom Atom
           | List [Expr]
           | Binary Op Expr Expr

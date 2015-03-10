@@ -11,6 +11,8 @@ import Data.Tuple
 import Data.Maybe
 import Data.Foldable (foldl)
 
+import Math (pow)
+
 import Control.Apply ((*>))
 import Control.Monad.State
 import Control.Monad.State.Trans
@@ -63,6 +65,7 @@ eval1 env expr = case expr of
   (Binary op e1 e2)             -> binary op e1 e2
   (Unary op e)                  -> unary op e
   (Atom (Name name))            -> apply env name []
+  (App (Binary Composition f g) [e]) -> Just $ App f [App g [e]]
   (App (SectL e1 op) [e2])      -> Just $ Binary op e1 e2
   (App (SectR op e2) [e1])      -> Just $ Binary op e1 e2
   (App (Prefix op) [e1, e2])    -> Just $ Binary op e1 e2
@@ -73,19 +76,34 @@ eval1 env expr = case expr of
 binary :: Op -> Expr -> Expr -> Maybe Expr
 binary = go
   where
-  go Add (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i + j
-  go Sub (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i - j
+  go Power (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ pow i j
+
   go Mul (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i * j
   go Div (Atom (Num i)) (Atom (Num 0)) = Nothing
   go Div (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ Math.floor (i / j)
+  go Mod (Atom (Num i)) (Atom (Num 0)) = Nothing
+  go Mod (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i % j
 
-  go And (Atom (Bool true))  b = Just b
-  go And (Atom (Bool false)) _ = Just $ Atom $ Bool $ false
-  go Or  (Atom (Bool true))  _ = Just $ Atom $ Bool $ true
-  go Or  (Atom (Bool false)) b = Just b
+  go Add (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i + j
+  go Sub (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i - j
 
   go Cons   e          (List es)  = Just $ List $ e:es
   go Append (List es1) (List es2) = Just $ List $ es1 ++ es2
+
+  go Eq  (Atom a1) (Atom a2) = Just $ Atom $ Bool $ a1 == a2
+  go Neq (Atom a1) (Atom a2) = Just $ Atom $ Bool $ a1 /= a2
+  go Leq (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Bool $ i <= j
+  go Lt  (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Bool $ i < j
+  go Geq (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Bool $ i >= j
+  go Gt  (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Bool $ i > j
+
+  go And (Atom (Bool true))  b = Just b
+  go And (Atom (Bool false)) _ = Just $ Atom $ Bool $ false
+
+  go Or  (Atom (Bool true))  _ = Just $ Atom $ Bool $ true
+  go Or  (Atom (Bool false)) b = Just b
+
+  go Dollar f e = Just $ App f [e]
 
   go _       _               _               = Nothing
 
