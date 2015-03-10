@@ -57,6 +57,9 @@ foldr f b (x:xs) = f x (foldr f b xs)
 foldl f b []     = b
 foldl f b (x:xs) = foldl f (f b x) xs
 
+scanl f b []     = [b]
+scanl f b (x:xs) = b : scanl f (f b x) xs
+
 id x = x
 
 flip f x y = f y x
