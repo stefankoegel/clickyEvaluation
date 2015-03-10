@@ -128,8 +128,21 @@ base expr =  (List <$> list expr)
          <|> bracket expr
          <|> (Atom <$> atom)
 
+lambda :: Parser String Expr -> Parser String Expr
+lambda expr = bracket $ do
+  string "\\"
+  eatSpaces
+  binds <- binding `sepEndBy` eatSpaces
+  string "->"
+  eatSpaces
+  body <- expr
+  return $ Lambda binds body
+
+termLambda :: Parser String Expr -> Parser String Expr
+termLambda expr = try (lambda expr) <|> base expr
+
 termPrefixOp :: Parser String Expr -> Parser String Expr
-termPrefixOp expr = try prefixOp <|> base expr
+termPrefixOp expr = try prefixOp <|> termLambda expr
 
 termSect :: Parser String Expr -> Parser String Expr
 termSect expr = try (section (termPrefixOp expr)) <|> termPrefixOp expr
