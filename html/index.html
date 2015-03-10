@@ -48,14 +48,13 @@ minimum (x:xs) = foldl min x xs
 length []     = 0
 length (x:xs) = 1 + length xs
 
-sum = foldl (+) 0
-product = foldl (*) 1
+sum = foldr (+) 0
+product = foldr (*) 1
 
 reverse []     = []
 reverse (x:xs) = reverse xs ++ [x]
 
-concat []       = []
-concat (xs:xss) = xs ++ concat xss
+concat = foldr (++) []
 
 map f []     = []
 map f (x:xs) = f x : map f xs
@@ -69,11 +68,11 @@ not False = True
 filter p (x:xs) = if (p x) (x : filter p xs) (filter p xs)
 filter p []     = []
 
-foldr f b []     = b
-foldr f b (x:xs) = f x (foldr f b xs)
+foldr f ini []     = ini
+foldr f ini (x:xs) = f x (foldr f ini xs)
 
-foldl f b []     = b
-foldl f b (x:xs) = foldl f (f b x) xs
+foldl f acc []     = acc
+foldl f acc (x:xs) = foldl f (f acc x) xs
 
 scanl f b []     = [b]
 scanl f b (x:xs) = b : scanl f (f b x) xs
