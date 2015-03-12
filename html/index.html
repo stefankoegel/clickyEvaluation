@@ -77,6 +77,8 @@ foldl f acc (x:xs) = foldl f (f acc x) xs
 scanl f b []     = [b]
 scanl f b (x:xs) = b : scanl f (f b x) xs
 
+iterate f x = x : iterate f (f x)
+
 id x = x
 
 flip f x y = f y x
