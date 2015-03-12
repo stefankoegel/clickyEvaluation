@@ -18,21 +18,25 @@ import Debug.Trace
 
 
 main = J.ready $ do
-  input       <- J.select "#input"       >>= getValue
+  J.select "#input"
+    >>= J.on "change" (\_ _ -> startEvaluation)
+  startEvaluation
+
+startEvaluation :: forall eff. Eff (dom :: DOM | eff) Unit
+startEvaluation = do
   definitions <- J.select "#definitions" >>= getValue
-  output      <- J.select "#output"
-  info        <- J.select "#info"
-
-  let expr = case parseExpr input of Right e -> e
   let env = defsToEnv $ case parseDefs definitions of Right d -> d
-  showExpr env expr
-  return unit
 
-showExpr :: forall eff. Env -> Expr -> Eff (dom :: DOM | eff) Unit
+  input       <- J.select "#input"       >>= getValue
+  let expr = case parseExpr input of Right e -> e
+
+  showExpr env expr
+
+showExpr :: Env -> Expr -> forall eff. Eff (dom :: DOM | eff) Unit
 showExpr env expr = do
   output <- J.select "#output"
   J.clear output
-  jexpr <- exprToJQuery env expr (evalExpr env)
+  jexpr <- exprToJQuery env expr evalExpr
   J.append jexpr output
 
   J.select "#output .clickable"
@@ -45,8 +49,8 @@ showExpr env expr = do
     >>= J.on "mouseover" (\_ _ -> J.select "#output .mouseOver" >>= J.removeClass "mouseOver")
   return unit
 
-evalExpr :: forall eff. Env -> Expr -> Path -> Eff (dom :: DOM | eff) Unit
-evalExpr env expr path =
+evalExpr :: forall eff. Env -> Path -> Expr -> Eff (dom :: DOM | eff) Unit
+evalExpr env path expr =
   case evalPath1 env path expr of
     Nothing    -> return unit
     Just expr' -> do

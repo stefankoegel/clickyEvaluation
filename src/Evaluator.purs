@@ -1,7 +1,6 @@
 module Evaluator
   ( Path(..)
   , Env()
-  , eval1
   , evalPath1
   , defsToEnv
   ) where

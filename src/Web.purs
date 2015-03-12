@@ -17,24 +17,24 @@ import Control.Apply ((*>))
 import AST
 import Evaluator
 
-type Handler = forall eff. Expr -> Path -> Eff (dom :: DOM | eff) Unit
+type Handler = forall eff. Env -> Path -> Expr -> Eff (dom :: DOM | eff) Unit
 
 exprToJQuery :: forall eff. Env -> Expr -> Handler -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery env expr handler = go Start expr
   where
-  addHandler :: Path -> Expr-> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-  addHandler p e j = case eval1 env e of
+  addHandler :: Path -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+  addHandler p j = case evalPath1 env p expr of
     Nothing -> return j
     Just _  -> do
-      J.on "click" (\je _ -> J.stopImmediatePropagation je *> handler expr p) j
+      J.on "click" (\je _ -> J.stopImmediatePropagation je *> handler env p expr) j
       J.addClass "clickable" j
   go :: (Path -> Path) -> Expr -> Eff (dom :: DOM | eff) J.JQuery
   go p expr = case expr of
-    Atom a -> atom a >>= addHandler (p End) expr
+    Atom a -> atom a >>= addHandler (p End)
     Binary op e1 e2 -> do
       j1 <- go (p <<< Fst) e1
       j2 <- go (p <<< Snd) e2
-      binary op j1 j2 >>= addHandler (p End) expr
+      binary op j1 j2 >>= addHandler (p End)
     List es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
       list js
@@ -50,11 +50,11 @@ exprToJQuery env expr handler = go Start expr
     Lambda binds body -> do
       jBinds <- for binds binding
       jBody <- go (p <<< Fst) body
-      lambda jBinds jBody >>= addHandler (p End) expr
+      lambda jBinds jBody >>= addHandler (p End)
     App func args -> do
       jFunc <- go (p <<< Fst) func
       jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args
-      app jFunc jArgs >>= addHandler (p End) expr
+      app jFunc jArgs >>= addHandler (p End)
 
 atom :: forall eff. Atom -> Eff (dom :: DOM | eff) J.JQuery
 atom (Num n)      = makeDiv (show n) ["atom", "num"]
