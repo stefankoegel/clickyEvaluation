@@ -20,7 +20,7 @@ import Evaluator
 type Handler = forall eff. Env -> Path -> Expr -> Eff (dom :: DOM | eff) Unit
 
 exprToJQuery :: forall eff. Env -> Expr -> Handler -> Eff (dom :: DOM | eff) J.JQuery
-exprToJQuery env expr handler = go Start expr
+exprToJQuery env expr handler = go id expr
   where
   addHandler :: Path -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
   addHandler p j = case evalPath1 env p expr of
@@ -44,7 +44,7 @@ exprToJQuery env expr handler = go Start expr
       section j jop
     SectR op e -> do
       jop <- makeDiv (show op) ["op"]
-      j <- go (p <<< Fst) e
+      j <- go (p <<< Snd) e
       section jop j
     Prefix op -> makeDiv ("(" ++ show op ++ ")") ["prefix", "op"]
     Lambda binds body -> do

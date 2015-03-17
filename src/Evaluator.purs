@@ -21,35 +21,38 @@ import Control.Monad.Trans
 
 import AST
 
-data Path = Start Path | Nth Number Path | Fst Path | Snd Path | End
+data Path = Nth Number Path
+          | Fst Path
+          | Snd Path
+          | End
 
-select :: Path -> (Expr -> Maybe Expr) -> Expr -> Maybe Expr
-select (Start p) eval expr = select p eval expr
-select End       eval expr = eval expr
+mapWithPath :: Path -> (Expr -> Maybe Expr) -> Expr -> Maybe Expr
+mapWithPath p f = go p
+  where
+  go End e     = f e
+  go (Fst p) e = case e of
+    Binary op e1 e2 -> Binary op <$> go p e1 <*> Just e2
+    Unary op e      -> Unary op  <$> go p e
+    SectL e op      -> SectL     <$> go p e <*> Just op
+    Lambda bs body  -> Lambda bs <$> go p body
+    App e es        -> App       <$> go p e <*> Just es
+    _               -> Nothing
+  go (Snd p) e = case e of
+    Binary op e1 e2 -> Binary op e1 <$> go p e2
+    SectR op e      -> SectR op     <$> go p e
+    _               -> Nothing
+  go (Nth n p) e = case e of
+    List es  -> List  <$> mapMaybeIndex n (go p) es
+    App e es -> App e <$> mapMaybeIndex n (go p) es
+    _        -> Nothing
 
-select (Fst p) eval expr = case expr of
-  Binary op e1 e2 -> Binary op <$> (select p eval e1) <*> Just e2
-  Unary op e      -> Unary op <$> select p eval e
-  SectL e op      -> SectL <$> (select p eval e) <*> Just op
-  SectR op e      -> SectR op <$> (select p eval) e
-  Lambda bs body  -> Lambda bs <$> select p eval body
-  App e es        -> App <$> (select p eval e) <*> Just es
-  _               -> Nothing
-select (Snd p) eval expr = case expr of
-  Binary op e1 e2 -> Binary op e1 <$> select p eval e2
-  _               -> Nothing
-select (Nth n p) eval expr = case expr of
-  List es  -> List <$> mapMIndex n (select p eval) es
-  App e es -> App e <$> mapMIndex n (select p eval) es
-  _        -> Nothing
-
-mapMIndex :: forall m a. Number -> (a -> Maybe a) -> [a] -> Maybe [a]
-mapMIndex i f as = do
+mapMaybeIndex :: forall m a. Number -> (a -> Maybe a) -> [a] -> Maybe [a]
+mapMaybeIndex i f as = do
   a <- (as !! i) >>= f
   return $ updateAt i a as
 
 evalPath1 :: Env -> Path -> Expr -> Maybe Expr
-evalPath1 env path expr = select path (eval1 env) expr
+evalPath1 env path expr = mapWithPath path (eval1 env) expr
 
 type Env = StrMap [Tuple [Binding] Expr]
 
