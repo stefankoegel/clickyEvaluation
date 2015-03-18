@@ -9,7 +9,7 @@ import Data.Either
 import Data.Maybe
 import Control.Apply ((*>))
 
-import Web
+import Web (exprToJQuery, getPath)
 import Parser
 import Evaluator
 import AST
@@ -22,7 +22,9 @@ main = J.ready $ do
     >>= J.on "change" (\_ _ -> startEvaluation)
   startEvaluation
 
-startEvaluation :: forall eff. Eff (dom :: DOM | eff) Unit
+type DOMEff a = forall eff. Eff (dom :: DOM, trace :: Trace | eff) a
+
+startEvaluation :: DOMEff Unit
 startEvaluation = do
   definitions <- J.select "#definitions" >>= getValue
   let env = defsToEnv $ case parseDefs definitions of Right d -> d
@@ -32,24 +34,48 @@ startEvaluation = do
 
   showExpr env expr
 
-showExpr :: Env -> Expr -> forall eff. Eff (dom :: DOM | eff) Unit
+foreign import map
+  """
+  function map(callback) {
+    return function(ob) {
+      return function () {
+        return ob.map( function(i, e) { return callback(jQuery(e))(); } );
+      };
+    };
+  }
+  """ :: forall eff. (J.JQuery -> Eff (dom :: DOM | eff) Unit) -> J.JQuery -> Eff (dom :: DOM | eff) Unit
+
+showExpr :: forall eff. Env -> Expr -> DOMEff Unit
 showExpr env expr = do
-  output <- J.select "#output"
-  J.clear output
-  jexpr <- exprToJQuery env expr evalExpr
+  outputContainer <- J.select "#output-container"
+  J.clear outputContainer
+
+  output <- J.create "<div></div>" >>= J.addClass "output"
+  J.append output outputContainer
+
+  jexpr <- exprToJQuery expr
   J.append jexpr output
 
-  J.select "#output .clickable"
+  J.find ".binary, .app, .func" output >>= map (makeClickable env expr)
+
+  J.find ".clickable" output
     >>= J.on "mouseover" (\je j -> do
       J.stopImmediatePropagation je
-      J.select "#output .mouseOver"
-        >>= J.removeClass "mouseOver"
+      J.find ".mouseOver" output >>= J.removeClass "mouseOver"
       J.addClass "mouseOver" j)
+
   J.body
-    >>= J.on "mouseover" (\_ _ -> J.select "#output .mouseOver" >>= J.removeClass "mouseOver")
+    >>= J.on "mouseover" (\_ _ -> J.find ".mouseOver" output >>= J.removeClass "mouseOver")
   return unit
 
-evalExpr :: forall eff. Env -> Path -> Expr -> Eff (dom :: DOM | eff) Unit
+makeClickable :: forall eff. Env -> Expr -> J.JQuery -> DOMEff Unit
+makeClickable env expr jq = do
+  path <- getPath jq
+  case evalPath1 env path expr of
+    Nothing -> return unit
+    Just _  -> void $ J.addClass "clickable" jq
+
+evalExpr :: forall eff. Env -> Path -> Expr -> DOMEff Unit
 evalExpr env path expr =
   case evalPath1 env path expr of
     Nothing    -> return unit
