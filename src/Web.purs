@@ -64,15 +64,12 @@ atom (Name name)  = makeDiv name ["atom", "name"]
 
 binding :: forall eff. Binding -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
-  Lit (Num n)     -> makeDiv (show n) ["atom", "name"]
-  Lit (Bool true) -> makeDiv "True" ["atom", "name"]
-  Lit (Bool false)-> makeDiv "False" ["atom", "name"]
-  Lit (Name name) -> makeDiv name ["atom", "name"]
+  Lit a        -> atom a
   ConsLit b bs -> do
     jCons <- makeDiv "" []
     makeDiv "(" ["brace"] >>= flip J.append jCons
     binding b             >>= flip J.append jCons
-    makeDiv ":" ["brace"] >>= flip J.append jCons
+    makeDiv ":" ["colon"] >>= flip J.append jCons
     binding bs            >>= flip J.append jCons
     makeDiv ")" ["brace"] >>= flip J.append jCons
   ListLit bs -> do
