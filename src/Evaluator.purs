@@ -26,6 +26,13 @@ data Path = Nth Number Path
           | Snd Path
           | End
 
+instance showPath :: Show Path where
+  show p = case p of
+    Nth i p -> "(Nth " ++ show i ++ " " ++ show p ++")"
+    Fst   p -> "(Fst " ++ show p ++")"
+    Snd   p -> "(Snd " ++ show p ++")"
+    End     -> "End"
+
 mapWithPath :: Path -> (Expr -> Maybe Expr) -> Expr -> Maybe Expr
 mapWithPath p f = go p
   where
