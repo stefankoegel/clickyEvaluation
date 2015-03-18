@@ -57,15 +57,9 @@ showExpr env expr = do
   J.append jexpr output
 
   J.find ".binary, .app, .func" output >>= map (makeClickable env expr)
+  J.find ".clickable" output >>= addMouseOverListener
+  J.body >>= J.on "mouseover" (\_ _ -> removeMouseOver)
 
-  J.find ".clickable" output
-    >>= J.on "mouseover" (\je j -> do
-      J.stopImmediatePropagation je
-      J.find ".mouseOver" output >>= J.removeClass "mouseOver"
-      J.addClass "mouseOver" j)
-
-  J.body
-    >>= J.on "mouseover" (\_ _ -> J.find ".mouseOver" output >>= J.removeClass "mouseOver")
   return unit
 
 makeClickable :: forall eff. Env -> Expr -> J.JQuery -> DOMEff Unit
@@ -74,6 +68,19 @@ makeClickable env expr jq = do
   case evalPath1 env path expr of
     Nothing -> return unit
     Just _  -> void $ J.addClass "clickable" jq
+
+addMouseOverListener :: J.JQuery -> DOMEff Unit
+addMouseOverListener jq = void $ J.on "mouseover" handler jq
+  where
+  handler :: J.JQueryEvent -> J.JQuery -> DOMEff Unit
+  handler jEvent jq = do
+    J.stopImmediatePropagation jEvent
+    removeMouseOver
+    J.addClass "mouseOver" jq
+    return unit
+
+removeMouseOver :: DOMEff Unit
+removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
 
 evalExpr :: forall eff. Env -> Path -> Expr -> DOMEff Unit
 evalExpr env path expr =
