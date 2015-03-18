@@ -1,6 +1,6 @@
 module Web
   ( exprToJQuery
-  , Handler ()
+  , getPath
   ) where
 
 import Control.Monad.Eff
@@ -12,29 +12,29 @@ import Data.Maybe
 import Data.Array ((..), length)
 import Data.StrMap (lookup)
 import Data.Tuple
+import Data.Foreign (unsafeFromForeign)
 import Control.Apply ((*>))
+import Control.Bind ((=<<))
 
 import AST
-import Evaluator
+import Evaluator (Path(..))
 
-type Handler = forall eff. Env -> Path -> Expr -> Eff (dom :: DOM | eff) Unit
+pathPropName :: String
+pathPropName = "clickyEvaluation_path"
 
-exprToJQuery :: forall eff. Env -> Expr -> Handler -> Eff (dom :: DOM | eff) J.JQuery
-exprToJQuery env expr handler = go id expr
+getPath :: forall eff. J.JQuery -> Eff (dom :: DOM | eff) Path
+getPath j = unsafeFromForeign <$> J.getProp pathPropName j
+
+exprToJQuery :: forall eff. Expr -> Eff (dom :: DOM | eff) J.JQuery
+exprToJQuery expr = go id expr
   where
-  addHandler :: Path -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-  addHandler p j = case evalPath1 env p expr of
-    Nothing -> return j
-    Just _  -> do
-      J.on "click" (\je _ -> J.stopImmediatePropagation je *> handler env p expr) j
-      J.addClass "clickable" j
   go :: (Path -> Path) -> Expr -> Eff (dom :: DOM | eff) J.JQuery
-  go p expr = case expr of
-    Atom a -> atom a >>= addHandler (p End)
+  go p e = J.setProp pathPropName (p End) =<< case e of
+    Atom a -> atom a
     Binary op e1 e2 -> do
       j1 <- go (p <<< Fst) e1
       j2 <- go (p <<< Snd) e2
-      binary op j1 j2 >>= addHandler (p End)
+      binary op j1 j2
     List es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
       list js
@@ -50,11 +50,11 @@ exprToJQuery env expr handler = go id expr
     Lambda binds body -> do
       jBinds <- for binds binding
       jBody <- go (p <<< Fst) body
-      lambda jBinds jBody >>= addHandler (p End)
+      lambda jBinds jBody
     App func args -> do
       jFunc <- go (p <<< Fst) func
       jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args
-      app jFunc jArgs >>= addHandler (p End)
+      app jFunc jArgs
 
 atom :: forall eff. Atom -> Eff (dom :: DOM | eff) J.JQuery
 atom (Num n)      = makeDiv (show n) ["atom", "num"]
