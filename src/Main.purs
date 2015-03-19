@@ -7,6 +7,7 @@ import Data.Foreign (unsafeFromForeign)
 
 import Data.Either
 import Data.Maybe
+import Data.Foldable (for_)
 import Control.Apply ((*>))
 import Control.Monad.State.Trans
 import Control.Monad.State.Class
@@ -54,23 +55,36 @@ foreign import map
 
 showEvaluationState :: EvalM Unit
 showEvaluationState = do
-  outputContainer <- liftEff $ J.select "#output-container"
-  liftEff $ J.clear outputContainer
+  output <- liftEff $ prepareContainer "output"
+  history <- liftEff $ prepareContainer "history"
 
-  output <- liftEff $ J.create "<div></div>" >>= J.addClass "output"
-  liftEff $ J.append output outputContainer
+  { env = env, expr = expr, history = hists } <- get :: EvalM EvalState
 
-  { env = env, expr = expr } <- get :: EvalM EvalState
+  liftEff $ exprToJQuery expr >>= flip J.append output
+  liftEff $ showHistory hists history
 
-  jexpr <- liftEff $ exprToJQuery expr
-  liftEff $ J.append jexpr output
-
-  liftEff (J.find ".binary, .app, .func" output) >>= makeClickable
-  liftEff (J.find ".clickable" output) >>= addMouseOverListener >>= addClickListener
-  liftEff $ J.body >>= J.on "mouseover" (\_ _ -> removeMouseOver)
+  liftEff (J.find ".binary, .app, .func" output)
+    >>= makeClickable
+  liftEff (J.find ".clickable" output)
+    >>= addMouseOverListener
+    >>= addClickListener
+  liftEff (J.body >>= J.on "mouseover" (\_ _ -> removeMouseOver))
 
   liftEff $ return unit :: DOMEff Unit
 
+showHistory :: [Expr] -> J.JQuery -> DOMEff Unit
+showHistory exprs jq = for_ exprs $ \expr -> do
+  exprToJQuery expr >>= flip J.append jq
+  J.create "<br></br>" >>= flip J.append jq
+  return unit
+
+
+prepareContainer :: String -> DOMEff J.JQuery
+prepareContainer name = do
+  container <- J.select ("#" ++ name ++ "-container") >>= J.clear
+  content <- J.create "<div></div>" >>= J.addClass name
+  J.append content container
+  return content
 
 makeClickable :: J.JQuery -> EvalM Unit
 makeClickable jq = do
@@ -115,6 +129,7 @@ evalExpr path = do
     Nothing    -> return unit
     Just expr' -> do
       modify (\es -> es { expr = expr' })
+      modify (\es -> es { history = expr : es.history })
       showEvaluationState
 
 getValue :: J.JQuery -> DOMEff String
