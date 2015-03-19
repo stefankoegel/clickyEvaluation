@@ -3,7 +3,7 @@ module Main where
 import qualified Control.Monad.JQuery as J
 import           Control.Monad.Eff
 import DOM
-import Data.Foreign (readString)
+import Data.Foreign (unsafeFromForeign)
 
 import Data.Either
 import Data.Maybe
@@ -98,8 +98,5 @@ evalExpr env path expr =
     Just expr' -> do
       showExpr env expr'
 
-getValue :: forall eff. J.JQuery -> Eff (dom :: DOM | eff) String
-getValue j = do
-  value <- J.getValue j
-  case readString value of
-    Right str -> return str
+getValue :: forall eff. J.JQuery -> DOMEff String
+getValue jq = unsafeFromForeign <$> J.getValue jq
