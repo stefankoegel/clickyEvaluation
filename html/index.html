@@ -24,8 +24,8 @@
 
     <h3>Definitions</h3>
     <textarea id="definitions" cols="120" rows="15">
-and = foldl (&&) True
-or = foldl (||) False
+and = foldr (&&) True
+or = foldr (||) False
 
 all p = and . map p
 any p = or . map p
@@ -45,14 +45,14 @@ elem e (x:xs) = if (e == x) True (elem e xs)
 max a b = if (a >= b) a b
 min a b = if (b >= a) a b
 
-maximum (x:xs) = foldl max x xs
-minimum (x:xs) = foldl min x xs
+maximum (x:xs) = foldr max x xs
+minimum (x:xs) = foldr min x xs
 
 length []     = 0
 length (x:xs) = 1 + length xs
 
-sum = foldr (+) 0
-product = foldr (*) 1
+sum = foldl (+) 0
+product = foldl (*) 1
 
 reverse []     = []
 reverse (x:xs) = reverse xs ++ [x]
