@@ -58,10 +58,10 @@ showEvaluationState = do
   output <- liftEff $ prepareContainer "output"
   history <- liftEff $ prepareContainer "history"
 
-  { env = env, expr = expr, history = hists } <- get :: EvalM EvalState
+  { env = env, expr = expr, history = histExprs } <- get :: EvalM EvalState
 
-  liftEff $ exprToJQuery expr >>= flip J.append output
-  liftEff $ showHistory hists history
+  liftEff $ exprToJQuery expr >>= wrapInDiv "output" >>= flip J.append output
+  liftEff $ showHistory histExprs >>= flip J.append history
 
   liftEff (J.find ".binary, .app, .func" output)
     >>= makeClickable
@@ -72,19 +72,20 @@ showEvaluationState = do
 
   liftEff $ return unit :: DOMEff Unit
 
-showHistory :: [Expr] -> J.JQuery -> DOMEff Unit
-showHistory exprs jq = for_ exprs $ \expr -> do
-  exprToJQuery expr >>= flip J.append jq
-  J.create "<br></br>" >>= flip J.append jq
-  return unit
-
+showHistory :: [Expr] -> DOMEff J.JQuery
+showHistory exprs = do
+  box <- J.create "<div></div>" >>= J.addClass "historyBox"
+  for_ exprs $ \expr -> do
+    exprToJQuery expr >>= wrapInDiv "history" >>= wrapInDiv "vertical" >>= flip J.append box
+  return box
 
 prepareContainer :: String -> DOMEff J.JQuery
 prepareContainer name = do
-  container <- J.select ("#" ++ name ++ "-container") >>= J.clear
-  content <- J.create "<div></div>" >>= J.addClass name
-  J.append content container
-  return content
+  J.select ("#" ++ name ++ "-container") >>= J.clear
+
+wrapInDiv :: String -> J.JQuery -> DOMEff J.JQuery
+wrapInDiv name jq = do
+  J.create "<div></div>" >>= J.addClass name >>= J.append jq
 
 makeClickable :: J.JQuery -> EvalM Unit
 makeClickable jq = do
@@ -120,7 +121,7 @@ addClickListener jq = do
     void $ runStateT (evalExpr path) evaluationState
 
 removeMouseOver :: DOMEff Unit
-removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOve"
+removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
 
 evalExpr :: Path -> EvalM Unit
 evalExpr path = do
