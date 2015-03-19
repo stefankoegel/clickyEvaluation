@@ -21,6 +21,7 @@
     "purescript-parsing": "*",
     "purescript-globals": "*",
     "purescript-math": "*",
-    "purescript-maps": "*"
+    "purescript-maps": "*",
+    "purescript-monad-eff": "*"
   }
 }

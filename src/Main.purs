@@ -8,6 +8,9 @@ import Data.Foreign (unsafeFromForeign)
 import Data.Either
 import Data.Maybe
 import Control.Apply ((*>))
+import Control.Monad.State.Trans
+import Control.Monad.State.Class
+import Control.Monad.Eff.Class
 
 import Web (exprToJQuery, getPath)
 import Parser
@@ -22,7 +25,11 @@ main = J.ready $ do
     >>= J.on "change" (\_ _ -> startEvaluation)
   startEvaluation
 
-type DOMEff a = forall eff. Eff (dom :: DOM, trace :: Trace | eff) a
+type DOMEff = Eff (dom :: DOM, trace :: Trace)
+
+type EvalState = { env :: Env, expr :: Expr, history :: [Expr] }
+
+type EvalM a = StateT EvalState DOMEff a
 
 startEvaluation :: DOMEff Unit
 startEvaluation = do
@@ -32,7 +39,7 @@ startEvaluation = do
   input       <- J.select "#input"       >>= getValue
   let expr = case parseExpr input of Right e -> e
 
-  showExpr env expr
+  void $ runStateT showExpr { env: env, expr: expr, history: [] }
 
 foreign import map
   """
@@ -43,34 +50,41 @@ foreign import map
       };
     };
   }
-  """ :: forall eff. (J.JQuery -> Eff (dom :: DOM | eff) Unit) -> J.JQuery -> Eff (dom :: DOM | eff) Unit
+  """ :: forall eff. (J.JQuery -> DOMEff Unit) -> J.JQuery -> DOMEff Unit
 
-showExpr :: forall eff. Env -> Expr -> DOMEff Unit
-showExpr env expr = do
-  outputContainer <- J.select "#output-container"
-  J.clear outputContainer
+showExpr :: forall eff. EvalM Unit
+showExpr = do
+  outputContainer <- liftEff $ J.select "#output-container"
+  liftEff $ J.clear outputContainer
 
-  output <- J.create "<div></div>" >>= J.addClass "output"
-  J.append output outputContainer
+  output <- liftEff $ J.create "<div></div>" >>= J.addClass "output"
+  liftEff $ J.append output outputContainer
 
-  jexpr <- exprToJQuery expr
-  J.append jexpr output
+  { env = env, expr = expr } <- get :: EvalM EvalState
 
-  J.find ".binary, .app, .func" output >>= map (makeClickable env expr)
-  J.find ".clickable" output >>= addMouseOverListener >>= addClickListener env expr
-  J.body >>= J.on "mouseover" (\_ _ -> removeMouseOver)
+  jexpr <- liftEff $ exprToJQuery expr
+  liftEff $ J.append jexpr output
 
-  return unit
+  liftEff (J.find ".binary, .app, .func" output) >>= makeClickable
+  liftEff (J.find ".clickable" output) >>= addMouseOverListener >>= addClickListener
+  liftEff $ J.body >>= J.on "mouseover" (\_ _ -> removeMouseOver)
 
-makeClickable :: forall eff. Env -> Expr -> J.JQuery -> DOMEff Unit
-makeClickable env expr jq = do
-  path <- getPath jq
-  case evalPath1 env path expr of
-    Nothing -> return unit
-    Just _  -> void $ J.addClass "clickable" jq
+  liftEff $ return unit :: DOMEff Unit
 
-addMouseOverListener :: J.JQuery -> DOMEff J.JQuery
-addMouseOverListener jq = J.on "mouseover" handler jq
+makeClickable :: forall eff. J.JQuery -> EvalM Unit
+makeClickable jq = do
+  { env = env, expr = expr } <- get
+  liftEff $ map (testEval env expr) jq
+  where
+  testEval :: Env -> Expr -> J.JQuery -> DOMEff Unit
+  testEval env expr jq = do
+    path <- getPath jq
+    case evalPath1 env path expr of
+      Nothing -> return unit
+      Just _  -> void $ J.addClass "clickable" jq
+
+addMouseOverListener :: J.JQuery -> EvalM J.JQuery
+addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
   where
   handler :: J.JQueryEvent -> J.JQuery -> DOMEff Unit
   handler jEvent jq = do
@@ -79,24 +93,28 @@ addMouseOverListener jq = J.on "mouseover" handler jq
     J.addClass "mouseOver" jq
     return unit
 
-addClickListener :: Env -> Expr -> J.JQuery -> DOMEff J.JQuery
-addClickListener env expr jq = J.on "click" handler jq
+addClickListener :: J.JQuery -> EvalM J.JQuery
+addClickListener jq = do
+  evaluationState <- get
+  liftEff $ J.on "click" (handler evaluationState) jq
   where
-  handler :: J.JQueryEvent -> J.JQuery -> DOMEff Unit
-  handler jEvent jq = do
+  handler :: EvalState -> J.JQueryEvent -> J.JQuery -> DOMEff Unit
+  handler evaluationState jEvent jq = do
     J.stopImmediatePropagation jEvent
     path <- getPath jq
-    evalExpr env path expr
+    void $ runStateT (evalExpr path) evaluationState
 
 removeMouseOver :: DOMEff Unit
-removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
+removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOve"
 
-evalExpr :: forall eff. Env -> Path -> Expr -> DOMEff Unit
-evalExpr env path expr =
+evalExpr :: forall eff. Path -> EvalM Unit
+evalExpr path = do
+  { env = env, expr = expr } <- get
   case evalPath1 env path expr of
     Nothing    -> return unit
     Just expr' -> do
-      showExpr env expr'
+      modify (\es -> es { expr = expr' })
+      showExpr
 
 getValue :: forall eff. J.JQuery -> DOMEff String
 getValue jq = unsafeFromForeign <$> J.getValue jq
