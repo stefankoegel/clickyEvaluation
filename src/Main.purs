@@ -50,7 +50,7 @@ foreign import map
       };
     };
   }
-  """ :: forall eff. (J.JQuery -> DOMEff Unit) -> J.JQuery -> DOMEff Unit
+  """ :: (J.JQuery -> DOMEff Unit) -> J.JQuery -> DOMEff Unit
 
 showExpr :: forall eff. EvalM Unit
 showExpr = do
@@ -71,7 +71,8 @@ showExpr = do
 
   liftEff $ return unit :: DOMEff Unit
 
-makeClickable :: forall eff. J.JQuery -> EvalM Unit
+
+makeClickable :: J.JQuery -> EvalM Unit
 makeClickable jq = do
   { env = env, expr = expr } <- get
   liftEff $ map (testEval env expr) jq
@@ -107,14 +108,14 @@ addClickListener jq = do
 removeMouseOver :: DOMEff Unit
 removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOve"
 
-evalExpr :: forall eff. Path -> EvalM Unit
+evalExpr :: Path -> EvalM Unit
 evalExpr path = do
   { env = env, expr = expr } <- get
   case evalPath1 env path expr of
     Nothing    -> return unit
     Just expr' -> do
       modify (\es -> es { expr = expr' })
-      showExpr
+      showEvaluationState
 
-getValue :: forall eff. J.JQuery -> DOMEff String
+getValue :: J.JQuery -> DOMEff String
 getValue jq = unsafeFromForeign <$> J.getValue jq
