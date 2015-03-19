@@ -39,7 +39,7 @@ startEvaluation = do
   input       <- J.select "#input"       >>= getValue
   let expr = case parseExpr input of Right e -> e
 
-  void $ runStateT showExpr { env: env, expr: expr, history: [] }
+  void $ runStateT showEvaluationState { env: env, expr: expr, history: [] }
 
 foreign import map
   """
@@ -52,8 +52,8 @@ foreign import map
   }
   """ :: (J.JQuery -> DOMEff Unit) -> J.JQuery -> DOMEff Unit
 
-showExpr :: forall eff. EvalM Unit
-showExpr = do
+showEvaluationState :: EvalM Unit
+showEvaluationState = do
   outputContainer <- liftEff $ J.select "#output-container"
   liftEff $ J.clear outputContainer
 
