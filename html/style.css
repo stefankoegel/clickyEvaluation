@@ -9,7 +9,7 @@ h3 {
   color: #333;
 }
 
-#input, #definitions, #output, #output div.clickable{
+#input, #definitions, .output, div.clickable{
   border: none;
   background: #ddd;
   padding: 10px;
@@ -18,24 +18,24 @@ h3 {
   transition: background .25s ease-in-out;
 }
 
-#input:hover, #definitions:hover, #output div.clickable.mouseOver{
+#input:hover, #definitions:hover, div.clickable.mouseOver{
   background: #fff;
   transition: background .25s ease-in-out;
 }
 
-#definitions, #input, #output-container, #info {
+#definitions, #input, #output-container, #history-container, #info {
   font-family: monospace;
   font-size: 15px;
   display: block;
   margin: 0px auto 50px auto;
 }
 
-#output-container {
+#output-container, #history-container {
   text-align: center;
   cursor: default;
 }
 
-#output {
+.output {
   display: inline-block;
   font-weight: bold;
   padding: 10px;
@@ -44,30 +44,30 @@ h3 {
   box-shadow: 2px 2px 5px 0 #333;
 }
 
-#output .binary, #output .app {
+.binary, .app {
   background: #bbb;
   padding: 10px;
   border-radius: 5px;
   box-shadow: 2px 2px 5px 0 #333;
 }
 
-#output div {
+.output div, .history div {
   display: inline-block;
   margin: 0px 5px;
 }
 
-#output div.clickable {
+div.clickable {
   padding: 15px;
 }
 
-#output .num, .bool {
+.num, .bool {
   color: #e4e;
 }
 
-#output .name {
+.name {
   color: #f62;
 }
 
-#output div.op, #output div.brace, #output div.comma {
+div.op, div.brace, div.comma {
   margin: 0px;
 }
