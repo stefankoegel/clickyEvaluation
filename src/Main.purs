@@ -60,6 +60,7 @@ showEvaluationState = do
   history <- liftEff $ prepareContainer "history"
 
   { env = env, expr = expr, history = histExprs } <- get :: EvalM EvalState
+  liftEff $ print expr
 
   liftEff $ exprToJQuery expr >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
