@@ -13,7 +13,7 @@
     </script>
 
     <h3>Expression</h3>
-    <input type="text" id="input" size="120" value="sum (map (\x -> x * x) [1, 2, 3, 4])">
+    <input type="text" id="input" size="120" value="sum' (map (^2) [1, 2, 3, 4])">
 
     <div id="output-container">
     </div>
@@ -53,6 +53,9 @@ length (x:xs) = 1 + length xs
 
 sum = foldl (+) 0
 product = foldl (*) 1
+
+sum' [] = 0
+sum' (x:xs) = x + sum' xs
 
 reverse []     = []
 reverse (x:xs) = reverse xs ++ [x]
