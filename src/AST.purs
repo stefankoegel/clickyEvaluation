@@ -38,6 +38,7 @@ data Expr = Atom Atom
 data Binding = Lit Atom
              | ConsLit Binding Binding
              | ListLit [Binding]
+             | NTupleLit [Binding]
 
 data Definition = Def String [Binding] Expr
 
@@ -71,15 +72,19 @@ instance showAtom :: Show Atom where
 showList :: forall a. (Show a) => [a] -> String
 showList ls = "[" ++ joinWith ", " (show <$> ls) ++ "]"
 
+showTuple :: forall a. (Show a) => [a] -> String
+showTuple ls = "(" ++ joinWith ", " (show <$> ls) ++ ")"
+
 instance showExpr :: Show Expr where
   show expr = case expr of
     Atom atom       -> "(Atom " ++ show atom ++ ")"
     List ls         -> "(List " ++ showList ls ++ ")"
-    NTuple ls       -> "(NTuple " ++ show (length ls) ++ " " ++ "(" ++ joinWith ", " (show <$> ls) ++ "))"
+    NTuple ls       -> "(NTuple " ++ showTuple ls ++ ")"
     Binary op e1 e2 -> "(Binary " ++ show e1 ++ " " ++ show op ++ " " ++ show e2 ++ ")"
     Unary op e      -> "(Unary " ++ show op ++ " " ++ show e ++ ")"
     SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"
     SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
+    Prefix op       -> "(Prefix (" ++ show op ++ "))"
     Lambda binds body -> "(Lambda " ++ showList binds ++ " " ++ show body ++ ")"
     App func args   -> "(App " ++ show func ++ " " ++ showList args ++ ")"
 
@@ -88,6 +93,7 @@ instance showBinding :: Show Binding where
     Lit atom     -> "(Lit " ++ show atom ++ ")"
     ConsLit b bs -> "(ConsLit " ++ show b ++ ":" ++ show bs ++ ")"
     ListLit bs   -> "(ListLit " ++ showList bs ++ ")"
+    NTupleLit ls -> "(NTupleLit " ++ showTuple ls ++ ")"
 
 instance showDefinition :: Show Definition where
   show (Def name bindings body) = "(Def " ++ name ++ " " ++ show bindings ++ " " ++ show body ++ ")"

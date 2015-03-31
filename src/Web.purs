@@ -14,7 +14,7 @@ import Data.StrMap (lookup)
 import Data.Tuple
 import Data.Foreign (unsafeFromForeign)
 import Control.Apply ((*>))
-import Control.Bind ((=<<))
+import Control.Bind ((=<<), (>=>))
 
 import AST
 import Evaluator (Path(..))
@@ -82,6 +82,12 @@ binding b = case b of
       binding b >>= flip J.append jList
       makeDiv "," ["comma"] >>= flip J.append jList
     makeDiv "]" ["brace"] >>= flip J.append jList
+  NTupleLit bs -> do
+    jTuple <- makeDiv "" []
+    makeDiv "(" ["brace"] >>= flip J.append jTuple
+    interleaveM_ (binding >=> flip J.append jTuple) (makeDiv "," ["comma"] >>= flip J.append jTuple) bs
+    makeDiv ")" ["brace"] >>= flip J.append jTuple
+    return jTuple
 
 lambda :: forall eff. [J.JQuery] -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 lambda jBinds jBody = do

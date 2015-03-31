@@ -123,8 +123,16 @@ opList =
 prefixOp :: Parser String Expr
 prefixOp = bracket $ Prefix <$> choice opList
 
-tuple :: Parser String Expr -> Parser String Expr
-tuple expr = bracket $ NTuple <$> expr `sepBy` (try (eatSpaces *> string "," *> eatSpaces))
+sepBy2 :: forall m s a sep. (Monad m) => ParserT s m a -> ParserT s m sep -> ParserT s m [a]
+sepBy2 p sep = do
+  a <- p
+  as <- some $ do
+    sep
+    p
+  return (a:as)
+
+tuple :: forall a. Parser String a -> Parser String [a]
+tuple expr = bracket $ expr `sepBy2` (try (eatSpaces *> string "," *> eatSpaces))
 
 base :: Parser String Expr -> Parser String Expr
 base expr =  (List <$> list expr)
@@ -142,7 +150,7 @@ lambda expr = bracket $ do
   return $ Lambda binds body
 
 termNTuple :: Parser String Expr -> Parser String Expr
-termNTuple expr = try (tuple expr) <|> base expr
+termNTuple expr = try (NTuple <$> tuple expr) <|> base expr
 
 termLambda :: Parser String Expr -> Parser String Expr
 termLambda expr = try (lambda expr) <|> termNTuple expr
@@ -243,8 +251,11 @@ consLit binding = bracket recurse
     bs <- recurse
     return $ ConsLit b bs
 
+tupleLit :: Parser String Binding -> Parser String Binding
+tupleLit binding = NTupleLit <$> tuple binding
+
 binding :: Parser String Binding
-binding = fix1 $ \binding -> lit <|> consLit binding <|> listLit binding
+binding = fix1 $ \binding -> lit <|> try (consLit binding) <|> tupleLit binding <|> listLit binding
 
 ---------------------------------------
 -- Parsers for the 'Definition' type

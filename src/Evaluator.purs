@@ -149,6 +149,7 @@ match (ConsLit b bs)   (Binary Cons e es) = match b e *> match bs es
 match (ListLit [])     (List [])        = return unit
 match (ListLit (b:bs)) (List (e:es))    = match b e *> match (ListLit bs) (List es)
 match (ListLit (b:bs)) (Binary Cons e es) = match b e *> match (ListLit bs) es
+match (NTupleLit bs)   (NTuple es)      = match (ListLit bs) (List es)
 match _                _                = lift Nothing
 
 boundNames :: Binding -> [String]
@@ -157,6 +158,7 @@ boundNames = go
   go (Lit (Name name)) = [name]
   go (ConsLit b1 b2)   = go b1 ++ go b2
   go (ListLit bs)      = foldMap go bs
+  go (NTupleLit bs)    = foldMap go bs
 
 isNameBound :: String -> Binding -> Boolean
 isNameBound name binding = (elemIndex name $ boundNames binding) >= 0
