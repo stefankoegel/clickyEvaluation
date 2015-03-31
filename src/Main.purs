@@ -96,6 +96,7 @@ showHistory expr i = do
                         void $ runStateT showEvaluationState es'
   delete <- liftEff $ J.create "<button></button>"
     >>= J.setText "Delete"
+    >>= J.addClass "delete"
     >>= J.on "click" deleteHandler
   liftEff $ J.append delete history
   let restoreHandler = \_ _ -> do
@@ -103,6 +104,7 @@ showHistory expr i = do
                          void $ runStateT showEvaluationState es'
   restore <- liftEff $ J.create "<button></button>"
     >>= J.setText "Restore"
+    >>= J.addClass "restore"
     >>= J.on "click" restoreHandler
   liftEff $ J.append restore history
   return history

@@ -9,12 +9,35 @@ h3 {
   color: #333;
 }
 
-#input, #definitions, .output, .historyBox, div.clickable{
+#input, #definitions, .output, .historyBox, div.clickable, button {
+  font-family: monospace;
+  font-size: 15px;
   border: none;
   background: #ddd;
   padding: 10px;
+  margin: 10px;
   border-radius: 10px;
   box-shadow: 3px 3px 10px 0 #333;
+  transition: background .25s ease-in-out;
+}
+
+button.delete {
+  background: #d99;
+  box-shadow: 3px 3px 10px 0 #733;
+}
+
+button.delete:hover {
+  background: #fbb;
+  transition: background .25s ease-in-out;
+}
+
+button.restore {
+  background: #9d9;
+  box-shadow: 3px 3px 10px 0 #373;
+}
+
+button.restore:hover {
+  background: #bfb;
   transition: background .25s ease-in-out;
 }
 
@@ -35,7 +58,7 @@ h3 {
   cursor: default;
 }
 
-.output, .historyBox {
+.output, .history, .historyBox {
   display: inline-block;
   font-weight: bold;
   padding: 10px;
