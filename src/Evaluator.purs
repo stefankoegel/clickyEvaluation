@@ -169,6 +169,7 @@ replace name value = go
   go expr = case expr of
     a@(Atom (Name str)) -> if str == name then value else a
     (List exprs)        -> List (go <$> exprs)
+    (NTuple exprs)      -> NTuple (go <$> exprs)
     (Binary op e1 e2)   -> Binary op (go e1) (go e2)
     (Unary op e)        -> Unary op (go e)
     (SectL e op)        -> SectL (go e) op
