@@ -7,9 +7,11 @@ import Control.Monad.Eff
 import qualified Control.Monad.JQuery as J
 import DOM
 
+import Data.Foldable (all)
 import Data.Traversable (for, zipWithA)
 import Data.Maybe
 import Data.Array ((..), length)
+import Data.String (joinWith)
 import Data.StrMap (lookup)
 import Data.Tuple
 import Data.Foreign (unsafeFromForeign)
@@ -35,9 +37,10 @@ exprToJQuery expr = go id expr
       j1 <- go (p <<< Fst) e1
       j2 <- go (p <<< Snd) e2
       binary op j1 j2
-    List es -> do
-      js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
-      list js
+    List es -> case isString es of
+                  true  -> string es
+                  false -> do js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
+                              list js
     NTuple es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
       tuple js
@@ -63,6 +66,7 @@ atom :: forall eff. Atom -> Eff (dom :: DOM | eff) J.JQuery
 atom (Num n)      = makeDiv (show n) ["atom", "num"]
 atom (Bool true)  = makeDiv "True"  ["atom", "bool"]
 atom (Bool false) = makeDiv "False" ["atom", "bool"]
+atom (Char c)     = makeDiv ("'" ++ c ++ "'") ["atom", "char"]
 atom (Name name)  = makeDiv name ["atom", "name"]
 
 binding :: forall eff. Binding -> Eff (dom :: DOM | eff) J.JQuery
@@ -150,6 +154,18 @@ list js = do
   close <- makeDiv "]" ["brace"]
   J.append close dls
   return dls
+
+isString :: [Expr] -> Boolean
+isString es = length es > 0 && all isChar es
+  where
+  isChar (Atom (Char _)) = true
+  isChar _               = false
+
+string :: forall eff. [Expr] -> Eff (dom :: DOM | eff) J.JQuery
+string es = do
+  let str = "\"" ++ joinWith "" ((\(Atom (Char s)) -> s) <$> es) ++ "\""
+  dstring <- makeDiv str ["list", "string"]
+  return dstring
 
 app :: forall eff. J.JQuery -> [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
 app jFunc jArgs = do

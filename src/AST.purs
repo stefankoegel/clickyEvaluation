@@ -15,11 +15,13 @@ data Op = Composition
 
 data Atom = Num Number
           | Bool Boolean
+          | Char String
           | Name String
 
 instance eqAtom :: Eq Atom where
   (==) (Num i)   (Num j)   = i == j
   (==) (Bool b1) (Bool b2) = b1 == b2
+  (==) (Char s1) (Char s2) = s1 == s2
   (==) (Name s1) (Name s2) = s1 == s2
   (==) _ _ = false
   (/=) a b = not (a == b)
@@ -67,6 +69,7 @@ instance showAtom :: Show Atom where
   show atom = case atom of
     Num number  -> "(Num " ++ show number ++ ")"
     Bool bool   -> "(Bool " ++ show bool ++ ")"
+    Char string -> "(Char " ++ string ++ ")"
     Name string -> "(Name " ++ string ++ ")"
 
 showList :: forall a. (Show a) => [a] -> String

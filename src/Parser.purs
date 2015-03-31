@@ -44,6 +44,19 @@ bool = do
   f = string "False" *> return (Bool false)
   t = string "True" *> return (Bool true)
 
+char_ :: Parser String Atom
+char_ = Char <$> choice [ string "\\\\" *> return "\\"
+--                        , string "\\n"  *> return "\n"
+--                        , string "\\r"  *> return "\r"
+--                        , string "\\t"  *> return "\t"
+                        , string "\\\""  *> return "\""
+                        , char
+                        ]
+
+
+character :: Parser String Atom
+character = between (string "'") (string "'") char_
+
 name :: Parser String String
 name = do
   str <- some $ oneOf $ split "" "_abcdefghijklmnopqrstuvwxyz'"
@@ -51,7 +64,7 @@ name = do
 
 atom :: Parser String Atom
 atom = do
-  num <|> try bool <|> (Name <$> name) <?> "Atom (Number, Boolean, Name)"
+  num <|> try bool <|> character <|> (Name <$> name) <?> "Atom (Number, Boolean, Name)"
 
 ---------------------------------------
 -- Parsers for the 'Expr' type
@@ -68,6 +81,11 @@ list p = do
   eatSpaces
   string "]"
   return ls
+
+stringList :: Parser String [Atom]
+stringList = do
+  string "\""
+  char_ `manyTill` (string "\"")
 
 app :: Parser String Expr -> Parser String Expr
 app expr = do
@@ -136,6 +154,7 @@ tuple expr = bracket $ expr `sepBy2` (try (eatSpaces *> string "," *> eatSpaces)
 
 base :: Parser String Expr -> Parser String Expr
 base expr =  (List <$> list expr)
+         <|> ((List <<< (Atom <$>)) <$> stringList)
          <|> bracket expr
          <|> (Atom <$> atom)
 

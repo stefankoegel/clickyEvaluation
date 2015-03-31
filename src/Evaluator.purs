@@ -143,8 +143,7 @@ matchls _ _ _ = Nothing
 
 match :: Binding -> Expr -> StateT Expr Maybe Unit
 match (Lit (Name x))   e                = modify (replace x e)
-match (Lit (Num i))    (Atom (Num j))   | i == j  = return unit
-match (Lit (Bool b))   (Atom (Bool b')) | b == b' = return unit
+match (Lit l)          (Atom a)         | a == l  = return unit
 match (ConsLit b bs)   (List (e:es))    = match b e *> match bs (List es)
 match (ConsLit b bs)   (Binary Cons e es) = match b e *> match bs es
 match (ListLit [])     (List [])        = return unit
