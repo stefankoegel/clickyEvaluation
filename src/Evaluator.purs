@@ -50,6 +50,7 @@ mapWithPath p f = go p
     _               -> Nothing
   go (Nth n p) e = case e of
     List es  -> List  <$> mapMaybeIndex n (go p) es
+    NTuple es -> NTuple <$> mapMaybeIndex n (go p) es
     App e es -> App e <$> mapMaybeIndex n (go p) es
     _        -> Nothing
 

@@ -1,7 +1,7 @@
 module AST where
 
 import Data.String (joinWith)
-import Data.Array  ()
+import Data.Array  (length)
 
 data Op = Composition
         | Power
@@ -26,6 +26,7 @@ instance eqAtom :: Eq Atom where
 
 data Expr = Atom Atom
           | List [Expr]
+          | NTuple [Expr]
           | Binary Op Expr Expr
           | Unary Op Expr
           | SectL Expr Op
@@ -74,6 +75,7 @@ instance showExpr :: Show Expr where
   show expr = case expr of
     Atom atom       -> "(Atom " ++ show atom ++ ")"
     List ls         -> "(List " ++ showList ls ++ ")"
+    NTuple ls       -> "(NTuple " ++ show (length ls) ++ " " ++ "(" ++ joinWith ", " (show <$> ls) ++ "))"
     Binary op e1 e2 -> "(Binary " ++ show e1 ++ " " ++ show op ++ " " ++ show e2 ++ ")"
     Unary op e      -> "(Unary " ++ show op ++ " " ++ show e ++ ")"
     SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"

@@ -123,6 +123,9 @@ opList =
 prefixOp :: Parser String Expr
 prefixOp = bracket $ Prefix <$> choice opList
 
+tuple :: Parser String Expr -> Parser String Expr
+tuple expr = bracket $ NTuple <$> expr `sepBy` (try (eatSpaces *> string "," *> eatSpaces))
+
 base :: Parser String Expr -> Parser String Expr
 base expr =  (List <$> list expr)
          <|> bracket expr
@@ -138,8 +141,11 @@ lambda expr = bracket $ do
   body <- expr
   return $ Lambda binds body
 
+termNTuple :: Parser String Expr -> Parser String Expr
+termNTuple expr = try (tuple expr) <|> base expr
+
 termLambda :: Parser String Expr -> Parser String Expr
-termLambda expr = try (lambda expr) <|> base expr
+termLambda expr = try (lambda expr) <|> termNTuple expr
 
 termPrefixOp :: Parser String Expr -> Parser String Expr
 termPrefixOp expr = try prefixOp <|> termLambda expr

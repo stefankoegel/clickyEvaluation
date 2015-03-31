@@ -38,6 +38,9 @@ exprToJQuery expr = go id expr
     List es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
       list js
+    NTuple es -> do
+      js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
+      tuple js
     SectL e op -> do
       j <- go (p <<< Fst) e
       jop <- makeDiv (show op) ["op"]
@@ -115,24 +118,32 @@ section j1 j2 = do
   J.append close jSect
   return jSect
 
+interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> [a] -> m Unit
+interleaveM_ f sep = go
+  where
+  go []     = return unit
+  go [x]    = void $ f x
+  go (x:xs) = f x *> sep *> go xs
+
+tuple :: forall eff. [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
+tuple js = do
+  dtuple <- makeDiv "" ["tuple"]
+  open <- makeDiv "(" ["brace"]
+  J.append open dtuple
+  interleaveM_ (flip J.append dtuple) (makeDiv "," ["comma"] >>= flip J.append dtuple) js
+  close <- makeDiv ")" ["brace"]
+  J.append close dtuple
+  return dtuple
+
 list :: forall eff. [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
 list js = do
   dls <- makeDiv "" ["list"]
   open <- makeDiv "[" ["brace"]
   J.append open dls
-  sep js dls
+  interleaveM_ (flip J.append dls) (makeDiv "," ["comma"] >>= flip J.append dls) js
   close <- makeDiv "]" ["brace"]
   J.append close dls
   return dls
-  where
-  sep []     dls = return unit
-  sep [j]    dls = void $ J.append j dls
-  sep (j:js) dls = do
-    J.append j dls
-    comma <- makeDiv "," ["comma"]
-    J.append comma dls
-    sep js dls
-
 
 app :: forall eff. J.JQuery -> [J.JQuery] -> Eff (dom :: DOM | eff) J.JQuery
 app jFunc jArgs = do
