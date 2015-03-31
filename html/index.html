@@ -51,6 +51,15 @@ minimum (x:xs) = foldr min x xs
 length []     = 0
 length (x:xs) = 1 + length xs
 
+zip (x:xs) (y:ys) = (x, y) : zip xs ys
+zip _      _      = []
+
+unzip []          = ([], [])
+unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs
+
+curry f a b = f (a, b)
+uncurry f (a, b) = f a b
+
 sum = foldl (+) 0
 product = foldl (*) 1
 
