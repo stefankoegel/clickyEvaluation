@@ -16,6 +16,8 @@ import Data.Either
 import Math (pow)
 
 import Control.Apply ((*>))
+import Control.Alt ((<|>))
+import qualified Control.Plus as P
 import Control.Monad.State
 import Control.Monad.State.Trans
 import Control.Monad.State.Class
@@ -86,20 +88,20 @@ insertDef env (Def name bindings body) = case lookup name env of
   Nothing   -> insert name [Tuple bindings body] env
   Just defs -> insert name (defs ++ [Tuple bindings body]) env
 
-eval1 :: Env -> Expr -> Maybe Expr
+eval1 :: Env -> Expr -> EvalError Expr
 eval1 env expr = case expr of
---  (Binary op e1 e2)             -> binary op e1 e2
-  (Unary op e)                  -> unary op e
-  (Atom (Name name))            -> apply env name []
-  (List (e:es))                 -> Just $ Binary Cons e (List es)
-  (App (Binary Composition f g) [e]) -> Just $ App f [App g [e]]
-  (App (Lambda binds body) args) -> matchls binds args body
-  (App (SectL e1 op) [e2])      -> Just $ Binary op e1 e2
-  (App (SectR op e2) [e1])      -> Just $ Binary op e1 e2
-  (App (Prefix op) [e1, e2])    -> Just $ Binary op e1 e2
-  (App (Atom (Name name)) args) -> apply env name args
-  (App (App func es) es')       -> Just $ App func (es ++ es')
-  _                 -> Nothing
+  (Binary op e1 e2)                  -> binary op e1 e2
+  (Unary op e)                       -> unary op e
+--  (Atom (Name name))            -> apply env name []
+  (List (e:es))                      -> return $ Binary Cons e (List es)
+  (App (Binary Composition f g) [e]) -> return $ App f [App g [e]]
+--  (App (Lambda binds body) args) -> matchls binds args body
+  (App (SectL e1 op) [e2])           -> return $ Binary op e1 e2
+  (App (SectR op e2) [e1])           -> return $ Binary op e1 e2
+  (App (Prefix op) [e1, e2])         -> return $ Binary op e1 e2
+--  (App (Atom (Name name)) args) -> apply env name args
+  (App (App func es) es')            -> return $ App func (es ++ es')
+  _ -> throwError $ "Cannot evaluate " ++ show expr
 
 binary :: Op -> Expr -> Expr -> EvalError Expr
 binary = go
@@ -136,17 +138,19 @@ binary = go
 
   go op e1 e2 = throwError $ "Cannot apply operator " ++ show op ++  " to " ++ show e1 ++ " and " ++ show e2
 
-unary :: Op -> Expr -> Maybe Expr
-unary Sub (Atom (Num i)) = Just $ Atom $ Num (-i)
-unary _   _              = Nothing
+unary :: Op -> Expr -> EvalError Expr
+unary Sub (Atom (Num i)) = return $ Atom $ Num (-i)
+unary op e = throwError $ "Cannot apply unary operator " ++ show op ++ " to " ++ show e
 
-apply :: Env -> String -> [Expr] -> Maybe Expr
+apply :: Env -> String -> [Expr] -> EvalError Expr
 apply env name args = case lookup name env of
-  Nothing    -> Nothing
-  Just cases -> head $ mapMaybe app cases
-    where
-    app :: Tuple [Binding] Expr -> Maybe Expr
-    app (Tuple binds body) = matchls binds args body
+  Nothing    -> throwError $ "Unknown function: " ++ name
+  Just cases -> case runIdentity $ runErrorT $ foldl (<|>) P.empty (app <$> cases) of
+    Right expr -> return expr
+    _          -> throwError $ "No matching funnction found for " ++ name
+  where
+  app :: Tuple [Binding] Expr -> EvalError Expr
+  app (Tuple binds body) = throwError "not yet implemented" -- matchls binds args body
 
 matchls :: [Binding] -> [Expr] -> Expr -> Maybe Expr
 matchls []     []     expr = Just expr
