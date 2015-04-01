@@ -53,6 +53,10 @@ button.restore:hover {
   margin: 0px auto 50px auto;
 }
 
+#output-container {
+  margin: 0px auto 0px auto;
+}
+
 #output-container, #history-container {
   text-align: center;
   cursor: default;
