@@ -5,11 +5,13 @@ module Evaluator
   , defsToEnv
   ) where
 
-import Data.Array    (head, mapMaybe, (!!), updateAt, elemIndex)
+import Data.Array    (head, mapMaybe, (!!), updateAt, elemIndex, length)
 import Data.StrMap   (StrMap(), empty, lookup, insert)
 import Data.Tuple
 import Data.Maybe
 import Data.Foldable (foldl, foldMap, any)
+import Data.Identity
+import Data.Either
 
 import Math (pow)
 
@@ -17,9 +19,20 @@ import Control.Apply ((*>))
 import Control.Monad.State
 import Control.Monad.State.Trans
 import Control.Monad.State.Class
+
+import Control.Monad.Writer
+import Control.Monad.Writer.Trans
+import Control.Monad.Writer.Class
+
+import Control.Monad.Error
+import Control.Monad.Error.Trans
+import Control.Monad.Error.Class
+
 import Control.Monad.Trans
 
 import AST
+
+type EvalError = ErrorT String Identity
 
 data Path = Nth Number Path
           | Fst Path
@@ -33,34 +46,35 @@ instance showPath :: Show Path where
     Snd   p -> "(Snd " ++ show p ++")"
     End     -> "End"
 
-mapWithPath :: Path -> (Expr -> Maybe Expr) -> Expr -> Maybe Expr
+mapWithPath :: Path -> (Expr -> EvalError Expr) -> Expr -> EvalError Expr
 mapWithPath p f = go p
   where
   go End e     = f e
   go (Fst p) e = case e of
-    Binary op e1 e2 -> Binary op <$> go p e1 <*> Just e2
+    Binary op e1 e2 -> Binary op <$> go p e1 <*> pure e2
     Unary op e      -> Unary op  <$> go p e
-    SectL e op      -> SectL     <$> go p e <*> Just op
+    SectL e op      -> SectL     <$> go p e <*> pure op
     Lambda bs body  -> Lambda bs <$> go p body
-    App e es        -> App       <$> go p e <*> Just es
-    _               -> Nothing
+    App e es        -> App       <$> go p e <*> pure es
+    _               -> throwError $ "Cannot match " ++ show (Fst p) ++ " with " ++ show e
   go (Snd p) e = case e of
     Binary op e1 e2 -> Binary op e1 <$> go p e2
     SectR op e      -> SectR op     <$> go p e
-    _               -> Nothing
+    _               -> throwError $ "Cannot match " ++ show (Snd p) ++ " with " ++ show e
   go (Nth n p) e = case e of
     List es  -> List  <$> mapMaybeIndex n (go p) es
     NTuple es -> NTuple <$> mapMaybeIndex n (go p) es
     App e es -> App e <$> mapMaybeIndex n (go p) es
-    _        -> Nothing
+    _        -> throwError $ "Cannot match " ++ show (Nth n p) ++ " with " ++ show e
 
-mapMaybeIndex :: forall m a. Number -> (a -> Maybe a) -> [a] -> Maybe [a]
+mapMaybeIndex :: forall m a. Number -> (a -> EvalError a) -> [a] -> EvalError [a]
 mapMaybeIndex i f as = do
-  a <- (as !! i) >>= f
-  return $ updateAt i a as
+  case as !! i of
+    Nothing -> throwError $ "Nothing at index " ++ show i ++ "! (length = " ++ show (length as) ++ ")"
+    Just a  -> return $ updateAt i a as
 
 evalPath1 :: Env -> Path -> Expr -> Maybe Expr
-evalPath1 env path expr = mapWithPath path (eval1 env) expr
+evalPath1 env path expr = Nothing --mapWithPath path (eval1 env) expr
 
 type Env = StrMap [Tuple [Binding] Expr]
 
@@ -74,7 +88,7 @@ insertDef env (Def name bindings body) = case lookup name env of
 
 eval1 :: Env -> Expr -> Maybe Expr
 eval1 env expr = case expr of
-  (Binary op e1 e2)             -> binary op e1 e2
+--  (Binary op e1 e2)             -> binary op e1 e2
   (Unary op e)                  -> unary op e
   (Atom (Name name))            -> apply env name []
   (List (e:es))                 -> Just $ Binary Cons e (List es)
@@ -87,39 +101,40 @@ eval1 env expr = case expr of
   (App (App func es) es')       -> Just $ App func (es ++ es')
   _                 -> Nothing
 
-binary :: Op -> Expr -> Expr -> Maybe Expr
+binary :: Op -> Expr -> Expr -> EvalError Expr
 binary = go
   where
-  go Power (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ pow i j
+  retA = return <<< Atom
+  go Power (Atom (Num i)) (Atom (Num j)) = retA $ Num $ pow i j
 
-  go Mul (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i * j
-  go Div (Atom (Num i)) (Atom (Num 0)) = Nothing
-  go Div (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ Math.floor (i / j)
-  go Mod (Atom (Num i)) (Atom (Num 0)) = Nothing
-  go Mod (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i % j
+  go Mul (Atom (Num i)) (Atom (Num j)) = retA $ Num $ i * j
+  go Div (Atom (Num i)) (Atom (Num 0)) = throwError "Division by zero!"
+  go Div (Atom (Num i)) (Atom (Num j)) = retA $ Num $ Math.floor (i / j)
+  go Mod (Atom (Num i)) (Atom (Num 0)) = throwError "Mod by zero!"
+  go Mod (Atom (Num i)) (Atom (Num j)) = retA $ Num $ i % j
 
-  go Add (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i + j
-  go Sub (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Num $ i - j
+  go Add (Atom (Num i)) (Atom (Num j)) = retA $ Num $ i + j
+  go Sub (Atom (Num i)) (Atom (Num j)) = retA $ Num $ i - j
 
-  go Cons   e          (List es)  = Just $ List $ e:es
-  go Append (List es1) (List es2) = Just $ List $ es1 ++ es2
+  go Cons   e          (List es)  = return $ List $ e:es
+  go Append (List es1) (List es2) = return $ List $ es1 ++ es2
 
-  go Eq  (Atom a1) (Atom a2) = Just $ Atom $ Bool $ a1 == a2
-  go Neq (Atom a1) (Atom a2) = Just $ Atom $ Bool $ a1 /= a2
-  go Leq (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Bool $ i <= j
-  go Lt  (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Bool $ i < j
-  go Geq (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Bool $ i >= j
-  go Gt  (Atom (Num i)) (Atom (Num j)) = Just $ Atom $ Bool $ i > j
+  go Eq  (Atom a1) (Atom a2) = retA $ Bool $ a1 == a2
+  go Neq (Atom a1) (Atom a2) = retA $ Bool $ a1 /= a2
+  go Leq (Atom (Num i)) (Atom (Num j)) = retA $ Bool $ i <= j
+  go Lt  (Atom (Num i)) (Atom (Num j)) = retA $ Bool $ i < j
+  go Geq (Atom (Num i)) (Atom (Num j)) = retA $ Bool $ i >= j
+  go Gt  (Atom (Num i)) (Atom (Num j)) = retA $ Bool $ i > j
 
-  go And (Atom (Bool true))  b = Just b
-  go And (Atom (Bool false)) _ = Just $ Atom $ Bool $ false
+  go And (Atom (Bool true))  b = return b
+  go And (Atom (Bool false)) _ = retA $ Bool $ false
 
-  go Or  (Atom (Bool true))  _ = Just $ Atom $ Bool $ true
-  go Or  (Atom (Bool false)) b = Just b
+  go Or  (Atom (Bool true))  _ = retA $ Bool $ true
+  go Or  (Atom (Bool false)) b = return b
 
-  go Dollar f e = Just $ App f [e]
+  go Dollar f e = return $ App f [e]
 
-  go _       _               _               = Nothing
+  go op e1 e2 = throwError $ "Cannot apply operator " ++ show op ++  " to " ++ show e1 ++ " and " ++ show e2
 
 unary :: Op -> Expr -> Maybe Expr
 unary Sub (Atom (Num i)) = Just $ Atom $ Num (-i)
@@ -140,6 +155,14 @@ matchls (b:bs) (e:es) expr = do
   matchls bs es expr'
 matchls []     es     expr = Just $ App expr es
 matchls _ _ _ = Nothing
+
+type Matches = [Tuple Atom Expr]
+
+type Matcher = StateT Expr (WriterT Matches (ErrorT String Identity))
+
+
+runMatcher :: forall a. Matcher a -> Expr -> EvalError (Tuple (Tuple a Expr) Matches)
+runMatcher m e = runWriterT $ runStateT m e
 
 match :: Binding -> Expr -> StateT Expr Maybe Unit
 match (Lit (Name x))   e                = modify (replace x e)
