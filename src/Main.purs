@@ -127,8 +127,8 @@ makeClickable jq = do
   testEval env expr jq = do
     path <- getPath jq
     case evalPath1 env path expr of
-      Nothing -> return unit
-      Just _  -> void $ J.addClass "clickable" jq
+      Left  _ -> return unit
+      Right _ -> void $ J.addClass "clickable" jq
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
 addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
@@ -158,8 +158,14 @@ evalExpr :: Path -> EvalM Unit
 evalExpr path = do
   { env = env, expr = expr } <- get
   case evalPath1 env path expr of
-    Nothing    -> return unit
-    Just expr' -> do
+    Left  msg   -> liftEff $ do
+      info <- J.create "<p></p>" >>= J.setText msg
+      J.select "#info"
+        >>= J.clear
+        >>= J.removeClass "hidden"
+        >>= J.append info
+      return unit
+    Right expr' -> do
       modify (\es -> es { expr = expr' })
       modify (\es -> es { history = expr : es.history })
       showEvaluationState

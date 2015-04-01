@@ -7,7 +7,7 @@ module Evaluator
 
 import Data.Array    (head, mapMaybe, (!!), updateAt, elemIndex, length)
 import Data.StrMap   (StrMap(), empty, lookup, insert)
-import Data.Tuple
+import Data.Tuple    (Tuple(Tuple), fst, snd)
 import Data.Maybe
 import Data.Foldable (foldl, foldMap, any)
 import Data.Identity
@@ -75,8 +75,8 @@ mapMaybeIndex i f as = do
     Nothing -> throwError $ "Nothing at index " ++ show i ++ "! (length = " ++ show (length as) ++ ")"
     Just a  -> return $ updateAt i a as
 
-evalPath1 :: Env -> Path -> Expr -> Maybe Expr
-evalPath1 env path expr = Nothing --mapWithPath path (eval1 env) expr
+evalPath1 :: Env -> Path -> Expr -> Either String Expr
+evalPath1 env path expr = runIdentity $ runErrorT $ mapWithPath path (eval1 env) expr
 
 type Env = StrMap [Tuple [Binding] Expr]
 
@@ -92,14 +92,14 @@ eval1 :: Env -> Expr -> EvalError Expr
 eval1 env expr = case expr of
   (Binary op e1 e2)                  -> binary op e1 e2
   (Unary op e)                       -> unary op e
---  (Atom (Name name))            -> apply env name []
+  (Atom (Name name))                 -> apply env name []
   (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) [e]) -> return $ App f [App g [e]]
---  (App (Lambda binds body) args) -> matchls binds args body
+  (App (Lambda binds body) args)     -> (snd <<< fst) <$> runMatcher (matchls binds args) body
   (App (SectL e1 op) [e2])           -> return $ Binary op e1 e2
   (App (SectR op e2) [e1])           -> return $ Binary op e1 e2
   (App (Prefix op) [e1, e2])         -> return $ Binary op e1 e2
---  (App (Atom (Name name)) args) -> apply env name args
+  (App (Atom (Name name)) args)      -> apply env name args
   (App (App func es) es')            -> return $ App func (es ++ es')
   _ -> throwError $ "Cannot evaluate " ++ show expr
 
@@ -147,28 +147,25 @@ apply env name args = case lookup name env of
   Nothing    -> throwError $ "Unknown function: " ++ name
   Just cases -> case runIdentity $ runErrorT $ foldl (<|>) P.empty (app <$> cases) of
     Right expr -> return expr
-    _          -> throwError $ "No matching funnction found for " ++ name
+    Left msg   -> throwError $ "No matching funnction found for " ++ name ++ "(last reason: " ++ msg ++ ")"
   where
   app :: Tuple [Binding] Expr -> EvalError Expr
-  app (Tuple binds body) = throwError "not yet implemented" -- matchls binds args body
-
-matchls :: [Binding] -> [Expr] -> Expr -> Maybe Expr
-matchls []     []     expr = Just expr
-matchls (b:bs) (e:es) expr = do
-  expr' <- execStateT (match b e) expr
-  matchls bs es expr'
-matchls []     es     expr = Just $ App expr es
-matchls _ _ _ = Nothing
+  app (Tuple binds body) = (snd <<< fst) <$> runMatcher (matchls binds args) body
 
 type Matches = [Tuple Atom Expr]
 
 type Matcher = StateT Expr (WriterT Matches (ErrorT String Identity))
 
+matchls :: [Binding] -> [Expr] -> Matcher Unit
+matchls []     []     = return unit
+matchls (b:bs) (e:es) = match b e *> matchls bs es
+matchls []     es     = modify (\expr -> App expr es)
+matchls bs     es     = throwError $ "Cannot match " ++ show bs ++ " with " ++ show es
 
 runMatcher :: forall a. Matcher a -> Expr -> EvalError (Tuple (Tuple a Expr) Matches)
 runMatcher m e = runWriterT $ runStateT m e
 
-match :: Binding -> Expr -> StateT Expr Maybe Unit
+match :: Binding -> Expr -> Matcher Unit
 match (Lit (Name x))   e                = modify (replace x e)
 match (Lit l)          (Atom a)         | a == l  = return unit
 --match (ConsLit b bs)   (List (e:es))    = match b e *> match bs (List es)
@@ -177,7 +174,7 @@ match (ListLit [])     (List [])        = return unit
 match (ListLit (b:bs)) (List (e:es))    = match b e *> match (ListLit bs) (List es)
 --match (ListLit (b:bs)) (Binary Cons e es) = match b e *> match (ListLit bs) es
 match (NTupleLit bs)   (NTuple es)      = match (ListLit bs) (List es)
-match _                _                = lift Nothing
+match b                e                = throwError $ "Cannot match " ++ show b ++ " with " ++ show e
 
 boundNames :: Binding -> [String]
 boundNames = go
