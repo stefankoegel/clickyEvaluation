@@ -144,11 +144,11 @@ matchls _ _ _ = Nothing
 match :: Binding -> Expr -> StateT Expr Maybe Unit
 match (Lit (Name x))   e                = modify (replace x e)
 match (Lit l)          (Atom a)         | a == l  = return unit
-match (ConsLit b bs)   (List (e:es))    = match b e *> match bs (List es)
+--match (ConsLit b bs)   (List (e:es))    = match b e *> match bs (List es)
 match (ConsLit b bs)   (Binary Cons e es) = match b e *> match bs es
 match (ListLit [])     (List [])        = return unit
 match (ListLit (b:bs)) (List (e:es))    = match b e *> match (ListLit bs) (List es)
-match (ListLit (b:bs)) (Binary Cons e es) = match b e *> match (ListLit bs) es
+--match (ListLit (b:bs)) (Binary Cons e es) = match b e *> match (ListLit bs) es
 match (NTupleLit bs)   (NTuple es)      = match (ListLit bs) (List es)
 match _                _                = lift Nothing
 
