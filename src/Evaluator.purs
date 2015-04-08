@@ -34,7 +34,12 @@ import Control.Monad.Trans
 
 import AST
 
-type EvalError = ErrorT String Identity
+type Matching = Tuple Atom Expr
+
+type Evaluator = WriterT [Matching] (ErrorT String Identity)
+
+runEvalM :: forall a. Evaluator a -> Either String (Tuple a [Matching])
+runEvalM = runIdentity <<< runErrorT <<< runWriterT
 
 data Path = Nth Number Path
           | Fst Path
@@ -48,7 +53,7 @@ instance showPath :: Show Path where
     Snd   p -> "(Snd " ++ show p ++")"
     End     -> "End"
 
-mapWithPath :: Path -> (Expr -> EvalError Expr) -> Expr -> EvalError Expr
+mapWithPath :: Path -> (Expr -> Evaluator Expr) -> Expr -> Evaluator Expr
 mapWithPath p f = go p
   where
   go End e     = f e
@@ -69,14 +74,14 @@ mapWithPath p f = go p
     App e es -> App e <$> mapMaybeIndex n (go p) es
     _        -> throwError $ "Cannot match " ++ show (Nth n p) ++ " with " ++ show e
 
-mapMaybeIndex :: forall m a. Number -> (a -> EvalError a) -> [a] -> EvalError [a]
+mapMaybeIndex :: forall m a. Number -> (a -> Evaluator a) -> [a] -> Evaluator [a]
 mapMaybeIndex i f as = do
   case as !! i of
     Nothing -> throwError $ "Nothing at index " ++ show i ++ "! (length = " ++ show (length as) ++ ")"
     Just a  -> return $ updateAt i a as
 
-evalPath1 :: Env -> Path -> Expr -> Either String Expr
-evalPath1 env path expr = runIdentity $ runErrorT $ mapWithPath path (eval1 env) expr
+evalPath1 :: Env -> Path -> Expr -> Either String (Tuple Expr [Tuple Atom Expr])
+evalPath1 env path expr = runEvalM $ mapWithPath path (eval1 env) expr
 
 type Env = StrMap [Tuple [Binding] Expr]
 
@@ -88,14 +93,14 @@ insertDef env (Def name bindings body) = case lookup name env of
   Nothing   -> insert name [Tuple bindings body] env
   Just defs -> insert name (defs ++ [Tuple bindings body]) env
 
-eval1 :: Env -> Expr -> EvalError Expr
+eval1 :: Env -> Expr -> Evaluator Expr
 eval1 env expr = case expr of
   (Binary op e1 e2)                  -> binary op e1 e2
   (Unary op e)                       -> unary op e
   (Atom (Name name))                 -> apply env name []
   (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) [e]) -> return $ App f [App g [e]]
-  (App (Lambda binds body) args)     -> (snd <<< fst) <$> runMatcher (matchls binds args) body
+  (App (Lambda binds body) args)     -> execMatcher (matchls binds args) body
   (App (SectL e1 op) [e2])           -> return $ Binary op e1 e2
   (App (SectR op e2) [e1])           -> return $ Binary op e1 e2
   (App (Prefix op) [e1, e2])         -> return $ Binary op e1 e2
@@ -103,7 +108,7 @@ eval1 env expr = case expr of
   (App (App func es) es')            -> return $ App func (es ++ es')
   _ -> throwError $ "Cannot evaluate " ++ show expr
 
-binary :: Op -> Expr -> Expr -> EvalError Expr
+binary :: Op -> Expr -> Expr -> Evaluator Expr
 binary = go
   where
   retA = return <<< Atom
@@ -138,23 +143,21 @@ binary = go
 
   go op e1 e2 = throwError $ "Cannot apply operator " ++ show op ++  " to " ++ show e1 ++ " and " ++ show e2
 
-unary :: Op -> Expr -> EvalError Expr
+unary :: Op -> Expr -> Evaluator Expr
 unary Sub (Atom (Num i)) = return $ Atom $ Num (-i)
 unary op e = throwError $ "Cannot apply unary operator " ++ show op ++ " to " ++ show e
 
-apply :: Env -> String -> [Expr] -> EvalError Expr
+apply :: Env -> String -> [Expr] -> Evaluator Expr
 apply env name args = case lookup name env of
   Nothing    -> throwError $ "Unknown function: " ++ name
-  Just cases -> case runIdentity $ runErrorT $ foldl (<|>) P.empty (app <$> cases) of
-    Right expr -> return expr
+  Just cases -> case runEvalM $ foldl (<|>) P.empty (app <$> cases) of
+    Right (Tuple expr _) -> return expr
     Left msg   -> throwError $ "No matching funnction found for " ++ name ++ "(last reason: " ++ msg ++ ")"
   where
-  app :: Tuple [Binding] Expr -> EvalError Expr
-  app (Tuple binds body) = (snd <<< fst) <$> runMatcher (matchls binds args) body
+  app :: Tuple [Binding] Expr -> Evaluator Expr
+  app (Tuple binds body) = execMatcher (matchls binds args) body
 
-type Matches = [Tuple Atom Expr]
-
-type Matcher = StateT Expr (WriterT Matches (ErrorT String Identity))
+type Matcher = StateT Expr Evaluator
 
 matchls :: [Binding] -> [Expr] -> Matcher Unit
 matchls []     []     = return unit
@@ -162,8 +165,8 @@ matchls (b:bs) (e:es) = match b e *> matchls bs es
 matchls []     es     = modify (\expr -> App expr es)
 matchls bs     es     = throwError $ "Cannot match " ++ show bs ++ " with " ++ show es
 
-runMatcher :: forall a. Matcher a -> Expr -> EvalError (Tuple (Tuple a Expr) Matches)
-runMatcher m e = runWriterT $ runStateT m e
+execMatcher :: forall a. Matcher a -> Expr -> Evaluator Expr
+execMatcher = execStateT
 
 match :: Binding -> Expr -> Matcher Unit
 match (Lit (Name x))   e                = modify (replace x e)

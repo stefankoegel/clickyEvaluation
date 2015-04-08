@@ -8,6 +8,7 @@ import Data.Foreign (unsafeFromForeign)
 import Data.Either
 import Data.Maybe
 import Data.Array ((..), length, deleteAt, (!!), drop)
+import Data.Tuple
 import Data.Traversable (zipWithA)
 import Control.Apply ((*>))
 import Control.Monad.State.Trans
@@ -157,6 +158,7 @@ removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
 evalExpr :: Path -> EvalM Unit
 evalExpr path = do
   { env = env, expr = expr } <- get
+  liftEff $ print path
   case evalPath1 env path expr of
     Left  msg   -> liftEff $ do
       info <- J.create "<p></p>" >>= J.setText msg
@@ -165,9 +167,10 @@ evalExpr path = do
         >>= J.removeClass "hidden"
         >>= J.append info
       return unit
-    Right expr' -> do
+    Right (Tuple expr' matchings) -> do
       modify (\es -> es { expr = expr' })
       modify (\es -> es { history = expr : es.history })
+      liftEff $ print matchings
       showEvaluationState
 
 getValue :: J.JQuery -> DOMEff String
