@@ -78,7 +78,9 @@ mapMaybeIndex :: forall m a. Number -> (a -> Evaluator a) -> [a] -> Evaluator [a
 mapMaybeIndex i f as = do
   case as !! i of
     Nothing -> throwError $ "Nothing at index " ++ show i ++ "! (length = " ++ show (length as) ++ ")"
-    Just a  -> return $ updateAt i a as
+    Just a  -> do
+      a' <- f a
+      return $ updateAt i a' as
 
 evalPath1 :: Env -> Path -> Expr -> Either String (Tuple Expr [Tuple Atom Expr])
 evalPath1 env path expr = runEvalM $ mapWithPath path (eval1 env) expr
