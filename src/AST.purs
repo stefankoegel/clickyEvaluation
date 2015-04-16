@@ -37,6 +37,31 @@ data Expr = Atom Atom
           | Lambda [Binding] Expr
           | App Expr [Expr]
 
+foldExpr :: forall a.
+               (Atom -> a)
+            -> ([a] -> a)
+            -> ([a] -> a)
+            -> (Op -> a -> a -> a)
+            -> (Op -> a -> a)
+            -> (a -> Op -> a)
+            -> (Op -> a -> a)
+            -> (Op -> a)
+            -> ([Binding] -> a -> a)
+            -> (a -> [a] -> a)
+            -> Expr -> a
+foldExpr atom list ntuple binary unary sectl sectr prefix lambda app = go
+  where
+  go (Atom a)          = atom a
+  go (List es)         = list (go <$> es)
+  go (NTuple es)       = ntuple (go <$> es)
+  go (Binary op e1 e2) = binary op (go e1) (go e2)
+  go (Unary op e)      = unary op (go e)
+  go (SectL e op)      = sectl (go e) op
+  go (SectR op e)      = sectr op (go e)
+  go (Prefix op)       = prefix op
+  go (Lambda bs e)     = lambda bs (go e)
+  go (App e es)        = app (go e) (go <$> es)
+
 data Binding = Lit Atom
              | ConsLit Binding Binding
              | ListLit [Binding]
