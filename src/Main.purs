@@ -160,17 +160,16 @@ evalExpr path = do
   { env = env, expr = expr } <- get
   liftEff $ print path
   case evalPath1 env path expr of
-    Left  msg   -> liftEff $ do
+    Left msg   -> liftEff $ do
       info <- J.create "<p></p>" >>= J.setText msg
       J.select "#info"
         >>= J.clear
         >>= J.removeClass "hidden"
         >>= J.append info
       return unit
-    Right (Tuple expr' matchings) -> do
+    Right expr' -> do
       modify (\es -> es { expr = expr' })
       modify (\es -> es { history = expr : es.history })
-      liftEff $ print matchings
       showEvaluationState
 
 getValue :: J.JQuery -> DOMEff String

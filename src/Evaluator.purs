@@ -5,11 +5,12 @@ module Evaluator
   , defsToEnv
   ) where
 
-import Data.Array    (head, mapMaybe, (!!), updateAt, elemIndex, length)
-import Data.StrMap   (StrMap(), empty, lookup, insert)
+import Data.Array    (head, mapMaybe, (!!), updateAt, elemIndex, length, concat, concatMap, nub, (\\), intersect, drop)
+import Data.StrMap   (StrMap(), empty, lookup, insert, delete, values)
 import Data.Tuple    (Tuple(Tuple), fst, snd)
 import Data.Maybe
-import Data.Foldable (foldl, foldMap, any)
+import Data.Foldable (foldl, foldr, foldMap, any)
+import Data.Traversable (zipWithA, traverse)
 import Data.Identity
 import Data.Either
 
@@ -36,10 +37,10 @@ import AST
 
 type Matching = Tuple Atom Expr
 
-type Evaluator = WriterT [Matching] (ErrorT String Identity)
+type Evaluator = ErrorT String Identity
 
-runEvalM :: forall a. Evaluator a -> Either String (Tuple a [Matching])
-runEvalM = runIdentity <<< runErrorT <<< runWriterT
+runEvalM :: forall a. Evaluator a -> Either String a
+runEvalM = runIdentity <<< runErrorT
 
 data Path = Nth Number Path
           | Fst Path
@@ -69,20 +70,20 @@ mapWithPath p f = go p
     SectR op e      -> SectR op     <$> go p e
     _               -> throwError $ "Cannot match " ++ show (Snd p) ++ " with " ++ show e
   go (Nth n p) e = case e of
-    List es  -> List  <$> mapMaybeIndex n (go p) es
-    NTuple es -> NTuple <$> mapMaybeIndex n (go p) es
-    App e es -> App e <$> mapMaybeIndex n (go p) es
+    List es  -> List  <$> mapIndex n (go p) es
+    NTuple es -> NTuple <$> mapIndex n (go p) es
+    App e es -> App e <$> mapIndex n (go p) es
     _        -> throwError $ "Cannot match " ++ show (Nth n p) ++ " with " ++ show e
 
-mapMaybeIndex :: forall m a. Number -> (a -> Evaluator a) -> [a] -> Evaluator [a]
-mapMaybeIndex i f as = do
+mapIndex :: forall m a. Number -> (a -> Evaluator a) -> [a] -> Evaluator [a]
+mapIndex i f as = do
   case as !! i of
     Nothing -> throwError $ "Nothing at index " ++ show i ++ "! (length = " ++ show (length as) ++ ")"
     Just a  -> do
       a' <- f a
       return $ updateAt i a' as
 
-evalPath1 :: Env -> Path -> Expr -> Either String (Tuple Expr [Tuple Atom Expr])
+evalPath1 :: Env -> Path -> Expr -> Either String Expr
 evalPath1 env path expr = runEvalM $ mapWithPath path (eval1 env) expr
 
 type Env = StrMap [Tuple [Binding] Expr]
@@ -102,13 +103,21 @@ eval1 env expr = case expr of
   (Atom (Name name))                 -> apply env name []
   (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) [e]) -> return $ App f [App g [e]]
-  (App (Lambda binds body) args)     -> execMatcher (matchls binds args) body
+  (App (Lambda binds body) args)     -> matchls' binds args >>= flip replace' body >>= wrapLambda binds args
   (App (SectL e1 op) [e2])           -> return $ Binary op e1 e2
   (App (SectR op e2) [e1])           -> return $ Binary op e1 e2
   (App (Prefix op) [e1, e2])         -> return $ Binary op e1 e2
   (App (Atom (Name name)) args)      -> apply env name args
   (App (App func es) es')            -> return $ App func (es ++ es')
   _ -> throwError $ "Cannot evaluate " ++ show expr
+
+wrapLambda :: [Binding] -> [Expr] -> Expr -> Evaluator Expr
+wrapLambda binds args body =
+  case compare (length binds) (length args) of
+    EQ -> return body
+    GT -> return $ Lambda (drop (length args) binds) body
+    LT -> return $ App body (drop (length binds) args)
+
 
 binary :: Op -> Expr -> Expr -> Evaluator Expr
 binary = go
@@ -153,33 +162,63 @@ apply :: Env -> String -> [Expr] -> Evaluator Expr
 apply env name args = case lookup name env of
   Nothing    -> throwError $ "Unknown function: " ++ name
   Just cases -> case runEvalM $ foldl (<|>) P.empty (app <$> cases) of
-    Right (Tuple expr _) -> return expr
+    Right expr -> return expr
     Left msg   -> throwError $ "No matching funnction found for " ++ name ++ "(last reason: " ++ msg ++ ")"
   where
   app :: Tuple [Binding] Expr -> Evaluator Expr
-  app (Tuple binds body) = execMatcher (matchls binds args) body
+  app (Tuple binds body) | length binds == length args = matchls' binds args >>= flip replace' body
+                         | otherwise                   = throwError $ "Wrong number of arguments!"
 
-type Matcher = StateT Expr Evaluator
+matchls' :: [Binding] -> [Expr] -> Evaluator (StrMap Expr)
+matchls' bs es = execStateT (zipWithA match' bs es) empty
 
-matchls :: [Binding] -> [Expr] -> Matcher Unit
-matchls []     []     = return unit
-matchls (b:bs) (e:es) = match b e *> matchls bs es
-matchls []     es     = modify (\expr -> App expr es)
-matchls bs     es     = throwError $ "Cannot match " ++ show bs ++ " with " ++ show es
+match' :: Binding -> Expr -> StateT (StrMap Expr) Evaluator Unit
+match' (Lit (Name name)) e                             = modify (insert name e)
+match' (Lit ba)          (Atom ea)          | ba == ea = return unit
+match' (ConsLit b bs)    (Binary Cons e es)            = match' b e *> match' bs es
+match' (ListLit bs)      (List es)          | length bs == length es = void $ zipWithA match' bs es
+match' (NTupleLit bs)    (NTuple es)        | length bs == length es = void $ zipWithA match' bs es
+match' b                 e                             = throwError $ "Cannot match " ++ show b ++ " with " ++ show e
 
-execMatcher :: forall a. Matcher a -> Expr -> Evaluator Expr
-execMatcher = execStateT
+replace' :: StrMap Expr -> Expr -> Evaluator Expr
+replace' subs = go
+  where
+  go expr = case expr of
+    a@(Atom (Name name)) -> case lookup name subs of
+      Just subExpr -> return subExpr
+      Nothing      -> return a
+    (List exprs)         -> List <$> (traverse go exprs)
+    (NTuple exprs)       -> NTuple <$> (traverse go exprs)
+    (Binary op e1 e2)    -> Binary <$> pure op <*> go e1 <*> go e2
+    (Unary op e)         -> Unary <$> pure op <*> go e
+    (SectL e op)         -> SectL <$> go e <*> pure op
+    (SectR op e)         -> SectR <$> pure op <*> go e
+    (Lambda binds body)  -> (avoidCapture subs binds) *> (Lambda <$> pure binds <*> replace' (foldr delete subs (boundNames' binds)) body)
+    (App func exprs)     -> App <$> go func <*> traverse go exprs
+    e                    -> return e
 
-match :: Binding -> Expr -> Matcher Unit
-match (Lit (Name x))   e                = modify (replace x e)
-match (Lit l)          (Atom a)         | a == l  = return unit
---match (ConsLit b bs)   (List (e:es))    = match b e *> match bs (List es)
-match (ConsLit b bs)   (Binary Cons e es) = match b e *> match bs es
-match (ListLit [])     (List [])        = return unit
-match (ListLit (b:bs)) (List (e:es))    = match b e *> match (ListLit bs) (List es)
---match (ListLit (b:bs)) (Binary Cons e es) = match b e *> match (ListLit bs) es
-match (NTupleLit bs)   (NTuple es)      = match (ListLit bs) (List es)
-match b                e                = throwError $ "Cannot match " ++ show b ++ " with " ++ show e
+avoidCapture :: StrMap Expr -> [Binding] -> Evaluator Unit
+avoidCapture subs binds = case intersect (concatMap freeVariables $ values subs) (boundNames' binds) of
+  []       -> return unit
+  captures -> throwError $ "Some variables have been captured: " ++ show captures
+
+freeVariables :: Expr -> [String]
+freeVariables = nub <<< foldExpr
+  (\a -> case a of
+    Name name -> [name]
+    _         -> [])
+  concat
+  concat
+  (\_ f1 f2 -> f1 ++ f2)
+  (\_ f -> f)
+  (\f _ -> f)
+  (\_ f -> f)
+  (\_ -> [])
+  (\bs f -> nub f \\ boundNames' bs)
+  (\f fs -> f ++ concat fs)
+
+boundNames' :: [Binding] -> [String]
+boundNames' = concatMap boundNames
 
 boundNames :: Binding -> [String]
 boundNames = go
@@ -188,23 +227,3 @@ boundNames = go
   go (ConsLit b1 b2)   = go b1 ++ go b2
   go (ListLit bs)      = foldMap go bs
   go (NTupleLit bs)    = foldMap go bs
-
-isNameBound :: String -> Binding -> Boolean
-isNameBound name binding = (elemIndex name $ boundNames binding) >= 0
-
-replace :: String -> Expr -> Expr -> Expr
-replace name value = go
-  where
-  go expr = case expr of
-    a@(Atom (Name str)) -> if str == name then value else a
-    (List exprs)        -> List (go <$> exprs)
-    (NTuple exprs)      -> NTuple (go <$> exprs)
-    (Binary op e1 e2)   -> Binary op (go e1) (go e2)
-    (Unary op e)        -> Unary op (go e)
-    (SectL e op)        -> SectL (go e) op
-    (SectR op e)        -> SectR op (go e)
-    l@(Lambda binds body) -> if any (isNameBound name) binds
-                               then l
-                               else Lambda binds (go body)
-    (App func exprs)    -> App (go func) (go <$> exprs)
-    e                   -> e
