@@ -26,7 +26,15 @@ import Debug.Trace
 main = J.ready $ do
   J.select "#input"
     >>= J.on "change" (\_ _ -> startEvaluation)
+    >>= J.on "keyup"  (\e _ -> if isEnterKey e then startEvaluation else return unit)
   startEvaluation
+
+foreign import isEnterKey
+  """
+  function isEnterKey(event) {
+    return event.which == 13;
+  }
+  """ :: J.JQueryEvent -> Boolean
 
 type DOMEff = Eff (dom :: DOM, trace :: Trace)
 
