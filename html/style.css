@@ -109,3 +109,18 @@ div.clickable {
 div.op, div.brace, div.comma {
   margin: 0px;
 }
+
+#info {
+  text-align: center;
+  font-size: 20px;
+  color: red;
+}
+
+#info p {
+  background: #ddd;
+  padding: 10px;
+  margin-left: 10%;
+  margin-right: 10%;
+  border-radius: 10px;
+  box-shadow: 3px 3px 10px 0 #333;
+}

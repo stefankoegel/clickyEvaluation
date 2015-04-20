@@ -45,12 +45,15 @@ type EvalM a = StateT EvalState DOMEff a
 startEvaluation :: DOMEff Unit
 startEvaluation = do
   definitions <- J.select "#definitions" >>= getValue
-  let env = defsToEnv $ case parseDefs definitions of Right d -> d
-
   input       <- J.select "#input"       >>= getValue
-  let expr = case parseExpr input of Right e -> e
-
-  void $ runStateT showEvaluationState { env: env, expr: expr, history: [] }
+  case parseExpr input of
+    Left msg   -> showInfo "Expression" msg
+    Right expr -> do
+      case defsToEnv <$> parseDefs definitions of
+        Left msg  -> showInfo "Definitions" msg
+        Right env -> do
+          clearInfo
+          void $ runStateT showEvaluationState { env: env, expr: expr, history: [] }
 
 foreign import map
   """
@@ -119,6 +122,19 @@ showHistory expr i = do
   liftEff $ J.append restore history
   return history
 
+showInfo :: String -> String -> DOMEff Unit
+showInfo origin msg = do
+  info <- J.create "<p></p>"
+    >>= J.addClass "info"
+    >>= J.setText ("Error in " ++ origin ++ " => " ++ msg)
+  clearInfo
+  J.select "#info"
+    >>= J.append info
+  return unit
+
+clearInfo :: DOMEff Unit
+clearInfo = void $ J.select "#info" >>= J.clear
+
 prepareContainer :: String -> DOMEff J.JQuery
 prepareContainer name = do
   J.select ("#" ++ name ++ "-container") >>= J.clear
@@ -168,13 +184,7 @@ evalExpr path = do
   { env = env, expr = expr } <- get
   liftEff $ print path
   case evalPath1 env path expr of
-    Left msg   -> liftEff $ do
-      info <- J.create "<p></p>" >>= J.setText msg
-      J.select "#info"
-        >>= J.clear
-        >>= J.removeClass "hidden"
-        >>= J.append info
-      return unit
+    Left msg   -> liftEff $ showInfo "execution" msg
     Right expr' -> do
       modify (\es -> es { expr = expr' })
       modify (\es -> es { history = expr : es.history })
