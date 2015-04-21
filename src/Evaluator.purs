@@ -45,6 +45,7 @@ runEvalM = runIdentity <<< runErrorT
 data Path = Nth Number Path
           | Fst Path
           | Snd Path
+          | Thrd Path
           | End
 
 instance showPath :: Show Path where
@@ -52,6 +53,7 @@ instance showPath :: Show Path where
     Nth i p -> "(Nth " ++ show i ++ " " ++ show p ++")"
     Fst   p -> "(Fst " ++ show p ++")"
     Snd   p -> "(Snd " ++ show p ++")"
+    Thrd   p -> "(Thrd " ++ show p ++")"
     End     -> "End"
 
 mapWithPath :: Path -> (Expr -> Evaluator Expr) -> Expr -> Evaluator Expr
@@ -62,13 +64,18 @@ mapWithPath p f = go p
     Binary op e1 e2 -> Binary op <$> go p e1 <*> pure e2
     Unary op e      -> Unary op  <$> go p e
     SectL e op      -> SectL     <$> go p e <*> pure op
+    IfExpr ce te ee -> IfExpr <$> go p ce <*> pure te <*> pure ee
     Lambda bs body  -> Lambda bs <$> go p body
     App e es        -> App       <$> go p e <*> pure es
     _               -> throwError $ "Cannot match " ++ show (Fst p) ++ " with " ++ show e
   go (Snd p) e = case e of
     Binary op e1 e2 -> Binary op e1 <$> go p e2
     SectR op e      -> SectR op     <$> go p e
+    IfExpr ce te ee -> IfExpr <$> pure ce <*> go p te <*> pure ee
     _               -> throwError $ "Cannot match " ++ show (Snd p) ++ " with " ++ show e
+  go (Thrd p) e = case e of
+    IfExpr ce te ee -> IfExpr <$> pure ce <*> pure te <*> go p ee
+    _               -> throwError $ "Cannot match " ++ show (Thrd p) ++ " with " ++ show e
   go (Nth n p) e = case e of
     List es  -> List  <$> mapIndex n (go p) es
     NTuple es -> NTuple <$> mapIndex n (go p) es
@@ -101,6 +108,8 @@ eval1 env expr = case expr of
   (Binary op e1 e2)                  -> binary op e1 e2
   (Unary op e)                       -> unary op e
   (Atom (Name name))                 -> apply env name []
+  (IfExpr (Atom (Bool true)) te _)   -> return te
+  (IfExpr (Atom (Bool false)) _ ee)  -> return ee
   (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) [e]) -> return $ App f [App g [e]]
   (App (Lambda binds body) args)     -> matchls' binds args >>= flip replace' body >>= wrapLambda binds args
@@ -214,6 +223,7 @@ freeVariables = nub <<< foldExpr
   (\f _ -> f)
   (\_ f -> f)
   (\_ -> [])
+  (\f1 f2 f3 -> f1 ++ f2 ++ f3)
   (\bs f -> nub f \\ boundNames' bs)
   (\f fs -> f ++ concat fs)
 

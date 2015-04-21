@@ -82,7 +82,7 @@ div.historyBox {
   margin: 15px;
 }
 
-.binary, .app {
+.binary, .app, .if {
   background: #bbb;
   padding: 10px;
   border-radius: 5px;

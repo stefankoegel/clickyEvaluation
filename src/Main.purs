@@ -77,7 +77,7 @@ showEvaluationState = do
   liftEff $ exprToJQuery expr >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
 
-  liftEff (J.find ".binary, .app, .func, .list" output)
+  liftEff (J.find ".binary, .app, .func, .list, .if" output)
     >>= makeClickable
   liftEff (J.find ".clickable" output)
     >>= addMouseOverListener

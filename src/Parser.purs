@@ -59,8 +59,10 @@ character = between (string "'") (string "'") char_
 
 name :: Parser String String
 name = do
-  str <- some $ oneOf $ split "" "_abcdefghijklmnopqrstuvwxyz'"
-  return $ joinWith "" str
+  str <- joinWith "" <$> (some $ oneOf $ split "" "_abcdefghijklmnopqrstuvwxyz'")
+  if str == "if" || str == "then" || str == "else"
+    then fail $ "Trying to match reserved keyword: " ++ str
+    else return str
 
 atom :: Parser String Atom
 atom = do
@@ -168,6 +170,16 @@ lambda expr = bracket $ do
   body <- expr
   return $ Lambda binds body
 
+ifthenelse :: Parser String Expr -> Parser String Expr
+ifthenelse expr = do
+  string "if" *> eatSpaces
+  condition <- expr
+  eatSpaces *> string "then" *> eatSpaces
+  thenPart <- expr
+  eatSpaces *> string "else" *> eatSpaces
+  elsePart <- expr
+  return $ IfExpr condition thenPart elsePart
+
 termNTuple :: Parser String Expr -> Parser String Expr
 termNTuple expr = try (NTuple <$> tuple expr) <|> base expr
 
@@ -180,8 +192,11 @@ termPrefixOp expr = try prefixOp <|> termLambda expr
 termSect :: Parser String Expr -> Parser String Expr
 termSect expr = try (section (termPrefixOp expr)) <|> termPrefixOp expr
 
+termIf :: Parser String Expr -> Parser String Expr
+termIf expr = try (ifthenelse expr) <|> termSect expr
+
 termApp :: Parser String Expr -> Parser String Expr
-termApp expr = try (app (termSect expr)) <|> termSect expr
+termApp expr = try (app (termIf expr)) <|> termIf expr
 
 opP :: forall a. Parser String a -> Op -> Parser String Op
 opP strP opConstructor = try $

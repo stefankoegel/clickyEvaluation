@@ -53,6 +53,11 @@ exprToJQuery expr = go id expr
       j <- go (p <<< Snd) e
       section jop j
     Prefix op -> makeDiv ("(" ++ show op ++ ")") ["prefix", "op"]
+    IfExpr cond thenExpr elseExpr -> do
+      jc <- go (p <<< Fst) cond
+      jt <- go (p <<< Snd) thenExpr
+      je <- go (p <<< Thrd) elseExpr
+      ifexpr jc jt je
     Lambda binds body -> do
       jBinds <- for binds binding
       jBody <- go (p <<< Fst) body
@@ -127,6 +132,17 @@ section j1 j2 = do
   close <- makeDiv ")" ["brace"]
   J.append close jSect
   return jSect
+
+ifexpr :: forall eff. J.JQuery -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+ifexpr cond thenExpr elseExpr = do
+  dIf <- makeDiv "" ["if"]
+  makeDiv "if" ["keyword"] >>= flip J.append dIf
+  J.append cond dIf
+  makeDiv "then" ["keyword"] >>= flip J.append dIf
+  J.append thenExpr dIf
+  makeDiv "else" ["keyword"] >>= flip J.append dIf
+  J.append elseExpr dIf
+  return dIf
 
 interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> [a] -> m Unit
 interleaveM_ f sep = go
