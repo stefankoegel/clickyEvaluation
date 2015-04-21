@@ -53,6 +53,10 @@ button.restore:hover {
   margin: 0px auto 50px auto;
 }
 
+#output-container {
+  margin: 0px auto 0px auto;
+}
+
 #output-container, #history-container {
   text-align: center;
   cursor: default;
@@ -78,7 +82,7 @@ div.historyBox {
   margin: 15px;
 }
 
-.binary, .app {
+.binary, .app, .if {
   background: #bbb;
   padding: 10px;
   border-radius: 5px;
@@ -104,4 +108,19 @@ div.clickable {
 
 div.op, div.brace, div.comma {
   margin: 0px;
+}
+
+#info {
+  text-align: center;
+  font-size: 20px;
+  color: red;
+}
+
+#info p {
+  background: #ddd;
+  padding: 10px;
+  margin-left: 10%;
+  margin-right: 10%;
+  border-radius: 10px;
+  box-shadow: 3px 3px 10px 0 #333;
 }

@@ -34,8 +34,36 @@ data Expr = Atom Atom
           | SectL Expr Op
           | SectR Op Expr
           | Prefix Op
+          | IfExpr Expr Expr Expr
           | Lambda [Binding] Expr
           | App Expr [Expr]
+
+foldExpr :: forall a.
+               (Atom -> a)
+            -> ([a] -> a)
+            -> ([a] -> a)
+            -> (Op -> a -> a -> a)
+            -> (Op -> a -> a)
+            -> (a -> Op -> a)
+            -> (Op -> a -> a)
+            -> (Op -> a)
+            -> (a -> a -> a -> a)
+            -> ([Binding] -> a -> a)
+            -> (a -> [a] -> a)
+            -> Expr -> a
+foldExpr atom list ntuple binary unary sectl sectr prefix ifexpr lambda app = go
+  where
+  go (Atom a)          = atom a
+  go (List es)         = list (go <$> es)
+  go (NTuple es)       = ntuple (go <$> es)
+  go (Binary op e1 e2) = binary op (go e1) (go e2)
+  go (Unary op e)      = unary op (go e)
+  go (SectL e op)      = sectl (go e) op
+  go (SectR op e)      = sectr op (go e)
+  go (Prefix op)       = prefix op
+  go (IfExpr c te ee)  = ifexpr (go c) (go te) (go ee)
+  go (Lambda bs e)     = lambda bs (go e)
+  go (App e es)        = app (go e) (go <$> es)
 
 data Binding = Lit Atom
              | ConsLit Binding Binding
@@ -88,6 +116,7 @@ instance showExpr :: Show Expr where
     SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"
     SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
     Prefix op       -> "(Prefix (" ++ show op ++ "))"
+    IfExpr c te ee  -> "(IfExpr " ++ show c ++ " then " ++ show te ++ " else " ++ show ee ++ ")"
     Lambda binds body -> "(Lambda " ++ showList binds ++ " " ++ show body ++ ")"
     App func args   -> "(App " ++ show func ++ " " ++ showList args ++ ")"
 

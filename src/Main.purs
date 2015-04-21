@@ -8,6 +8,7 @@ import Data.Foreign (unsafeFromForeign)
 import Data.Either
 import Data.Maybe
 import Data.Array ((..), length, deleteAt, (!!), drop)
+import Data.Tuple
 import Data.Traversable (zipWithA)
 import Control.Apply ((*>))
 import Control.Monad.State.Trans
@@ -25,7 +26,15 @@ import Debug.Trace
 main = J.ready $ do
   J.select "#input"
     >>= J.on "change" (\_ _ -> startEvaluation)
+    >>= J.on "keyup"  (\e _ -> if isEnterKey e then startEvaluation else return unit)
   startEvaluation
+
+foreign import isEnterKey
+  """
+  function isEnterKey(event) {
+    return event.which == 13;
+  }
+  """ :: J.JQueryEvent -> Boolean
 
 type DOMEff = Eff (dom :: DOM, trace :: Trace)
 
@@ -36,12 +45,15 @@ type EvalM a = StateT EvalState DOMEff a
 startEvaluation :: DOMEff Unit
 startEvaluation = do
   definitions <- J.select "#definitions" >>= getValue
-  let env = defsToEnv $ case parseDefs definitions of Right d -> d
-
   input       <- J.select "#input"       >>= getValue
-  let expr = case parseExpr input of Right e -> e
-
-  void $ runStateT showEvaluationState { env: env, expr: expr, history: [] }
+  case parseExpr input of
+    Left msg   -> showInfo "Expression" msg
+    Right expr -> do
+      case defsToEnv <$> parseDefs definitions of
+        Left msg  -> showInfo "Definitions" msg
+        Right env -> do
+          clearInfo
+          void $ runStateT showEvaluationState { env: env, expr: expr, history: [] }
 
 foreign import map
   """
@@ -65,7 +77,7 @@ showEvaluationState = do
   liftEff $ exprToJQuery expr >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
 
-  liftEff (J.find ".binary, .app, .func, .list" output)
+  liftEff (J.find ".binary, .app, .func, .list, .if" output)
     >>= makeClickable
   liftEff (J.find ".clickable" output)
     >>= addMouseOverListener
@@ -110,6 +122,19 @@ showHistory expr i = do
   liftEff $ J.append restore history
   return history
 
+showInfo :: String -> String -> DOMEff Unit
+showInfo origin msg = do
+  info <- J.create "<p></p>"
+    >>= J.addClass "info"
+    >>= J.setText ("Error in " ++ origin ++ " => " ++ msg)
+  clearInfo
+  J.select "#info"
+    >>= J.append info
+  return unit
+
+clearInfo :: DOMEff Unit
+clearInfo = void $ J.select "#info" >>= J.clear
+
 prepareContainer :: String -> DOMEff J.JQuery
 prepareContainer name = do
   J.select ("#" ++ name ++ "-container") >>= J.clear
@@ -127,8 +152,8 @@ makeClickable jq = do
   testEval env expr jq = do
     path <- getPath jq
     case evalPath1 env path expr of
-      Nothing -> return unit
-      Just _  -> void $ J.addClass "clickable" jq
+      Left  _ -> return unit
+      Right _ -> void $ J.addClass "clickable" jq
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
 addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
@@ -157,9 +182,10 @@ removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
 evalExpr :: Path -> EvalM Unit
 evalExpr path = do
   { env = env, expr = expr } <- get
+  liftEff $ print path
   case evalPath1 env path expr of
-    Nothing    -> return unit
-    Just expr' -> do
+    Left msg   -> liftEff $ showInfo "execution" msg
+    Right expr' -> do
       modify (\es -> es { expr = expr' })
       modify (\es -> es { history = expr : es.history })
       showEvaluationState
