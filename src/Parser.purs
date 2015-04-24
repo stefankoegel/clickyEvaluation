@@ -59,7 +59,7 @@ character = between (string "'") (string "'") char_
 
 name :: Parser String String
 name = do
-  str <- joinWith "" <$> (some $ oneOf $ split "" "_abcdefghijklmnopqrstuvwxyz'")
+  str <- joinWith "" <$> (some $ oneOf $ split "" "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'")
   if str == "if" || str == "then" || str == "else"
     then fail $ "Trying to match reserved keyword: " ++ str
     else return str
