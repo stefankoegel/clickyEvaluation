@@ -21,6 +21,18 @@ h3 {
   transition: background .25s ease-in-out;
 }
 
+
+div.list, div.lambda {
+  font-family: monospace;
+  font-size: 15px;
+  border: none;
+  background: #aaa;
+  padding: 10px;
+  margin: 5px;
+  border-radius: 10px;
+  box-shadow: 1.5px 1.5px 5px 0 #333;
+}
+
 button.delete {
   background: #d99;
   box-shadow: 3px 3px 10px 0 #733;
