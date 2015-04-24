@@ -15,7 +15,7 @@
     <div id="info"></div>
 
     <h3>Expression</h3>
-    <input type="text" id="input" size="120" value="sum' (map (^2) [1, 2, 3, 4])">
+    <input type="text" id="input" size="120" value="sum (map (^2) [1, 2, 3, 4])">
 
     <div id="output-container">
     </div>
@@ -25,8 +25,11 @@
 
     <h3>Definitions</h3>
     <textarea id="definitions" cols="120" rows="15">
-and = foldr (&&) True
-or = foldr (||) False
+and (True:xs) = and xs
+and _         = False
+
+or (False:xs) = or xs
+or _          = True
 
 all p = and . map p
 any p = or . map p
@@ -41,10 +44,10 @@ drop 0 xs     = xs
 drop n (x:xs) = drop (n - 1) xs
 
 elem e []     = False
-elem e (x:xs) = if (e == x) True (elem e xs)
+elem e (x:xs) = if e == x then True else elem e xs
 
-max a b = if (a >= b) a b
-min a b = if (b >= a) a b
+max a b = if a >= b then a else b
+min a b = if b >= a then a else b
 
 maximum (x:xs) = foldr max x xs
 minimum (x:xs) = foldr min x xs
@@ -55,17 +58,21 @@ length (x:xs) = 1 + length xs
 zip (x:xs) (y:ys) = (x, y) : zip xs ys
 zip _      _      = []
 
+zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys
+zipWith _ _      _      = []
+
 unzip []          = ([], [])
 unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs
 
 curry f a b = f (a, b)
 uncurry f (a, b) = f a b
 
-sum = foldl (+) 0
-product = foldl (*) 1
 
-sum' [] = 0
-sum' (x:xs) = x + sum' xs
+sum (x:xs) = x + sum xs
+sum [] = 0
+
+product (x:xs) = x * product xs
+product [] = 1
 
 reverse []     = []
 reverse (x:xs) = reverse xs ++ [x]
@@ -75,13 +82,10 @@ concat = foldr (++) []
 map f []     = []
 map f (x:xs) = f x : map f xs
 
-if True  a b = a
-if False a b = b
-
 not True  = False
 not False = True
 
-filter p (x:xs) = if (p x) (x : filter p xs) (filter p xs)
+filter p (x:xs) = if p x then x : filter p xs else filter p xs
 filter p []     = []
 
 foldr f ini []     = ini
@@ -96,6 +100,8 @@ scanl f b (x:xs) = b : scanl f (f b x) xs
 iterate f x = x : iterate f (f x)
 
 id x = x
+
+const x _ = x
 
 flip f x y = f y x
 
