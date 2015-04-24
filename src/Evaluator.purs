@@ -110,7 +110,7 @@ eval1 env expr = case expr of
   (Atom (Name name))                 -> apply env name []
   (IfExpr (Atom (Bool true)) te _)   -> return te
   (IfExpr (Atom (Bool false)) _ ee)  -> return ee
-  (List (e:es))                      -> return $ Binary Cons e (List es)
+--  (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) [e]) -> return $ App f [App g [e]]
   (App (Lambda binds body) args)     -> matchls' binds args >>= flip replace' body >>= wrapLambda binds args
   (App (SectL e1 op) [e2])           -> return $ Binary op e1 e2
@@ -185,7 +185,9 @@ match' :: Binding -> Expr -> StateT (StrMap Expr) Evaluator Unit
 match' (Lit (Name name)) e                             = modify (insert name e)
 match' (Lit ba)          (Atom ea)          | ba == ea = return unit
 match' (ConsLit b bs)    (Binary Cons e es)            = match' b e *> match' bs es
+match' (ConsLit b bs)    (List (e:es))                 = match' (ConsLit b bs) (Binary Cons e (List es))
 match' (ListLit bs)      (List es)          | length bs == length es = void $ zipWithA match' bs es
+match' (ListLit bs)      (Binary Cons e (List es))     = match' (ListLit bs) (List (e:es))
 match' (NTupleLit bs)    (NTuple es)        | length bs == length es = void $ zipWithA match' bs es
 match' b                 e                             = throwError $ "Cannot match " ++ show b ++ " with " ++ show e
 
