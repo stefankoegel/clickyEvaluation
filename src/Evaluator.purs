@@ -204,6 +204,7 @@ replace' subs = go
     (Unary op e)         -> Unary <$> pure op <*> go e
     (SectL e op)         -> SectL <$> go e <*> pure op
     (SectR op e)         -> SectR <$> pure op <*> go e
+    (IfExpr ce te ee)    -> IfExpr <$> go ce <*> go te <*> go ee
     (Lambda binds body)  -> (avoidCapture subs binds) *> (Lambda <$> pure binds <*> replace' (foldr delete subs (boundNames' binds)) body)
     (App func exprs)     -> App <$> go func <*> traverse go exprs
     e                    -> return e
