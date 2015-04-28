@@ -15,13 +15,13 @@
     "html/dist/*"
   ],
   "dependencies": {
-    "purescript-arrays": "*",
-    "purescript-jquery": "*",
-    "purescript-foreign": "*",
-    "purescript-parsing": "*",
-    "purescript-globals": "*",
-    "purescript-math": "*",
-    "purescript-maps": "*",
-    "purescript-monad-eff": "*"
+    "purescript-arrays": "0.3.4",
+    "purescript-jquery": "0.4.0",
+    "purescript-foreign": "0.4.2",
+    "purescript-parsing": "0.3.1",
+    "purescript-globals": "0.1.6",
+    "purescript-math": "0.1.1",
+    "purescript-maps": "0.3.4",
+    "purescript-monad-eff": "0.1.0"
   }
 }
