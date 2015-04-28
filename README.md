@@ -39,6 +39,7 @@ Everything not on the above list. Especially:
 * Types (and other sanity checks)
 * ADTs
 * Comments
+* List comprehensions
 
 ## Building
 
