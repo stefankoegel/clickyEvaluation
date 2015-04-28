@@ -3,7 +3,6 @@
   "dependencies": {
     "bower": "*",
     "grunt-purescript": "*",
-    "grunt-cli": "*",
-    "jquery": "*"
+    "grunt-cli": "*"
   }
 }
