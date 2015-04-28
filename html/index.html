@@ -68,6 +68,12 @@ unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs
 curry f a b = f (a, b)
 uncurry f (a, b) = f a b
 
+repeat x = x : repeat x
+
+replicate 0 _ = []
+replicate n x = x : replicate (n - 1) x
+
+enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []
 
 sum (x:xs) = x + sum xs
 sum [] = 0
