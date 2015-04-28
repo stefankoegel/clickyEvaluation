@@ -9,10 +9,13 @@ h3 {
   color: #333;
 }
 
+#input, #definitions {
+  max-width: 90%;
+}
+
 #input, #definitions, .output, .historyBox, div.clickable, button {
   font-family: monospace;
   font-size: 15px;
-  max-width: 90%;
   border: none;
   background: #ddd;
   padding: 10px;
