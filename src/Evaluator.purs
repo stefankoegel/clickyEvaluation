@@ -175,7 +175,7 @@ apply env name args = case lookup name env of
     Left msg   -> throwError $ "No matching funnction found for " ++ name ++ "(last reason: " ++ msg ++ ")"
   where
   app :: Tuple [Binding] Expr -> Evaluator Expr
-  app (Tuple binds body) | length binds == length args = matchls' binds args >>= flip replace' body
+  app (Tuple binds body) | length binds <= length args = matchls' binds args >>= flip replace' body >>= wrapLambda binds args
                          | otherwise                   = throwError $ "Wrong number of arguments!"
 
 matchls' :: [Binding] -> [Expr] -> Evaluator (StrMap Expr)

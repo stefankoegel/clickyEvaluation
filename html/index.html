@@ -26,11 +26,13 @@
 
     <h3>Definitions</h3>
     <textarea id="definitions" cols="120" rows="15">
-and (True:xs) = and xs
-and _         = False
+and (True:xs)  = and xs
+and (False:xs) = False
+and []         = False
 
 or (False:xs) = or xs
-or _          = True
+or (True:xs)  = True
+or []         = True
 
 all p = and . map p
 any p = or . map p
@@ -57,10 +59,12 @@ length []     = 0
 length (x:xs) = 1 + length xs
 
 zip (x:xs) (y:ys) = (x, y) : zip xs ys
-zip _      _      = []
+zip []      _     = []
+zip _       []    = []
 
 zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys
-zipWith _ _      _      = []
+zipWith _ []     _      = []
+zipWith _ _      []     = []
 
 unzip []          = ([], [])
 unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs
