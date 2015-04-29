@@ -1,5 +1,6 @@
 /.*
 !/.gitignore
+!/.travis.yml
 /html/dist/*
 /node_modules/
 /bower_components/
