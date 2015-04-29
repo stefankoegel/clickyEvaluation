@@ -1,5 +1,7 @@
 # Clicky Evaluation
 
+[![Build Status](https://travis-ci.org/stefankoegel/clickyEvaluation.svg?branch=master)](https://travis-ci.org/stefankoegel/clickyEvaluation)
+
 ## Description
 
 *Clicky Evaluation* parses simple *Haskell-like* expressions and function
