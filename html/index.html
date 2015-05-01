@@ -28,11 +28,11 @@
     <textarea id="definitions" cols="120" rows="15">
 and (True:xs)  = and xs
 and (False:xs) = False
-and []         = False
+and []         = True
 
 or (False:xs) = or xs
 or (True:xs)  = True
-or []         = True
+or []         = False
 
 all p = and . map p
 any p = or . map p
