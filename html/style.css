@@ -13,6 +13,14 @@ h3 {
   max-width: 90%;
 }
 
+#definitions {
+  height: 600px;
+  border-radius: 10px;
+  box-shadow: 3px 3px 10px 0 #333;
+  margin: 10px;
+  padding: 10px;
+}
+
 #input, #definitions, .output, .historyBox, div.clickable, button {
   font-family: monospace;
   font-size: 15px;

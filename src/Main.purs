@@ -5,6 +5,10 @@ import           Control.Monad.Eff
 import DOM
 import Data.Foreign (unsafeFromForeign)
 
+import Ace (ace)
+import Ace.Types (EAce())
+import qualified Ace.Editor as Editor
+
 import Data.Either
 import Data.Maybe
 import Data.Array ((..), length, deleteAt, (!!), drop)
@@ -36,7 +40,7 @@ foreign import isEnterKey
   }
   """ :: J.JQueryEvent -> Boolean
 
-type DOMEff = Eff (dom :: DOM, trace :: Trace)
+type DOMEff = Eff (dom :: DOM, trace :: Trace, ace :: EAce)
 
 type EvalState = { env :: Env, expr :: Expr, history :: [Expr] }
 
@@ -44,7 +48,8 @@ type EvalM a = StateT EvalState DOMEff a
 
 startEvaluation :: DOMEff Unit
 startEvaluation = do
-  definitions <- J.select "#definitions" >>= getValue
+  editor <- Ace.edit "definitions" Ace.ace
+  definitions <- Editor.getValue editor
   input       <- J.select "#input"       >>= getValue
   case parseExpr input of
     Left msg   -> showInfo "Expression" msg
