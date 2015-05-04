@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Clicky Evaluation</title>
+    <meta charset="utf8">
+    <link rel="stylesheet" href="style.css" charset="utf-8">
+  </head>
+  <body>
+  <a href="https://github.com/stefankoegel/clickyEvaluation"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/a6677b08c955af8400f44c6298f40e7d19cc5b2d/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f677261795f3664366436642e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png"></a>
+    <script src="https://code.jquery.com/jquery-1.11.2.min.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.1.9/ace.js" charset="utf-8"></script>
+    <script>
+      jQuery(function() {
+        var editor = ace.edit("definitions");
+        editor.setTheme("ace/theme/kuroir");
+        editor.getSession().setMode("ace/mode/haskell");
+        editor.getSession().setTabSize(8);
+        editor.setShowPrintMargin(false);
+      });
+    </script>
+    <script charset="utf-8" src="dist/Main.js"></script>
+    <script charset="utf-8">
+      PS.Main.main();
+    </script>
+
+    <div id="info"></div>
+
+    <h3>Expression</h3>
+    <input type="text" id="input" size="120" value="sum (map (^2) [1, 2, 3, 4])">
+
+    <div id="output-container">
+    </div>
+
+    <div id="history-container">
+    </div>
+
+    <h3>Definitions</h3>
+    <div class="ace" id="definitions">
+and (True:xs)  = and xs
+and (False:xs) = False
+and []         = True
+
+or (False:xs) = or xs
+or (True:xs)  = True
+or []         = False
+
+all p = and . map p
+any p = or . map p
+
+head (x:xs) = x
+tail (x:xs) = xs
+
+take 0 xs     = []
+take n (x:xs) = x : take (n - 1) xs
+
+drop 0 xs     = xs
+drop n (x:xs) = drop (n - 1) xs
+
+elem e []     = False
+elem e (x:xs) = if e == x then True else elem e xs
+
+max a b = if a >= b then a else b
+min a b = if b >= a then a else b
+
+maximum (x:xs) = foldr max x xs
+minimum (x:xs) = foldr min x xs
+
+length []     = 0
+length (x:xs) = 1 + length xs
+
+zip (x:xs) (y:ys) = (x, y) : zip xs ys
+zip []      _     = []
+zip _       []    = []
+
+zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys
+zipWith _ []     _      = []
+zipWith _ _      []     = []
+
+unzip []          = ([], [])
+unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs
+
+curry f a b = f (a, b)
+uncurry f (a, b) = f a b
+
+repeat x = x : repeat x
+
+replicate 0 _ = []
+replicate n x = x : replicate (n - 1) x
+
+enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []
+
+sum (x:xs) = x + sum xs
+sum [] = 0
+
+product (x:xs) = x * product xs
+product [] = 1
+
+reverse []     = []
+reverse (x:xs) = reverse xs ++ [x]
+
+concat = foldr (++) []
+
+map f []     = []
+map f (x:xs) = f x : map f xs
+
+not True  = False
+not False = True
+
+filter p (x:xs) = if p x then x : filter p xs else filter p xs
+filter p []     = []
+
+foldr f ini []     = ini
+foldr f ini (x:xs) = f x (foldr f ini xs)
+
+foldl f acc []     = acc
+foldl f acc (x:xs) = foldl f (f acc x) xs
+
+scanl f b []     = [b]
+scanl f b (x:xs) = b : scanl f (f b x) xs
+
+iterate f x = x : iterate f (f x)
+
+id x = x
+
+const x _ = x
+
+flip f x y = f y x
+
+even n = (n `mod` 2) == 0
+odd n = (n `mod` 2) == 1
+
+fix f = f (fix f)
+</div>
+
+  </body>
+</html>
