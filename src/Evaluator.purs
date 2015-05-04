@@ -35,8 +35,6 @@ import Control.Monad.Trans
 
 import AST
 
-type Matching = Tuple Atom Expr
-
 type Evaluator = ErrorT String Identity
 
 runEvalM :: forall a. Evaluator a -> Either String a
