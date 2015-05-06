@@ -189,7 +189,7 @@ evalExpr path = do
   { env = env, expr = expr } <- get
   liftEff $ print path
   case evalPath1 env path expr of
-    Left msg   -> liftEff $ showInfo "execution" msg
+    -- Left msg   -> liftEff $ showInfo "execution" msg
     Right expr' -> do
       modify (\es -> es { expr = expr' })
       modify (\es -> es { history = expr : es.history })
