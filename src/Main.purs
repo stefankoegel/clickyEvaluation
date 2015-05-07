@@ -8,6 +8,8 @@ import Data.Foreign (unsafeFromForeign)
 import Ace (ace)
 import Ace.Types (EAce())
 import qualified Ace.Editor as Editor
+import qualified Ace.EditSession as Session
+import qualified Ace.Range as  Range
 
 import Data.Either
 import Data.Maybe
@@ -23,6 +25,8 @@ import Web (exprToJQuery, getPath)
 import Parser
 import Evaluator
 import AST
+import Text.Parsing.Parser (ParseError(ParseError))
+import Text.Parsing.Parser.Pos (Position(Position))
 
 import Debug.Trace
 
@@ -51,14 +55,24 @@ startEvaluation = do
   editor <- Ace.edit "definitions" Ace.ace
   definitions <- Editor.getValue editor
   input       <- J.select "#input"       >>= getValue
+
   case parseExpr input of
-    Left msg   -> showInfo "Expression" msg
+    Left err   -> showInfo "Expression" (show err)
     Right expr -> do
       case defsToEnv <$> parseDefs definitions of
-        Left msg  -> showInfo "Definitions" msg
+        Left err@(ParseError { position: (Position { line: line, column: column }) })  -> do
+          showInfo "Definitions" (show err)
+          markText (line - 1) column
         Right env -> do
           clearInfo
           void $ runStateT showEvaluationState { env: env, expr: expr, history: [] }
+
+markText :: Number -> Number -> DOMEff Unit
+markText line column = do
+  editor <- Ace.edit "definitions" Ace.ace
+  session <- Editor.getSession editor
+  rang <- Range.create line column 100000 100000
+  Session.addMarker rang "syntaxError" "" false session
 
 foreign import map
   """

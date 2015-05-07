@@ -18,10 +18,8 @@ import AST
 eatSpaces :: Parser String Unit
 eatSpaces = void $ many $ string " " <|> string "\t"
 
-parse :: forall a. Parser String a -> String -> Either String a
-parse p s = case runParser s p of
-  Left err -> Left $ show err
-  Right a  -> Right a
+parse :: forall a. Parser String a -> String -> Either ParseError a
+parse p s = runParser s p
 
 ---------------------------------------
 -- Parsers for the 'Atom' type
@@ -72,7 +70,7 @@ atom = do
 -- Parsers for the 'Expr' type
 ---------------------------------------
 
-parseExpr :: String -> Either String Expr
+parseExpr :: String -> Either ParseError Expr
 parseExpr = parse (eatSpaces *> expr)
 
 list :: forall a. Parser String a -> Parser String [a]
@@ -295,7 +293,7 @@ binding = fix1 $ \binding -> lit <|> try (consLit binding) <|> tupleLit binding 
 -- Parsers for the 'Definition' type
 ---------------------------------------
 
-parseDefs :: String -> Either String [Definition]
+parseDefs :: String -> Either ParseError [Definition]
 parseDefs = parse (skipSpaces *> defs)
 
 def :: Parser String Definition

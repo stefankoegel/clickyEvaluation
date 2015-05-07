@@ -18,7 +18,7 @@
     "purescript-arrays": "0.3.4",
     "purescript-jquery": "0.4.0",
     "purescript-foreign": "0.4.2",
-    "purescript-parsing": "0.3.1",
+    "purescript-parsing": "#be0bf1a0d3",
     "purescript-globals": "0.1.6",
     "purescript-math": "0.1.1",
     "purescript-maps": "0.3.4",

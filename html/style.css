@@ -148,3 +148,8 @@ div.op, div.brace, div.comma {
   border-radius: 10px;
   box-shadow: 3px 3px 10px 0 #333;
 }
+
+.syntaxError {
+  position: absolute;
+  background: #fbb;
+}
