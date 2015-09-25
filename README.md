@@ -48,12 +48,16 @@ Everything not on the above list. Especially:
 ## Building
 
 You will need to install the Haskell Platform (7.6.3 should be enough), nodejs and npm.
+This project won't work with purescript-0.7.0 or higher (I will fix this soon),
+that's why the following instructions use an older version.
 
 ```
-cabal update && cabal install purescript
+cabal update
+cabal sandbox init
+cabal install purescript-0.9.5
 npm install
 $(npm bin)/bower update
-$(npm bin)/grunt
+PATH=.cabal-sandbox/bin:$PATH $(npm bin)/grunt
 ```
 
 Run with:

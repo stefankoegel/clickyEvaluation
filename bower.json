@@ -23,6 +23,7 @@
     "purescript-math": "0.1.1",
     "purescript-maps": "0.3.4",
     "purescript-monad-eff": "0.1.0",
-    "purescript-ace": "0.3.0"
+    "purescript-ace": "0.3.0",
+    "purescript-simple-dom": "0.0.2"
   }
 }
