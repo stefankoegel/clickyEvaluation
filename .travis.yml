@@ -1,10 +1,9 @@
 language : haskell
 ghc : 7.6.3
 install :
-  - 'cabal update'
-  - 'cabal sandbox init'
-  - 'cabal install purescript-0.6.9.5'
+  - 'wget -O purescript.tar.gz https://github.com/purescript/purescript/releases/download/v0.6.9.5/linux64.tar.gz'
+  - 'tar -xvf purescript.tar.gz'
   - 'npm install'
   - '$(npm bin)/bower update'
 script :
-  - 'PATH=.cabal-sandbox/bin:$PATH $(npm bin)/grunt'
+  - 'PATH=purescript:$PATH $(npm bin)/grunt'
