@@ -2,8 +2,9 @@ language : haskell
 ghc : 7.6.3
 install :
   - 'cabal update'
-  - 'cabal install purescript'
+  - 'cabal sandbox init'
+  - 'cabal install purescript-0.9.5'
   - 'npm install'
   - '$(npm bin)/bower update'
 script :
-  - '$(npm bin)/grunt'
+  - 'PATH=.cabal-sandbox/bin:$PATH $(npm bin)/grunt'
