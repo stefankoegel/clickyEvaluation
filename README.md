@@ -49,7 +49,7 @@ Everything not on the above list. Especially:
 
 You will need to install the Haskell Platform (7.6.3 should be enough), nodejs and npm.
 This project won't work with purescript-0.7.0 or higher (I will fix this soon),
-that's why the following instructions use an older version.
+that is why the following instructions use an older version.
 
 ```
 wget -O purescript.tar.gz https://github.com/purescript/purescript/releases/download/v0.6.9.5/linux64.tar.gz
