@@ -54,7 +54,7 @@ that's why the following instructions use an older version.
 ```
 cabal update
 cabal sandbox init
-cabal install purescript-0.9.5
+cabal install purescript-0.6.9.5
 npm install
 $(npm bin)/bower update
 PATH=.cabal-sandbox/bin:$PATH $(npm bin)/grunt

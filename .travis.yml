@@ -3,7 +3,7 @@ ghc : 7.6.3
 install :
   - 'cabal update'
   - 'cabal sandbox init'
-  - 'cabal install purescript-0.9.5'
+  - 'cabal install purescript-0.6.9.5'
   - 'npm install'
   - '$(npm bin)/bower update'
 script :
