@@ -52,12 +52,11 @@ This project won't work with purescript-0.7.0 or higher (I will fix this soon),
 that's why the following instructions use an older version.
 
 ```
-cabal update
-cabal sandbox init
-cabal install purescript-0.6.9.5
+wget -O purescript.tar.gz https://github.com/purescript/purescript/releases/download/v0.6.9.5/linux64.tar.gz
+tar -xvf purescript.tar.gz
 npm install
 $(npm bin)/bower update
-PATH=.cabal-sandbox/bin:$PATH $(npm bin)/grunt
+PATH=purescript:$PATH $(npm bin)/grunt
 ```
 
 Run with:
