@@ -1,133 +1,146 @@
 module Parser where
 
+import Prelude
 import Global              (readInt)
-import Data.String         (joinWith, split)
-import Data.Identity       (Identity())
+import Data.Int (floor)
+import qualified Data.String as Str
+import Data.List (fromList, List(Cons, Nil), concat)
+import qualified Data.Array as Arr
+-- import Data.Identity       (Identity())
 import Data.Either
+import Data.Foldable
 import Control.Alt         ((<|>))
 import Control.Apply       ((*>))
-import Control.Alternative (some, many)
-import Control.Lazy        (fix1)
 
-import Text.Parsing.Parser
-import Text.Parsing.Parser.Combinators
-import Text.Parsing.Parser.String
+import Text.Parsing.StringParser
+import Text.Parsing.StringParser.Combinators
+import Text.Parsing.StringParser.String
 
 import AST
-
-eatSpaces :: Parser String Unit
-eatSpaces = void $ many $ string " " <|> string "\t"
-
-parse :: forall a. Parser String a -> String -> Either ParseError a
-parse p s = runParser s p
 
 ---------------------------------------
 -- Parsers for the 'Atom' type
 ---------------------------------------
 
-num :: Parser String Atom
-num = do
-  str <- string "0" <|> nat
-  return $ Num $ readInt 10 str
-  where
-  nat = do
-    d <- oneOf $ split "" "123456789"
-    ds <- many $ oneOf $ split "" "0123456789"
-    return $ joinWith "" $ d:ds
+-- | Transforms a list of characters to a string.
+listToString :: List Char -> String
+listToString = Str.fromCharArray <<< fromList
 
-bool :: Parser String Atom
+-- | Parses a decimal `Int`. (Leading zeroes are allowed)
+aint :: Parser Atom
+aint = (AInt <<< floor <<< readInt 10 <<< listToString) <$> many1 anyDigit
+
+-- | Parses `True` or `False`.
+bool :: Parser Atom
 bool = do
   f <|> t
   where
   f = string "False" *> return (Bool false)
-  t = string "True" *> return (Bool true)
+  t = string "True"  *> return (Bool true)
 
-char_ :: Parser String Atom
-char_ = Char <$> choice [ string "\\\\" *> return "\\"
---                        , string "\\n"  *> return "\n"
---                        , string "\\r"  *> return "\r"
---                        , string "\\t"  *> return "\t"
-                        , string "\\\""  *> return "\""
-                        , char
-                        ]
+-- | Parses one character and handles some escape sequences.
+escapedChar :: Parser String
+escapedChar = choice 
+                 [ string "\\\\" *> return "\\"
+                 , string "\\n"  *> return "\n"
+                 , string "\\r"  *> return "\r"
+                 , string "\\t"  *> return "\t"
+                 , string "\\\"" *> return "\""
+                 , string "\\\"" *> return "\'"
+                 , Str.singleton <$> anyChar
+                 ]
 
+-- | Parses one character between apostrophes.
+character :: Parser Atom
+character = Char <$> between (string "'") (string "'") escapedChar
 
-character :: Parser String Atom
-character = between (string "'") (string "'") char_
+-- | List of lower case letters that are allowed as first characters in a variable names.
+lowerCaseLetters :: Array Char
+lowerCaseLetters =
+  [ '_'
+  , 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's'
+  , 't', 'u', 'v', 'w', 'x', 'y', 'z'
+  ]
 
-name :: Parser String String
-name = do
-  str <- joinWith "" <$> (some $ oneOf $ split "" "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'")
-  if str == "if" || str == "then" || str == "else"
-    then fail $ "Trying to match reserved keyword: " ++ str
-    else return str
+-- | List of upper case letters that are allowed as first characters in type and constructor names.
+upperCaseLetters :: Array Char
+upperCaseLetters =
+  [ 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S'
+  , 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
+  ]
 
-atom :: Parser String Atom
+-- | List of all letters that can be used in names.
+allLetters :: Array Char
+allLetters = Arr.concat [lowerCaseLetters, upperCaseLetters, ['\'']]
+
+-- | Parses the name of a variable and contains a `String`.
+varName :: Parser String
+varName = do
+  first <- oneOf lowerCaseLetters
+  rest  <- many1 $ oneOf allLetters
+  return $ listToString $ Cons first rest
+
+-- | Parses an `Atom`.
+atom :: Parser Atom
 atom = do
-  num <|> try bool <|> character <|> (Name <$> name) <?> "Atom (Number, Boolean, Name)"
+  aint <|> try bool <|> character <|> (Name <$> varName) <?> "Atom (Int, Boolean, Char, Variable name)"
 
 ---------------------------------------
 -- Parsers for the 'Expr' type
 ---------------------------------------
 
-parseExpr :: String -> Either ParseError Expr
-parseExpr = parse (eatSpaces *> expr)
-
-list :: forall a. Parser String a -> Parser String [a]
+-- | Parses a list of elements between square brackets and separated by commas.
+list :: forall a. Parser a -> Parser (List a)
 list p = do
   string "["
-  eatSpaces
-  ls <- p `sepBy` (try (eatSpaces *> string "," *> eatSpaces))
-  eatSpaces
+  skipSpaces
+  ls <- p `sepBy` (try (skipSpaces *> string "," *> skipSpaces))
+  skipSpaces
   string "]"
   return ls
 
-stringList :: Parser String [Atom]
-stringList = do
-  string "\""
-  char_ `manyTill` (string "\"")
-
-app :: Parser String Expr -> Parser String Expr
+-- | 
+app :: Parser Expr -> Parser Expr
 app expr = do
   func <- expr
-  exprs <- some (try $ eatSpaces *> expr)
+  exprs <- many1 (try $ skipSpaces *> expr)
   return $ App func exprs
 
-bracket :: forall a. Parser String a -> Parser String a
+bracket :: forall a. Parser a -> Parser a
 bracket p = do
   string "("
-  eatSpaces
+  skipSpaces
   e <- p
-  eatSpaces
+  skipSpaces
   string ")"
   return e
 
-section :: Parser String Expr -> Parser String Expr
+section :: Parser Expr -> Parser Expr
 section expr = bracket (try sectR <|> sectL)
   where
   sectR = do
     op <- choice opList
-    eatSpaces
+    skipSpaces
     e <- expr
     return $ SectR op e
   sectL = do
     e <- expr
-    eatSpaces
+    skipSpaces
     op <- choice opList
     return $ SectL e op
 
-opList :: [Parser String Op]
+opList :: Array (Parser Op)
 opList =
   [ opP (string ".")     Composition
   , opP (string "^")     Power
   , opP (string "*")     Mul
   , opP (try $ string "`div`") Div
   , opP (string "`mod`") Mod
-  , opP (string "+" *> notFollowedBy (string "+")) Add
-  , opP (string "-" *> notFollowedBy (eatSpaces *> num)) Sub
-  , opP (string ":")     Cons
   , opP (string "++")    Append
-  , opP (string "==")    Eq
+  , opP (string "+")     Add
+  , opP (string "-")     Sub
+  , opP (string ":")     Colon
+  , opP (string "==")    Equ
   , opP (string "/=")    Neq
   , opP (string "<=")    Leq
   , opP (string "<")     Lt
@@ -138,103 +151,102 @@ opList =
   , opP (string "$")     Dollar
   ]
 
-prefixOp :: Parser String Expr
+prefixOp :: Parser Expr
 prefixOp = bracket $ Prefix <$> choice opList
 
-sepBy2 :: forall m s a sep. (Monad m) => ParserT s m a -> ParserT s m sep -> ParserT s m [a]
-sepBy2 p sep = do
-  a <- p
-  as <- some $ do
-    sep
-    p
-  return (a:as)
+tuple :: forall a. Parser a -> Parser (List a)
+tuple expr = bracket $ expr `sepBy` (try (skipSpaces *> string "," *> skipSpaces)) -- TODO sepby2
 
-tuple :: forall a. Parser String a -> Parser String [a]
-tuple expr = bracket $ expr `sepBy2` (try (eatSpaces *> string "," *> eatSpaces))
+-- | Parses a string between quotation marks
+quotedString :: Parser (List Expr)
+quotedString = do
+  string "\""
+  str <- escapedChar `manyTill` (string "\"")
+  return $ (Atom <<< Char) <$> str
 
-base :: Parser String Expr -> Parser String Expr
+base :: Parser Expr -> Parser Expr
 base expr =  (List <$> list expr)
-         <|> ((List <<< (Atom <$>)) <$> stringList)
+         <|> List <$> quotedString
          <|> bracket expr
          <|> (Atom <$> atom)
 
-lambda :: Parser String Expr -> Parser String Expr
+lambda :: Parser Expr -> Parser Expr
 lambda expr = bracket $ do
   string "\\"
-  eatSpaces
-  binds <- binding `sepEndBy` eatSpaces
+  skipSpaces
+  binds <- binding `sepEndBy` skipSpaces
   string "->"
-  eatSpaces
+  skipSpaces
   body <- expr
   return $ Lambda binds body
 
-ifthenelse :: Parser String Expr -> Parser String Expr
+ifthenelse :: Parser Expr -> Parser Expr
 ifthenelse expr = do
-  string "if" *> eatSpaces
+  string "if" *> skipSpaces
   condition <- expr
-  eatSpaces *> string "then" *> eatSpaces
+  skipSpaces *> string "then" *> skipSpaces
   thenPart <- expr
-  eatSpaces *> string "else" *> eatSpaces
+  skipSpaces *> string "else" *> skipSpaces
   elsePart <- expr
   return $ IfExpr condition thenPart elsePart
 
-termNTuple :: Parser String Expr -> Parser String Expr
+termNTuple :: Parser Expr -> Parser Expr
 termNTuple expr = try (NTuple <$> tuple expr) <|> base expr
 
-termLambda :: Parser String Expr -> Parser String Expr
+termLambda :: Parser Expr -> Parser Expr
 termLambda expr = try (lambda expr) <|> termNTuple expr
 
-termPrefixOp :: Parser String Expr -> Parser String Expr
+termPrefixOp :: Parser Expr -> Parser Expr
 termPrefixOp expr = try prefixOp <|> termLambda expr
 
-termSect :: Parser String Expr -> Parser String Expr
+termSect :: Parser Expr -> Parser Expr
 termSect expr = try (section (termPrefixOp expr)) <|> termPrefixOp expr
 
-termIf :: Parser String Expr -> Parser String Expr
+termIf :: Parser Expr -> Parser Expr
 termIf expr = try (ifthenelse expr) <|> termSect expr
 
-termApp :: Parser String Expr -> Parser String Expr
+termApp :: Parser Expr -> Parser Expr
 termApp expr = try (app (termIf expr)) <|> termIf expr
 
-opP :: forall a. Parser String a -> Op -> Parser String Op
+opP :: forall a. Parser a -> Op -> Parser Op
 opP strP opConstructor = try $
-  (eatSpaces *> strP *> eatSpaces *> return opConstructor)
+  (skipSpaces *> strP *> skipSpaces *> return opConstructor)
 
-term9r :: Parser String Expr -> Parser String Expr
+term9r :: Parser Expr -> Parser Expr
 term9r expr = chainr1 (termApp expr) (Binary <$> opP (string ".") Composition)
 
-term8r :: Parser String Expr -> Parser String Expr
+term8r :: Parser Expr -> Parser Expr
 term8r expr = chainr1 (term9r expr) (Binary <$> opP (string "^") Power)
 
-term7l :: Parser String Expr -> Parser String Expr
+term7l :: Parser Expr -> Parser Expr
 term7l expr = chainl1 (term8r expr) (mulP <|> try divP <|> modP)
   where
   mulP = Binary <$> opP (string "*") Mul
   divP = Binary <$> opP (string "`div`") Div
   modP = Binary <$> opP (string "`mod`") Mod
 
-term6neg :: Parser String Expr -> Parser String Expr
+term6neg :: Parser Expr -> Parser Expr
 term6neg expr = try negation <|> (term7l expr)
   where
   negation = do
     string "-"
-    eatSpaces
+    skipSpaces
     e <- (term7l expr)
     return $ Unary Sub e
 
-term6l :: Parser String Expr -> Parser String Expr
+term6l :: Parser Expr -> Parser Expr
 term6l expr = chainl1 (term6neg expr) (addP <|> subP)
   where
-  addP = Binary <$> opP (string "+" *> notFollowedBy (string "+")) Add
+  addP = Binary <$> opP (string "+") Add
   subP = Binary <$> opP (string "-") Sub
 
-term5r :: Parser String Expr -> Parser String Expr
+term5r :: Parser Expr -> Parser Expr
 term5r expr = chainr1 (term6l expr) (consP <|> appendP)
   where
-  consP = Binary <$> opP (string ":") Cons
+  consP = Binary <$> opP (string ":") Colon
   appendP = Binary <$> opP (string "++") Append
 
-term4 :: Parser String Expr -> Parser String Expr
+term4 :: Parser Expr -> Parser Expr
 term4 expr = try comparison <|> term5r expr
   where
   comparison = do
@@ -242,69 +254,64 @@ term4 expr = try comparison <|> term5r expr
     op <- choice [eq, neq, leq, lt, geq, gt]
     e2 <- term5r expr
     return $ Binary op e1 e2
-  eq  = opP (string "==") Eq
+  eq  = opP (string "==") Equ
   neq = opP (string "/=") Neq
   leq = opP (string "<=") Leq
   lt  = opP (string "<")  Lt
   geq = opP (string ">=") Geq
   gt  = opP (string ">")  Gt
 
-term3r :: Parser String Expr -> Parser String Expr
+term3r :: Parser Expr -> Parser Expr
 term3r expr = chainr1 (term4 expr) (Binary <$> opP (string "&&") And)
 
-term2r :: Parser String Expr -> Parser String Expr
+term2r :: Parser Expr -> Parser Expr
 term2r expr = chainr1 (term3r expr) (Binary <$> opP (string "||") Or)
 
-term0r :: Parser String Expr -> Parser String Expr
+term0r :: Parser Expr -> Parser Expr
 term0r expr = chainr1 (term2r expr) (Binary <$> opP (string "$") Dollar)
 
-expr :: Parser String Expr
-expr = fix1 $ \expr -> term0r expr
+expression :: Parser Expr
+expression = fix $ \expr -> term0r expr
 
----------------------------------------
--- Parsers for the 'Binding' type
----------------------------------------
-
-lit :: Parser String Binding
+lit :: Parser Binding
 lit = Lit <$> atom
 
-listLit :: Parser String Binding -> Parser String Binding
-listLit binding = ListLit <$> list binding
+listLit :: Parser Binding -> Parser Binding
+listLit binds = ListLit <$> list binds 
 
-consLit :: Parser String Binding -> Parser String Binding
-consLit binding = bracket recurse
-  where
-  recurse = fix1 $ \recurse -> try (cons recurse) <|> binding
-  cons recurse = do
-    b <- binding
-    eatSpaces
-    string ":"
-    eatSpaces
-    bs <- recurse
-    return $ ConsLit b bs
+consLit :: Parser Binding -> Parser Binding
+consLit binds = do
+  string "("
+  skipSpaces
+  b <-binds 
+  skipSpaces
+  string ":"
+  skipSpaces
+  bs <-binds 
+  skipSpaces
+  string ")"
+  return $ ConsLit b bs
+-- TODO: handle (x:y:zs)
 
-tupleLit :: Parser String Binding -> Parser String Binding
-tupleLit binding = NTupleLit <$> tuple binding
+tupleLit :: Parser Binding -> Parser Binding
+tupleLit binds = NTupleLit <$> tuple binds 
 
-binding :: Parser String Binding
-binding = fix1 $ \binding -> lit <|> try (consLit binding) <|> tupleLit binding <|> listLit binding
+binding :: Parser Binding
+binding = fix $ \binds -> lit <|> try (consLit binds) <|> tupleLit binds <|> listLit binds 
 
 ---------------------------------------
 -- Parsers for the 'Definition' type
 ---------------------------------------
 
-parseDefs :: String -> Either ParseError [Definition]
-parseDefs = parse (skipSpaces *> defs)
-
-def :: Parser String Definition
+def :: Parser Definition
 def = do
-  defName <- name
-  eatSpaces
-  binds <- binding `sepEndBy` eatSpaces
+  defName <- varName
+  skipSpaces
+  binds <- binding `sepEndBy` skipSpaces
   string "="
-  eatSpaces
-  body <- expr
+  skipSpaces
+  body <- expression
   return $ Def defName binds body
 
-defs :: Parser String [Definition]
+defs :: Parser (List Definition)
 defs = def `sepEndBy` skipSpaces

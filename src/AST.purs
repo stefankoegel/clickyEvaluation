@@ -1,55 +1,65 @@
 module AST where
 
+import Prelude
 import Data.String (joinWith)
-import Data.Array  (length)
+import Data.List
 
+-- | Operators
+-- |
+-- | Primitive infix operators that are evaluated directly by the `Evaluator`.
+-- | (`Colon` is `Cons` but clashes with `Data.List.Cons`)
 data Op = Composition
         | Power
         | Mul | Div | Mod
         | Add | Sub
-        | Cons | Append
-        | Eq | Neq | Lt | Leq | Gt | Geq
+        | Colon | Append
+        | Equ | Neq | Lt | Leq | Gt | Geq
         | And
         | Or
         | Dollar
 
-data Atom = Num Number
+-- | Atoms
+-- |
+-- | Primitive data types 
+data Atom = AInt Int
           | Bool Boolean
           | Char String
           | Name String
 
 instance eqAtom :: Eq Atom where
-  (==) (Num i)   (Num j)   = i == j
-  (==) (Bool b1) (Bool b2) = b1 == b2
-  (==) (Char s1) (Char s2) = s1 == s2
-  (==) (Name s1) (Name s2) = s1 == s2
-  (==) _ _ = false
-  (/=) a b = not (a == b)
+  eq (AInt i)   (AInt j) =  i == j
+  eq (Bool b1) (Bool b2) = b1 == b2
+  eq (Char s1) (Char s2) = s1 == s2
+  eq (Name s1) (Name s2) = s1 == s2
+  eq _ _ = false
 
+-- | Expressions
+-- |
+-- | The basic expressions the `Parser` and `Evaluator` recognize.
 data Expr = Atom Atom
-          | List [Expr]
-          | NTuple [Expr]
+          | List (List Expr)
+          | NTuple (List Expr)
           | Binary Op Expr Expr
           | Unary Op Expr
           | SectL Expr Op
           | SectR Op Expr
           | Prefix Op
           | IfExpr Expr Expr Expr
-          | Lambda [Binding] Expr
-          | App Expr [Expr]
+          | Lambda (List Binding) Expr
+          | App Expr (List Expr)
 
 foldExpr :: forall a.
                (Atom -> a)
-            -> ([a] -> a)
-            -> ([a] -> a)
+            -> ((List a) -> a)
+            -> ((List a) -> a)
             -> (Op -> a -> a -> a)
             -> (Op -> a -> a)
             -> (a -> Op -> a)
             -> (Op -> a -> a)
             -> (Op -> a)
             -> (a -> a -> a -> a)
-            -> ([Binding] -> a -> a)
-            -> (a -> [a] -> a)
+            -> ((List Binding) -> a -> a)
+            -> (a -> (List a) -> a)
             -> Expr -> a
 foldExpr atom list ntuple binary unary sectl sectr prefix ifexpr lambda app = go
   where
@@ -65,67 +75,68 @@ foldExpr atom list ntuple binary unary sectl sectr prefix ifexpr lambda app = go
   go (Lambda bs e)     = lambda bs (go e)
   go (App e es)        = app (go e) (go <$> es)
 
+
+-- | Bindings
+-- |
+-- | Binding forms for pattern matching on lists and tuples
 data Binding = Lit Atom
              | ConsLit Binding Binding
-             | ListLit [Binding]
-             | NTupleLit [Binding]
+             | ListLit (List Binding)
+             | NTupleLit (List Binding)
 
-data Definition = Def String [Binding] Expr
+-- | Definitions
+-- |
+-- | Definitions for functions and constants
+data Definition = Def String (List Binding) Expr
 
 instance showOp :: Show Op where
   show op = case op of
-    Composition -> "."
-    Power  -> "^"
-    Mul    -> "*"
-    Div    -> "`div`"
-    Mod    -> "`mod`"
-    Add    -> "+"
-    Sub    -> "-"
-    Cons   -> ":"
-    Append -> "++"
-    Eq     -> "=="
-    Neq    -> "/="
-    Lt     -> "<"
-    Leq    -> "<="
-    Gt     -> ">"
-    Geq    -> ">="
-    And    -> "&&"
-    Or     -> "||"
-    Dollar -> "$"
+    Composition -> "Composition"
+    Power  -> "Power"
+    Mul    -> "Mul"
+    Div    -> "Div"
+    Mod    -> "Mod"
+    Add    -> "Add"
+    Sub    -> "Sub"
+    Colon  -> "Colon"
+    Append -> "Append"
+    Equ    -> "Equ"
+    Neq    -> "Neq"
+    Lt     -> "Lt"
+    Leq    -> "Leq"
+    Gt     -> "Gt"
+    Geq    -> "Geq"
+    And    -> "And"
+    Or     -> "Or"
+    Dollar -> "Dollar"
 
 instance showAtom :: Show Atom where
   show atom = case atom of
-    Num number  -> "(Num " ++ show number ++ ")"
+    AInt number -> "(AInt " ++ show number ++ ")"
     Bool bool   -> "(Bool " ++ show bool ++ ")"
     Char string -> "(Char " ++ string ++ ")"
     Name string -> "(Name " ++ string ++ ")"
 
-showList :: forall a. (Show a) => [a] -> String
-showList ls = "[" ++ joinWith ", " (show <$> ls) ++ "]"
-
-showTuple :: forall a. (Show a) => [a] -> String
-showTuple ls = "(" ++ joinWith ", " (show <$> ls) ++ ")"
-
 instance showExpr :: Show Expr where
   show expr = case expr of
     Atom atom       -> "(Atom " ++ show atom ++ ")"
-    List ls         -> "(List " ++ showList ls ++ ")"
-    NTuple ls       -> "(NTuple " ++ showTuple ls ++ ")"
+    List ls         -> "(List " ++ show ls ++ ")"
+    NTuple ls       -> "(NTuple " ++ show ls ++ ")"
     Binary op e1 e2 -> "(Binary " ++ show e1 ++ " " ++ show op ++ " " ++ show e2 ++ ")"
     Unary op e      -> "(Unary " ++ show op ++ " " ++ show e ++ ")"
     SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"
     SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
-    Prefix op       -> "(Prefix (" ++ show op ++ "))"
-    IfExpr c te ee  -> "(IfExpr " ++ show c ++ " then " ++ show te ++ " else " ++ show ee ++ ")"
-    Lambda binds body -> "(Lambda " ++ showList binds ++ " " ++ show body ++ ")"
-    App func args   -> "(App " ++ show func ++ " " ++ showList args ++ ")"
+    Prefix op       -> "(Prefix " ++ show op ++ ")"
+    IfExpr c te ee  -> "(IfExpr " ++ show c ++ " " ++ show te ++ " " ++ show ee ++ ")"
+    Lambda binds body -> "(Lambda " ++ show binds ++ " " ++ show body ++ ")"
+    App func args   -> "(App " ++ show func ++ " " ++ show args ++ ")"
 
 instance showBinding :: Show Binding where
   show binding = case binding of
     Lit atom     -> "(Lit " ++ show atom ++ ")"
     ConsLit b bs -> "(ConsLit " ++ show b ++ ":" ++ show bs ++ ")"
-    ListLit bs   -> "(ListLit " ++ showList bs ++ ")"
-    NTupleLit ls -> "(NTupleLit " ++ showTuple ls ++ ")"
+    ListLit bs   -> "(ListLit " ++ show bs ++ ")"
+    NTupleLit ls -> "(NTupleLit " ++ show ls ++ ")"
 
 instance showDefinition :: Show Definition where
   show (Def name bindings body) = "(Def " ++ name ++ " " ++ show bindings ++ " " ++ show body ++ ")"

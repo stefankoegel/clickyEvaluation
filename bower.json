@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "clickyEvaluation",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Visual tool for stepwise evaluation of simple Haskell expressions",
   "main": "src/Main.purs",
   "authors": [
@@ -15,14 +15,15 @@
     "html/dist/*"
   ],
   "dependencies": {
-    "purescript-arrays": "0.3.4",
-    "purescript-jquery": "0.4.0",
-    "purescript-foreign": "0.4.2",
-    "purescript-parsing": "#be0bf1a0d3",
-    "purescript-globals": "0.1.6",
-    "purescript-math": "0.1.1",
-    "purescript-maps": "0.3.4",
-    "purescript-monad-eff": "0.1.0",
-    "purescript-ace": "0.3.0"
+    "purescript-arrays": "~0.4.2",
+    "purescript-lists": "~0.7.6",
+    "purescript-transformers": "~0.8.1",
+    "purescript-string-parsers": "~0.6.3",
+    "purescript-dom": "~0.2.8",
+    "purescript-maps": "~0.5.0",
+    "purescript-jquery": "*",
+    "purescript-globals": "*",
+    "purescript-math": "*",
+    "purescript-ace": "*"
   }
 }

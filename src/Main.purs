@@ -14,6 +14,7 @@ import qualified Ace.Range as  Range
 import Data.Either
 import Data.Maybe
 import Data.Array ((..), length, deleteAt, (!!), drop)
+import Data.List
 import Data.Tuple
 import Data.Traversable (zipWithA)
 import Control.Apply ((*>))
@@ -37,16 +38,9 @@ main = J.ready $ do
     >>= J.on "keyup"  (\e _ -> if isEnterKey e then startEvaluation else return unit)
   startEvaluation
 
-foreign import isEnterKey
-  """
-  function isEnterKey(event) {
-    return event.which == 13;
-  }
-  """ :: J.JQueryEvent -> Boolean
-
 type DOMEff = Eff (dom :: DOM, trace :: Trace, ace :: EAce)
 
-type EvalState = { env :: Env, expr :: Expr, history :: [Expr] }
+type EvalState = { env :: Env, expr :: Expr, history :: (singleton Expr) }
 
 type EvalM a = StateT EvalState DOMEff a
 
@@ -74,17 +68,6 @@ markText line column = do
   rang <- Range.create line column 100000 100000
   Session.addMarker rang "syntaxError" "" false session
 
-foreign import map
-  """
-  function map(callback) {
-    return function(ob) {
-      return function () {
-        return ob.map( function(i, e) { return callback(jQuery(e))(); } );
-      };
-    };
-  }
-  """ :: (J.JQuery -> DOMEff Unit) -> J.JQuery -> DOMEff Unit
-
 showEvaluationState :: EvalM Unit
 showEvaluationState = do
   output <- liftEff $ prepareContainer "output"
@@ -105,17 +88,17 @@ showEvaluationState = do
 
   liftEff $ return unit :: DOMEff Unit
 
-forIndex :: forall m a b. (Applicative m) => [a] -> (a -> Number -> m b) -> m [b]
+forIndex :: forall m a b. (Applicative m) => (singleton a) -> (a -> Number -> m b) -> m (singleton b)
 forIndex as f = zipWithA f as (0 .. (length as - 1))
 
-showHistoryList :: [Expr] -> EvalM J.JQuery
+showHistoryList :: (singleton Expr) -> EvalM J.JQuery
 showHistoryList exprs = do
   box <- liftEff $ J.create "<div></div>" >>= J.addClass "historyBox"
   forIndex exprs $ \expr i -> do
     showHistory expr i >>= liftEff <<< wrapInDiv "vertical" >>= liftEff <<< flip J.append box
   return box
 
-(!!!) :: forall a. [a] -> Number -> a
+(!!!) :: forall a. (singleton a) -> Number -> a
 (!!!) xs i = case xs !! i of Just x -> x
 
 showHistory :: Expr -> Number -> EvalM J.JQuery

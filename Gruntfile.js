@@ -8,7 +8,8 @@ module.exports = function(grunt) {
 
     psc: {
       options: {
-        modules: ["Main"]
+        modules: ["StateEffect"],
+        main: ["StateEffect"]
       },
       all: {
         src: ["<%=srcFiles%>"],
@@ -16,7 +17,17 @@ module.exports = function(grunt) {
       }
     },
 
-    dotPsci: ["<%=srcFiles%>"]
+    dotPsci: ["<%=srcFiles%>"],
+
+    testEff: {
+      options: {
+        modules: ["StateEffect"]
+      },
+      all: {
+        src: ["<%=srcFiles%>"],
+        dest: "dist/Test.js"
+      }
+    }
   });
 
   grunt.loadNpmTasks("grunt-purescript");
