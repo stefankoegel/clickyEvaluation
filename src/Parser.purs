@@ -5,11 +5,7 @@ import Global              (readInt)
 import Data.Int (floor)
 import qualified Data.String as String
 import Data.List
-import qualified Data.Array as Arr
--- import Data.Identity       (Identity())
 import Data.Maybe
-import Data.Either
-import Data.Foldable
 import Control.Alt         ((<|>))
 import Control.Apply       ((<*), (*>))
 
@@ -61,17 +57,32 @@ variable = do
 -- Parsers for Expressions
 ---------------------------------------------------------
 
+-- | Fail if the specified parser matches.
+notFollowedBy :: forall a. Parser a -> Parser Unit
+notFollowedBy p = try $ (try p *> fail "Negated parser succeeded") <|> return unit
+
 -- | Table of operators (math, boolean, ...)
 operatorTable :: OperatorTable Expr
 operatorTable =
   [
-    [ Infix (spaced (string "*") *> return (Binary Mul)) AssocLeft
-    , Infix (spaced (string "`div`") *> return (Binary Div)) AssocLeft
+    [ mkOp "." Composition AssocRight ]
+  , [ mkOp "^" Power AssocRight ]
+  , [ mkOp "*" Mul AssocLeft, mkOp "`div`" Div AssocLeft, mkOp "`mod`" Mod AssocLeft ]
+  , [ Infix (spaced (char '+' *> notFollowedBy (char '+')) *> return (Binary Add)) AssocLeft
+    , mkOp "-" Sub AssocLeft ]
+  , [ mkOp ":" Colon AssocRight, mkOp "++" Append AssocRight ]
+  , [ mkOp "==" Equ AssocNone, mkOp "/=" Neq AssocNone
+    , Infix (spaced (char '<' *> notFollowedBy (char '=')) *> return (Binary Lt)) AssocNone
+    , Infix (spaced (char '>' *> notFollowedBy (char '=')) *> return (Binary Lt)) AssocNone
+    , mkOp "<=" Leq AssocNone, mkOp ">=" Geq AssocNone
     ]
-  , [ Infix (spaced (string "+") *> return (Binary Add)) AssocLeft
-    , Infix (spaced (string "-") *> return (Binary Sub)) AssocLeft
-    ]
+  , [ mkOp "&&" And AssocRight ]
+  , [ mkOp "||" Or AssocRight ]
+  , [ mkOp "$" Dollar AssocRight ]
   ]
+  where
+    mkOp :: String -> Op -> Assoc -> Operator Expr
+    mkOp str op assoc = Infix (spaced (string str) *> return (Binary op)) assoc
 
 -- | Parse an expression between brackets
 brackets :: forall a. Parser a -> Parser a
