@@ -18,6 +18,27 @@ data Op = Composition
         | Or
         | Dollar
 
+instance eqOp :: Eq Op where
+  eq Composition Composition = true
+  eq Power Power = true
+  eq Mul  Mul  = true
+  eq Div  Div  = true
+  eq Mod Mod = true
+  eq Add  Add  = true
+  eq Sub Sub = true
+  eq Colon  Colon  = true
+  eq Append Append = true
+  eq Equ  Equ  = true
+  eq Neq  Neq  = true
+  eq Lt  Lt  = true
+  eq Leq  Leq  = true
+  eq Gt  Gt  = true
+  eq Geq Geq = true
+  eq And And = true
+  eq Or Or = true
+  eq Dollar Dollar = true
+  eq _ _ = false
+
 -- | Atoms
 -- |
 -- | Primitive data types 
@@ -43,10 +64,23 @@ data Expr = Atom Atom
           | Unary Op Expr
           | SectL Expr Op
           | SectR Op Expr
-          | Prefix Op
           | IfExpr Expr Expr Expr
           | Lambda (List Binding) Expr
           | App Expr (List Expr)
+
+instance eqEpr :: Eq Expr where
+  eq (Atom a1)           (Atom a2)         = a1 == a2
+  eq (List l1)           (List l2)         = l1 == l2
+  eq (NTuple l1)         (NTuple l2)       = l1 == l2
+  eq (Binary o1 e1 e2)   (Binary o2 e3 e4) = o1 == o2 && e1 == e3 && e2 == e4
+  eq (Unary o1 e1)       (Unary o2 e2)     = o1 == o2 && e1 == e2
+  eq (SectL e1 o1)       (SectL e2 o2)     = e1 == e2 && o1 == o2
+  eq (SectR o1 e1)       (SectR o2 e2)     = o1 == o2 && e1 == e2
+  eq (IfExpr c1 t1 e1)   (IfExpr c2 t2 e2) = c1 == c2 && t1 == t2 && e1 == e2
+  eq (Lambda bs1 e1)     (Lambda bs2 e2)   = bs1 == bs2 && e1 == e2
+  eq (App e1 l1)         (App e2 l2)       = e1 == e2 && l1 == l2
+  eq _                   _                 = false
+
 
 foldExpr :: forall a.
                (Atom -> a)
@@ -56,12 +90,11 @@ foldExpr :: forall a.
             -> (Op -> a -> a)
             -> (a -> Op -> a)
             -> (Op -> a -> a)
-            -> (Op -> a)
             -> (a -> a -> a -> a)
             -> ((List Binding) -> a -> a)
             -> (a -> (List a) -> a)
             -> Expr -> a
-foldExpr atom list ntuple binary unary sectl sectr prefix ifexpr lambda app = go
+foldExpr atom list ntuple binary unary sectl sectr ifexpr lambda app = go
   where
   go (Atom a)          = atom a
   go (List es)         = list (go <$> es)
@@ -70,7 +103,6 @@ foldExpr atom list ntuple binary unary sectl sectr prefix ifexpr lambda app = go
   go (Unary op e)      = unary op (go e)
   go (SectL e op)      = sectl (go e) op
   go (SectR op e)      = sectr op (go e)
-  go (Prefix op)       = prefix op
   go (IfExpr c te ee)  = ifexpr (go c) (go te) (go ee)
   go (Lambda bs e)     = lambda bs (go e)
   go (App e es)        = app (go e) (go <$> es)
@@ -83,6 +115,13 @@ data Binding = Lit Atom
              | ConsLit Binding Binding
              | ListLit (List Binding)
              | NTupleLit (List Binding)
+
+instance eqBinding :: Eq Binding where
+  eq (Lit a1) (Lit a2) = a1 == a2
+  eq (ConsLit b1 b2) (ConsLit b3 b4) = b1 == b3 && b2 == b4
+  eq (ListLit l1) (ListLit l2) = l1 == l2
+  eq (NTupleLit l1) (NTupleLit l2) = l1 == l2
+  eq _ _ = false
 
 -- | Definitions
 -- |
@@ -122,11 +161,10 @@ instance showExpr :: Show Expr where
     Atom atom       -> "(Atom " ++ show atom ++ ")"
     List ls         -> "(List " ++ show ls ++ ")"
     NTuple ls       -> "(NTuple " ++ show ls ++ ")"
-    Binary op e1 e2 -> "(Binary " ++ show e1 ++ " " ++ show op ++ " " ++ show e2 ++ ")"
+    Binary op e1 e2 -> "(Binary " ++ show op ++ " " ++ show e1 ++ " " ++ show e2 ++ ")"
     Unary op e      -> "(Unary " ++ show op ++ " " ++ show e ++ ")"
     SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"
     SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
-    Prefix op       -> "(Prefix " ++ show op ++ ")"
     IfExpr c te ee  -> "(IfExpr " ++ show c ++ " " ++ show te ++ " " ++ show ee ++ ")"
     Lambda binds body -> "(Lambda " ++ show binds ++ " " ++ show body ++ ")"
     App func args   -> "(App " ++ show func ++ " " ++ show args ++ ")"
