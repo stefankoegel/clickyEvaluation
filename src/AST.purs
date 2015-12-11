@@ -1,7 +1,6 @@
 module AST where
 
 import Prelude
-import Data.String (joinWith)
 import Data.List
 
 -- | Operators

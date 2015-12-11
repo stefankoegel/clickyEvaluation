@@ -38,6 +38,30 @@ main = do
   test "upper" variable "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'" (Name "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'")
   test "special" variable "_____''''" (Name "_____''''")
 
+
+  test "composition" expression "f . g" (Binary Composition (Atom (Name "f")) (Atom (Name "g")))
+  test "power" expression "2 ^ 10" (Binary Power (Atom (AInt 2)) (Atom (AInt 10)))
+  test "mul" expression "2 * 2" (Binary Mul (Atom (AInt 2)) (Atom (AInt 2)))
+  test "div" expression "13 `div` 3" (Binary Div (Atom (AInt 13)) (Atom (AInt 3)))
+  test "mod" expression "13 `mod` 3" (Binary Mod (Atom (AInt 13)) (Atom (AInt 3)))
+  test "add1" expression "1 + 1"  (Binary Add (Atom (AInt 1)) (Atom (AInt 1)))
+  test "add2" expression "2+2" (Binary Add (Atom (AInt 2)) (Atom (AInt 2)))
+  test "sub" expression "5 - 3" (Binary Sub (Atom (AInt 5)) (Atom (AInt 3)))
+  test "colon" expression "x:xs" (Binary Colon (Atom (Name "x")) (Atom (Name "xs")))
+  test "append1" expression "xs ++ ys" (Binary Append (Atom (Name "xs")) (Atom (Name "ys")))
+  test "append2" expression "xs++ys"  (Binary Append (Atom (Name "xs")) (Atom (Name "ys")))
+  test "equ" expression "5 == 5" (Binary Equ (Atom (AInt 5)) (Atom (AInt 5)))
+  test "neq" expression "1 /= 2" (Binary Neq (Atom (AInt 1)) (Atom (AInt 2)))
+  test "lt1" expression "1 < 234" (Binary Lt (Atom (AInt 1)) (Atom (AInt 234)))
+  test "lt2" expression "x<y" (Binary Lt (Atom (Name "x")) (Atom (Name "y")))
+  test "leq" expression "1 <= 234" (Binary Leq (Atom (AInt 1)) (Atom (AInt 234)))
+  test "gt1" expression "567 > 1" (Binary Lt (Atom (AInt 567)) (Atom (AInt 1)))
+  test "gt2" expression "x>y" (Binary Lt (Atom (Name "x")) (Atom (Name "y")))
+  test "geq" expression "567 >= 1" (Binary Geq (Atom (AInt 567)) (Atom (AInt 1)))
+  test "and" expression "hot && cold" (Binary And (Atom (Name "hot")) (Atom (Name "cold")))
+  test "or" expression "be || notBe" (Binary Or (Atom (Name "be")) (Atom (Name "notBe")))
+  test "dollar" expression "f $ 1 + 2"  (Binary Dollar (Atom (Name "f")) (Binary Add (Atom (AInt 1)) (Atom (AInt 2))))
+
   test "1" expression "1" (Atom (AInt 1))
   test "add" expression "1 + 2" (Binary Add (Atom (AInt 1)) (Atom (AInt 2)))
   test "precedence" expression "1 * 2 + 3 * 4" (Binary Add 
@@ -91,3 +115,4 @@ main = do
     (Binary Mul
       (App (aname "f") (toList [aname "a", Binary Mul (aint 1) (aint 2)]))
       (aint 3))
+
