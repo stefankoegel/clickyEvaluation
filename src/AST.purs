@@ -152,8 +152,8 @@ instance showAtom :: Show Atom where
   show atom = case atom of
     AInt number -> "(AInt " ++ show number ++ ")"
     Bool bool   -> "(Bool " ++ show bool ++ ")"
-    Char string -> "(Char " ++ string ++ ")"
-    Name string -> "(Name " ++ string ++ ")"
+    Char string -> "(Char " ++ show string ++ ")"
+    Name string -> "(Name " ++ show string ++ ")"
 
 instance showExpr :: Show Expr where
   show expr = case expr of
@@ -176,4 +176,4 @@ instance showBinding :: Show Binding where
     NTupleLit ls -> "(NTupleLit " ++ show ls ++ ")"
 
 instance showDefinition :: Show Definition where
-  show (Def name bindings body) = "(Def " ++ name ++ " " ++ show bindings ++ " " ++ show body ++ ")"
+  show (Def name bindings body) = "(Def " ++ show name ++ " " ++ show bindings ++ " " ++ show body ++ ")"
