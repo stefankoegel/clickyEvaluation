@@ -38,38 +38,37 @@ main = do
   test "upper" variable "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'" (Name "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'")
   test "special" variable "_____''''" (Name "_____''''")
 
+  test "composition" expression "f . g" (Binary Composition (aname "f") (aname "g"))
+  test "power" expression "2 ^ 10" (Binary Power (aint 2) (aint 10))
+  test "mul" expression "2 * 2" (Binary Mul (aint 2) (aint 2))
+  test "div" expression "13 `div` 3" (Binary Div (aint 13) (aint 3))
+  test "mod" expression "13 `mod` 3" (Binary Mod (aint 13) (aint 3))
+  test "add1" expression "1 + 1"  (Binary Add (aint 1) (aint 1))
+  test "add2" expression "2+2" (Binary Add (aint 2) (aint 2))
+  test "sub" expression "5 - 3" (Binary Sub (aint 5) (aint 3))
+  test "colon" expression "x:xs" (Binary Colon (aname "x") (aname "xs"))
+  test "append1" expression "xs ++ ys" (Binary Append (aname "xs") (aname "ys"))
+  test "append2" expression "xs++ys"  (Binary Append (aname "xs") (aname "ys"))
+  test "equ" expression "5 == 5" (Binary Equ (aint 5) (aint 5))
+  test "neq" expression "1 /= 2" (Binary Neq (aint 1) (aint 2))
+  test "lt1" expression "1 < 234" (Binary Lt (aint 1) (aint 234))
+  test "lt2" expression "x<y" (Binary Lt (aname "x") (aname "y"))
+  test "leq" expression "1 <= 234" (Binary Leq (aint 1) (aint 234))
+  test "gt1" expression "567 > 1" (Binary Lt (aint 567) (aint 1))
+  test "gt2" expression "x>y" (Binary Lt (aname "x") (aname "y"))
+  test "geq" expression "567 >= 1" (Binary Geq (aint 567) (aint 1))
+  test "and" expression "hot && cold" (Binary And (aname "hot") (aname "cold"))
+  test "or" expression "be || notBe" (Binary Or (aname "be") (aname "notBe"))
+  test "dollar" expression "f $ 1 + 2"  (Binary Dollar (aname "f") (Binary Add (aint 1) (aint 2)))
 
-  test "composition" expression "f . g" (Binary Composition (Atom (Name "f")) (Atom (Name "g")))
-  test "power" expression "2 ^ 10" (Binary Power (Atom (AInt 2)) (Atom (AInt 10)))
-  test "mul" expression "2 * 2" (Binary Mul (Atom (AInt 2)) (Atom (AInt 2)))
-  test "div" expression "13 `div` 3" (Binary Div (Atom (AInt 13)) (Atom (AInt 3)))
-  test "mod" expression "13 `mod` 3" (Binary Mod (Atom (AInt 13)) (Atom (AInt 3)))
-  test "add1" expression "1 + 1"  (Binary Add (Atom (AInt 1)) (Atom (AInt 1)))
-  test "add2" expression "2+2" (Binary Add (Atom (AInt 2)) (Atom (AInt 2)))
-  test "sub" expression "5 - 3" (Binary Sub (Atom (AInt 5)) (Atom (AInt 3)))
-  test "colon" expression "x:xs" (Binary Colon (Atom (Name "x")) (Atom (Name "xs")))
-  test "append1" expression "xs ++ ys" (Binary Append (Atom (Name "xs")) (Atom (Name "ys")))
-  test "append2" expression "xs++ys"  (Binary Append (Atom (Name "xs")) (Atom (Name "ys")))
-  test "equ" expression "5 == 5" (Binary Equ (Atom (AInt 5)) (Atom (AInt 5)))
-  test "neq" expression "1 /= 2" (Binary Neq (Atom (AInt 1)) (Atom (AInt 2)))
-  test "lt1" expression "1 < 234" (Binary Lt (Atom (AInt 1)) (Atom (AInt 234)))
-  test "lt2" expression "x<y" (Binary Lt (Atom (Name "x")) (Atom (Name "y")))
-  test "leq" expression "1 <= 234" (Binary Leq (Atom (AInt 1)) (Atom (AInt 234)))
-  test "gt1" expression "567 > 1" (Binary Lt (Atom (AInt 567)) (Atom (AInt 1)))
-  test "gt2" expression "x>y" (Binary Lt (Atom (Name "x")) (Atom (Name "y")))
-  test "geq" expression "567 >= 1" (Binary Geq (Atom (AInt 567)) (Atom (AInt 1)))
-  test "and" expression "hot && cold" (Binary And (Atom (Name "hot")) (Atom (Name "cold")))
-  test "or" expression "be || notBe" (Binary Or (Atom (Name "be")) (Atom (Name "notBe")))
-  test "dollar" expression "f $ 1 + 2"  (Binary Dollar (Atom (Name "f")) (Binary Add (Atom (AInt 1)) (Atom (AInt 2))))
-
-  test "1" expression "1" (Atom (AInt 1))
-  test "add" expression "1 + 2" (Binary Add (Atom (AInt 1)) (Atom (AInt 2)))
+  test "1" expression "1" (aint 1)
+  test "add" expression "1 + 2" (Binary Add (aint 1) (aint 2))
   test "precedence" expression "1 * 2 + 3 * 4" (Binary Add 
-                                    (Binary Mul (Atom (AInt 1)) (Atom (AInt 2)))
-                                    (Binary Mul (Atom (AInt 3)) (Atom (AInt 4))))
+                                    (Binary Mul (aint 1) (aint 2))
+                                    (Binary Mul (aint 3) (aint 4)))
   test "whitespaces" expression 
-    "1   \n   -    \t   ( f   )    \t\t\t\t                     \n\n\n             `div`     _ignore"
-    (Binary Sub (Atom (AInt 1)) (Binary Div (Atom (Name "f")) (Atom (Name "_ignore"))))
+    "1   \n   -    \t   ( f   )    \t\t\t\t                                                                 \n\n\n             `div`     _ignore"
+    (Binary Sub (aint 1) (Binary Div (aname "f") (aname "_ignore")))
   test "brackets" expression "(  1  +  2  )  *  3" (Binary Mul (Binary Add (aint 1) (aint 2)) (aint 3))
   test "brackets2" expression "( (  1  +  2  - 3  )  *  4 * 5 * 6)"
     (Binary Mul 
@@ -81,7 +80,8 @@ main = do
           (aint 4))
         (aint 5))
       (aint 6))
-  test "many brackets" expression "(   (( ((  f )) *  ( (17   )) ) ))" (Binary Mul (Atom (Name "f")) (aint 17))
+  test "brackets3" expression "( ( ( 1 ) ) )" (aint 1)
+  test "many brackets" expression "(   (( ((  f )) *  ( (17   )) ) ))" (Binary Mul (aname "f") (aint 17))
 
   test "if_then_else" expression "if x then y else z" (IfExpr (aname "x") (aname "y") (aname "z"))
   test "nested if" expression "if(if 1 then 2 else 3)then y else z" (IfExpr (IfExpr (aint 1) (aint 2) (aint 3)) (aname "y") (aname "z"))
@@ -115,4 +115,35 @@ main = do
     (Binary Mul
       (App (aname "f") (toList [aname "a", Binary Mul (aint 1) (aint 2)]))
       (aint 3))
+
+  test "tuple" expression "(1, 2)" (NTuple (toList [aint 1, aint 2]))
+  test "3tuple" expression "(1, 2, 3)" (NTuple (toList [aint 1, aint 2, aint 3]))
+  test "4tuple" expression "(1, 2, 3, 4)" (NTuple (toList [aint 1, aint 2, aint 3, aint 4]))
+  test "tuple_spaces" expression "(   1   , 2   )" (NTuple (toList [aint 1, aint 2]))
+  test "3tuple_spaces" expression "(  1   , 2    , 3     )" (NTuple (toList [aint 1, aint 2, aint 3]))
+  test "tuple_arith" expression "((1 + 2, (3)))" (NTuple (toList [Binary Add (aint 1) (aint 2), aint 3]))
+  test "tuple_apply" expression "fmap f (snd (1,2), fst ( 1 , 2 ))"
+    (App (aname "fmap") (toList
+      [ (aname "f")
+      , NTuple (toList
+        [ App (aname "snd") (toList [NTuple (toList [aint 1, aint 2])])
+        , App (aname "fst") (toList [NTuple (toList [aint 1, aint 2])])
+        ])
+      ]
+    ))
+  -- This test leads to a stack overflow. I don't know how to optimize it away...
+  -- test "tuple_deep" expression "((((( ((((((1)),((2))),(3,((((4)))))),((5,6),(7,8))),(((9,(10)),(((11,12)))),((((13,14),(14,15)))))) )))))" (aname "stackOverflow")
+  test "binding1" binding "x" (Lit (Name "x"))
+  test "binding2" binding "10" (Lit (AInt 10))
+  test "lambda1" expression "(\\x -> x)" (Lambda (toList [Lit (Name "x")]) (aname "x"))
+  test "lambda2" expression "( \\ x y z -> ( x , y , z ) )"
+    (Lambda (toList [Lit (Name "x"), Lit (Name "y"), Lit (Name "z")])
+      (NTuple (toList [aname "x", aname "y", aname "z"])))
+  test "lambda3" expression "(\\x -> (\\y -> (\\z -> f x y z)))"
+    (Lambda (singleton $ Lit $ Name "x")
+      (Lambda (singleton $ Lit $ Name "y")
+        (Lambda (singleton $ Lit $ Name "z")
+          (App (aname "f") (toList [aname "x", aname "y", aname "z"])))))
+
+
 

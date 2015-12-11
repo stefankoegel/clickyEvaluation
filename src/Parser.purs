@@ -94,12 +94,15 @@ spaced p = try $ PC.between skipSpaces skipSpaces p
 
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
 base :: Parser Expr -> Parser Expr
-base expr = (Atom <$> (int <|> variable)) <|> brackets expr
+base expr =
+      tuples expr
+  <|> (Atom <$> (int <|> variable))
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
 syntax :: Parser Expr -> Parser Expr
 syntax expr = 
       try (ifThenElse expr)
+  <|> try (lambda expr)
   <|> application (base expr)
 
 -- | Parse an if_then_else construct
@@ -113,19 +116,37 @@ ifThenElse expr = do
   elseExpr <- spaced expr
   return $ IfExpr testExpr thenExpr elseExpr
 
+-- | Parse tuples.
+tuples :: Parser Expr -> Parser Expr
+tuples expr = do
+  char '(' *> skipSpaces
+  e <- expr
+  skipSpaces
+  mes <- PC.optionMaybe $ try $ do
+    char ',' *> skipSpaces
+    expr `PC.sepBy1` (try $ whiteSpace *> char ',' *> whiteSpace)
+  skipSpaces
+  char ')'
+
+  case mes of
+    Nothing -> return e
+    Just es -> return $ NTuple (Cons e es)
+
 -- | Parse a lambda expression
 lambda :: Parser Expr -> Parser Expr
 lambda expr = do
-  char '\\'
-  -- TODO
+  char '(' *> skipSpaces
+  char '\\' *> skipSpaces
+  binds <- (binding `PC.sepEndBy1` whiteSpace)
+  string "->" *> skipSpaces
   body <- expr
-  return body
+  return $ Lambda binds body
 
 -- | Parse function application
 application :: Parser Expr -> Parser Expr
 application expr = do
   e <- expr
-  mArgs <- PC.optionMaybe (try (skipSpaces *> (try expr) `PC.sepEndBy1` whiteSpace))
+  mArgs <- PC.optionMaybe (try $ skipSpaces *> (try expr) `PC.sepEndBy1` whiteSpace)
   case mArgs of
     Nothing   -> return e
     Just args -> return $ App e args
@@ -133,3 +154,13 @@ application expr = do
 -- | Parse an arbitrary expression
 expression :: Parser Expr
 expression = PC.fix $ \expr -> buildExprParser operatorTable (syntax expr)
+
+---------------------------------------------------------
+-- Parsers for Bindings
+---------------------------------------------------------
+
+lit :: Parser Binding
+lit = Lit <$> (int <|> variable)
+
+binding :: Parser Binding
+binding = lit
