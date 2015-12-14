@@ -2,10 +2,13 @@ module Parser where
 
 import Prelude
 import Global              (readInt)
-import Data.Int (floor)
 import qualified Data.String as String
+import Data.Int            (floor)
 import Data.List
 import Data.Maybe
+import Data.Tuple
+import Data.Tuple.Nested
+
 import Control.Alt         ((<|>))
 import Control.Apply       ((<*), (*>))
 
@@ -61,28 +64,40 @@ variable = do
 notFollowedBy :: forall a. Parser a -> Parser Unit
 notFollowedBy p = try $ (try p *> fail "Negated parser succeeded") <|> return unit
 
+-- | Table for operator parsers and their AST representation. Sorted by precedence.
+infixOperators :: Array (Array (Tuple3 (Parser String) Op Assoc))
+infixOperators =
+  [ [ (tuple3 (string ".") Composition AssocRight) ]
+  , [ (tuple3 (string "^") Power AssocRight) ]
+  , [ (tuple3 (string "*") Mul AssocLeft)
+    , (tuple3 (string "`div`") Div AssocLeft)
+    , (tuple3 (string "`mod`") Mod AssocLeft)
+    ]
+  , [ (tuple3 (try $ string "+" <* notFollowedBy (char '+')) Add AssocLeft)
+    , (tuple3 (string "-") Sub AssocLeft)
+    ]
+  , [ (tuple3 (string ":") Colon AssocRight)
+    , (tuple3 (string "++") Append AssocRight)
+    ]
+  , [ (tuple3 (string "==") Equ AssocNone)
+    , (tuple3 (string "/=") Neq AssocNone)
+    , (tuple3 (try $ string "<" <* notFollowedBy (char '=')) Lt AssocNone)
+    , (tuple3 (try $ string ">" <* notFollowedBy (char '=')) Gt AssocNone)
+    , (tuple3 (string "<=") Leq AssocNone)
+    , (tuple3 (string ">=") Geq AssocNone)
+    ]
+  , [ (tuple3 (string "&&") And AssocRight) ]
+  , [ (tuple3 (string "||") Or AssocRight) ]
+  , [ (tuple3 (string "$") Dollar AssocRight) ]
+  ]
+
 -- | Table of operators (math, boolean, ...)
 operatorTable :: OperatorTable Expr
-operatorTable =
-  [
-    [ mkOp "." Composition AssocRight ]
-  , [ mkOp "^" Power AssocRight ]
-  , [ mkOp "*" Mul AssocLeft, mkOp "`div`" Div AssocLeft, mkOp "`mod`" Mod AssocLeft ]
-  , [ Infix (spaced (char '+' *> notFollowedBy (char '+')) *> return (Binary Add)) AssocLeft
-    , mkOp "-" Sub AssocLeft ]
-  , [ mkOp ":" Colon AssocRight, mkOp "++" Append AssocRight ]
-  , [ mkOp "==" Equ AssocNone, mkOp "/=" Neq AssocNone
-    , Infix (spaced (char '<' *> notFollowedBy (char '=')) *> return (Binary Lt)) AssocNone
-    , Infix (spaced (char '>' *> notFollowedBy (char '=')) *> return (Binary Lt)) AssocNone
-    , mkOp "<=" Leq AssocNone, mkOp ">=" Geq AssocNone
-    ]
-  , [ mkOp "&&" And AssocRight ]
-  , [ mkOp "||" Or AssocRight ]
-  , [ mkOp "$" Dollar AssocRight ]
-  ]
-  where
-    mkOp :: String -> Op -> Assoc -> Operator Expr
-    mkOp str op assoc = Infix (spaced (string str) *> return (Binary op)) assoc
+operatorTable = ((uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$>) <$> infixOperators
+
+-- | Parser for operators
+opParser :: Parser Op
+opParser = PC.choice $ ((uncurry3 (\p op _ -> p *> return op)) <$>) $ concat $ (toList <$>) $ toList infixOperators
 
 -- | Parse an expression between brackets
 brackets :: forall a. Parser a -> Parser a
@@ -95,7 +110,9 @@ spaced p = try $ PC.between skipSpaces skipSpaces p
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
 base :: Parser Expr -> Parser Expr
 base expr =
-      tuples expr
+      try (tuples expr)
+  <|> section expr
+  <|> list expr
   <|> (Atom <$> (int <|> variable))
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
@@ -127,10 +144,41 @@ tuples expr = do
     expr `PC.sepBy1` (try $ whiteSpace *> char ',' *> whiteSpace)
   skipSpaces
   char ')'
-
   case mes of
     Nothing -> return e
     Just es -> return $ NTuple (Cons e es)
+
+-- | Parser for operator sections
+section :: Parser Expr -> Parser Expr
+section expr = do
+  char '('
+  skipSpaces
+  me1 <- PC.optionMaybe expr
+  skipSpaces
+  op <- opParser
+  skipSpaces
+  me2 <- PC.optionMaybe expr
+  skipSpaces
+  char ')'
+  case me1 of
+    Nothing ->
+      case me2 of
+        Nothing -> return $ PrefixOp op
+        Just e2 -> return $ SectR op e2
+    Just e1 ->
+      case me2 of
+        Nothing -> return $ SectL e1 op
+        Just _ -> fail "Cannot have a section with two expressions!"
+
+-- | Parser for lists
+list :: Parser Expr -> Parser Expr
+list expr = do
+  char '['
+  skipSpaces
+  exprs <- expr `PC.sepBy` (try $ whiteSpace *> char ',' *> whiteSpace)
+  skipSpaces
+  char ']'
+  return $ List exprs
 
 -- | Parse a lambda expression
 lambda :: Parser Expr -> Parser Expr
@@ -150,6 +198,7 @@ application expr = do
   case mArgs of
     Nothing   -> return e
     Just args -> return $ App e args
+
 
 -- | Parse an arbitrary expression
 expression :: Parser Expr
