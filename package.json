@@ -1,8 +1,15 @@
 {
   "private": true,
+  "engines": {
+    "node": "*",
+    "npm": "*"
+  },
   "dependencies": {
+    "pulp": "*",
     "bower": "*",
-    "grunt-purescript": "*",
-    "grunt-cli": "*"
+    "purescript": "*"
+  },
+  "scripts": {
+    "pulp": "pulp"
   }
 }

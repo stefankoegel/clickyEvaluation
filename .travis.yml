@@ -4,6 +4,6 @@ install :
   - 'cabal update'
   - 'cabal install purescript'
   - 'npm install'
-  - '$(npm bin)/bower update'
+  - 'npm run pulp dep update'
 script :
-  - '$(npm bin)/grunt'
+  - 'npm run pulp test'
