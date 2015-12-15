@@ -153,11 +153,11 @@ section :: Parser Expr -> Parser Expr
 section expr = do
   char '('
   skipSpaces
-  me1 <- PC.optionMaybe expr
+  me1 <- PC.optionMaybe (syntax expr)
   skipSpaces
   op <- opParser
   skipSpaces
-  me2 <- PC.optionMaybe expr
+  me2 <- PC.optionMaybe (syntax expr)
   skipSpaces
   char ')'
   case me1 of
