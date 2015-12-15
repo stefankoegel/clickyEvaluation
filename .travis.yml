@@ -1,7 +1,7 @@
-language : haskell
-ghc : 7.6.3
+language: node_js
+sudo: false
 install :
   - 'npm install'
-  - 'npm run pulp dep update'
+  - 'npm run pulp dep install'
 script :
   - 'npm run pulp test'
