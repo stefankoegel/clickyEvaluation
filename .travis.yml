@@ -6,4 +6,5 @@ install :
   - 'npm install'
   - 'npm run pulp dep install'
 script :
+  - 'npm run pulp build'
   - 'npm run pulp test'
