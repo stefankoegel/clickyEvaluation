@@ -110,7 +110,7 @@ spaced p = try $ PC.between skipSpaces skipSpaces p
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
 base :: Parser Expr -> Parser Expr
 base expr =
-      try (tuples expr)
+      try (tuplesOrBrackets expr)
   <|> section expr
   <|> list expr
   <|> (Atom <$> (int <|> variable))
@@ -120,7 +120,7 @@ syntax :: Parser Expr -> Parser Expr
 syntax expr = 
       try (ifThenElse expr)
   <|> try (lambda expr)
-  <|> application (base expr)
+  <|> applicationOrSingleExpression expr
 
 -- | Parse an if_then_else construct
 ifThenElse :: Parser Expr -> Parser Expr
@@ -133,9 +133,9 @@ ifThenElse expr = do
   elseExpr <- spaced expr
   return $ IfExpr testExpr thenExpr elseExpr
 
--- | Parse tuples.
-tuples :: Parser Expr -> Parser Expr
-tuples expr = do
+-- | Parser for tuples or bracketed expressions.
+tuplesOrBrackets :: Parser Expr -> Parser Expr
+tuplesOrBrackets expr = do
   char '(' *> skipSpaces
   e <- expr
   skipSpaces
@@ -190,11 +190,11 @@ lambda expr = do
   body <- expr
   return $ Lambda binds body
 
--- | Parse function application
-application :: Parser Expr -> Parser Expr
-application expr = do
-  e <- expr
-  mArgs <- PC.optionMaybe (try $ skipSpaces *> (try expr) `PC.sepEndBy1` whiteSpace)
+-- | Parser for function application or single expressions
+applicationOrSingleExpression :: Parser Expr -> Parser Expr
+applicationOrSingleExpression expr = do
+  e <- (base expr)
+  mArgs <- PC.optionMaybe (try $ skipSpaces *> (try (base expr)) `PC.sepEndBy1` whiteSpace)
   case mArgs of
     Nothing   -> return e
     Just args -> return $ App e args
