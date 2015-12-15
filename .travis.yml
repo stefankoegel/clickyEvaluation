@@ -1,8 +1,6 @@
 language : haskell
 ghc : 7.6.3
 install :
-  - 'cabal update'
-  - 'cabal install purescript'
   - 'npm install'
   - 'npm run pulp dep update'
 script :
