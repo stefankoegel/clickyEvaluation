@@ -11,6 +11,7 @@
   "scripts": {
     "postinstall": "pulp dep install",
     "build": "pulp build",
-    "test": "pulp test"
+    "test": "pulp test",
+    "watch": "pulp -w test"
   }
 }
