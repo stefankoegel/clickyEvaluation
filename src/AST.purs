@@ -65,6 +65,7 @@ data Expr = Atom Atom
           | SectR Op Expr
           | PrefixOp Op
           | IfExpr Expr Expr Expr
+          | LetExpr Binding Expr Expr
           | Lambda (List Binding) Expr
           | App Expr (List Expr)
 
@@ -78,6 +79,7 @@ instance eqExpr :: Eq Expr where
   eq (SectR o1 e1)       (SectR o2 e2)     = o1 == o2 && e1 == e2
   eq (PrefixOp o1)       (PrefixOp o2)     = o1 == o2
   eq (IfExpr c1 t1 e1)   (IfExpr c2 t2 e2) = c1 == c2 && t1 == t2 && e1 == e2
+  eq (LetExpr a b c)     (LetExpr d e f)   = a == d && b == e && c == f
   eq (Lambda bs1 e1)     (Lambda bs2 e2)   = bs1 == bs2 && e1 == e2
   eq (App e1 l1)         (App e2 l2)       = e1 == e2 && l1 == l2
   eq _                   _                 = false
@@ -141,6 +143,7 @@ instance showExpr :: Show Expr where
     SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
     PrefixOp op     -> "(PrefixOp " ++ show op ++ ")"
     IfExpr c te ee  -> "(IfExpr " ++ show c ++ " " ++ show te ++ " " ++ show ee ++ ")"
+    LetExpr b l e   -> "(LetExpr " ++ show b ++ " " ++ show l ++ " " ++ show e ++ ")"
     Lambda binds body -> "(Lambda " ++ show binds ++ " " ++ show body ++ ")"
     App func args   -> "(App " ++ show func ++ " " ++ show args ++ ")"
 

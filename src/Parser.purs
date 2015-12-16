@@ -6,7 +6,6 @@ import qualified Data.String as String
 import Data.Int            (floor)
 import Data.List
 import Data.Maybe
-import Data.Tuple
 import Data.Tuple.Nested
 
 import Control.Alt         ((<|>))
@@ -44,7 +43,7 @@ anyLetter = lowerCaseLetter <|> upperCaseLetter <|> char '\''
 
 -- | List of reserved key words
 reservedWords :: List String
-reservedWords = toList ["if", "then", "else"]
+reservedWords = toList ["if", "then", "else", "let", "in"]
 
 -- | Parser for variables
 variable :: Parser Atom
@@ -119,6 +118,7 @@ base expr =
 syntax :: Parser Expr -> Parser Expr
 syntax expr = 
       try (ifThenElse expr)
+  <|> try (letExpr expr)
   <|> try (lambda expr)
   <|> applicationOrSingleExpression expr
 
@@ -189,6 +189,18 @@ lambda expr = do
   string "->" *> skipSpaces
   body <- expr
   return $ Lambda binds body
+
+
+-- | Parser for let expression
+letExpr :: Parser Expr -> Parser Expr
+letExpr expr = do
+  string "let" *> skipSpaces
+  bnd <- binding
+  skipSpaces *> char '=' *> skipSpaces
+  lexp <- expr
+  skipSpaces *> string "in" *> skipSpaces
+  body <- expr
+  return $ LetExpr bnd lexp body
 
 -- | Parser for function application or single expressions
 applicationOrSingleExpression :: Parser Expr -> Parser Expr

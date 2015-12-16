@@ -169,8 +169,21 @@ main = do
   test "prefixOp3" expression "((^) 2 10)" (App (PrefixOp Power) (toList [aint 2, aint 10]))
 
   test "sectL1" expression "(1+)" (SectL (aint 1) Add)
-  test "sectL1" expression "( n `mod` )" (SectL (aname "n") Mod)
-  test "sectL1" expression "([1] ++)" (SectL (List $ toList [aint 1]) Append)
-  test "sectL1" expression "(   ( 2 +  2 )  <= )" (SectL (Binary Add (aint 2) (aint 2)) Leq)
+  test "sectL2" expression "( n `mod` )" (SectL (aname "n") Mod)
+  test "sectL3" expression "([1] ++)" (SectL (List $ toList [aint 1]) Append)
+  test "sectL4" expression "(   ( 2 +  2 )  <= )" (SectL (Binary Add (aint 2) (aint 2)) Leq)
 
+  test "let1" expression "let x = 1 in x + x" (LetExpr (Lit (Name "x")) (aint 1) (Binary Add (aname "x") (aname "x")))
+  test "let2" expression "letty + let x = 1 in x" (Binary Add (aname "letty") (LetExpr (Lit (Name "x")) (aint 1) (aname "x")))
+  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z"
+    (LetExpr
+      (Lit (Name "x"))
+      (LetExpr
+        (Lit (Name "y"))
+        (aint 1)
+        (aname "y"))
+      (LetExpr
+        (Lit (Name "z"))
+        (aint 2)
+        (Binary Add (aname "x") (aname "z"))))
 
