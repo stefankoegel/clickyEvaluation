@@ -17,7 +17,7 @@ test name p input expected = case runParser p input of
   Left  (ParseError err) -> print $ "Fail (" ++ name ++ "): " ++ err
   Right result           -> 
     if result == expected
-      then print $ "Success (" ++ name ++ ")"
+      then print $ "Succes (" ++ name ++ ")"
       else print $ "Fail (" ++ name ++ "): " ++ show result ++ " /= " ++ show expected
 
 aint :: Int -> Expr
@@ -28,6 +28,8 @@ aname s = Atom $ Name s
 
 main :: forall eff. Eff (console :: CONSOLE | eff) Unit
 main = do
+  print "Running tests:"
+
   test "0" int "0" (AInt 0)
   test "1" int "1" (AInt 1)
   test "all" int "0123456789" (AInt 123456789)
@@ -54,8 +56,8 @@ main = do
   test "lt1" expression "1 < 234" (Binary Lt (aint 1) (aint 234))
   test "lt2" expression "x<y" (Binary Lt (aname "x") (aname "y"))
   test "leq" expression "1 <= 234" (Binary Leq (aint 1) (aint 234))
-  test "gt1" expression "567 > 1" (Binary Lt (aint 567) (aint 1))
-  test "gt2" expression "x>y" (Binary Lt (aname "x") (aname "y"))
+  test "gt1" expression "567 > 1" (Binary Gt (aint 567) (aint 1))
+  test "gt2" expression "x>y" (Binary Gt (aname "x") (aname "y"))
   test "geq" expression "567 >= 1" (Binary Geq (aint 567) (aint 1))
   test "and" expression "hot && cold" (Binary And (aname "hot") (aname "cold"))
   test "or" expression "be || notBe" (Binary Or (aname "be") (aname "notBe"))
@@ -133,17 +135,55 @@ main = do
     ))
   -- This test leads to a stack overflow. I don't know how to optimize it away...
   -- test "tuple_deep" expression "((((( ((((((1)),((2))),(3,((((4)))))),((5,6),(7,8))),(((9,(10)),(((11,12)))),((((13,14),(14,15)))))) )))))" (aname "stackOverflow")
+
+  test "list_empty" expression "[]" (List Nil)
+  test "list1" expression "[1]" (List (toList [aint 1]))
+  test "list2" expression "[  1  ]" (List (toList [aint 1]))
+  test "list3" expression "[  1  ,2,3,     4    ,  5  ]" (List (toList [aint 1, aint 2, aint 3, aint 4, aint 5]))
+  test "list_nested" expression "[ [1,2] , [ 3 , 4 ] ]" (List $ toList [(List $ toList [aint 1, aint 2]), (List $ toList [aint 3, aint 4])])
+  test "list_complex" expression "[ 1 + 2 , 3 + 4 ] ++ []"
+    (Binary Append 
+      (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
+      (List Nil))
+
   test "binding1" binding "x" (Lit (Name "x"))
   test "binding2" binding "10" (Lit (AInt 10))
   test "lambda1" expression "(\\x -> x)" (Lambda (toList [Lit (Name "x")]) (aname "x"))
   test "lambda2" expression "( \\ x y z -> ( x , y , z ) )"
     (Lambda (toList [Lit (Name "x"), Lit (Name "y"), Lit (Name "z")])
       (NTuple (toList [aname "x", aname "y", aname "z"])))
-  test "lambda3" expression "(\\x -> (\\y -> (\\z -> f x y z)))"
+  test "lambda3" expression "(  \\  x ->   (   \\    y ->    (   \\    z ->     f   x   y   z )  )  )"
     (Lambda (singleton $ Lit $ Name "x")
       (Lambda (singleton $ Lit $ Name "y")
         (Lambda (singleton $ Lit $ Name "z")
           (App (aname "f") (toList [aname "x", aname "y", aname "z"])))))
 
+  test "sectR1" expression "(+1)" (SectR Add (aint 1))
+  test "sectR2" expression "( ^ 2 )" (SectR Power (aint 2))
+  test "sectR3" expression "(++ [1])" (SectR Append (List (toList [aint 1])))
+  test "sectR4" expression "(<= (2 + 2))" (SectR Leq (Binary Add (aint 2) (aint 2)))
+  test "sectR5" expression "(   >=  (  2 + 2  )  )" (SectR Geq (Binary Add (aint 2) (aint 2)))
 
+  test "prefixOp1" expression "(+)" (PrefixOp Add)
+  test "prefixOp2" expression "( ++ )" (PrefixOp Append)
+  test "prefixOp3" expression "((^) 2 10)" (App (PrefixOp Power) (toList [aint 2, aint 10]))
+
+  test "sectL1" expression "(1+)" (SectL (aint 1) Add)
+  test "sectL2" expression "( n `mod` )" (SectL (aname "n") Mod)
+  test "sectL3" expression "([1] ++)" (SectL (List $ toList [aint 1]) Append)
+  test "sectL4" expression "(   ( 2 +  2 )  <= )" (SectL (Binary Add (aint 2) (aint 2)) Leq)
+
+  test "let1" expression "let x = 1 in x + x" (LetExpr (Lit (Name "x")) (aint 1) (Binary Add (aname "x") (aname "x")))
+  test "let2" expression "letty + let x = 1 in x" (Binary Add (aname "letty") (LetExpr (Lit (Name "x")) (aint 1) (aname "x")))
+  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z"
+    (LetExpr
+      (Lit (Name "x"))
+      (LetExpr
+        (Lit (Name "y"))
+        (aint 1)
+        (aname "y"))
+      (LetExpr
+        (Lit (Name "z"))
+        (aint 2)
+        (Binary Add (aname "x") (aname "z"))))
 

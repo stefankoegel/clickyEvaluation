@@ -1,8 +1,17 @@
 {
   "private": true,
+  "engines": {
+    "node": "*",
+    "npm": "*"
+  },
   "dependencies": {
-    "bower": "*",
-    "grunt-purescript": "*",
-    "grunt-cli": "*"
+    "pulp": "*",
+    "bower": "*"
+  },
+  "scripts": {
+    "postinstall": "pulp dep install",
+    "build": "pulp build",
+    "test": "pulp test",
+    "watch": "pulp -w test"
   }
 }

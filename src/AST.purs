@@ -63,11 +63,13 @@ data Expr = Atom Atom
           | Unary Op Expr
           | SectL Expr Op
           | SectR Op Expr
+          | PrefixOp Op
           | IfExpr Expr Expr Expr
+          | LetExpr Binding Expr Expr
           | Lambda (List Binding) Expr
           | App Expr (List Expr)
 
-instance eqEpr :: Eq Expr where
+instance eqExpr :: Eq Expr where
   eq (Atom a1)           (Atom a2)         = a1 == a2
   eq (List l1)           (List l2)         = l1 == l2
   eq (NTuple l1)         (NTuple l2)       = l1 == l2
@@ -75,37 +77,12 @@ instance eqEpr :: Eq Expr where
   eq (Unary o1 e1)       (Unary o2 e2)     = o1 == o2 && e1 == e2
   eq (SectL e1 o1)       (SectL e2 o2)     = e1 == e2 && o1 == o2
   eq (SectR o1 e1)       (SectR o2 e2)     = o1 == o2 && e1 == e2
+  eq (PrefixOp o1)       (PrefixOp o2)     = o1 == o2
   eq (IfExpr c1 t1 e1)   (IfExpr c2 t2 e2) = c1 == c2 && t1 == t2 && e1 == e2
+  eq (LetExpr a b c)     (LetExpr d e f)   = a == d && b == e && c == f
   eq (Lambda bs1 e1)     (Lambda bs2 e2)   = bs1 == bs2 && e1 == e2
   eq (App e1 l1)         (App e2 l2)       = e1 == e2 && l1 == l2
   eq _                   _                 = false
-
-
-foldExpr :: forall a.
-               (Atom -> a)
-            -> ((List a) -> a)
-            -> ((List a) -> a)
-            -> (Op -> a -> a -> a)
-            -> (Op -> a -> a)
-            -> (a -> Op -> a)
-            -> (Op -> a -> a)
-            -> (a -> a -> a -> a)
-            -> ((List Binding) -> a -> a)
-            -> (a -> (List a) -> a)
-            -> Expr -> a
-foldExpr atom list ntuple binary unary sectl sectr ifexpr lambda app = go
-  where
-  go (Atom a)          = atom a
-  go (List es)         = list (go <$> es)
-  go (NTuple es)       = ntuple (go <$> es)
-  go (Binary op e1 e2) = binary op (go e1) (go e2)
-  go (Unary op e)      = unary op (go e)
-  go (SectL e op)      = sectl (go e) op
-  go (SectR op e)      = sectr op (go e)
-  go (IfExpr c te ee)  = ifexpr (go c) (go te) (go ee)
-  go (Lambda bs e)     = lambda bs (go e)
-  go (App e es)        = app (go e) (go <$> es)
-
 
 -- | Bindings
 -- |
@@ -164,7 +141,9 @@ instance showExpr :: Show Expr where
     Unary op e      -> "(Unary " ++ show op ++ " " ++ show e ++ ")"
     SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"
     SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
+    PrefixOp op     -> "(PrefixOp " ++ show op ++ ")"
     IfExpr c te ee  -> "(IfExpr " ++ show c ++ " " ++ show te ++ " " ++ show ee ++ ")"
+    LetExpr b l e   -> "(LetExpr " ++ show b ++ " " ++ show l ++ " " ++ show e ++ ")"
     Lambda binds body -> "(Lambda " ++ show binds ++ " " ++ show body ++ ")"
     App func args   -> "(App " ++ show func ++ " " ++ show args ++ ")"
 
