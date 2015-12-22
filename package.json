@@ -5,8 +5,7 @@
     "npm": "*"
   },
   "dependencies": {
-    "pulp": "*",
-    "bower": "*"
+    "pulp": "6.0.1"
   },
   "scripts": {
     "postinstall": "pulp dep install",
