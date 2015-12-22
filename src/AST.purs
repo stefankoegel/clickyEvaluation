@@ -40,7 +40,7 @@ instance eqOp :: Eq Op where
 
 -- | Atoms
 -- |
--- | Primitive data types 
+-- | Primitive data types
 data Atom = AInt Int
           | Bool Boolean
           | Char String
@@ -53,6 +53,13 @@ instance eqAtom :: Eq Atom where
   eq (Name s1) (Name s2) = s1 == s2
   eq _ _ = false
 
+instance ordAtom :: Ord Atom where
+  compare (AInt a) (AInt b) = compare a b
+  compare (Bool a) (Bool b) = compare a b
+  compare (Char a) (Char b) = compare a b
+  compare (Name a) (Name b) = compare a b
+  compare _ _ = EQ
+  
 -- | Expressions
 -- |
 -- | The basic expressions the `Parser` and `Evaluator` recognize.

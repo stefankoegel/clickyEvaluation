@@ -24,6 +24,7 @@
     "purescript-jquery": "*",
     "purescript-globals": "*",
     "purescript-math": "*",
-    "purescript-ace": "*"
+    "purescript-ace": "*",
+    "purescript-sets": "~0.5.4"
   }
 }

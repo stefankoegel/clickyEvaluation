@@ -10,6 +10,8 @@ import Data.List
 import Text.Parsing.StringParser
 
 import AST
+import Parser
+import TypeChecker (runInfer, emptyTyenv, infer)
 
 
 -- debug env
@@ -115,5 +117,20 @@ definitions = """
 
   fix f = f (fix f)
   """
+
+
+
+aname :: String -> Expr
+aname s = Atom $ Name s
+
+aint :: Int -> Expr
+aint i = Atom $ AInt i
+
+testExp = (Lambda (toList $ [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c",Lit $ Name "d"]) (App (aname "a") (toList [aname "b", aname "c", aname "d"])))
+testExp2 = (Lambda (toList [Lit $ Name "a", Lit $ Name "b"]) (App (aname "a") (toList [aname "b"])))
+testExp3 = (SectL (aint 3) Power)
+testExp4 = (SectR  Power (aint 3))
+
+test = runInfer $ infer emptyTyenv testExp4
 
 -- debug end
