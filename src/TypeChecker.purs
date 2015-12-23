@@ -33,16 +33,23 @@ data Type
     = TypVar TVar -- Typ Variables e.x. a
     | TypCon String -- Typ Constants e.x Int
     | TypArr Type Type -- e.x Int -> Int
+    | AD AD
+
+data AD
+    = TList Type
+    | TTuple (List Type)
 
 instance showType :: Show Type where
   show (TypVar a) = show a
   show (TypCon a) = show a
   show (TypArr a b) = "(" ++ show a ++ " -> " ++ show b ++ ")"
+  show (AD a) = show a
 
 instance eqType :: Eq Type where
   eq (TypVar a) (TypVar b) = a == b
   eq (TypCon a) (TypCon b) = a == b
   eq (TypArr a b) (TypArr a' b') = (a == a') && (b == b')
+  eq (AD a) (AD b) = eq a b
   eq _ _ = false
 
 instance ordTVar :: Ord TVar where
@@ -53,6 +60,14 @@ instance eqTVar :: Eq TVar where
 
 instance showTVar :: Show TVar where
   show (TVar a) = show a
+
+instance showAD :: Show AD where
+  show (TList a) = "[" ++ show a ++ "]"
+  show (TTuple a) = "TTuple " ++ show a
+
+instance eqAD :: Eq AD where
+  eq (TList a) (TList b) = eq a b
+  eq (TTuple a) (TTuple b) = eq a b
 
 data Scheme = Forall (List TVar) Type
 
@@ -102,10 +117,12 @@ instance subType :: Substitutable Type where
    apply _ (TypCon a) = TypCon a
    apply s t@(TypVar a) = fromMaybe t $ Map.lookup a s
    apply s (TypArr t1 t2) =  TypArr (apply s t1) (apply s t2)
+   apply s (AD a) = AD (apply s a)
 
    ftv (TypCon  _)         = Set.empty
    ftv (TypVar a)       = Set.singleton a
    ftv (TypArr t1 t2) =  Set.union (ftv t1) (ftv t2)
+   ftv (AD a) = ftv a
 
 
 instance listSub :: (Substitutable a) => Substitutable (List a) where
@@ -116,6 +133,12 @@ instance subTypeEnv :: Substitutable TypeEnv where
   apply s (TypeEnv env) =  TypeEnv $ map (apply s) env
   ftv (TypeEnv env) = ftv $ snd $ unzip $ Map.toList env
 
+instance subAD :: Substitutable AD where
+  apply s (TList t) = TList (apply s t)
+  apply s(TTuple t) = TTuple (apply s t)
+
+  ftv (TList t) = ftv t
+  ftv (TTuple t) = ftv t
 
 
 initInfer :: InferState
@@ -156,6 +179,8 @@ unify (TypArr l r) (TypArr l' r')  = do
 unify (TypVar a) t = bindVar a t
 unify t (TypVar a) = bindVar a t
 unify (TypCon a) (TypCon b) | a == b = return nullSubst
+unify (AD a) (AD b) | a == b = return nullSubst
+unify (AD (TList a)) (AD (TList b)) = unify a b
 unify t1 t2 = throwError $ UnificationFail t1 t2
 
 bindVar ::  TVar -> Type -> Infer Subst
@@ -317,6 +342,16 @@ infer env ex = case ex of
 
   Binary op e1 e2 ->  infer env (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))
 
+  List (Cons e1 xs) -> do
+    (Tuple s1 (AD (TList t1))) <- infer env (List xs)
+    (Tuple s2 t2) <- infer (apply s1 env) e1
+    s3 <- unify (apply s2 t1) t2
+    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (AD $ TList t2)))
+
+  List Nil -> do
+    tv <- fresh
+    return (Tuple nullSubst (AD $ TList tv))
+
 
 inferOp :: Op -> Infer (Tuple Subst Type)
 inferOp op = do
@@ -332,8 +367,8 @@ inferOp op = do
     Mod -> int3
     Add -> int3
     Sub -> int3
-    -- Colon TODO
-    --  Append TODO
+    Colon -> f (a `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a)))
+    Append -> f ((AD $ TList a) `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a)))
     Equ -> aBool a
     Neq -> aBool a
     Lt -> aBool a
@@ -347,6 +382,3 @@ inferOp op = do
   f typ = return (Tuple nullSubst typ)
   int3 = f (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))
   aBool a = f (a `TypArr` (a `TypArr` TypCon "Bool"))
-
-tvar :: String -> Type
-tvar s = TypVar $ TVar s

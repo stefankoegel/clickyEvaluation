@@ -126,11 +126,19 @@ aname s = Atom $ Name s
 aint :: Int -> Expr
 aint i = Atom $ AInt i
 
-testExp = (Lambda (toList $ [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c",Lit $ Name "d"]) (App (aname "a") (toList [aname "b", aname "c", aname "d"])))
+testExp1 = (Lambda (toList $ [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c",Lit $ Name "d"]) (App (aname "a") (toList [aname "b", aname "c", aname "d"])))
 testExp2 = (Lambda (toList [Lit $ Name "a", Lit $ Name "b"]) (App (aname "a") (toList [aname "b"])))
 testExp3 = (SectL (aint 3) Power)
 testExp4 = (SectR  Power (aint 3))
+testExp5 = (List (toList [aint 1, aint 2, aint 3, aint 4, aint 5]))
+testExp6 = (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
+testExp7 = (List $ toList [PrefixOp Add, aint 4])
+testExp8 = (List Nil)
+testExp9 = (Binary Append
+  (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
+  (List Nil))
+testExp10 = (Binary Colon (aint 3) (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)]))
 
-test = runInfer $ infer emptyTyenv testExp4
+test = runInfer $ infer emptyTyenv testExp1
 
 -- debug end
