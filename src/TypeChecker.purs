@@ -101,7 +101,7 @@ instance showTypeError :: Show TypeError where
   show (UnboundVariable a) = show a ++ " not in scope"
   show (Ambigious _) = "Ambigious TODO error msg"
   show (UnificationMismatch a b) = "Cant unify " ++ show a ++ " with " ++ show b
-  show (UnknownError a) = "UnknownError" ++ show a
+  show (UnknownError a) = "UnknownError " ++ show a
 
 
 class Substitutable a where
@@ -180,8 +180,18 @@ unify (TypVar a) t = bindVar a t
 unify t (TypVar a) = bindVar a t
 unify (TypCon a) (TypCon b) | a == b = return nullSubst
 unify (AD a) (AD b) | a == b = return nullSubst
-unify (AD (TList a)) (AD (TList b)) = unify a b
+unify (AD a) (AD b) = unifyAD a b
 unify t1 t2 = throwError $ UnificationFail t1 t2
+
+unifyAD :: AD -> AD -> Infer Subst
+unifyAD (TList a) (TList b) = unify a b
+unifyAD (TTuple (Cons a as)) (TTuple (Cons b bs)) = do
+  s1 <- unifyAD (TTuple as) (TTuple bs)
+  s2 <- unify a b
+  return (s1 `compose` s2)
+
+unifyAD a b = throwError $ UnificationFail (AD a) (AD b)
+
 
 bindVar ::  TVar -> Type -> Infer Subst
 bindVar a t | t == (TypVar a)     = return nullSubst
@@ -352,6 +362,15 @@ infer env ex = case ex of
     tv <- fresh
     return (Tuple nullSubst (AD $ TList tv))
 
+
+  NTuple (Cons e Nil) -> do
+    (Tuple s t) <- infer env e
+    return $ Tuple s (AD $ TTuple $ Cons t Nil)
+
+  NTuple (Cons e1 xs) -> do
+    (Tuple s1 (AD (TTuple t1))) <- infer env (NTuple xs)
+    (Tuple s2 t2) <- infer (apply s1 env) e1
+    return (Tuple (s2 `compose` s1) (AD $ TTuple (Cons t2 t1)))
 
 inferOp :: Op -> Infer (Tuple Subst Type)
 inferOp op = do
