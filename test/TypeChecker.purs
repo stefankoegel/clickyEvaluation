@@ -139,7 +139,9 @@ testExp9 = (Binary Append
   (List Nil))
 testExp10 = (Binary Colon (aint 3) (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)]))
 testExp11 = NTuple (toList [Binary Add (aint 1) (aint 2), aint 3])
+testExp12 = (SectR Colon $ List $ toList [aint 3])
+testExp13 = (SectL (aint 3) Colon)
 
-test = runInfer $ infer emptyTyenv testExp11
+test = runInfer $ infer emptyTyenv testExp12
 
 -- debug end

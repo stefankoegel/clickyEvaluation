@@ -329,19 +329,19 @@ infer env ex = case ex of
 
   PrefixOp op -> inferOp op
 
-  SectR op e -> do --TODO fix - does not work correctly
+  SectL e op -> do
     tv <- fresh
     (Tuple s1 t1) <- inferOp op
     (Tuple s2 t2) <- infer (apply s1 env) e
     s3       <- unify (apply s2 t1) (TypArr t2 tv)
     return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 tv))
 
-  SectL e op -> do --TODO fix - does not work correctly
-    tv <- fresh
-    (Tuple s1 t1) <- infer env e
-    (Tuple s2 t2) <- inferOp op
-    s3       <- unify (apply s2 t1) (TypArr t2 tv)
-    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 tv))
+  SectR op e -> do
+    (Tuple s1 t1@(TypArr a (TypArr b c))) <- inferOp op
+    (Tuple s2 t2) <- infer env e
+    s3       <- unify (apply s2 b) t2
+    let s4 = (s3 `compose` s2 `compose` s1)
+    return (Tuple s4 (apply s4 (TypArr a c)))
 
   Unary op e -> do
     tv <- fresh
