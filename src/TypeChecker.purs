@@ -76,6 +76,9 @@ instance showScheme :: Show Scheme where
 
 data TypeEnv = TypeEnv (Map.Map Atom Scheme)
 
+instance showTypeEnv :: Show TypeEnv where
+  show (TypeEnv a) = show a
+
 data Unique = Unique { count :: Int }
 
 type Infer a = ExceptT TypeError (State Unique) a
@@ -140,6 +143,10 @@ instance subAD :: Substitutable AD where
   ftv (TList t) = ftv t
   ftv (TTuple t) = ftv t
 
+instance subTupAtomScheme :: Substitutable (Tuple Atom Scheme) where
+  apply s (Tuple a b) = Tuple a (apply s b)
+
+  ftv (Tuple _ b) = ftv b
 
 initInfer :: InferState
 initInfer = InferState { count : 0}
@@ -189,6 +196,7 @@ unifyAD (TTuple (Cons a as)) (TTuple (Cons b bs)) = do
   s1 <- unifyAD (TTuple as) (TTuple bs)
   s2 <- unify a b
   return (s1 `compose` s2)
+unifyAD (TTuple Nil) (TTuple Nil) = return nullSubst
 
 unifyAD a b = throwError $ UnificationFail (AD a) (AD b)
 
@@ -245,40 +253,6 @@ lookupEnv (TypeEnv env) x = do
                   return (Tuple nullSubst t)
 
 
-    -- TODO remove
-    -- just here so that i can look at it ;-)
-
-    -- data Expr =
-
-    --           Atom Atom
-
-    --              kind :: * -> *
-    --           | List (List Expr)           -> find out common type (infer and generalize)
-
-    --              kind ::  * -> * -> * bei n = 2 ~~ allgemein (*->)^n -> *
-    --           | NTuple (List Expr)         -> type every Expr in Tuple
-
-    --           | Binary Op Expr Expr        -> Application
-    --           | Unary Op Expr              -> Application
-    --           | SectL Expr Op              -> Application
-    --           | SectR Op Expr              -> Application
-    --           | PrefixOp Op                -> Lookup (simple Function)
-    --           | IfExpr Expr Expr Expr      -> Application
-    --           | LetExpr Binding Expr Expr  -> Let
-    --           | Lambda (List Binding) Expr -> Abstraktion
-    --           | App Expr (List Expr)       -> Application
-
-
-    -- data Atom = AInt Int     -> Prim Type
-    --           | Bool Boolean -> Prim Type
-    --           | Char String  -> Prim Type
-    --           | Name String  -> Variable
-
-    -- data Binding = Lit Atom
-    --              | ConsLit Binding Binding
-    --              | ListLit (List Binding)
-    --              | NTupleLit (List Binding)
-
 -- Tuple and List not supported yet
 infer :: TypeEnv -> Expr -> Infer (Tuple Subst Type)
 infer env ex = case ex of
@@ -288,17 +262,21 @@ infer env ex = case ex of
   (Atom (Char _)) -> return (Tuple nullSubst (TypCon "Char"))
   (Atom (AInt _)) -> return (Tuple nullSubst (TypCon "Int"))
 
-  Lambda (Cons (Lit x@(Name _)) Nil) e -> do
+  Lambda (Cons bin Nil) e -> do
     tv <- fresh
-    let env' = env `extend` (Tuple x (Forall Nil tv))
+    Tuple envL tvB <- extractBinding bin
+    let env' = foldr (\a b -> extend b a) env envL
+    s0 <- unify tv tvB
     (Tuple s1 t1) <- infer env' e
-    return (Tuple s1 (apply s1 tv `TypArr` t1))
+    return (Tuple s1 (apply (s0 `compose` s1) tv `TypArr` t1))
 
-  Lambda (Cons (Lit x@(Name _)) xs) e -> do
+  Lambda (Cons bin xs) e -> do
     tv <- fresh
-    let env' = env `extend` (Tuple x (Forall Nil tv))
+    Tuple envL tvB <- extractBinding bin
+    let env' = foldr (\a b -> extend b a) env envL
+    s0 <- unify tv tvB
     (Tuple s1 t1) <- infer env' (Lambda xs e)
-    return (Tuple s1 (apply s1 tv `TypArr` t1))
+    return (Tuple s1 (apply (s0 `compose` s1) tv `TypArr` t1))
 
     -- one element list
   App e1 (Cons e2 Nil) -> do
@@ -311,12 +289,15 @@ infer env ex = case ex of
   App e1 (Cons e2 xs) -> infer env  (App (App e1 (Cons e2 Nil)) xs)
 
 -- TODO  support just atom let expr for now
-  LetExpr (Lit x@(Name _)) e1 e2 -> do
+  LetExpr bin e1 e2 -> do
     (Tuple s1 t1) <- infer env e1
-    let env' = apply s1 env
-        t'   = generalize env' t1
-    (Tuple s2 t2) <- infer (env' `extend` (Tuple x t')) e2
-    return (Tuple (s1 `compose` s2) t2)
+    (Tuple list typ) <- extractBinding bin
+    s2 <- unify typ t1
+    let env' = apply (s1 `compose` s2) env
+        t'   = generalize env' (apply (s1 `compose` s2) t1)
+        env'' = apply s2 (foldr (\a b -> extend b a) env' list)
+    (Tuple s3 t2) <- infer env'' e2
+    return (Tuple (s1 `compose` s2 `compose` s3) t2)
 
 
   IfExpr cond tr fl -> do
@@ -401,3 +382,85 @@ inferOp op = do
   f typ = return (Tuple nullSubst typ)
   int3 = f (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))
   aBool a = f (a `TypArr` (a `TypArr` TypCon "Bool"))
+
+-- recursive functions are typed wrong
+inferDef :: TypeEnv -> Definition -> Infer (Tuple Subst Type)
+inferDef env (Def str bin exp) = do
+    tv <- fresh
+    let env' = env `extend` (Tuple (Name str) (Forall Nil tv))
+    let exp' = Lambda bin exp
+    infer env' exp'
+    -- Tuple s1 t1 <- infer env' exp'
+    -- let env'' = (apply s1 env')
+    -- -- throwError $ UnknownError $ show env''
+    -- infer env'' exp'
+    --infer env' (LetExpr (Lit $ Name str) exp' exp')
+  -- Tuple s1 t1 <- infer env' $ Lambda bin exp
+  -- return (Tuple s1 (apply s1 tv))
+
+
+extractConsLit:: Type -> Binding -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
+extractConsLit tv (ConsLit a b@(ConsLit _ _)) = do
+  Tuple list1 typ1 <- extractBinding a
+  s1 <- unify typ1  tv
+  let list1' = apply s1 list1
+  Tuple listB (AD ( TList typB)) <- extractConsLit tv b
+  s2 <- unify typB (apply s1 tv)
+  return $ Tuple (apply s2 (list1' ++ listB)) (AD $ TList (apply s2 typB))
+
+extractConsLit tv (ConsLit a (Lit b)) = do
+  Tuple list typ <- extractBinding a
+  s1 <- unify tv typ
+  let list' = apply s1 list
+  let ltyp = AD $ TList (apply s1 tv)
+  return $ Tuple (Cons (Tuple b $ Forall Nil ltyp) list') ltyp
+
+
+extractConsLit tv (ConsLit a b) = do
+  Tuple list typ <- extractBinding a
+  Tuple list2 typ2 <- extractBinding b
+  s1 <- unify typ2 typ
+  s2 <- unify (apply s1 typ) tv
+  let sC =  s2 `compose` s1
+  let list' = map (\(Tuple a b) -> Tuple a $ apply sC b) list
+  let list2' = map (\ (Tuple a b) -> Tuple a $  apply sC b) list2
+  return $ Tuple (list' ++ list2') $ AD $ TList tv
+
+
+extractListLit :: List Binding -> Infer (List (Tuple (List (Tuple Atom Scheme)) Type))
+extractListLit (Cons a Nil) = do
+  b1 <- extractBinding a
+  return (Cons b1 Nil)
+
+extractListLit (Cons a b) = do
+  b1 <- extractBinding a
+  bs <- extractListLit b
+  return (Cons b1 bs)
+
+extractBinding:: Binding -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
+extractBinding (Lit a) = do
+  tv <- fresh
+  return $ Tuple (toList [(Tuple a (Forall Nil tv))]) tv
+
+extractBinding a@(ConsLit _ _) = do
+  tv <- fresh
+  extractConsLit tv a
+
+extractBinding (ListLit a) = do
+  bs <- extractListLit a
+  tv <- fresh
+  let ini = Tuple Nil tv
+  Tuple list typ <- foldM f ini bs
+  return $ Tuple list (AD $ TList typ)
+  where
+  -- :: Tuple (List (Tuple Atom Scheme)) Type -> Tuple (List (Tuple Atom Scheme)) Type -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
+    f (Tuple l1 t1) (Tuple l2 t2) = do
+      let ls = l1 ++ l2
+      s1 <- unify t1 t2
+      return $ Tuple (apply s1 ls) (apply s1 t1)
+
+
+extractBinding (NTupleLit a) = do
+  bs <- extractListLit a
+  let tup = unzip bs
+  return $ Tuple (concat $ fst tup) (AD $ TTuple $ snd tup)

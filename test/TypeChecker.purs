@@ -11,7 +11,7 @@ import Text.Parsing.StringParser
 
 import AST
 import Parser
-import TypeChecker (runInfer, emptyTyenv, infer)
+import TypeChecker (runInfer, emptyTyenv, infer, inferDef)
 
 
 -- debug env
@@ -137,11 +137,35 @@ testExp8 = (List Nil)
 testExp9 = (Binary Append
   (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
   (List Nil))
-testExp10 = (Binary Colon (aint 3) (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)]))
+testExp10 = (Binary Colon (aint 3) (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4),Atom $ Char "Hallo"]))
 testExp11 = NTuple (toList [Binary Add (aint 1) (aint 2), aint 3])
 testExp12 = (SectR Colon $ List $ toList [aint 3])
 testExp13 = (SectL (aint 3) Colon)
+testExp14 = (Def "map" (toList [Lit $ Name "f", Lit $ Name "xs"]) (App (aname "map") (toList [aname "f",aname"xs"])))
+testExp15 = (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aint 5))
+testExp16 = (Lambda (toList [ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (aname "x"))
+testExp17 = Def "map" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App  (PrefixOp Colon) (toList [App (aname "f") $ toList [(aname"x")], App (aname "map") (toList [aname"f", aname"xs"])]))
+testExp18 = Def "foldr" (toList [Lit $ Name "f", Lit $ Name "ini", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App (aname "f") (toList [aname "x",App (aname "foldr") (toList [aname "f", aname"ini", aname"xs"])]))
+testExp19 = Def "fold" (toList [Lit $ Name "f", Lit $ Name "ini", Lit $ Name "x", Lit $ Name "xs"]) (App (aname "f") (toList [aname "x", App (aname "fold") (toList [aname "f", aname "ini", aname"x", aname"xs"])]))
+testExp20 = Def "f" (toList [Lit $ Name "fs",Lit $ Name "x"]) (App (aname "fs") (toList [aname "x", App (aname "f") (toList [aname "fs",aname "x"])]))
+testExp21 = Def "f" (toList [Lit $ Name "x"]) (App (aname "f") (toList [aname "x"]))
+testExp22 = (LetExpr (Lit $ Name "x") (aint 3) (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aname "x")))
+testExp24 = Def "list" (toList [ListLit (toList [(Lit $ Name "x1"),Lit $ Name "x2"])]) (aname "x1")
 
-test = runInfer $ infer emptyTyenv testExp12
+testExp25 = Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xs")
+testExp26 = Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xss")
+testExp27 = Def "list" (toList [(ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xss")
+
+testExp23 = Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "x") --wrong
+
+testExp30 = Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])]) (aname "b")
+testExp31 = Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])]) (aname "a")
+testExp32 = Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"]))
+testExp33 = Def "list" (toList [ListLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"]))
+
+testExp34 = LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (App (aname "a") (toList [aname "b"]))
+testExp35 = LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (aname "a")
+
+test = runInfer $ infer emptyTyenv testExp35
 
 -- debug end
