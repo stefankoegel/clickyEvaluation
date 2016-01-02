@@ -223,5 +223,34 @@ expression = PC.fix $ \expr -> buildExprParser operatorTable (syntax expr)
 lit :: Parser Binding
 lit = Lit <$> (int <|> variable)
 
+consLit :: Parser Binding -> Parser Binding
+consLit bnd = do
+  char '(' *> skipSpaces
+  b <- bnd
+  skipSpaces *> char ':' *> skipSpaces
+  bs <- bnd
+  skipSpaces *> char ')'
+  return $ ConsLit b bs
+
+listLit :: Parser Binding -> Parser Binding
+listLit bnd = do
+  char '[' *> skipSpaces
+  bs <- bnd `PC.sepBy` (try $ whiteSpace *> char ',' *> whiteSpace)
+  skipSpaces *> char ']'
+  return $ ListLit bs
+
+tupleLit :: Parser Binding -> Parser Binding
+tupleLit bnd = do
+  char '(' *> skipSpaces
+  b <- bnd
+  skipSpaces *> char ',' *> skipSpaces
+  bs <- bnd `PC.sepBy1` (try $ whiteSpace *> char ',' *> whiteSpace)
+  skipSpaces *> char ')'
+  return $ NTupleLit (Cons b bs)
+
 binding :: Parser Binding
-binding = lit
+binding = PC.fix  $ \bnd ->
+      (try $ consLit bnd)
+  <|> (tupleLit bnd)
+  <|> (listLit bnd)
+  <|> lit

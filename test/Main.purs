@@ -146,8 +146,8 @@ main = do
       (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
       (List Nil))
 
-  test "binding1" binding "x" (Lit (Name "x"))
-  test "binding2" binding "10" (Lit (AInt 10))
+  test "binding_lit1" binding "x" (Lit (Name "x"))
+  test "binding_lit2" binding "10" (Lit (AInt 10))
   test "lambda1" expression "(\\x -> x)" (Lambda (toList [Lit (Name "x")]) (aname "x"))
   test "lambda2" expression "( \\ x y z -> ( x , y , z ) )"
     (Lambda (toList [Lit (Name "x"), Lit (Name "y"), Lit (Name "z")])
@@ -187,3 +187,25 @@ main = do
         (aint 2)
         (Binary Add (aname "x") (aname "z"))))
 
+  test "consLit1" binding "(x:xs)" (ConsLit (Lit (Name "x")) (Lit (Name "xs")))
+  test "consLit2" binding "(x:(y:zs))" (ConsLit (Lit (Name "x")) (ConsLit (Lit (Name "y")) (Lit (Name "zs"))))
+  test "consLit3" binding "(  x   :  (  666  :  zs  )   )" (ConsLit (Lit (Name "x")) (ConsLit (Lit (AInt 666)) (Lit (Name "zs"))))
+
+  test "listLit1" binding "[]" (ListLit Nil)
+  test "listLit2" binding "[    ]" (ListLit Nil)
+  test "listLit3" binding "[  x ]" (ListLit (Cons (Lit (Name "x")) Nil))
+  test "listLit4" binding "[  x   ,  y  ,   1337 ]" (ListLit (toList [Lit (Name "x"), Lit (Name "y"), Lit (AInt 1337)]))
+
+  test "tupleLit1" binding "(a,b)" (NTupleLit (toList [Lit (Name "a"), Lit (Name "b")]))
+  test "tupleLit2" binding "(   a   ,  b   ,   c   )" (NTupleLit (toList $ [Lit (Name "a"), Lit (Name "b"), Lit (Name "c")]))
+  test "tupleLit3" binding "(  (  x  ,  y  )  , ( a  ,  b  )  , 10 )"
+    (NTupleLit (toList
+      [ NTupleLit (toList [Lit (Name "x"), Lit (Name "y")])
+      , NTupleLit (toList [Lit (Name "a"), Lit (Name "b")])
+      , (Lit (AInt 10))
+      ]))
+
+  test "binding" binding "( ( x , y ) : [ a , b ] )"
+    (ConsLit
+      (NTupleLit (toList [Lit (Name "x"), Lit (Name "y")]))
+      (ListLit (toList [Lit (Name "a"), Lit (Name "b")])))
