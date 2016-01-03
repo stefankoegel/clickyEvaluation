@@ -63,7 +63,7 @@ instance showTVar :: Show TVar where
 
 instance showAD :: Show AD where
   show (TList a) = "[" ++ show a ++ "]"
-  show (TTuple a) = "TTuple " ++ show a
+  show (TTuple a) = "(" ++ foldr (\t s -> show t ++","++s) ")" a
 
 instance eqAD :: Eq AD where
   eq (TList a) (TList b) = eq a b
@@ -248,9 +248,11 @@ mapM f as = foldr k (return Nil) as
 lookupEnv :: TypeEnv -> Atom -> Infer (Tuple Subst Type)
 lookupEnv (TypeEnv env) x = do
   case Map.lookup x env of
-    Nothing -> throwError $ UnboundVariable (show x)
+    Nothing -> throwError $ UnboundVariable (f x)
     Just s  -> do t <- instantiate s
                   return (Tuple nullSubst t)
+  where
+    f (Name x) = x
 
 
 -- Tuple and List not supported yet
@@ -478,3 +480,42 @@ inferGroup env (Cons def1 defs) = do
   Tuple s2 t2 <- inferGroup env defs
   s3 <- unify t1 t2
   return $ Tuple s3 (apply s3 t1)
+
+
+buildTypeEnv:: List Definition -> Either TypeError TypeEnv
+buildTypeEnv Nil = Right emptyTyenv
+buildTypeEnv defs = buildTypeEnvFromGroups emptyTyenv groupMap keys
+  where
+    groupMap = buildGroups defs
+    keys = Map.keys groupMap
+
+buildGroups:: List Definition -> Map.Map String (List Definition)
+buildGroups Nil = Map.empty
+buildGroups (Cons def@(Def str bin exp) Nil) =
+  Map.singleton str (Cons def Nil)
+
+buildGroups (Cons def@(Def str bin exp) defs) =
+  case binList of
+    Just list -> Map.insert str (Cons def list) defMap
+    Nothing -> Map.insert str (Cons def Nil) defMap
+  where
+    defMap = buildGroups defs
+    binList = Map.lookup str defMap
+--                         old         grouped Definitions                 keys         new
+buildTypeEnvFromGroups:: TypeEnv -> Map.Map String (List Definition) -> List String -> Either TypeError TypeEnv
+buildTypeEnvFromGroups env _ Nil = Right env
+buildTypeEnvFromGroups env groupMap k@(Cons key keys) =
+  case mayDefs of
+    Nothing -> Left $ UnboundVariable key
+    Just defs -> case runInfer $ inferGroup env defs of
+      Right scheme -> buildTypeEnvFromGroups (env `extend` (Tuple (Name key) scheme)) (Map.delete key groupMap) keys
+      Left (UnboundVariable var) -> buildTypeEnvFromGroups env groupMap (Cons var (delete var k))
+      Left err -> Left err
+  where
+    mayDefs = Map.lookup key groupMap
+
+
+typeProgramn:: List Definition -> Expr -> Either TypeError Scheme
+typeProgramn defs exp = case runInfer <$> (infer <$> (buildTypeEnv defs) <*> pure exp) of
+  Left err -> Left err
+  Right a -> a

@@ -11,7 +11,7 @@ import Text.Parsing.StringParser
 
 import AST
 import Parser
-import TypeChecker (runInfer, emptyTyenv, infer, inferDef, inferGroup)
+import TypeChecker (runInfer, emptyTyenv, infer, inferDef, inferGroup, buildTypeEnv, typeProgramn)
 
 
 -- debug env
@@ -182,8 +182,21 @@ testExp45 = Def "zip" (toList [ ConsLit (Lit $ Name "x") (Lit $ Name "xs"), Cons
 testExp46 = Def "zip" (toList [ListLit Nil,Lit $ Name "_"]) (List Nil)
 testExp47 = Def "zip" (toList [Lit $ Name "_",ListLit Nil]) (List Nil)
 
-testExp48 = toList [testExp45,testExp46,testExp47]
+testExp55 = Def "zip2" (toList [ ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
+  (App (PrefixOp Colon) (toList [NTuple (toList [aname "x",aname "y"]), App (aname "zip") (toList [aname "xs",aname "ys"])]))
+testExp56 = Def "zip2" (toList [ListLit Nil,Lit $ Name "_"]) (List Nil)
+testExp57 = Def "zip2" (toList [Lit $ Name "_",ListLit Nil]) (List Nil)
+testExp60 = Def "f" Nil (aname "zip")
+testExp61 = Cons testExp60 $ testExp48 ++ testExp44 ++ testExp58
 
-test = runInfer $ inferGroup emptyTyenv testExp48
+
+testExp48 = toList [testExp45,testExp46,testExp47]
+testExp58 = toList [testExp55,testExp56,testExp57]
+
+exp = App (aname "f") (toList [List (toList [aint 1,aint 3,aint 4]), List (toList [Atom $ Char "1",Atom $ Char "2",Atom $ Char "3"])])
+
+test = typeProgramn testExp61 exp
+-- buildTypeEnv $ Cons testExp60 $ testExp48 ++ testExp44 ++ testExp58
+-- runInfer $ inferGroup emptyTyenv testExp48
 
 -- debug end
