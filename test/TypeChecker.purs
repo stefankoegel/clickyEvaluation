@@ -195,8 +195,8 @@ testExp58 = toList [testExp55,testExp56,testExp57]
 
 exp = App (aname "f") (toList [List (toList [aint 1,aint 3,aint 4]), List (toList [Atom $ Char "1",Atom $ Char "2",Atom $ Char "3"])])
 
-test = typeProgramn testExp61 exp
+-- test = typeProgramn testExp61 exp
 -- buildTypeEnv $ Cons testExp60 $ testExp48 ++ testExp44 ++ testExp58
--- runInfer $ inferGroup emptyTyenv testExp48
+test =  runInfer $ inferGroup emptyTyenv testExp48
 
 -- debug end

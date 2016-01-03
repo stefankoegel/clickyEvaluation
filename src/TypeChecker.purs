@@ -160,10 +160,13 @@ extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
 nullSubst:: Subst
 nullSubst = Map.empty
 
+-- not used right now
+-- use later to replace t_xx with letters on output
 letters:: List String
 letters = map String.fromCharArray letters'
   where
-    letters' = inf 1 >>= flip Array.replicateM (toList $ String.toCharArray "abcdefghijklmnopqrstuvwxyz")
+    letters' = inf 1 >>= flip Array.replicateM
+      (toList $ String.toCharArray "abcdefghijklmnopqrstuvwxyz")
     inf 2 = 2:Nil --TODO remove limit somehow -- nessary because of strict evaluation
     inf x = x:inf(x+1)
 
@@ -171,10 +174,7 @@ fresh :: Infer Type
 fresh = do
   (Unique s) <- get
   put (Unique {count:(s.count+1)})
-  case (letters !! s.count) of
-    Nothing -> throwError $ UnknownError "out of letters" --TODO make sure this never ever happens
-    Just l -> return $ TypVar $ TVar l
-
+  return $ TypVar $ TVar $ "t_" ++ show s.count
 
 
 unify ::  Type -> Type -> Infer Subst
@@ -459,7 +459,8 @@ extractBinding (ListLit a) = do
   Tuple list typ <- foldM f ini bs
   return $ Tuple list (AD $ TList typ)
   where
-  -- :: Tuple (List (Tuple Atom Scheme)) Type -> Tuple (List (Tuple Atom Scheme)) Type -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
+-- :: Tuple (List (Tuple Atom Scheme)) Type -> Tuple (List (Tuple Atom Scheme)) Type
+--           -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
     f (Tuple l1 t1) (Tuple l2 t2) = do
       let ls = l1 ++ l2
       s1 <- unify t1 t2
@@ -501,21 +502,25 @@ buildGroups (Cons def@(Def str bin exp) defs) =
   where
     defMap = buildGroups defs
     binList = Map.lookup str defMap
---                         old         grouped Definitions                 keys         new
-buildTypeEnvFromGroups:: TypeEnv -> Map.Map String (List Definition) -> List String -> Either TypeError TypeEnv
+--                         old -> grouped Definitions -> keys -> new
+buildTypeEnvFromGroups:: TypeEnv -> Map.Map String (List Definition)
+  -> List String -> Either TypeError TypeEnv
 buildTypeEnvFromGroups env _ Nil = Right env
 buildTypeEnvFromGroups env groupMap k@(Cons key keys) =
   case mayDefs of
     Nothing -> Left $ UnboundVariable key
     Just defs -> case runInfer $ inferGroup env defs of
-      Right scheme -> buildTypeEnvFromGroups (env `extend` (Tuple (Name key) scheme)) (Map.delete key groupMap) keys
-      Left (UnboundVariable var) -> buildTypeEnvFromGroups env groupMap (Cons var (delete var k))
+      Right scheme -> buildTypeEnvFromGroups
+        (env `extend` (Tuple (Name key) scheme)) (Map.delete key groupMap) keys
+      Left (UnboundVariable var) -> buildTypeEnvFromGroups
+        env groupMap (Cons var (delete var k))
       Left err -> Left err
   where
     mayDefs = Map.lookup key groupMap
 
 
 typeProgramn:: List Definition -> Expr -> Either TypeError Scheme
-typeProgramn defs exp = case runInfer <$> (infer <$> (buildTypeEnv defs) <*> pure exp) of
+typeProgramn defs exp = case runInfer <$>
+    (infer <$> (buildTypeEnv defs) <*> pure exp) of
   Left err -> Left err
   Right a -> a
