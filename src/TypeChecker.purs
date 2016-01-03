@@ -278,6 +278,8 @@ infer env ex = case ex of
     (Tuple s1 t1) <- infer env' (Lambda xs e)
     return (Tuple s1 (apply (s0 `compose` s1) tv `TypArr` t1))
 
+  Lambda Nil e -> infer env e
+
     -- one element list
   App e1 (Cons e2 Nil) -> do
     tv <- fresh
@@ -288,7 +290,6 @@ infer env ex = case ex of
 
   App e1 (Cons e2 xs) -> infer env  (App (App e1 (Cons e2 Nil)) xs)
 
--- TODO  support just atom let expr for now
   LetExpr bin e1 e2 -> do
     (Tuple s1 t1) <- infer env e1
     (Tuple list typ) <- extractBinding bin
@@ -389,7 +390,8 @@ inferDef env (Def str bin exp) = do
     tv <- fresh
     let env' = env `extend` (Tuple (Name str) (Forall Nil tv))
     let exp' = Lambda bin exp
-    infer env' exp'
+    Tuple s1 t1 <- infer env' exp'
+    return $ Tuple s1 (apply s1 t1)
     -- Tuple s1 t1 <- infer env' exp'
     -- let env'' = (apply s1 env')
     -- -- throwError $ UnknownError $ show env''
@@ -437,6 +439,8 @@ extractListLit (Cons a b) = do
   bs <- extractListLit b
   return (Cons b1 bs)
 
+extractListLit Nil = return Nil
+
 extractBinding:: Binding -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
 extractBinding (Lit a) = do
   tv <- fresh
@@ -464,3 +468,13 @@ extractBinding (NTupleLit a) = do
   bs <- extractListLit a
   let tup = unzip bs
   return $ Tuple (concat $ fst tup) (AD $ TTuple $ snd tup)
+
+
+inferGroup:: TypeEnv -> List Definition -> Infer (Tuple Subst Type)
+inferGroup _ Nil = throwError $ UnknownError "Cant type empty Group"
+inferGroup env (Cons def1 Nil) = inferDef env def1
+inferGroup env (Cons def1 defs) = do
+  Tuple s1 t1 <- inferDef env def1
+  Tuple s2 t2 <- inferGroup env defs
+  s3 <- unify t1 t2
+  return $ Tuple s3 (apply s3 t1)

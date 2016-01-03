@@ -11,7 +11,7 @@ import Text.Parsing.StringParser
 
 import AST
 import Parser
-import TypeChecker (runInfer, emptyTyenv, infer, inferDef)
+import TypeChecker (runInfer, emptyTyenv, infer, inferDef, inferGroup)
 
 
 -- debug env
@@ -166,6 +166,24 @@ testExp33 = Def "list" (toList [ListLit (toList [Lit $ Name "a",Lit $ Name "b",L
 testExp34 = LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (App (aname "a") (toList [aname "b"]))
 testExp35 = LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (aname "a")
 
-test = runInfer $ infer emptyTyenv testExp35
+testExp36 = toList [testExp17,testExp37]
+testExp37 = Def "map" (toList [Lit $ Name "f", ListLit Nil]) (List Nil)
+
+testExp40 = toList [Def "a" (Nil) (aint 3),Def "a" (toList [Lit $ Name "x"]) (aint 5)]
+
+testExp41 = Def "zipWith" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
+  (App (PrefixOp Colon) (toList [App (aname "f") (toList [aname "x",aname "y"]), App (aname "zipWith") (toList [aname "f",aname"xs",aname "ys"])]))
+textExp42 = Def "zipWith" (toList [Lit $ Name "_",ListLit Nil,Lit $ Name "_"]) (List Nil)
+textExp43 = Def "zipWith" (toList [Lit $ Name "_",Lit $ Name "_",ListLit Nil]) (List Nil)
+testExp44 = toList [textExp42,textExp43,testExp41]
+
+testExp45 = Def "zip" (toList [ ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
+  (App (PrefixOp Colon) (toList [NTuple (toList [aname "x",aname "y"]), App (aname "zip") (toList [aname "xs",aname "ys"])]))
+testExp46 = Def "zip" (toList [ListLit Nil,Lit $ Name "_"]) (List Nil)
+testExp47 = Def "zip" (toList [Lit $ Name "_",ListLit Nil]) (List Nil)
+
+testExp48 = toList [testExp45,testExp46,testExp47]
+
+test = runInfer $ inferGroup emptyTyenv testExp48
 
 -- debug end
