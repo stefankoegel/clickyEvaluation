@@ -14,11 +14,11 @@ import Control.Monad.Eff.Console
 
 test :: forall a eff. (Show a, Eq a) => String -> Parser a -> String -> a -> Eff (console :: CONSOLE | eff ) Unit
 test name p input expected = case runParser p input of
-  Left  (ParseError err) -> print $ "Fail (" ++ name ++ "): " ++ err
+  Left  (ParseError err) -> log $ "Fail (" ++ name ++ "): " ++ err
   Right result           -> 
     if result == expected
-      then print $ "Succes (" ++ name ++ ")"
-      else print $ "Fail (" ++ name ++ "): " ++ show result ++ " /= " ++ show expected
+      then log $ "Succes (" ++ name ++ ")"
+      else log $ "Fail (" ++ name ++ "): " ++ show result ++ " /= " ++ show expected
 
 aint :: Int -> Expr
 aint i = Atom $ AInt i
@@ -28,12 +28,15 @@ aname s = Atom $ Name s
 
 main :: forall eff. Eff (console :: CONSOLE | eff) Unit
 main = do
-  print "Running tests:"
+  log "Running tests:"
 
   test "0" int "0" (AInt 0)
   test "1" int "1" (AInt 1)
   test "all" int "0123456789" (AInt 123456789)
   test "high" int "999999999999999999" (AInt 2147483647)
+
+  test "bool1" bool "True" (Bool true)
+  test "bool2" bool "False" (Bool false)
 
   test "a" variable "a" (Name "a")
   test "lower" variable "a_bcdefghijklmnopqrstuvwxyz_" (Name "a_bcdefghijklmnopqrstuvwxyz_")
@@ -69,7 +72,7 @@ main = do
                                     (Binary Mul (aint 1) (aint 2))
                                     (Binary Mul (aint 3) (aint 4)))
   test "whitespaces" expression 
-    "1   \n   -    \t   ( f   )    \t\t\t\t                                                                 \n\n\n             `div`     _ignore"
+    "1   \t   -    \t   ( f   )    \t\t\t\t                                                                \t\t\t\t             `div`     _ignore"
     (Binary Sub (aint 1) (Binary Div (aname "f") (aname "_ignore")))
   test "brackets" expression "(  1  +  2  )  *  3" (Binary Mul (Binary Add (aint 1) (aint 2)) (aint 3))
   test "brackets2" expression "( (  1  +  2  - 3  )  *  4 * 5 * 6)"
@@ -100,6 +103,7 @@ main = do
       (IfExpr (aname "x") (aname "y") (aname "z"))
       (IfExpr (aname "a") (aname "b") (aname "c"))
       (IfExpr (aname "i") (aname "j") (aname "k")))
+  test "if2" expression "if bool then False else True" (IfExpr (aname "bool") (Atom (Bool false)) (Atom (Bool true)))
 
   test "apply1" expression "f 1" (App (aname "f") (singleton (aint 1)))
   test "apply2" expression "f x y z 12 (3 + 7)"
@@ -189,11 +193,11 @@ main = do
 
   test "consLit1" binding "(x:xs)" (ConsLit (Lit (Name "x")) (Lit (Name "xs")))
   test "consLit2" binding "(x:(y:zs))" (ConsLit (Lit (Name "x")) (ConsLit (Lit (Name "y")) (Lit (Name "zs"))))
-  test "consLit3" binding "(  x   :  (  666  :  zs  )   )" (ConsLit (Lit (Name "x")) (ConsLit (Lit (AInt 666)) (Lit (Name "zs"))))
+  test "consLit3" binding "(  x  :  (  666  :  zs  )   )" (ConsLit (Lit (Name "x")) (ConsLit (Lit (AInt 666)) (Lit (Name "zs"))))
 
   test "listLit1" binding "[]" (ListLit Nil)
   test "listLit2" binding "[    ]" (ListLit Nil)
-  test "listLit3" binding "[  x ]" (ListLit (Cons (Lit (Name "x")) Nil))
+  test "listLit3" binding "[  True ]" (ListLit (Cons (Lit (Bool true)) Nil))
   test "listLit4" binding "[  x   ,  y  ,   1337 ]" (ListLit (toList [Lit (Name "x"), Lit (Name "y"), Lit (AInt 1337)]))
 
   test "tupleLit1" binding "(a,b)" (NTupleLit (toList [Lit (Name "a"), Lit (Name "b")]))
@@ -209,3 +213,114 @@ main = do
     (ConsLit
       (NTupleLit (toList [Lit (Name "x"), Lit (Name "y")]))
       (ListLit (toList [Lit (Name "a"), Lit (Name "b")])))
+
+  test "def1" definition "x = 10" (Def "x" Nil (aint 10))
+  test "def2" definition "double x = x + x" (Def "double" (Cons (Lit (Name "x")) Nil) (Binary Add (aname "x") (aname "x")))
+  test "def3" definition "zip (x:xs) (y:ys) = (x,y) : zip xs ys"
+    (Def "zip"
+      (toList [ConsLit (Lit (Name "x")) (Lit (Name "xs")), ConsLit (Lit (Name "y")) (Lit (Name "ys"))])
+      (Binary Colon
+        (NTuple (toList  [Atom (Name "x"), Atom (Name "y")]))
+        (App (aname "zip") (toList [Atom (Name "xs"), Atom (Name "ys")]))))
+
+  test "defs" definitions "\n\na   =   10 \n  \n \nb    =  20  \n\n  \n"
+    (toList [Def "a" Nil (aint 10), Def "b" Nil (aint 20)])
+
+  test "prelude" definitions prelude (toList [Def "a" Nil (aint 10), Def "b" Nil (aint 20)])
+
+prelude :: String
+prelude =
+  "and (True:xs)  = and xs\n" ++
+  "and (False:xs) = False\n" ++
+  "and []         = True\n" ++
+  "\n" ++
+  "or (False:xs) = or xs\n" ++
+  "or (True:xs)  = True\n" ++
+  "or []         = False\n" ++
+  "\n" ++
+  "all p = and . map p\n" ++
+  "any p = or . map p\n" ++
+  "\n" ++
+  "head (x:xs) = x\n" ++
+  "tail (x:xs) = xs\n" ++
+  "\n" ++
+  "take 0 xs     = []\n" ++
+  "take n (x:xs) = x : take (n - 1) xs\n"
+  -- "\n" ++
+  -- "drop 0 xs     = xs\n" ++
+  -- "drop n (x:xs) = drop (n - 1) xs\n" ++
+  -- "\n" ++
+  -- "elem e []     = False\n" ++
+  -- "elem e (x:xs) = if e == x then True else elem e xs\n" ++
+  -- "\n" ++
+  -- "max a b = if a >= b then a else b\n" ++
+  -- "min a b = if b >= a then a else b\n" ++
+  -- "\n" ++
+  -- "maximum (x:xs) = foldr max x xs\n" ++
+  -- "minimum (x:xs) = foldr min x xs\n" ++
+  -- "\n" ++
+  -- "length []     = 0\n" ++
+  -- "length (x:xs) = 1 + length xs\n" ++
+  -- "\n" ++
+  -- "zip (x:xs) (y:ys) = (x, y) : zip xs ys\n" ++
+  -- "zip []      _     = []\n" ++
+  -- "zip _       []    = []\n" ++
+  -- "\n" ++
+  -- "zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys\n" ++
+  -- "zipWith _ []     _      = []\n" ++
+  -- "zipWith _ _      []     = []\n" ++
+  -- "\n" ++
+  -- "unzip []          = ([], [])\n" ++
+  -- "unzip ((a, b):xs) = (\\(as, bs) -> (a:as, b:bs)) $ unzip xs\n" ++
+  -- "\n" ++
+  -- "curry f a b = f (a, b)\n" ++
+  -- "uncurry f (a, b) = f a b\n" ++
+  -- "\n" ++
+  -- "repeat x = x : repeat x\n" ++
+  -- "\n" ++
+  -- "replicate 0 _ = []\n" ++
+  -- "replicate n x = x : replicate (n - 1) x\n" ++
+  -- "\n" ++
+  -- "enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []\n" ++
+  -- "\n" ++
+  -- "sum (x:xs) = x + sum xs\n" ++
+  -- "sum [] = 0\n" ++
+  -- "\n" ++
+  -- "product (x:xs) = x * product xs\n" ++
+  -- "product [] = 1\n" ++
+  -- "\n" ++
+  -- "reverse []     = []\n" ++
+  -- "reverse (x:xs) = reverse xs ++ [x]\n" ++
+  -- "\n" ++
+  -- "concat = foldr (++) []\n" ++
+  -- "\n" ++
+  -- "map f []     = []\n" ++
+  -- "map f (x:xs) = f x : map f xs\n" ++
+  -- "\n" ++
+  -- "not True  = False\n" ++
+  -- "not False = True\n" ++
+  -- "\n" ++
+  -- "filter p (x:xs) = if p x then x : filter p xs else filter p xs\n" ++
+  -- "filter p []     = []\n" ++
+  -- "\n" ++
+  -- "foldr f ini []     = ini\n" ++
+  -- "foldr f ini (x:xs) = f x (foldr f ini xs)\n" ++
+  -- "\n" ++
+  -- "foldl f acc []     = acc\n" ++
+  -- "foldl f acc (x:xs) = foldl f (f acc x) xs\n" ++
+  -- "\n" ++
+  -- "scanl f b []     = [b]\n" ++
+  -- "scanl f b (x:xs) = b : scanl f (f b x) xs\n" ++
+  -- "\n" ++
+  -- "iterate f x = x : iterate f (f x)\n" ++
+  -- "\n" ++
+  -- "id x = x\n" ++
+  -- "\n" ++
+  -- "const x _ = x\n" ++
+  -- "\n" ++
+  -- "flip f x y = f y x\n" ++
+  -- "\n" ++
+  -- "even n = (n `mod` 2) == 0\n" ++
+  -- "odd n = (n `mod` 2) == 1\n" ++
+  -- "\n" ++
+  -- "fix f = f (fix f)\n"

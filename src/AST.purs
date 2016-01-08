@@ -104,6 +104,9 @@ instance eqBinding :: Eq Binding where
 -- | Definitions for functions and constants
 data Definition = Def String (List Binding) Expr
 
+instance eqDefinition :: Eq Definition where
+  eq (Def n1 b1 e1) (Def n2 b2 e2) = n1 == n2 && b1 == b2 && e1 == e2
+
 instance showOp :: Show Op where
   show op = case op of
     Composition -> "Composition"
@@ -127,32 +130,32 @@ instance showOp :: Show Op where
 
 instance showAtom :: Show Atom where
   show atom = case atom of
-    AInt number -> "(AInt " ++ show number ++ ")"
-    Bool bool   -> "(Bool " ++ show bool ++ ")"
-    Char string -> "(Char " ++ show string ++ ")"
-    Name string -> "(Name " ++ show string ++ ")"
+    AInt number -> "AInt " ++ show number
+    Bool bool   -> "Bool " ++ show bool
+    Char string -> "Char " ++ show string
+    Name string -> "Name " ++ show string
 
 instance showExpr :: Show Expr where
   show expr = case expr of
-    Atom atom       -> "(Atom " ++ show atom ++ ")"
-    List ls         -> "(List " ++ show ls ++ ")"
-    NTuple ls       -> "(NTuple " ++ show ls ++ ")"
-    Binary op e1 e2 -> "(Binary " ++ show op ++ " " ++ show e1 ++ " " ++ show e2 ++ ")"
-    Unary op e      -> "(Unary " ++ show op ++ " " ++ show e ++ ")"
-    SectL expr op   -> "(SectL " ++ show expr ++ " " ++ show op ++ ")"
-    SectR op expr   -> "(SectR " ++ show op ++ " " ++ show expr ++ ")"
-    PrefixOp op     -> "(PrefixOp " ++ show op ++ ")"
-    IfExpr c te ee  -> "(IfExpr " ++ show c ++ " " ++ show te ++ " " ++ show ee ++ ")"
-    LetExpr b l e   -> "(LetExpr " ++ show b ++ " " ++ show l ++ " " ++ show e ++ ")"
-    Lambda binds body -> "(Lambda " ++ show binds ++ " " ++ show body ++ ")"
-    App func args   -> "(App " ++ show func ++ " " ++ show args ++ ")"
+    Atom atom       -> "Atom (" ++ show atom ++ ")"
+    List ls         -> "List (" ++ show ls ++ ")"
+    NTuple ls       -> "NTuple (" ++ show ls ++ ")"
+    Binary op e1 e2 -> "Binary " ++ show op ++ " (" ++ show e1 ++ ") (" ++ show e2 ++ ")"
+    Unary op e      -> "Unary " ++ show op ++ " (" ++ show e ++ ")"
+    SectL expr op   -> "SectL (" ++ show expr ++ ") " ++ show op
+    SectR op expr   -> "SectR " ++ show op ++ " (" ++ show expr ++ ")"
+    PrefixOp op     -> "PrefixOp " ++ show op
+    IfExpr ce te ee  -> "IfExpr (" ++ show ce ++ ") (" ++ show te ++ ") (" ++ show ee ++ ")"
+    LetExpr b l e   -> "LetExpr (" ++ show b ++ ") (" ++ show l ++ ") (" ++ show e ++ ")"
+    Lambda binds body -> "Lambda (" ++ show binds ++ ") (" ++ show body ++ ")"
+    App func args   -> "App (" ++ show func ++ ") (" ++ show args ++ ")"
 
 instance showBinding :: Show Binding where
   show binding = case binding of
-    Lit atom     -> "(Lit " ++ show atom ++ ")"
-    ConsLit b bs -> "(ConsLit " ++ show b ++ ":" ++ show bs ++ ")"
-    ListLit bs   -> "(ListLit " ++ show bs ++ ")"
-    NTupleLit ls -> "(NTupleLit " ++ show ls ++ ")"
+    Lit atom     -> "Lit (" ++ show atom ++ ")"
+    ConsLit b bs -> "ConsLit (" ++ show b ++ ") (" ++ show bs ++ ")"
+    ListLit bs   -> "ListLit (" ++ show bs ++ ")"
+    NTupleLit ls -> "NTupleLit (" ++ show ls ++ ")"
 
 instance showDefinition :: Show Definition where
-  show (Def name bindings body) = "(Def " ++ show name ++ " " ++ show bindings ++ " " ++ show body ++ ")"
+  show (Def name bindings body) = "Def " ++ show name ++ " (" ++ show bindings ++ ") (" ++ show body ++ ")"

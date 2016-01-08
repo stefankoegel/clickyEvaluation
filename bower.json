@@ -19,6 +19,7 @@
     "purescript-lists": "~0.7.6",
     "purescript-transformers": "~0.8.1",
     "purescript-string-parsers": "~0.6.3",
+    "purescript-parsing": "~0.7.1",
     "purescript-dom": "~0.2.8",
     "purescript-maps": "~0.5.0",
     "purescript-jquery": "*",
