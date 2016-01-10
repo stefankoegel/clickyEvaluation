@@ -10,11 +10,13 @@ import Data.Tuple.Nested
 
 import Control.Alt         ((<|>))
 import Control.Apply       ((<*), (*>))
+import Control.Lazy        (fix)
+import Data.Identity
 
-import Text.Parsing.StringParser
-import Text.Parsing.StringParser.Combinators as PC
-import Text.Parsing.StringParser.Expr
-import Text.Parsing.StringParser.String
+import Text.Parsing.Parser
+import Text.Parsing.Parser.Combinators as PC
+import Text.Parsing.Parser.Expr
+import Text.Parsing.Parser.String
 
 import AST
 
@@ -22,49 +24,70 @@ import AST
 -- Parsers for Atoms
 ---------------------------------------------------------
 
+-- | Skip spaces and tabs
+eatSpaces :: Parser String Unit
+eatSpaces = void $ many $ oneOf [' ','\t']
+
+anyDigit :: Parser String Char
+anyDigit = oneOf $ String.toCharArray "0123456789"
+
 -- | Parser for Int. (0 to 2^31-1)
-int :: Parser Atom
+int :: Parser String Atom
 int = do
-  ds <- PC.many1 anyDigit
-  let value = floor $ readInt 10 $ String.fromCharArray $ fromList ds
+  d <- anyDigit
+  ds <- many anyDigit
+  let value = floor $ readInt 10 $ String.fromCharArray $ fromList (Cons d ds)
   return $ AInt value
 
+-- | Parser for Boolean
+bool :: Parser String Atom
+bool = do
+  PC.choice $ toList [string "True" *> return (Bool true), string "False" *> return (Bool false)]
+
 -- | Parser for characters at the start of variables
-lowerCaseLetter :: Parser Char
-lowerCaseLetter = oneOf $ toList $ String.toCharArray "_abcdefghijklmnopqrstuvwxyz"
+lowerCaseLetter :: Parser String Char
+lowerCaseLetter = oneOf $ String.toCharArray "_abcdefghijklmnopqrstuvwxyz"
 
 -- | Parser for characters at the start of constructors and types
-upperCaseLetter :: Parser Char
-upperCaseLetter = oneOf $ toList $ String.toCharArray "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+upperCaseLetter :: Parser String Char
+upperCaseLetter = oneOf $ String.toCharArray "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 -- | Parser for all characters after the first in names
-anyLetter :: Parser Char
+anyLetter :: Parser String Char
 anyLetter = lowerCaseLetter <|> upperCaseLetter <|> char '\''
 
 -- | List of reserved key words
 reservedWords :: List String
 reservedWords = toList ["if", "then", "else", "let", "in"]
 
--- | Parser for variables
-variable :: Parser Atom
-variable = do
+-- | Parser for variables names
+name :: Parser String String
+name = do
   c <- lowerCaseLetter
-  cs <- PC.many anyLetter
-  let var = String.fromCharArray $ fromList $ Cons c cs
-  case elemIndex var reservedWords of
-    Nothing -> return $ Name var
-    Just _  -> fail $ var ++ " is a reserved word!"
+  cs <- many anyLetter
+  let nm = String.fromCharArray $ fromList $ Cons c cs
+  case elemIndex nm reservedWords of
+    Nothing -> return nm 
+    Just _  -> fail $ nm ++ " is a reserved word!"
+
+-- | Parser for variable atoms
+variable :: Parser String Atom
+variable = Name <$> name
+
+-- | Parser for atoms
+atom :: Parser String Atom
+atom = int <|> variable <|> bool
 
 ---------------------------------------------------------
 -- Parsers for Expressions
 ---------------------------------------------------------
 
 -- | Fail if the specified parser matches.
-notFollowedBy :: forall a. Parser a -> Parser Unit
-notFollowedBy p = try $ (try p *> fail "Negated parser succeeded") <|> return unit
+notFollowedBy :: forall a. Parser String a -> Parser String Unit
+notFollowedBy p = PC.try $ (PC.try p *> fail "Negated parser succeeded") <|> return unit
 
 -- | Table for operator parsers and their AST representation. Sorted by precedence.
-infixOperators :: Array (Array (Tuple3 (Parser String) Op Assoc))
+infixOperators :: Array (Array (Tuple3 (Parser String String) Op Assoc))
 infixOperators =
   [ [ (tuple3 (string ".") Composition AssocRight) ]
   , [ (tuple3 (string "^") Power AssocRight) ]
@@ -72,7 +95,7 @@ infixOperators =
     , (tuple3 (string "`div`") Div AssocLeft)
     , (tuple3 (string "`mod`") Mod AssocLeft)
     ]
-  , [ (tuple3 (try $ string "+" <* notFollowedBy (char '+')) Add AssocLeft)
+  , [ (tuple3 (PC.try $ string "+" <* notFollowedBy (char '+')) Add AssocLeft)
     , (tuple3 (string "-") Sub AssocLeft)
     ]
   , [ (tuple3 (string ":") Colon AssocRight)
@@ -80,8 +103,8 @@ infixOperators =
     ]
   , [ (tuple3 (string "==") Equ AssocNone)
     , (tuple3 (string "/=") Neq AssocNone)
-    , (tuple3 (try $ string "<" <* notFollowedBy (char '=')) Lt AssocNone)
-    , (tuple3 (try $ string ">" <* notFollowedBy (char '=')) Gt AssocNone)
+    , (tuple3 (PC.try $ string "<" <* notFollowedBy (char '=')) Lt AssocNone)
+    , (tuple3 (PC.try $ string ">" <* notFollowedBy (char '=')) Gt AssocNone)
     , (tuple3 (string "<=") Leq AssocNone)
     , (tuple3 (string ">=") Geq AssocNone)
     ]
@@ -91,41 +114,50 @@ infixOperators =
   ]
 
 -- | Table of operators (math, boolean, ...)
-operatorTable :: OperatorTable Expr
+operatorTable :: OperatorTable Identity String Expr
 operatorTable = ((uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$>) <$> infixOperators
 
 -- | Parser for operators
-opParser :: Parser Op
+opParser :: Parser String Op
 opParser = PC.choice $ ((uncurry3 (\p op _ -> p *> return op)) <$>) $ concat $ (toList <$>) $ toList infixOperators
 
 -- | Parse an expression between brackets
-brackets :: forall a. Parser a -> Parser a
-brackets p = PC.between (char '(' *> skipSpaces) (skipSpaces *> char ')') p
+brackets :: forall a. Parser String a -> Parser String a
+brackets p = PC.between (char '(' *> eatSpaces) (eatSpaces *> char ')') p
 
 -- | Parse an expression between spaces (backtracks)
-spaced :: forall a. Parser a -> Parser a
-spaced p = try $ PC.between skipSpaces skipSpaces p
+spaced :: forall a. Parser String a -> Parser String a
+spaced p = PC.try $ PC.between eatSpaces eatSpaces p
 
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
-base :: Parser Expr -> Parser Expr
+base :: Parser String Expr -> Parser String Expr
 base expr =
-      try (tuplesOrBrackets expr)
+      PC.try (tuplesOrBrackets expr)
+  <|> PC.try (lambda expr)
   <|> section expr
   <|> list expr
-  <|> (Atom <$> (int <|> variable))
+  <|> (Atom <$> atom)
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
-syntax :: Parser Expr -> Parser Expr
+syntax :: Parser String Expr -> Parser String Expr
 syntax expr = 
-      try (ifThenElse expr)
-  <|> try (letExpr expr)
-  <|> try (lambda expr)
+      PC.try (ifThenElse expr)
+  <|> PC.try (letExpr expr)
   <|> applicationOrSingleExpression expr
 
+-- | Parser for function application or single expressions
+applicationOrSingleExpression :: Parser String Expr -> Parser String Expr
+applicationOrSingleExpression expr = do
+  e <- (base expr)
+  mArgs <- PC.optionMaybe (PC.try $ eatSpaces *> ((PC.try (base expr)) `PC.sepEndBy1` eatSpaces))
+  case mArgs of
+    Nothing   -> return e
+    Just args -> return $ App e args
+
 -- | Parse an if_then_else construct
-ifThenElse :: Parser Expr -> Parser Expr
+ifThenElse :: Parser String Expr -> Parser String Expr
 ifThenElse expr = do
-  string "if" *> PC.lookAhead (oneOf $ toList [' ', '\t', '\n', '('])
+  string "if" *> PC.lookAhead (oneOf [' ', '\t', '\n', '('])
   testExpr <- spaced expr
   string "then"
   thenExpr <- spaced expr
@@ -134,31 +166,31 @@ ifThenElse expr = do
   return $ IfExpr testExpr thenExpr elseExpr
 
 -- | Parser for tuples or bracketed expressions.
-tuplesOrBrackets :: Parser Expr -> Parser Expr
+tuplesOrBrackets :: Parser String Expr -> Parser String Expr
 tuplesOrBrackets expr = do
-  char '(' *> skipSpaces
+  char '(' *> eatSpaces
   e <- expr
-  skipSpaces
-  mes <- PC.optionMaybe $ try $ do
-    char ',' *> skipSpaces
-    expr `PC.sepBy1` (try $ whiteSpace *> char ',' *> whiteSpace)
-  skipSpaces
+  eatSpaces
+  mes <- PC.optionMaybe $ PC.try $ do
+    char ',' *> eatSpaces
+    expr `PC.sepBy1` (PC.try $ eatSpaces *> char ',' *> eatSpaces)
+  eatSpaces
   char ')'
   case mes of
     Nothing -> return e
     Just es -> return $ NTuple (Cons e es)
 
 -- | Parser for operator sections
-section :: Parser Expr -> Parser Expr
+section :: Parser String Expr -> Parser String Expr
 section expr = do
   char '('
-  skipSpaces
+  eatSpaces
   me1 <- PC.optionMaybe (syntax expr)
-  skipSpaces
+  eatSpaces
   op <- opParser
-  skipSpaces
+  eatSpaces
   me2 <- PC.optionMaybe (syntax expr)
-  skipSpaces
+  eatSpaces
   char ')'
   case me1 of
     Nothing ->
@@ -171,86 +203,98 @@ section expr = do
         Just _ -> fail "Cannot have a section with two expressions!"
 
 -- | Parser for lists
-list :: Parser Expr -> Parser Expr
+list :: Parser String Expr -> Parser String Expr
 list expr = do
   char '['
-  skipSpaces
-  exprs <- expr `PC.sepBy` (try $ whiteSpace *> char ',' *> whiteSpace)
-  skipSpaces
+  eatSpaces
+  exprs <- expr `PC.sepBy` (PC.try $ eatSpaces *> char ',' *> eatSpaces)
+  eatSpaces
   char ']'
   return $ List exprs
 
 -- | Parse a lambda expression
-lambda :: Parser Expr -> Parser Expr
+lambda :: Parser String Expr -> Parser String Expr
 lambda expr = do
-  char '(' *> skipSpaces
-  char '\\' *> skipSpaces
-  binds <- (binding `PC.sepEndBy1` whiteSpace)
-  string "->" *> skipSpaces
+  char '(' *> eatSpaces
+  char '\\' *> eatSpaces
+  binds <- (binding `PC.sepEndBy1` eatSpaces)
+  string "->" *> eatSpaces
   body <- expr
+  eatSpaces
+  char ')'
   return $ Lambda binds body
 
 
 -- | Parser for let expression
-letExpr :: Parser Expr -> Parser Expr
+letExpr :: Parser String Expr -> Parser String Expr
 letExpr expr = do
-  string "let" *> skipSpaces
+  string "let" *> eatSpaces
   bnd <- binding
-  skipSpaces *> char '=' *> skipSpaces
+  eatSpaces *> char '=' *> eatSpaces
   lexp <- expr
-  skipSpaces *> string "in" *> skipSpaces
+  eatSpaces *> string "in" *> eatSpaces
   body <- expr
   return $ LetExpr bnd lexp body
 
--- | Parser for function application or single expressions
-applicationOrSingleExpression :: Parser Expr -> Parser Expr
-applicationOrSingleExpression expr = do
-  e <- (base expr)
-  mArgs <- PC.optionMaybe (try $ skipSpaces *> (try (base expr)) `PC.sepEndBy1` whiteSpace)
-  case mArgs of
-    Nothing   -> return e
-    Just args -> return $ App e args
-
 
 -- | Parse an arbitrary expression
-expression :: Parser Expr
-expression = PC.fix $ \expr -> buildExprParser operatorTable (syntax expr)
+expression :: Parser String Expr
+expression = fix $ \expr -> buildExprParser operatorTable (syntax expr)
 
 ---------------------------------------------------------
 -- Parsers for Bindings
 ---------------------------------------------------------
 
-lit :: Parser Binding
-lit = Lit <$> (int <|> variable)
+lit :: Parser String Binding
+lit = Lit <$> atom
 
-consLit :: Parser Binding -> Parser Binding
+consLit :: Parser String Binding -> Parser String Binding
 consLit bnd = do
-  char '(' *> skipSpaces
+  char '(' *> eatSpaces
   b <- bnd
-  skipSpaces *> char ':' *> skipSpaces
+  eatSpaces *> char ':' *> eatSpaces
   bs <- bnd
-  skipSpaces *> char ')'
+  eatSpaces *> char ')'
   return $ ConsLit b bs
 
-listLit :: Parser Binding -> Parser Binding
+listLit :: Parser String Binding -> Parser String Binding
 listLit bnd = do
-  char '[' *> skipSpaces
-  bs <- bnd `PC.sepBy` (try $ whiteSpace *> char ',' *> whiteSpace)
-  skipSpaces *> char ']'
+  char '[' *> eatSpaces
+  bs <- bnd `PC.sepBy` (PC.try $ eatSpaces *> char ',' *> eatSpaces)
+  eatSpaces *> char ']'
   return $ ListLit bs
 
-tupleLit :: Parser Binding -> Parser Binding
+tupleLit :: Parser String Binding -> Parser String Binding
 tupleLit bnd = do
-  char '(' *> skipSpaces
+  char '(' *> eatSpaces
   b <- bnd
-  skipSpaces *> char ',' *> skipSpaces
-  bs <- bnd `PC.sepBy1` (try $ whiteSpace *> char ',' *> whiteSpace)
-  skipSpaces *> char ')'
+  eatSpaces *> char ',' *> eatSpaces
+  bs <- bnd `PC.sepBy1` (PC.try $ eatSpaces *> char ',' *> eatSpaces)
+  eatSpaces *> char ')'
   return $ NTupleLit (Cons b bs)
 
-binding :: Parser Binding
-binding = PC.fix  $ \bnd ->
-      (try $ consLit bnd)
+binding :: Parser String Binding
+binding = fix  $ \bnd ->
+      (PC.try $ consLit bnd)
   <|> (tupleLit bnd)
   <|> (listLit bnd)
   <|> lit
+
+---------------------------------------------------------
+-- Parsers for Definitions
+---------------------------------------------------------
+
+definition :: Parser String Definition
+definition = do
+  defName <- name
+  eatSpaces
+  binds <- binding `PC.sepEndBy` eatSpaces
+  char '='
+  eatSpaces
+  body <- expression
+  return $ Def defName binds body
+
+definitions :: Parser String (List Definition)
+definitions = do
+  whiteSpace
+  definition `PC.sepEndBy` whiteSpace
