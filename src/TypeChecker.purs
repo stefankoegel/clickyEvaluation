@@ -40,10 +40,10 @@ data AD
     | TTuple (List Type)
 
 instance showType :: Show Type where
-  show (TypVar a) = show a
-  show (TypCon a) = show a
-  show (TypArr a b) = "(" ++ show a ++ " -> " ++ show b ++ ")"
-  show (AD a) = show a
+  show (TypVar var) = "(TypVar  " ++ show var ++ ")"
+  show (TypCon con) = "(TypCon " ++ con ++ ")"
+  show (TypArr t1 t2) = "(TypArr "++ show t1 ++" " ++ show t2 ++ ")"
+  show (AD ad) = "(AD "++ show ad ++ ")"
 
 instance eqType :: Eq Type where
   eq (TypVar a) (TypVar b) = a == b
@@ -59,11 +59,11 @@ instance eqTVar :: Eq TVar where
   eq (TVar a) (TVar b) = a == b
 
 instance showTVar :: Show TVar where
-  show (TVar a) = show a
+  show (TVar a) = "(TVar " ++ show a ++ ")"
 
 instance showAD :: Show AD where
-  show (TList a) = "[" ++ show a ++ "]"
-  show (TTuple a) = "(" ++ foldr (\t s -> show t ++","++s) ")" a
+  show (TList t) = "(TList "++ show t ++")"
+  show (TTuple tl) = "(TTuple "++ show tl ++ ")"
 
 instance eqAD :: Eq AD where
   eq (TList a) (TList b) = eq a b
@@ -72,7 +72,7 @@ instance eqAD :: Eq AD where
 data Scheme = Forall (List TVar) Type
 
 instance showScheme :: Show Scheme where
-  show (Forall a b) = "forall " ++ show a ++ "." ++ show b
+  show (Forall a b) = "Forall (" ++ show a ++ ") " ++ show b
 
 data TypeEnv = TypeEnv (Map.Map Atom Scheme)
 
@@ -94,7 +94,6 @@ data TypeError
   = UnificationFail Type Type
   | InfiniteType TVar Type
   | UnboundVariable String
-  | Ambigious (List Constraint)
   | UnificationMismatch (List Type) (List Type)
   | UnknownError String
 
@@ -102,9 +101,15 @@ instance showTypeError :: Show TypeError where
   show (UnificationFail a b) = "Cant unify " ++ show a ++ " with " ++  show b
   show (InfiniteType a b ) = "Cant construct Infinite type" ++  show a ++ " ~ " ++ show b
   show (UnboundVariable a) = show a ++ " not in scope"
-  show (Ambigious _) = "Ambigious TODO error msg"
   show (UnificationMismatch a b) = "Cant unify " ++ show a ++ " with " ++ show b
   show (UnknownError a) = "UnknownError " ++ show a
+
+instance eqTypeError :: Eq TypeError where
+  eq (UnificationFail a b) (UnificationFail a' b') = (a == a') && (b == b')
+  eq (InfiniteType a b) (InfiniteType a' b') = (a == a') && (b == b')
+  eq (UnboundVariable a) (UnboundVariable a') = (a == a')
+  eq (UnificationMismatch a b) (UnificationMismatch a' b') = (a == a') && (b == b')
+  eq (UnknownError a) (UnknownError a') = (a == a')
 
 
 class Substitutable a where
