@@ -41,7 +41,7 @@ data AD
 
 instance showType :: Show Type where
   show (TypVar var) = "(TypVar  " ++ show var ++ ")"
-  show (TypCon con) = "(TypCon " ++ con ++ ")"
+  show (TypCon con) = "(TypCon " ++ show con ++ ")"
   show (TypArr t1 t2) = "(TypArr "++ show t1 ++" " ++ show t2 ++ ")"
   show (AD ad) = "(AD "++ show ad ++ ")"
 
@@ -63,7 +63,7 @@ instance showTVar :: Show TVar where
 
 instance showAD :: Show AD where
   show (TList t) = "(TList "++ show t ++")"
-  show (TTuple tl) = "(TTuple "++ show tl ++ ")"
+  show (TTuple tl) = "(TTuple ("++ show tl ++ "))"
 
 instance eqAD :: Eq AD where
   eq (TList a) (TList b) = eq a b
@@ -98,11 +98,11 @@ data TypeError
   | UnknownError String
 
 instance showTypeError :: Show TypeError where
-  show (UnificationFail a b) = "Cant unify " ++ show a ++ " with " ++  show b
-  show (InfiniteType a b ) = "Cant construct Infinite type" ++  show a ++ " ~ " ++ show b
-  show (UnboundVariable a) = show a ++ " not in scope"
-  show (UnificationMismatch a b) = "Cant unify " ++ show a ++ " with " ++ show b
-  show (UnknownError a) = "UnknownError " ++ show a
+  show (UnificationFail a b) = "(UnificationFail "++ show a ++ " " ++ show b ++")"
+  show (InfiniteType a b ) = "(InfiniteType " ++ show a ++ " " ++ show b ++ ")"
+  show (UnboundVariable a) = "(UnboundVariable " ++ show a ++ ")"
+  show (UnificationMismatch a b) = "(UnificationMismatch " ++ show a ++ " " ++ show b ++ ")"
+  show (UnknownError a) = "(UnknownError " ++ show a ++ ")"
 
 instance eqTypeError :: Eq TypeError where
   eq (UnificationFail a b) (UnificationFail a' b') = (a == a') && (b == b')

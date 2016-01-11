@@ -10,6 +10,7 @@ import Data.List
 import Data.Tuple
 import Data.Map as Map
 import Data.Maybe
+import Data.Foldable
 
 import Text.Parsing.Parser
 
@@ -34,19 +35,19 @@ test:: forall eff. String -> Either TypeError Scheme -> Either TypeError Scheme
  -> Eff (console :: CONSOLE | eff ) Unit
 test name expected actuall = if eqTypErrScheme expected actuall
   then log $ "Typing success ("  ++ name ++ ")"
-  else log $ "Typing fail (" ++ name ++ ") :  expected result: "
-    ++ show expected ++ " actuall result: " ++ show actuall
+  else log $ "\n \n Typing fail (" ++ name ++ ") :  expected result: \n"
+    ++ show expected ++ "\n actuall result: \n" ++ show actuall ++ "\n \n"
+     ++ "Pretty Print expected: \n" ++ prettyPrint expected
+      ++ "\n Pritty Print actuall: \n" ++ prettyPrint actuall ++ "\n \n"
 
 eqTypErrScheme:: Either TypeError Scheme -> Either TypeError Scheme -> Boolean
 eqTypErrScheme (Left a) (Left a') = (a == a')
 eqTypErrScheme (Right a) (Right a') = eqScheme a a'
-  -- let m =  unify a a' in  case evalState (runExceptT m) initUnique of
-  -- Left _ -> false
-  -- Right _ -> true
 eqTypErrScheme _ _ = false
 
 eqScheme :: Scheme -> Scheme -> Boolean
-eqScheme (Forall l1 t1) (Forall l2 t2) = ((length l1) == (length l2)) && (fst (eqType Map.empty t1 t2))
+eqScheme (Forall l1 t1) (Forall l2 t2)
+  = ((length l1) == (length l2)) && (fst (eqType Map.empty t1 t2))
 
 eqType:: Map.Map TVar TVar -> Type -> Type ->Tuple Boolean (Map.Map TVar TVar)
 eqType map (TypVar a) (TypVar b) = case  Map.lookup a map of
@@ -59,6 +60,7 @@ eqType map (TypArr a b) (TypArr a' b') = Tuple (fst tup1 && fst tup2) (snd tup2)
   tup2 = eqType (snd tup1) b b'
 eqType map (AD (TList a)) (AD (TList b)) = eqType map a b
 eqType map (AD (TTuple a)) (AD (TTuple b)) = eqTypeList map a b
+eqType map _ _ = Tuple false map
 
 eqTypeList:: Map.Map TVar TVar -> List Type -> List Type -> Tuple Boolean (Map.Map TVar TVar)
 eqTypeList map (Cons a as) (Cons b bs) = let tup1 = eqType map a b in if (fst tup1)
@@ -79,9 +81,17 @@ tvar s = TypVar $ TVar s
 out::forall eff. String -> Eff (console :: CONSOLE | eff ) Unit
 out s = log s
 
+parseExp:: String -> Either ParseError Expr
+parseExp exp = runParser exp expression
+
 typeStr:: String -> Either TypeError Scheme
 typeStr expS = case runParser expS expression of
   Right exp -> runInfer $ infer emptyTyenv exp
+  Left _ -> Left $ UnknownError "Parse Error"
+
+typeStrPre:: String -> Either TypeError Scheme
+typeStrPre expS = case runParser expS expression of
+  Right exp -> typeProgramn Test.Parser.parsedPrelude exp
   Left _ -> Left $ UnknownError "Parse Error"
 
 typeExp:: Expr -> Either TypeError Scheme
@@ -89,12 +99,20 @@ typeExp exp = runInfer $ infer emptyTyenv exp
 
 prettyPrint:: Either TypeError Scheme -> String
 prettyPrint a@(Left _) = show a
-prettyPrint (Right (Forall _ t)) = f t
+prettyPrint (Right (Forall _ t)) = prittyPrintType t
+
+prittyPrintType:: Type -> String -- TODO
+prittyPrintType = f
   where
-  f (TypVar a) = show a
+  f (TypVar (TVar a)) = show a
   f (TypCon a) = show a
   f (TypArr t1 t2) = "(" ++ f t1 ++ " -> " ++ f t2 ++ ")"
-  f (AD a) = show a
+  f (AD a) = prittyPrintAD a
+
+
+prittyPrintAD:: AD -> String
+prittyPrintAD (TList a) = "[" ++ prittyPrintType a ++ "]"
+prittyPrintAD (TTuple a) = "(" ++ foldr (\t s -> prittyPrintType t ++","++s) ")" a
 
 printTypeExp::forall eff. Expr -> Eff (console :: CONSOLE | eff ) Unit
 printTypeExp e = out $ prettyPrint $ typeExp e
@@ -102,74 +120,75 @@ printTypeExp e = out $ prettyPrint $ typeExp e
 printTypeStr::forall eff. String -> Eff (console :: CONSOLE | eff ) Unit
 printTypeStr s = out $ prettyPrint $ typeStr s
 
+-- default 1
+d1 = Right (Forall Nil $ tvar "a")
+
 runTests :: forall eff. Eff (console :: CONSOLE | eff) Unit
 runTests = do
   log "Running Typing Tests"
 
-  testInfer "SectL" (SectL (aint 3) Power) infer (Right (Forall Nil $ TypArr (TypCon "Int") (TypCon "Int")))
+  testInfer "SectL" (SectL (aint 3) Power)
+    infer (Right (Forall Nil $ TypArr (TypCon "Int") (TypCon "Int")))
+  testInfer "SectR" (SectR Power (aint 3))
+    infer (Right (Forall (Nil) (TypArr (TypCon "Int") (TypCon "Int"))))
   testInfer "Lambda1" (Lambda (toList $ [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c",Lit $ Name "d"]) (App (aname "a") (toList [aname "b", aname "c", aname "d"])))
     infer (Right (Forall (toList [TVar "b",TVar "c", TVar "d", TVar "e"]) (TypArr (TypArr (tvar "b") (TypArr (tvar "c") (TypArr (tvar "d") (tvar "e")))) (TypArr ( tvar "b")  ((TypArr (tvar "c") (TypArr (tvar "d") (tvar "e"))))))))
   testInfer "Lambda2" (Lambda (toList [Lit $ Name "a", Lit $ Name "b"]) (App (aname "a") (toList [aname "b"])))
     infer (Right (Forall (Cons ((TVar "t_3")) (Cons ((TVar "t_4")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_3")) (TypVar  (TVar "t_4"))) (TypArr (TypVar  (TVar "t_3")) (TypVar  (TVar "t_4"))))))
+  testInfer "List1" (List (toList [aint 1, aint 2, aint 3, aint 4, aint 5])) infer (Right (Forall (Nil) (AD (TList (TypCon "Int")))))
+  testInfer "List2" (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
+    infer (Right (Forall (Nil) (AD (TList (TypCon "Int")))))
+  testInfer "List3" (List $ toList [PrefixOp Add, aint 4])
+    infer (Left ((UnificationFail (TypCon "Int") (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int"))))))
+  testInfer "Nil List" (List Nil)
+    infer   (Right (Forall (Cons ((TVar "t_0")) (Nil)) (AD (TList (TypVar  (TVar "t_0"))))))
+  testInfer "Append" (Binary Append
+    (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
+    (List Nil))
+    infer (Right (Forall (Nil) (AD (TList (TypCon "Int")))))
+  testInfer "Colon" (Binary Colon (aint 3) (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4),Atom $ Char "Hallo"]))
+    infer (Left ((UnificationFail (TypCon "Char") (TypCon "Int"))))
+  testInfer "NTuple" (NTuple (toList [Binary Add (aint 1) (aint 2), aint 3]))
+    infer (Right (Forall (Nil) (AD (TTuple (Cons ((TypCon "Int")) (Cons ((TypCon "Int")) (Nil)))))))
+  testInfer "SectR Colon" (SectR Colon $ List $ toList [aint 3])
+    infer (Right (Forall (Nil) (TypArr (TypCon "Int") (AD (TList (TypCon "Int"))))))
+  testInfer "Def ~map" (Def "map" (toList [Lit $ Name "f", Lit $ Name "xs"]) (App (aname "map") (toList [aname "f",aname"xs"])))
+    inferDef (Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_4")) (Cons ((TVar "t_5")) (Nil)))) (TypArr (TypVar  (TVar "t_2")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_5"))))))
+  testInfer "Lambda Wildcard" (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aint 5))
+    infer (Right (Forall (Cons ((TVar "t_1")) (Cons ((TVar "t_3")) (Nil))) (TypArr (TypVar  (TVar "t_1")) (TypArr (TypVar  (TVar "t_3")) (TypCon "Int")))))
+  testInfer "Lambda ConsBinding" (Lambda (toList [ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (aname "x"))
+    infer (Right (Forall (Cons ((TVar "t_2")) (Nil)) (TypArr (AD (TList (TypVar  (TVar "t_2")))) (TypVar  (TVar "t_2")))))
+  testInfer "singel map" (Def "map" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App  (PrefixOp Colon) (toList [App (aname "f") $ toList [(aname"x")], App (aname "map") (toList [aname"f", aname"xs"])])))
+    inferDef (Right (Forall (Cons ((TVar "t_11")) (Cons ((TVar "t_5")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_5")) (TypVar  (TVar "t_11"))) (TypArr (AD (TList (TypVar  (TVar "t_5")))) (AD (TList (TypVar  (TVar "t_11"))))))))
 
+  testInfer "foldr" (Def "foldr" (toList [Lit $ Name "f", Lit $ Name "ini", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App (aname "f") (toList [aname "x",App (aname "foldr") (toList [aname "f", aname "ini" ,aname "xs"  ] )])))
+    inferDef (Right (Forall ((Cons ((TVar "t_4")) (Cons ((TVar "t_7")) Nil))) (TypArr (TypArr (TypVar  (TVar "t_7")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_4")))) (TypArr (TypVar  (TVar "t_4")) (TypArr (AD (TList (TypVar  (TVar "t_7")))) (TypVar  (TVar "t_4")))))))
 
-testExp2 = (Lambda (toList [Lit $ Name "a", Lit $ Name "b"]) (App (aname "a") (toList [aname "b"])))
-testExp3 = (SectL (aint 3) Power)
-testExp4 = (SectR  Power (aint 3))
-testExp5 = (List (toList [aint 1, aint 2, aint 3, aint 4, aint 5]))
-testExp6 = (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
-testExp7 = (List $ toList [PrefixOp Add, aint 4])
-testExp8 = (List Nil)
-testExp9 = (Binary Append
-  (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
-  (List Nil))
-testExp10 = (Binary Colon (aint 3) (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4),Atom $ Char "Hallo"]))
-testExp11 = NTuple (toList [Binary Add (aint 1) (aint 2), aint 3])
-testExp12 = (SectR Colon $ List $ toList [aint 3])
-testExp13 = (SectL (aint 3) Colon)
-testExp14 = (Def "map" (toList [Lit $ Name "f", Lit $ Name "xs"]) (App (aname "map") (toList [aname "f",aname"xs"])))
-testExp15 = (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aint 5))
-testExp16 = (Lambda (toList [ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (aname "x"))
-testExp17 = Def "map" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App  (PrefixOp Colon) (toList [App (aname "f") $ toList [(aname"x")], App (aname "map") (toList [aname"f", aname"xs"])]))
-testExp18 = Def "foldr" (toList [Lit $ Name "f", Lit $ Name "ini", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App (aname "f") (toList [aname "x",App (aname "foldr") (toList [aname "f", aname"ini", aname"xs"])]))
-testExp19 = Def "fold" (toList [Lit $ Name "f", Lit $ Name "ini", Lit $ Name "x", Lit $ Name "xs"]) (App (aname "f") (toList [aname "x", App (aname "fold") (toList [aname "f", aname "ini", aname"x", aname"xs"])]))
-testExp20 = Def "f" (toList [Lit $ Name "fs",Lit $ Name "x"]) (App (aname "fs") (toList [aname "x", App (aname "f") (toList [aname "fs",aname "x"])]))
-testExp21 = Def "f" (toList [Lit $ Name "x"]) (App (aname "f") (toList [aname "x"]))
-testExp22 = (LetExpr (Lit $ Name "x") (aint 3) (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aname "x")))
-testExp24 = Def "list" (toList [ListLit (toList [(Lit $ Name "x1"),Lit $ Name "x2"])]) (aname "x1")
+  testInfer "let Expr"  (LetExpr (Lit $ Name "x") (aint 3) (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aname "x")))
+    infer (Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_4")) (Nil))) (TypArr (TypVar  (TVar "t_2")) (TypArr (TypVar  (TVar "t_4")) (TypCon "Int")))))
+  testInfer "ConsLit Binding 1" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "x"))
+    inferDef (Right (Forall (Cons ((TVar "t_2")) (Nil)) (TypArr (AD (TList (TypVar  (TVar "t_2")))) (TypVar  (TVar "t_2")))))
+  testInfer "ConsLit Binding 2" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xs"))
+    inferDef (Right (Forall (Cons ((TVar "t_2")) (Nil)) (TypArr (AD (TList (TypVar  (TVar "t_2")))) (TypVar  (TVar "t_2")))))
+  testInfer "ConsLit Binding 3" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xss"))
+    inferDef (Right (Forall (Cons ((TVar "t_2")) (Nil)) (TypArr (AD (TList (TypVar  (TVar "t_2")))) (AD (TList (TypVar  (TVar "t_2")))))))
+  testInfer "Binding Tuple 1" (Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])]) (aname "a"))
+    inferDef (Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_3")) (Nil))) (TypArr (AD (TTuple $ Cons ((TypVar  (TVar "t_2"))) (Cons ((TypVar  (TVar "t_3"))) (Nil)))) (TypVar  (TVar "t_2")))))
+  testInfer "Binding Tuple 2" (Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])]) (aname "b"))
+    inferDef (Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_3")) (Nil))) (TypArr (AD (TTuple (Cons ((TypVar  (TVar "t_2"))) (Cons ((TypVar  (TVar "t_3"))) (Nil))))) (TypVar  (TVar "t_3")))))
+  testInfer "Binding Tuple 3" (Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"])))
+    inferDef (Right (Forall (Cons ((TVar "t_3")) (Cons ((TVar "t_4")) (Cons ((TVar "t_5")) (Nil)))) (TypArr (AD (TTuple (Cons ((TypArr (TypVar  (TVar "t_3")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_5"))))) (Cons ((TypVar  (TVar "t_3"))) (Cons ((TypVar  (TVar "t_4"))) (Nil)))))) (TypVar  (TVar "t_5")))))
+  testInfer "ListLit Binding" (Def "list" (toList [ListLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"])))
+    inferDef (Left ((InfiniteType (TVar "t_4") (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_7"))))))
+  testInfer "NTupleLit Binding LetExp"  (LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (App (aname "a") (toList [aname "b"])))
+    infer (Right (Forall (Nil) (TypCon "Char")))
 
-testExp25 = Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xs")
-testExp26 = Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xss")
-testExp27 = Def "list" (toList [(ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xss")
+  testInfer "zipWith - Group" (toList [Def "zipWith" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
+      (App (PrefixOp Colon) (toList [App (aname "f") (toList [aname "x",aname "y"]), App (aname "zipWith") (toList [aname "f",aname"xs",aname "ys"])])),
+      Def "zipWith" (toList [Lit $ Name "_",ListLit Nil,Lit $ Name "_"]) (List Nil),
+      Def "zipWith" (toList [Lit $ Name "_",Lit $ Name "_",ListLit Nil]) (List Nil)])
+    inferGroup (Right (Forall (Cons ((TVar "t_23")) (Cons ((TVar "t_33")) (Cons ((TVar "t_34")) (Nil)))) (TypArr (TypArr (TypVar  (TVar "t_23")) (TypArr (TypVar  (TVar "t_33")) (TypVar  (TVar "t_34")))) (TypArr (AD (TList (TypVar  (TVar "t_23")))) (TypArr (AD (TList (TypVar  (TVar "t_33")))) (AD (TList (TypVar  (TVar "t_34")))))))))
 
-testExp23 = Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "x") --wrong
-
-testExp30 = Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])]) (aname "b")
-testExp31 = Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])]) (aname "a")
-testExp32 = Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"]))
-testExp33 = Def "list" (toList [ListLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"]))
-
-testExp34 = LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (App (aname "a") (toList [aname "b"]))
-testExp35 = LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (aname "a")
-
-testExp36 = toList [testExp17,testExp37]
-testExp37 = Def "map" (toList [Lit $ Name "f", ListLit Nil]) (List Nil)
-
-testExp40 = toList [Def "a" (Nil) (aint 3),Def "a" (toList [Lit $ Name "x"]) (aint 5)]
-
-testExp41 = Def "zipWith" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
-  (App (PrefixOp Colon) (toList [App (aname "f") (toList [aname "x",aname "y"]), App (aname "zipWith") (toList [aname "f",aname"xs",aname "ys"])]))
-textExp42 = Def "zipWith" (toList [Lit $ Name "_",ListLit Nil,Lit $ Name "_"]) (List Nil)
-textExp43 = Def "zipWith" (toList [Lit $ Name "_",Lit $ Name "_",ListLit Nil]) (List Nil)
-testExp44 = toList [textExp42,textExp43,testExp41]
-
-testExp45 = Def "zip" (toList [ ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
-  (App (PrefixOp Colon) (toList [NTuple (toList [aname "x",aname "y"]), App (aname "zip") (toList [aname "xs",aname "ys"])]))
-testExp46 = Def "zip" (toList [ListLit Nil,Lit $ Name "_"]) (List Nil)
-testExp47 = Def "zip" (toList [Lit $ Name "_",ListLit Nil]) (List Nil)
-
-testExp55 = Def "zip2" (toList [ ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
-  (App (PrefixOp Colon) (toList [NTuple (toList [aname "x",aname "y"]), App (aname "zip") (toList [aname "xs",aname "ys"])]))
-testExp56 = Def "zip2" (toList [ListLit Nil,Lit $ Name "_"]) (List Nil)
-testExp57 = Def "zip2" (toList [Lit $ Name "_",ListLit Nil]) (List Nil)
-testExp60 = Def "f" Nil (aname "zip")
+  testProgramm "Prelude with exp" Test.Parser.parsedPrelude
+    ((App (Atom (Name "sum")) (Cons (App (Atom (Name "map")) (Cons (SectR Power (Atom (AInt 2))) (Cons (List (Cons (Atom (AInt 1)) (Cons (Atom (AInt 2)) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))) (Nil)))) (Nil))))
+    (Right (Forall (Nil) (TypCon "Int")))
