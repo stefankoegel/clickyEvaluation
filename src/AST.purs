@@ -81,18 +81,31 @@ data Expr = Atom Atom
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
 -- bindings are ignored
 data TypeTree
-          = Atom                                Type
-          | List (List TypeTree)                Type
-          | NTuple (List TypeTree)              Type
-          | Binary Type TypeTree TypeTree       Type
-          | Unary Type TypeTree                 Type
-          | SectL TypeTree Type                 Type
-          | SectR Type TypeTree                 Type
-          | PrefixOp                            Type
-          | IfExpr TypeTree TypeTree TypeTree   Type
-          | LetExpr TypeTree TypeTree           Type
-          | Lambda TypeTree                     Type
-          | App TypeTree (List TypeTree)        Type
+          = TAtom                                Type
+          | TListTree (List TypeTree)            Type
+          | TNTuple (List TypeTree)              Type
+          | TBinary Type TypeTree TypeTree       Type
+          | TUnary Type TypeTree                 Type
+          | TSectL TypeTree Type                 Type
+          | TSectR Type TypeTree                 Type
+          | TPrefixOp                            Type
+          | TIfExpr TypeTree TypeTree TypeTree   Type
+          | TLetExpr TypeTree TypeTree           Type
+          | TLambda TypeTree                     Type
+          | TApp TypeTree (List TypeTree)        Type
+
+
+data TVar = TVar String
+
+data Type
+    = TypVar TVar -- Typ Variables e.x. a
+    | TypCon String -- Typ Constants e.x Int
+    | TypArr Type Type -- e.x Int -> Int
+    | AD AD
+
+data AD
+    = TList Type
+    | TTuple (List Type)
 
 
 instance eqExpr :: Eq Expr where
@@ -185,3 +198,33 @@ instance showBinding :: Show Binding where
 
 instance showDefinition :: Show Definition where
   show (Def name bindings body) = "Def " ++ show name ++ " (" ++ show bindings ++ ") (" ++ show body ++ ")"
+
+instance showType :: Show Type where
+  show (TypVar var) = "(TypVar  " ++ show var ++ ")"
+  show (TypCon con) = "(TypCon " ++ show con ++ ")"
+  show (TypArr t1 t2) = "(TypArr "++ show t1 ++" " ++ show t2 ++ ")"
+  show (AD ad) = "(AD "++ show ad ++ ")"
+
+instance eqType :: Eq Type where
+  eq (TypVar a) (TypVar b) = a == b
+  eq (TypCon a) (TypCon b) = a == b
+  eq (TypArr a b) (TypArr a' b') = (a == a') && (b == b')
+  eq (AD a) (AD b) = eq a b
+  eq _ _ = false
+
+instance ordTVar :: Ord TVar where
+  compare (TVar a) (TVar b) = compare a b
+
+instance eqTVar :: Eq TVar where
+  eq (TVar a) (TVar b) = a == b
+
+instance showTVar :: Show TVar where
+  show (TVar a) = "(TVar " ++ show a ++ ")"
+
+instance showAD :: Show AD where
+  show (TList t) = "(TList "++ show t ++")"
+  show (TTuple tl) = "(TTuple ("++ show tl ++ "))"
+
+instance eqAD :: Eq AD where
+  eq (TList a) (TList b) = eq a b
+  eq (TTuple a) (TTuple b) = eq a b

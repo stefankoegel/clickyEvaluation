@@ -27,48 +27,6 @@ import Data.Array as Array
 
 import AST
 
-data TVar = TVar String
-
-data Type
-    = TypVar TVar -- Typ Variables e.x. a
-    | TypCon String -- Typ Constants e.x Int
-    | TypArr Type Type -- e.x Int -> Int
-    | AD AD
-
-data AD
-    = TList Type
-    | TTuple (List Type)
-
-instance showType :: Show Type where
-  show (TypVar var) = "(TypVar  " ++ show var ++ ")"
-  show (TypCon con) = "(TypCon " ++ show con ++ ")"
-  show (TypArr t1 t2) = "(TypArr "++ show t1 ++" " ++ show t2 ++ ")"
-  show (AD ad) = "(AD "++ show ad ++ ")"
-
-instance eqType :: Eq Type where
-  eq (TypVar a) (TypVar b) = a == b
-  eq (TypCon a) (TypCon b) = a == b
-  eq (TypArr a b) (TypArr a' b') = (a == a') && (b == b')
-  eq (AD a) (AD b) = eq a b
-  eq _ _ = false
-
-instance ordTVar :: Ord TVar where
-  compare (TVar a) (TVar b) = compare a b
-
-instance eqTVar :: Eq TVar where
-  eq (TVar a) (TVar b) = a == b
-
-instance showTVar :: Show TVar where
-  show (TVar a) = "(TVar " ++ show a ++ ")"
-
-instance showAD :: Show AD where
-  show (TList t) = "(TList "++ show t ++")"
-  show (TTuple tl) = "(TTuple ("++ show tl ++ "))"
-
-instance eqAD :: Eq AD where
-  eq (TList a) (TList b) = eq a b
-  eq (TTuple a) (TTuple b) = eq a b
-
 data Scheme = Forall (List TVar) Type
 
 instance showScheme :: Show Scheme where
