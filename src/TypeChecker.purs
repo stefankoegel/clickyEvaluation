@@ -260,7 +260,7 @@ lookupEnv (TypeEnv env) x = do
     f (Name x) = x
 
 
--- Tuple and List not supported yet
+
 infer :: TypeEnv -> Expr -> Infer (Tuple Subst Type)
 infer env ex = case ex of
 

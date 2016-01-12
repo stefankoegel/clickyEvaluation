@@ -59,7 +59,7 @@ instance ordAtom :: Ord Atom where
   compare (Char a) (Char b) = compare a b
   compare (Name a) (Name b) = compare a b
   compare _ _ = EQ
-  
+
 -- | Expressions
 -- |
 -- | The basic expressions the `Parser` and `Evaluator` recognize.
@@ -75,6 +75,25 @@ data Expr = Atom Atom
           | LetExpr Binding Expr Expr
           | Lambda (List Binding) Expr
           | App Expr (List Expr)
+
+
+-- last type para is type of expr at this level
+-- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
+-- bindings are ignored
+data TypeTree
+          = Atom                                Type
+          | List (List TypeTree)                Type
+          | NTuple (List TypeTree)              Type
+          | Binary Type TypeTree TypeTree       Type
+          | Unary Type TypeTree                 Type
+          | SectL TypeTree Type                 Type
+          | SectR Type TypeTree                 Type
+          | PrefixOp                            Type
+          | IfExpr TypeTree TypeTree TypeTree   Type
+          | LetExpr TypeTree TypeTree           Type
+          | Lambda TypeTree                     Type
+          | App TypeTree (List TypeTree)        Type
+
 
 instance eqExpr :: Eq Expr where
   eq (Atom a1)           (Atom a2)         = a1 == a2
