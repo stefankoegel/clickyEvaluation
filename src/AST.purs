@@ -228,3 +228,17 @@ instance showAD :: Show AD where
 instance eqAD :: Eq AD where
   eq (TList a) (TList b) = eq a b
   eq (TTuple a) (TTuple b) = eq a b
+
+instance showTypeTree :: Show TypeTree where
+  show (TAtom t) = "(TAtom " ++ show t ++ ")"
+  show (TListTree lt t) = "(TListTree (" ++ show lt ++ ") " ++ show t ++ ")"
+  show (TNTuple lt t) = "(TNTuple ("++ show lt ++ ") " ++ show t ++ ")"
+  show (TBinary t1 tt1 tt2 t) = "(TBinary " ++ show t1 ++ " " ++ show tt1 ++  " " ++ show tt2 ++ " " ++ show t ++ ")"
+  show (TUnary t1 tt t) = "(TUnary "++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
+  show (TSectL tt t1 t) = "(TSectL "++ show tt ++ " "++ show t1 ++ " " ++ show t ++ ")"
+  show (TSectR t1 tt t) = "(TSectR " ++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
+  show (TPrefixOp t) = "(TPrefixOp " ++ show t ++ ")"
+  show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show tt3 ++ " " ++ show t ++ ")"
+  show (TLetExpr tt1 tt2 t) = "(TLetExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show t ++ ")"
+  show (TLambda tt t ) = "(TLambda " ++ show tt ++ " " ++ show t ++ ")"
+  show (TApp tt1 tl t) = "(TApp " ++ show tt1 ++ " (" ++ show tl ++ ") " ++ show t ++ ")"

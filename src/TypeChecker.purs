@@ -111,6 +111,33 @@ instance subTupAtomScheme :: Substitutable (Tuple Atom Scheme) where
 
   ftv (Tuple _ b) = ftv b
 
+instance subTypeTree :: Substitutable TypeTree where
+  apply s (TAtom t) = TAtom $ apply s t
+  apply s (TListTree l t) = TListTree (apply s l) (apply s t)
+  apply s (TNTuple l t) = TNTuple (apply s l) (apply s t)
+  apply s (TBinary op tt1 tt2 t) =  TBinary (apply s op) (apply s tt1) (apply s tt2) (apply s t)
+  apply s (TUnary op tt t) = TUnary (apply s op) (apply s tt) (apply s t)
+  apply s (TSectL tt op t) = TSectL (apply s tt) (apply s op) (apply s t)
+  apply s (TSectR op tt t) = TSectR (apply s op) (apply s tt) (apply s t)
+  apply s (TPrefixOp t) = TPrefixOp $ apply s t
+  apply s (TIfExpr tt1 tt2 tt3 t) = TIfExpr (apply s tt1) (apply s tt2) (apply s tt2) (apply s t)
+  apply s (TLetExpr tt1 tt2 t) = TLetExpr (apply s tt1) (apply s tt2) (apply s t)
+  apply s (TLambda tt t) = TLambda (apply s tt) (apply s t)
+  apply s (TApp tt1 l t) = TApp (apply s tt1) (apply s l) (apply s t)
+
+  ftv (TAtom t)  = ftv t
+  ftv (TListTree _ t)  = ftv t
+  ftv (TNTuple _ t)  = ftv t
+  ftv (TBinary _ _ _ t)  = ftv t
+  ftv (TUnary _ _ t)  = ftv t
+  ftv (TSectL _ _ t)  = ftv t
+  ftv (TSectR _ _ t)  = ftv t
+  ftv (TPrefixOp t)  = ftv t
+  ftv (TIfExpr _ _ _ t)  = ftv t
+  ftv (TLetExpr _ _ t)  = ftv t
+  ftv (TLambda _ t)  = ftv t
+  ftv (TApp _ _ t)  = ftv t
+
 initInfer :: InferState
 initInfer = InferState { count : 0}
 
@@ -218,14 +245,36 @@ lookupEnv (TypeEnv env) x = do
     f (Name x) = x
 
 
+extractType:: TypeTree -> Type
+extractType (TAtom t)  =  t
+extractType (TListTree _ t)  =  t
+extractType (TNTuple _ t)  =  t
+extractType (TBinary _ _ _ t)  =  t
+extractType (TUnary _ _ t)  =  t
+extractType (TSectL _ _ t)  =  t
+extractType (TSectR _ _ t)  =  t
+extractType (TPrefixOp t)  =  t
+extractType (TIfExpr _ _ _ t)  =  t
+extractType (TLetExpr _ _ t)  =  t
+extractType (TLambda _ t)  =  t
+extractType (TApp tt1 _ t)  =  t
 
-infer :: TypeEnv -> Expr -> Infer (Tuple Subst Type)
+
+inferType :: TypeEnv -> Expr -> Infer (Tuple Subst Type)
+inferType env exp = do
+  Tuple s t <- infer env exp
+  let t' = extractType t
+  return $ Tuple s t'
+
+infer :: TypeEnv -> Expr -> Infer (Tuple Subst TypeTree)
 infer env ex = case ex of
 
-  (Atom x@(Name _)) -> lookupEnv env x
-  (Atom (Bool _)) -> return (Tuple nullSubst (TypCon "Bool"))
-  (Atom (Char _)) -> return (Tuple nullSubst (TypCon "Char"))
-  (Atom (AInt _)) -> return (Tuple nullSubst (TypCon "Int"))
+  (Atom x@(Name _)) -> do
+    Tuple s t <- lookupEnv env x
+    return (Tuple s $ TAtom t)
+  (Atom (Bool _)) -> return (Tuple nullSubst $ TAtom (TypCon "Bool"))
+  (Atom (Char _)) -> return (Tuple nullSubst $ TAtom (TypCon "Char"))
+  (Atom (AInt _)) -> return (Tuple nullSubst $ TAtom (TypCon "Int"))
 
   Lambda (Cons bin Nil) e -> do
     tv <- fresh
@@ -233,15 +282,15 @@ infer env ex = case ex of
     let env' = foldr (\a b -> extend b a) env envL
     s0 <- unify tv tvB
     (Tuple s1 t1) <- infer env' e
-    return (Tuple s1 (apply (s0 `compose` s1) tv `TypArr` t1))
+    return (Tuple s1 (TLambda (apply (s0 `compose` s1) t1) (apply (s0 `compose` s1) tv `TypArr` (extractType t1)))) --TODO move apply out
 
   Lambda (Cons bin xs) e -> do
     tv <- fresh
     Tuple envL tvB <- extractBinding bin
     let env' = foldr (\a b -> extend b a) env envL
     s0 <- unify tv tvB
-    (Tuple s1 t1) <- infer env' (Lambda xs e)
-    return (Tuple s1 (apply (s0 `compose` s1) tv `TypArr` t1))
+    (Tuple s1 (TLambda tt t1)) <- infer env' (Lambda xs e)
+    return (Tuple s1 (TLambda (apply (s0 `compose` s1) tt) (apply (s0 `compose` s1) tv `TypArr` t1))) -- TODO move apply out
 
   Lambda Nil e -> infer env e
 
@@ -250,17 +299,19 @@ infer env ex = case ex of
     tv <- fresh
     (Tuple s1 t1) <- infer env e1
     (Tuple s2 t2) <- infer (apply s1 env) e2
-    s3       <- unify (apply s2 t1) (TypArr t2 tv)
-    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 tv))
+    s3       <- unify (apply s2 (extractType t1)) (TypArr (extractType t2) tv)
+    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 $ TApp t1 (Cons t2 Nil) tv))
 
-  App e1 (Cons e2 xs) -> infer env  (App (App e1 (Cons e2 Nil)) xs)
+  App e1 (Cons e2 xs) -> do
+    Tuple s (TApp (TApp tt lt t) lt' t') <- infer env  (App (App e1 (Cons e2 Nil)) xs)
+    return $ Tuple s (TApp tt (lt++lt') t')
 
   LetExpr bin e1 e2 -> do
     (Tuple s1 t1) <- infer env e1
     (Tuple list typ) <- extractBinding bin
-    s2 <- unify typ t1
+    s2 <- unify typ (extractType t1)
     let env' = apply (s1 `compose` s2) env
-        t'   = generalize env' (apply (s1 `compose` s2) t1)
+        t'   = generalize env' (apply (s1 `compose` s2) (extractType t1))
         env'' = apply s2 (foldr (\a b -> extend b a) env' list)
     (Tuple s3 t2) <- infer env'' e2
     return (Tuple (s1 `compose` s2 `compose` s3) t2)
@@ -270,54 +321,56 @@ infer env ex = case ex of
     (Tuple s1 t1) <- infer env cond
     (Tuple s2 t2) <- infer env tr
     (Tuple s3 t3) <- infer env fl
-    s4 <- unify t1 (TypCon "Bool")
-    s5 <- unify t2 t3
+    s4 <- unify (extractType t1) (TypCon "Bool")
+    s5 <- unify (extractType t2) (extractType t3)
     return (Tuple (s5 `compose` s4 `compose` s3 `compose` s2 `compose` s1) (apply s5 t2))
 
-  PrefixOp op -> inferOp op
+  PrefixOp op -> do
+    Tuple s t <- inferOp op
+    return (Tuple s $ TPrefixOp t)
 
   SectL e op -> do
     tv <- fresh
     (Tuple s1 t1) <- inferOp op
     (Tuple s2 t2) <- infer (apply s1 env) e
-    s3       <- unify (apply s2 t1) (TypArr t2 tv)
-    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 tv))
+    s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
+    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TSectL t2 t1 tv)))
 
   SectR op e -> do
     (Tuple s1 t1@(TypArr a (TypArr b c))) <- inferOp op
     (Tuple s2 t2) <- infer env e
-    s3       <- unify (apply s2 b) t2
+    s3       <- unify (apply s2 b) (extractType t2)
     let s4 = (s3 `compose` s2 `compose` s1)
-    return (Tuple s4 (apply s4 (TypArr a c)))
+    return (Tuple s4 (apply s4 (TSectR t1 t2 (TypArr a c))))
 
   Unary op e -> do
     tv <- fresh
     (Tuple s1 t1) <- inferOp op
     (Tuple s2 t2) <- infer (apply s1 env) e
-    s3       <- unify (apply s2 t1) (TypArr t2 tv)
-    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 tv))
+    s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
+    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TUnary t1 t2 tv)))
 
   Binary op e1 e2 ->  infer env (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))
 
   List (Cons e1 xs) -> do
-    (Tuple s1 (AD (TList t1))) <- infer env (List xs)
+    (Tuple s1 (TListTree ltt (AD (TList t1)))) <- infer env (List xs)
     (Tuple s2 t2) <- infer (apply s1 env) e1
-    s3 <- unify (apply s2 t1) t2
-    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (AD $ TList t2)))
+    s3 <- unify (apply s2 t1) (extractType t2)
+    return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TListTree (Cons t2 ltt) (AD $ TList (extractType t2)))))
 
   List Nil -> do
     tv <- fresh
-    return (Tuple nullSubst (AD $ TList tv))
+    return (Tuple nullSubst $ TListTree Nil (AD $ TList tv))
 
 
   NTuple (Cons e Nil) -> do
     (Tuple s t) <- infer env e
-    return $ Tuple s (AD $ TTuple $ Cons t Nil)
+    return $ Tuple s $ TNTuple (Cons t Nil) (AD $ TTuple $ Cons (extractType t) Nil)
 
   NTuple (Cons e1 xs) -> do
-    (Tuple s1 (AD (TTuple t1))) <- infer env (NTuple xs)
+    (Tuple s1 (TNTuple lt (AD (TTuple t1)))) <- infer env (NTuple xs)
     (Tuple s2 t2) <- infer (apply s1 env) e1
-    return (Tuple (s2 `compose` s1) (AD $ TTuple (Cons t2 t1)))
+    return (Tuple (s2 `compose` s1) $ TNTuple (Cons t2 lt) (AD $ TTuple (Cons (extractType t2) t1)))
 
 inferOp :: Op -> Infer (Tuple Subst Type)
 inferOp op = do
@@ -355,7 +408,8 @@ inferDef env (Def str bin exp) = do
     tv <- fresh
     let env' = env `extend` (Tuple (Name str) (Forall Nil tv))
     let exp' = Lambda bin exp
-    Tuple s1 t1 <- infer env' exp'
+    Tuple s1 t1' <- infer env' exp'
+    let t1 = extractType t1'
     return $ Tuple s1 (apply s1 t1)
     -- Tuple s1 t1 <- infer env' exp'
     -- let env'' = (apply s1 env')
@@ -484,6 +538,19 @@ buildTypeEnvFromGroups env groupMap k@(Cons key keys) =
 
 typeProgramn:: List Definition -> Expr -> Either TypeError Scheme
 typeProgramn defs exp = case runInfer <$>
-    (infer <$> (buildTypeEnv defs) <*> pure exp) of
+    (inferType <$> (buildTypeEnv defs) <*> pure exp) of
   Left err -> Left err
   Right a -> a
+
+typeTreeProgramn:: List Definition -> Expr -> Either TypeError TypeTree
+typeTreeProgramn defs exp = case m of
+  Left e -> Left e
+  Right m -> case evalState (runExceptT m) initUnique of
+    Left err -> Left err
+    Right res -> Right $ closeOver' res
+  where
+    m = (infer <$> (buildTypeEnv defs) <*> pure exp)
+
+
+closeOver' :: (Tuple (Map.Map TVar Type) TypeTree) -> TypeTree
+closeOver' (Tuple s tt) = apply s tt

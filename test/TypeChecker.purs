@@ -86,7 +86,7 @@ parseExp exp = runParser exp expression
 
 typeStr:: String -> Either TypeError Scheme
 typeStr expS = case runParser expS expression of
-  Right exp -> runInfer $ infer emptyTyenv exp
+  Right exp -> runInfer $ inferType emptyTyenv exp
   Left _ -> Left $ UnknownError "Parse Error"
 
 typeStrPre:: String -> Either TypeError Scheme
@@ -95,7 +95,7 @@ typeStrPre expS = case runParser expS expression of
   Left _ -> Left $ UnknownError "Parse Error"
 
 typeExp:: Expr -> Either TypeError Scheme
-typeExp exp = runInfer $ infer emptyTyenv exp
+typeExp exp = runInfer $ inferType emptyTyenv exp
 
 prettyPrint:: Either TypeError Scheme -> String
 prettyPrint a@(Left _) = show a
@@ -128,36 +128,36 @@ runTests = do
   log "Running Typing Tests"
 
   testInfer "SectL" (SectL (aint 3) Power)
-    infer (Right (Forall Nil $ TypArr (TypCon "Int") (TypCon "Int")))
+    inferType(Right (Forall Nil $ TypArr (TypCon "Int") (TypCon "Int")))
   testInfer "SectR" (SectR Power (aint 3))
-    infer (Right (Forall (Nil) (TypArr (TypCon "Int") (TypCon "Int"))))
+    inferType(Right (Forall (Nil) (TypArr (TypCon "Int") (TypCon "Int"))))
   testInfer "Lambda1" (Lambda (toList $ [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c",Lit $ Name "d"]) (App (aname "a") (toList [aname "b", aname "c", aname "d"])))
-    infer (Right (Forall (toList [TVar "b",TVar "c", TVar "d", TVar "e"]) (TypArr (TypArr (tvar "b") (TypArr (tvar "c") (TypArr (tvar "d") (tvar "e")))) (TypArr ( tvar "b")  ((TypArr (tvar "c") (TypArr (tvar "d") (tvar "e"))))))))
+    inferType(Right (Forall (toList [TVar "b",TVar "c", TVar "d", TVar "e"]) (TypArr (TypArr (tvar "b") (TypArr (tvar "c") (TypArr (tvar "d") (tvar "e")))) (TypArr ( tvar "b")  ((TypArr (tvar "c") (TypArr (tvar "d") (tvar "e"))))))))
   testInfer "Lambda2" (Lambda (toList [Lit $ Name "a", Lit $ Name "b"]) (App (aname "a") (toList [aname "b"])))
-    infer (Right (Forall (Cons ((TVar "t_3")) (Cons ((TVar "t_4")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_3")) (TypVar  (TVar "t_4"))) (TypArr (TypVar  (TVar "t_3")) (TypVar  (TVar "t_4"))))))
-  testInfer "List1" (List (toList [aint 1, aint 2, aint 3, aint 4, aint 5])) infer (Right (Forall (Nil) (AD (TList (TypCon "Int")))))
+    inferType(Right (Forall (Cons ((TVar "t_3")) (Cons ((TVar "t_4")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_3")) (TypVar  (TVar "t_4"))) (TypArr (TypVar  (TVar "t_3")) (TypVar  (TVar "t_4"))))))
+  testInfer "List1" (List (toList [aint 1, aint 2, aint 3, aint 4, aint 5])) inferType(Right (Forall (Nil) (AD (TList (TypCon "Int")))))
   testInfer "List2" (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
-    infer (Right (Forall (Nil) (AD (TList (TypCon "Int")))))
+    inferType(Right (Forall (Nil) (AD (TList (TypCon "Int")))))
   testInfer "List3" (List $ toList [PrefixOp Add, aint 4])
-    infer (Left ((UnificationFail (TypCon "Int") (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int"))))))
+    inferType(Left ((UnificationFail (TypCon "Int") (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int"))))))
   testInfer "Nil List" (List Nil)
-    infer   (Right (Forall (Cons ((TVar "t_0")) (Nil)) (AD (TList (TypVar  (TVar "t_0"))))))
+    inferType  (Right (Forall (Cons ((TVar "t_0")) (Nil)) (AD (TList (TypVar  (TVar "t_0"))))))
   testInfer "Append" (Binary Append
     (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
     (List Nil))
-    infer (Right (Forall (Nil) (AD (TList (TypCon "Int")))))
+    inferType(Right (Forall (Nil) (AD (TList (TypCon "Int")))))
   testInfer "Colon" (Binary Colon (aint 3) (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4),Atom $ Char "Hallo"]))
-    infer (Left ((UnificationFail (TypCon "Char") (TypCon "Int"))))
+    inferType(Left ((UnificationFail (TypCon "Char") (TypCon "Int"))))
   testInfer "NTuple" (NTuple (toList [Binary Add (aint 1) (aint 2), aint 3]))
-    infer (Right (Forall (Nil) (AD (TTuple (Cons ((TypCon "Int")) (Cons ((TypCon "Int")) (Nil)))))))
+    inferType(Right (Forall (Nil) (AD (TTuple (Cons ((TypCon "Int")) (Cons ((TypCon "Int")) (Nil)))))))
   testInfer "SectR Colon" (SectR Colon $ List $ toList [aint 3])
-    infer (Right (Forall (Nil) (TypArr (TypCon "Int") (AD (TList (TypCon "Int"))))))
+    inferType(Right (Forall (Nil) (TypArr (TypCon "Int") (AD (TList (TypCon "Int"))))))
   testInfer "Def ~map" (Def "map" (toList [Lit $ Name "f", Lit $ Name "xs"]) (App (aname "map") (toList [aname "f",aname"xs"])))
     inferDef (Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_4")) (Cons ((TVar "t_5")) (Nil)))) (TypArr (TypVar  (TVar "t_2")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_5"))))))
   testInfer "Lambda Wildcard" (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aint 5))
-    infer (Right (Forall (Cons ((TVar "t_1")) (Cons ((TVar "t_3")) (Nil))) (TypArr (TypVar  (TVar "t_1")) (TypArr (TypVar  (TVar "t_3")) (TypCon "Int")))))
+    inferType(Right (Forall (Cons ((TVar "t_1")) (Cons ((TVar "t_3")) (Nil))) (TypArr (TypVar  (TVar "t_1")) (TypArr (TypVar  (TVar "t_3")) (TypCon "Int")))))
   testInfer "Lambda ConsBinding" (Lambda (toList [ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (aname "x"))
-    infer (Right (Forall (Cons ((TVar "t_2")) (Nil)) (TypArr (AD (TList (TypVar  (TVar "t_2")))) (TypVar  (TVar "t_2")))))
+    inferType(Right (Forall (Cons ((TVar "t_2")) (Nil)) (TypArr (AD (TList (TypVar  (TVar "t_2")))) (TypVar  (TVar "t_2")))))
   testInfer "singel map" (Def "map" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App  (PrefixOp Colon) (toList [App (aname "f") $ toList [(aname"x")], App (aname "map") (toList [aname"f", aname"xs"])])))
     inferDef (Right (Forall (Cons ((TVar "t_11")) (Cons ((TVar "t_5")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_5")) (TypVar  (TVar "t_11"))) (TypArr (AD (TList (TypVar  (TVar "t_5")))) (AD (TList (TypVar  (TVar "t_11"))))))))
 
@@ -165,7 +165,7 @@ runTests = do
     inferDef (Right (Forall ((Cons ((TVar "t_4")) (Cons ((TVar "t_7")) Nil))) (TypArr (TypArr (TypVar  (TVar "t_7")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_4")))) (TypArr (TypVar  (TVar "t_4")) (TypArr (AD (TList (TypVar  (TVar "t_7")))) (TypVar  (TVar "t_4")))))))
 
   testInfer "let Expr"  (LetExpr (Lit $ Name "x") (aint 3) (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aname "x")))
-    infer (Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_4")) (Nil))) (TypArr (TypVar  (TVar "t_2")) (TypArr (TypVar  (TVar "t_4")) (TypCon "Int")))))
+    inferType(Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_4")) (Nil))) (TypArr (TypVar  (TVar "t_2")) (TypArr (TypVar  (TVar "t_4")) (TypCon "Int")))))
   testInfer "ConsLit Binding 1" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "x"))
     inferDef (Right (Forall (Cons ((TVar "t_2")) (Nil)) (TypArr (AD (TList (TypVar  (TVar "t_2")))) (TypVar  (TVar "t_2")))))
   testInfer "ConsLit Binding 2" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xs"))
@@ -181,7 +181,7 @@ runTests = do
   testInfer "ListLit Binding" (Def "list" (toList [ListLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"])))
     inferDef (Left ((InfiniteType (TVar "t_4") (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_7"))))))
   testInfer "NTupleLit Binding LetExp"  (LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (App (aname "a") (toList [aname "b"])))
-    infer (Right (Forall (Nil) (TypCon "Char")))
+    inferType(Right (Forall (Nil) (TypCon "Char")))
 
   testInfer "zipWith - Group" (toList [Def "zipWith" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
       (App (PrefixOp Colon) (toList [App (aname "f") (toList [aname "x",aname "y"]), App (aname "zipWith") (toList [aname "f",aname"xs",aname "ys"])])),
