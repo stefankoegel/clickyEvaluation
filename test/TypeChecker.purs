@@ -84,6 +84,9 @@ out s = log s
 parseExp:: String -> Either ParseError Expr
 parseExp exp = runParser exp expression
 
+parseDef:: String -> Either ParseError Definition
+parseDef def = runParser def definition
+
 typeStr:: String -> Either TypeError Scheme
 typeStr expS = case runParser expS expression of
   Right exp -> runInfer $ inferType emptyTyenv exp
@@ -96,6 +99,9 @@ typeStrPre expS = case runParser expS expression of
 
 typeExp:: Expr -> Either TypeError Scheme
 typeExp exp = runInfer $ inferType emptyTyenv exp
+
+typeDef:: Definition -> Either TypeError Scheme
+typeDef def = runInfer $ inferDef emptyTyenv def
 
 prettyPrint:: Either TypeError Scheme -> String
 prettyPrint a@(Left _) = show a
@@ -160,10 +166,8 @@ runTests = do
     inferType(Right (Forall (Cons ((TVar "t_2")) (Nil)) (TypArr (AD (TList (TypVar  (TVar "t_2")))) (TypVar  (TVar "t_2")))))
   testInfer "singel map" (Def "map" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App  (PrefixOp Colon) (toList [App (aname "f") $ toList [(aname"x")], App (aname "map") (toList [aname"f", aname"xs"])])))
     inferDef (Right (Forall (Cons ((TVar "t_11")) (Cons ((TVar "t_5")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_5")) (TypVar  (TVar "t_11"))) (TypArr (AD (TList (TypVar  (TVar "t_5")))) (AD (TList (TypVar  (TVar "t_11"))))))))
-
   testInfer "foldr" (Def "foldr" (toList [Lit $ Name "f", Lit $ Name "ini", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App (aname "f") (toList [aname "x",App (aname "foldr") (toList [aname "f", aname "ini" ,aname "xs"  ] )])))
-    inferDef (Right (Forall ((Cons ((TVar "t_4")) (Cons ((TVar "t_7")) Nil))) (TypArr (TypArr (TypVar  (TVar "t_7")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_4")))) (TypArr (TypVar  (TVar "t_4")) (TypArr (AD (TList (TypVar  (TVar "t_7")))) (TypVar  (TVar "t_4")))))))
-
+    inferDef (Right (Forall (Cons ((TVar "t_5")) (Cons ((TVar "t_4")) (Cons ((TVar "t_7")) Nil))) (TypArr (TypArr (TypVar  (TVar "t_7")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_4")))) (TypArr (TypVar  (TVar "t_5")) (TypArr (AD (TList (TypVar  (TVar "t_7")))) (TypVar  (TVar "t_4")))))))
   testInfer "let Expr"  (LetExpr (Lit $ Name "x") (aint 3) (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aname "x")))
     inferType(Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_4")) (Nil))) (TypArr (TypVar  (TVar "t_2")) (TypArr (TypVar  (TVar "t_4")) (TypCon "Int")))))
   testInfer "ConsLit Binding 1" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "x"))
@@ -188,6 +192,10 @@ runTests = do
       Def "zipWith" (toList [Lit $ Name "_",ListLit Nil,Lit $ Name "_"]) (List Nil),
       Def "zipWith" (toList [Lit $ Name "_",Lit $ Name "_",ListLit Nil]) (List Nil)])
     inferGroup (Right (Forall (Cons ((TVar "t_23")) (Cons ((TVar "t_33")) (Cons ((TVar "t_34")) (Nil)))) (TypArr (TypArr (TypVar  (TVar "t_23")) (TypArr (TypVar  (TVar "t_33")) (TypVar  (TVar "t_34")))) (TypArr (AD (TList (TypVar  (TVar "t_23")))) (TypArr (AD (TList (TypVar  (TVar "t_33")))) (AD (TList (TypVar  (TVar "t_34")))))))))
+
+  testInfer "real foldr - Group" (toList [(Def "foldr" (Cons (Lit (Name "f")) (Cons (Lit (Name "ini")) (Cons (ListLit (Nil)) (Nil)))) (Atom (Name "ini"))),
+      (Def "foldr" (Cons (Lit (Name "f")) (Cons (Lit (Name "ini")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (App (Atom (Name "f")) (Cons (Atom (Name "x")) (Cons (App (Atom (Name "foldr")) (Cons (Atom (Name "f")) (Cons (Atom (Name "ini")) (Cons (Atom (Name "xs")) (Nil))))) (Nil)))))])
+    inferGroup ((Right (Forall ((Cons ((TVar "t_4")) (Cons ((TVar "t_7")) Nil))) (TypArr (TypArr (TypVar  (TVar "t_7")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_4")))) (TypArr (TypVar  (TVar "t_4")) (TypArr (AD (TList (TypVar  (TVar "t_7")))) (TypVar  (TVar "t_4"))))))))
 
   testProgramm "Prelude with exp" Test.Parser.parsedPrelude
     ((App (Atom (Name "sum")) (Cons (App (Atom (Name "map")) (Cons (SectR Power (Atom (AInt 2))) (Cons (List (Cons (Atom (AInt 1)) (Cons (Atom (AInt 2)) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))) (Nil)))) (Nil))))

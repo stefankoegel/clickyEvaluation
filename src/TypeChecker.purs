@@ -303,7 +303,7 @@ infer env ex = case ex of
     return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 $ TApp t1 (Cons t2 Nil) tv))
 
   App e1 (Cons e2 xs) -> do
-    Tuple s (TApp (TApp tt lt t) lt' t') <- infer env  (App (App e1 (Cons e2 Nil)) xs)
+    Tuple s (TApp (TApp tt lt _) lt' t') <- infer env  (App (App e1 (Cons e2 Nil)) xs)
     return $ Tuple s (TApp tt (lt++lt') t')
 
   LetExpr bin e1 e2 -> do
@@ -402,7 +402,6 @@ inferOp op = do
   int3 = f (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))
   aBool a = f (a `TypArr` (a `TypArr` TypCon "Bool"))
 
--- recursive functions are typed wrong
 inferDef :: TypeEnv -> Definition -> Infer (Tuple Subst Type)
 inferDef env (Def str bin exp) = do
     tv <- fresh
@@ -410,14 +409,10 @@ inferDef env (Def str bin exp) = do
     let exp' = Lambda bin exp
     Tuple s1 t1' <- infer env' exp'
     let t1 = extractType t1'
-    return $ Tuple s1 (apply s1 t1)
-    -- Tuple s1 t1 <- infer env' exp'
-    -- let env'' = (apply s1 env')
-    -- -- throwError $ UnknownError $ show env''
-    -- infer env'' exp'
-    --infer env' (LetExpr (Lit $ Name str) exp' exp')
-  -- Tuple s1 t1 <- infer env' $ Lambda bin exp
-  -- return (Tuple s1 (apply s1 tv))
+    let env'' = env `extend` (Tuple (Name str) (Forall Nil (apply s1 t1)))
+    Tuple s2 t2 <- infer env'' exp'
+    s3 <- unify (apply s1 t1) (apply s2 (extractType t2))
+    return $ Tuple (s3 `compose` s1) (apply s3 (apply s1 t1))
 
 
 extractConsLit:: Type -> Binding -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
