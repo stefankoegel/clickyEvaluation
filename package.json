@@ -9,7 +9,7 @@
   },
   "scripts": {
     "postinstall": "pulp dep install",
-    "build": "pulp build",
+    "build": "pulp build --to html/Main.js",
     "test": "pulp test",
     "watch": "pulp -w test"
   }
