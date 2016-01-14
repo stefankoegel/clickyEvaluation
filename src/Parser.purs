@@ -12,6 +12,7 @@ import Control.Alt         ((<|>))
 import Control.Apply       ((<*), (*>))
 import Control.Lazy        (fix)
 import Data.Identity
+import Data.Either
 
 import Text.Parsing.Parser
 import Text.Parsing.Parser.Combinators as PC
@@ -241,6 +242,9 @@ letExpr expr = do
 expression :: Parser String Expr
 expression = fix $ \expr -> buildExprParser operatorTable (syntax expr)
 
+parseExpr :: String -> Either ParseError Expr
+parseExpr input = runParser input expression
+
 ---------------------------------------------------------
 -- Parsers for Bindings
 ---------------------------------------------------------
@@ -298,3 +302,7 @@ definitions :: Parser String (List Definition)
 definitions = do
   whiteSpace
   definition `PC.sepEndBy` whiteSpace
+
+parseDefs :: String -> Either ParseError (List Definition)
+parseDefs input = runParser input definitions
+
