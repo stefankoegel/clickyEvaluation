@@ -21,7 +21,7 @@
     "purescript-parsing": "~0.7.1",
     "purescript-dom": "~0.2.8",
     "purescript-maps": "~0.5.0",
-    "purescript-jquery": "*",
+    "purescript-jquery": "0.6.0",
     "purescript-globals": "*",
     "purescript-math": "*",
     "purescript-ace": "*"

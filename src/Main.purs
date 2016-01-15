@@ -1,23 +1,20 @@
 module Main where
 
-import qualified Control.Monad.Eff.JQuery as J
-import           Control.Monad.Eff
+import Control.Monad.Eff.JQuery as J
+import Control.Monad.Eff
 import Control.Monad.Eff.Console
 import DOM
 import Data.Foreign (unsafeFromForeign)
 import Prelude
 
-import Ace (ace)
 import Ace.Types (ACE())
-import qualified Ace.Editor as Editor
-import qualified Ace.EditSession as Session
-import qualified Ace.Range as  Range
+import Ace.Editor as Editor
+import Ace.EditSession as Session
+import Ace.Range as  Range
 
 import Data.Either
 import Data.Maybe
--- import Data.Array ((..), length, deleteAt, (!!), drop)
 import Data.List
-import Data.Tuple
 import Control.Apply ((*>))
 import Control.Monad.State.Trans
 import Control.Monad.State.Class
@@ -25,17 +22,17 @@ import Control.Monad.Eff.Class
 
 import Web (exprToJQuery, getPath)
 import Parser
-import Evaluator (evalPath1, Env(), Path(..), defsToEnv)
+import Evaluator (evalPath1, Env(), Path(), defsToEnv)
 import AST
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
+import JSHelpers
 
-
-
+main :: DOMEff J.JQuery
 main = J.ready $ do
   J.select "#input"
     >>= J.on "change" (\_ _ -> startEvaluation)
-    >>= J.on "keyup"  (\e _ -> if false {- isEnterKey e -} then startEvaluation else return unit)
+    >>= J.on "keyup"  (\e _ -> if isEnterKey e then startEvaluation else return unit)
   startEvaluation
 
 type DOMEff = Eff (dom :: DOM, console :: CONSOLE, ace :: ACE)
@@ -79,8 +76,8 @@ showEvaluationState = do
   liftEff $ exprToJQuery expr >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
 
-  -- liftEff (J.find ".binary, .app, .func, .list, .if" output)
-  --   >>= makeClickable
+  liftEff (J.find ".binary, .app, .func, .list, .if" output)
+    >>= makeClickable
   liftEff (J.find ".clickable" output)
     >>= addMouseOverListener
     >>= addClickListener
@@ -145,17 +142,17 @@ wrapInDiv :: String -> J.JQuery -> DOMEff J.JQuery
 wrapInDiv name jq = do
   J.create "<div></div>" >>= J.addClass name >>= J.append jq
 
--- makeClickable :: J.JQuery -> EvalM Unit
--- makeClickable jq = do
---   { env = env, expr = expr } <- get
---   liftEff $ map (testEval env expr) jq
---   where
---   testEval :: Env -> Expr -> J.JQuery -> DOMEff Unit
---   testEval env expr jq = do
---     path <- getPath jq
---     case evalPath1 env path expr of
---       Left err -> void $ J.setAttr "title" (show err) jq
---       Right _  -> void $ J.addClass "clickable" jq *> J.setAttr "title" "" jq
+makeClickable :: J.JQuery -> EvalM Unit
+makeClickable jq = do
+  { env = env, expr = expr } <- get
+  liftEff $ jqMap (testEval env expr) jq
+  where
+  testEval :: Env -> Expr -> J.JQuery -> DOMEff Unit
+  testEval env expr jq = do
+    path <- getPath jq
+    case evalPath1 env path expr of
+      Left err -> void $ J.setAttr "title" (show err) jq
+      Right _  -> void $ J.addClass "clickable" jq *> J.setAttr "title" "" jq
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
 addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq

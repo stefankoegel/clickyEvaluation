@@ -4,7 +4,7 @@ module Web
   ) where
 
 import Control.Monad.Eff
-import qualified Control.Monad.Eff.JQuery as J
+import Control.Monad.Eff.JQuery as J
 import DOM
 import Prelude
 
