@@ -128,6 +128,27 @@ instance showOp :: Show Op where
     Or     -> "Or"
     Dollar -> "Dollar"
 
+pPrintOp :: Op -> String
+pPrintOp op = case op of
+  Composition -> "."
+  Power  -> "^"
+  Mul    -> "*"
+  Div    -> "`div`"
+  Mod    -> "`mod`"
+  Add    -> "+"
+  Sub    -> "-"
+  Colon  -> ":"
+  Append -> "++"
+  Equ    -> "=="
+  Neq    -> "/="
+  Lt     -> "<"
+  Leq    -> "<="
+  Gt     -> ">"
+  Geq    -> ">="
+  And    -> "&&"
+  Or     -> "||"
+  Dollar -> "$"
+
 instance showAtom :: Show Atom where
   show atom = case atom of
     AInt number -> "AInt " ++ show number

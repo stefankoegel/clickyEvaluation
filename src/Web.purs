@@ -44,13 +44,13 @@ exprToJQuery expr = go id expr
       tuple js
     SectL e op -> do
       j <- go (p <<< Fst) e
-      jop <- makeDiv (show op) (singleton "op")
+      jop <- makeDiv (pPrintOp op) (singleton "op")
       section j jop
     SectR op e -> do
-      jop <- makeDiv (show op) (singleton "op")
+      jop <- makeDiv (pPrintOp op) (singleton "op")
       j <- go (p <<< Snd) e
       section jop j
-    PrefixOp op -> makeDiv ("(" ++ show op ++ ")") (toList ["prefix", "op"])
+    PrefixOp op -> makeDiv ("(" ++ pPrintOp op ++ ")") (toList ["prefix", "op"])
     IfExpr cond thenExpr elseExpr -> do
       jc <- go (p <<< Fst) cond
       jt <- go (p <<< Snd) thenExpr
@@ -115,7 +115,7 @@ binary :: forall eff. Op -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQu
 binary op j1 j2 = do
   dBin <- makeDiv "" (singleton "binary")
   J.append j1 dBin
-  dOp <- makeDiv (show op) (singleton "op")
+  dOp <- makeDiv (pPrintOp op) (singleton "op")
   J.append dOp dBin
   J.append j2 dBin
   return dBin
