@@ -105,7 +105,7 @@ typeDef def = runInfer $ inferDef emptyTyenv def
 
 prettyPrint:: Either TypeError Scheme -> String
 prettyPrint a@(Left _) = show a
-prettyPrint (Right (Forall _ t)) = prittyPrintType t
+prettyPrint (Right (Forall _ t)) = prettyPrintType t
 
 printTypeExp::forall eff. Expr -> Eff (console :: CONSOLE | eff ) Unit
 printTypeExp e = out $ prettyPrint $ typeExp e

@@ -1,4 +1,4 @@
- module TypeChecker where
+module TypeChecker where
 
 import Prelude hiding (apply,compose)
 import Control.Monad.Eff
@@ -554,15 +554,15 @@ closeOver' :: (Tuple (Map.Map TVar Type) TypeTree) -> TypeTree
 closeOver' (Tuple s tt) = apply s tt
 
 
-prittyPrintType:: Type -> String -- TODO
-prittyPrintType = f
+prettyPrintType:: Type -> String -- TODO
+prettyPrintType = f
   where
   f (TypVar (TVar a)) = show a
   f (TypCon a) = show a
   f (TypArr t1 t2) = "(" ++ f t1 ++ " -> " ++ f t2 ++ ")"
-  f (AD a) = prittyPrintAD a
+  f (AD a) = prettyPrintAD a
 
 
-prittyPrintAD:: AD -> String
-prittyPrintAD (TList a) = "[" ++ prittyPrintType a ++ "]"
-prittyPrintAD (TTuple a) = "(" ++ foldr (\t s -> prittyPrintType t ++","++s) ")" a
+prettyPrintAD:: AD -> String
+prettyPrintAD (TList a) = "[" ++ prettyPrintType a ++ "]"
+prettyPrintAD (TTuple a) = "(" ++ foldr (\t s -> prettyPrintType t ++","++s) ")" a

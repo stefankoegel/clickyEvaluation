@@ -19,7 +19,7 @@ import Control.Bind ((=<<), (>=>))
 
 import AST
 import Evaluator (Path(..))
-import TypeChecker (prittyPrintType,extractType,mapM) --TODO move mapM function somewhere else
+import TypeChecker (prettyPrintType,extractType)
 
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
@@ -71,7 +71,7 @@ exprToJQuery output = go id output
 
 
 atom :: forall eff. Atom -> Type -> Eff (dom :: DOM | eff) J.JQuery
-atom (AInt n) t     = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv (TypCon "HALLO") >>= addTypetoDiv t 
+atom (AInt n) t     = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv (TypCon "HALLO") >>= addTypetoDiv t
 atom (Bool true) t  = makeDiv "True"  (toList ["atom", "bool"]) >>= addTypetoDiv t
 atom (Bool false) t = makeDiv "False" (toList ["atom", "bool"]) >>= addTypetoDiv t
 atom (Char c) t    = (makeDiv ("'" ++ c ++ "'") (toList ["atom", "char"])) >>= addTypetoDiv t
@@ -207,4 +207,4 @@ makeDiv text classes = do
 
 
 addTypetoDiv:: forall eff. Type -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-addTypetoDiv typ = J.setAttr "title" (prittyPrintType typ)
+addTypetoDiv typ = J.setAttr "title" (prettyPrintType typ)
