@@ -143,6 +143,11 @@ instance eqBinding :: Eq Binding where
 -- | Definitions for functions and constants
 data Definition = Def String (List Binding) Expr
 
+type Output = {
+    expr :: Expr,
+    typ :: TypeTree
+  }
+
 instance eqDefinition :: Eq Definition where
   eq (Def n1 b1 e1) (Def n2 b2 e2) = n1 == n2 && b1 == b2 && e1 == e2
 

@@ -1,4 +1,4 @@
-module TypeChecker where
+ module TypeChecker where
 
 import Prelude hiding (apply,compose)
 import Control.Monad.Eff
@@ -350,7 +350,10 @@ infer env ex = case ex of
     s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
     return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TUnary t1 t2 tv)))
 
-  Binary op e1 e2 ->  infer env (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))
+  Binary op e1 e2 -> do
+    (Tuple s (TApp tt (Cons tt1 (Cons tt2 Nil)) t)) <- infer env (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))
+    return $ Tuple s (TBinary (extractType tt) tt1 tt2 t)
+
 
   List (Cons e1 xs) -> do
     (Tuple s1 (TListTree ltt (AD (TList t1)))) <- infer env (List xs)
@@ -549,3 +552,17 @@ typeTreeProgramn defs exp = case m of
 
 closeOver' :: (Tuple (Map.Map TVar Type) TypeTree) -> TypeTree
 closeOver' (Tuple s tt) = apply s tt
+
+
+prittyPrintType:: Type -> String -- TODO
+prittyPrintType = f
+  where
+  f (TypVar (TVar a)) = show a
+  f (TypCon a) = show a
+  f (TypArr t1 t2) = "(" ++ f t1 ++ " -> " ++ f t2 ++ ")"
+  f (AD a) = prittyPrintAD a
+
+
+prittyPrintAD:: AD -> String
+prittyPrintAD (TList a) = "[" ++ prittyPrintType a ++ "]"
+prittyPrintAD (TTuple a) = "(" ++ foldr (\t s -> prittyPrintType t ++","++s) ")" a

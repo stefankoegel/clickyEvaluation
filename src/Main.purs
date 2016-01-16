@@ -15,6 +15,8 @@ import Ace.Range as  Range
 import Data.Either
 import Data.Maybe
 import Data.List
+import Data.Tuple
+import Data.StrMap as StrMap
 import Control.Apply ((*>))
 import Control.Monad.State.Trans
 import Control.Monad.State.Class
@@ -27,6 +29,7 @@ import AST
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
 import JSHelpers
+import TypeChecker (typeTreeProgramn)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -73,11 +76,17 @@ showEvaluationState = do
   { env = env, expr = expr, history = histExprs } <- get :: EvalM EvalState
   liftEff $ print expr
 
-  liftEff $ exprToJQuery expr >>= wrapInDiv "output" >>= flip J.append output
-  showHistoryList histExprs >>= liftEff <<< flip J.append history
+  let defs = concat $ map (\(Tuple name defs) -> map (\(Tuple bin expr) -> Def name bin expr) defs) $ StrMap.toList env
+  let eitherTT = typeTreeProgramn defs expr
+  let tt = either (\_ -> TAtom $ TypCon "NOT A REAL TYP") id eitherTT
+
+  liftEff $ print tt
+
+  liftEff $ exprToJQuery {expr:expr, typ:tt} >>= wrapInDiv "output" >>= flip J.append output
+  showHistoryList (map (\expr -> {expr:expr, typ:tt}) histExprs) >>= liftEff <<< flip J.append history
 
   liftEff (J.find ".binary, .app, .func, .list, .if" output)
-    >>= makeClickable
+    -- >>= makeClickable
   liftEff (J.find ".clickable" output)
     >>= addMouseOverListener
     >>= addClickListener
@@ -88,7 +97,7 @@ showEvaluationState = do
 forIndex :: forall m a b. (Applicative m) => (List a) -> (a -> Int -> m b) -> m (List b)
 forIndex as f = zipWithA f as (0 .. (length as - 1))
 
-showHistoryList :: (List Expr) -> EvalM J.JQuery
+showHistoryList :: (List Output) -> EvalM J.JQuery
 showHistoryList exprs = do
   box <- liftEff $ J.create "<div></div>" >>= J.addClass "historyBox"
   forIndex exprs $ \expr i -> do
@@ -98,10 +107,10 @@ showHistoryList exprs = do
 (!!!) :: forall a. (List a) -> Int -> a
 (!!!) xs i = case xs !! i of Just x -> x
 
-showHistory :: Expr -> Int -> EvalM J.JQuery
-showHistory expr i = do
+showHistory :: Output -> Int -> EvalM J.JQuery
+showHistory out i = do
   history <- liftEff $ J.create "<div></div>" >>= J.addClass "history"
-  liftEff $ exprToJQuery expr >>= flip J.append history
+  liftEff $ exprToJQuery out >>= flip J.append history
   es <- get :: EvalM EvalState
   let deleteHandler = \_ _ -> do
                         let es' = es { history = maybe es.history id (deleteAt i es.history) }

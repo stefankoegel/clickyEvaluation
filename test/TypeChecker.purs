@@ -107,19 +107,6 @@ prettyPrint:: Either TypeError Scheme -> String
 prettyPrint a@(Left _) = show a
 prettyPrint (Right (Forall _ t)) = prittyPrintType t
 
-prittyPrintType:: Type -> String -- TODO
-prittyPrintType = f
-  where
-  f (TypVar (TVar a)) = show a
-  f (TypCon a) = show a
-  f (TypArr t1 t2) = "(" ++ f t1 ++ " -> " ++ f t2 ++ ")"
-  f (AD a) = prittyPrintAD a
-
-
-prittyPrintAD:: AD -> String
-prittyPrintAD (TList a) = "[" ++ prittyPrintType a ++ "]"
-prittyPrintAD (TTuple a) = "(" ++ foldr (\t s -> prittyPrintType t ++","++s) ")" a
-
 printTypeExp::forall eff. Expr -> Eff (console :: CONSOLE | eff ) Unit
 printTypeExp e = out $ prettyPrint $ typeExp e
 
