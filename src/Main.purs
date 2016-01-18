@@ -40,7 +40,7 @@ main = J.ready $ do
 
 type DOMEff = Eff (dom :: DOM, console :: CONSOLE, ace :: ACE)
 
-type EvalState = { env :: Env, expr :: Expr, history :: List Expr }
+type EvalState = { env :: Env, expr :: Expr, history :: List Output }
 
 type EvalM a = StateT EvalState DOMEff a
 
@@ -78,15 +78,14 @@ showEvaluationState = do
 
   let defs = concat $ map (\(Tuple name defs) -> map (\(Tuple bin expr) -> Def name bin expr) defs) $ StrMap.toList env
   let eitherTT = typeTreeProgramn defs expr
-  let tt = either (\_ -> TAtom $ TypCon "NOT A REAL TYP") id eitherTT
-
+  let tt = either (\_ -> TAtom $ TypCon "NOT A REAL TYP") id eitherTT --TODO replace and show error
   liftEff $ print tt
 
   liftEff $ exprToJQuery {expr:expr, typ:tt} >>= wrapInDiv "output" >>= flip J.append output
-  showHistoryList (map (\expr -> {expr:expr, typ:tt}) histExprs) >>= liftEff <<< flip J.append history
+  showHistoryList histExprs >>= liftEff <<< flip J.append history
 
   liftEff (J.find ".binary, .app, .func, .list, .if" output)
-    -- >>= makeClickable
+     >>= makeClickable
   liftEff (J.find ".clickable" output)
     >>= addMouseOverListener
     >>= addClickListener
@@ -121,7 +120,7 @@ showHistory out i = do
     >>= J.on "click" deleteHandler
   liftEff $ J.append delete history
   let restoreHandler = \_ _ -> do
-                         let es' = es { history = drop (i + 1) es.history, expr = es.history !!! i }
+                         let es' = es { history = drop (i + 1) es.history, expr = (\out -> out.expr) (es.history !!! i) }
                          void $ runStateT showEvaluationState es'
   restore <- liftEff $ J.create "<button></button>"
     >>= J.setText "Restore"
@@ -160,7 +159,7 @@ makeClickable jq = do
   testEval env expr jq = do
     path <- getPath jq
     case evalPath1 env path expr of
-      Left err -> void $ J.setAttr "title" (show err) jq
+      Left err -> void $ J.setAttr "titles" (show err) jq
       Right _  -> void $ J.addClass "clickable" jq *> J.setAttr "title" "" jq
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
@@ -191,11 +190,14 @@ evalExpr :: Path -> EvalM Unit
 evalExpr path = do
   { env = env, expr = expr } <- get
   liftEff $ print path
+  let defs = concat $ map (\(Tuple name defs) -> map (\(Tuple bin expr) -> Def name bin expr) defs) $ StrMap.toList env
+  let eitherTT = typeTreeProgramn defs expr
+  let tt = either (\_ -> TAtom $ TypCon "NOT A REAL TYP") id eitherTT --TODO replace and show error
   case evalPath1 env path expr of
     -- Left msg   -> liftEff $ showInfo "execution" msg
     Right expr' -> do
       modify (\es -> es { expr = expr' })
-      modify (\es -> es { history = expr : es.history })
+      modify (\es -> es { history = {expr:expr, typ:tt} : es.history })
       showEvaluationState
 
 getValue :: J.JQuery -> DOMEff String
