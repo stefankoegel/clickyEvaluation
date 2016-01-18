@@ -37,7 +37,7 @@ exprToJQuery output = go id output
     {expr:(Binary op e1 e2), typ:(TBinary opt tt1 tt2 t)} -> do
       j1 <- go (p <<< Fst) {expr:e1, typ:tt1}
       j2 <- go (p <<< Snd) {expr:e2, typ:tt2}
-      binary op opt j1 j2 --TODO show type of op or type of expr ?
+      binary op opt t j1 j2 --TODO show type of op or type of expr ?
 
     {expr:(List es), typ:(TListTree ts t)} -> case isString es of
                   true  -> string es t
@@ -116,11 +116,11 @@ lambda jBinds jBody t = do
   J.append close jLam
   return jLam
 
-binary :: forall eff. Op -> Type -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-binary op t j1 j2 = do
+binary :: forall eff. Op -> Type -> Type -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+binary op opt t j1 j2 = do
   dBin <- makeDiv "" (singleton "binary") >>= addTypetoDiv t
   J.append j1 dBin
-  dOp <- makeDiv (pPrintOp op) (singleton "op")
+  dOp <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt
   J.append dOp dBin
   J.append j2 dBin
   return dBin
