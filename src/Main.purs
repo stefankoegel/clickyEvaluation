@@ -24,12 +24,12 @@ import Control.Monad.Eff.Class
 
 import Web (exprToJQuery, getPath)
 import Parser
-import Evaluator (evalPath1, Env(), Path(), defsToEnv)
+import Evaluator (evalPath1, Env(), Path(), defsToEnv,envToDefs)
 import AST
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
 import JSHelpers
-import TypeChecker (typeTreeProgramn)
+import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv())
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -40,7 +40,7 @@ main = J.ready $ do
 
 type DOMEff = Eff (dom :: DOM, console :: CONSOLE, ace :: ACE)
 
-type EvalState = { env :: Env, expr :: Expr, history :: List Output }
+type EvalState = { env :: Env, out :: Output, history :: List Output, typEnv :: TypeEnv }
 
 type EvalM a = StateT EvalState DOMEff a
 
@@ -57,9 +57,13 @@ startEvaluation = do
         Left err@(ParseError { position: (Position { line: line, column: column }) })  -> do
           showInfo "Definitions" (show err)
           markText (line - 1) column
-        Right env -> do
-          clearInfo
-          void $ runStateT showEvaluationState { env: env, expr: expr, history: Nil }
+        Right env -> case buildTypeEnv (envToDefs env) of --  type Env
+          Left err -> showInfo "Definitions" (show err)
+          Right typEnv -> case typeTreeProgramnEnv typEnv expr of --  type expr
+            Left err -> showInfo "Expression" (show err)
+            Right typ -> do
+              clearInfo
+              void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ}, history: Nil, typEnv:typEnv }
 
 markText :: Int -> Int -> DOMEff Unit
 markText line column = do
@@ -73,15 +77,10 @@ showEvaluationState = do
   output <- liftEff $ prepareContainer "output"
   history <- liftEff $ prepareContainer "history"
 
-  { env = env, expr = expr, history = histExprs } <- get :: EvalM EvalState
-  liftEff $ print expr
+  { env = env, out = out, history = histExprs } <- get :: EvalM EvalState
+  liftEff $ print out.expr
 
-  let defs = concat $ map (\(Tuple name defs) -> map (\(Tuple bin expr) -> Def name bin expr) defs) $ StrMap.toList env
-  let eitherTT = typeTreeProgramn defs expr
-  let tt = either (\_ -> TAtom $ TypCon "NOT A REAL TYP") id eitherTT --TODO replace and show error
-  liftEff $ print tt
-
-  liftEff $ exprToJQuery {expr:expr, typ:tt} >>= wrapInDiv "output" >>= flip J.append output
+  liftEff $ exprToJQuery out >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
 
   liftEff (J.find ".binary, .app, .func, .list, .if" output)
@@ -120,7 +119,7 @@ showHistory out i = do
     >>= J.on "click" deleteHandler
   liftEff $ J.append delete history
   let restoreHandler = \_ _ -> do
-                         let es' = es { history = drop (i + 1) es.history, expr = (\out -> out.expr) (es.history !!! i) }
+                         let es' = es { history = drop (i + 1) es.history, out = (es.history !!! i) }
                          void $ runStateT showEvaluationState es'
   restore <- liftEff $ J.create "<button></button>"
     >>= J.setText "Restore"
@@ -152,7 +151,8 @@ wrapInDiv name jq = do
 
 makeClickable :: J.JQuery -> EvalM Unit
 makeClickable jq = do
-  { env = env, expr = expr } <- get
+  { env = env, out = out } <- get
+  let expr = out.expr
   liftEff $ jqMap (testEval env expr) jq
   where
   testEval :: Env -> Expr -> J.JQuery -> DOMEff Unit
@@ -188,17 +188,17 @@ removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
 
 evalExpr :: Path -> EvalM Unit
 evalExpr path = do
-  { env = env, expr = expr } <- get
+  { env = env, out = out, typEnv = typEnv} <- get
+  let expr = out.expr
   liftEff $ print path
-  let defs = concat $ map (\(Tuple name defs) -> map (\(Tuple bin expr) -> Def name bin expr) defs) $ StrMap.toList env
-  let eitherTT = typeTreeProgramn defs expr
-  let tt = either (\_ -> TAtom $ TypCon "NOT A REAL TYP") id eitherTT --TODO replace and show error
   case evalPath1 env path expr of
-    -- Left msg   -> liftEff $ showInfo "execution" msg
-    Right expr' -> do
-      modify (\es -> es { expr = expr' })
-      modify (\es -> es { history = {expr:expr, typ:tt} : es.history })
-      showEvaluationState
+    Left msg   -> liftEff $ showInfo "execution" (show msg)
+    Right expr' -> case typeTreeProgramnEnv typEnv expr' of -- typ expr'
+        Left err -> liftEff $ showInfo "Expression" (show err)
+        Right typ' -> do
+          modify (\es -> es { out = {expr:expr', typ:typ'} })
+          modify (\es -> es { history = out : es.history })
+          showEvaluationState
 
 getValue :: J.JQuery -> DOMEff String
 getValue jq = unsafeFromForeign <$> J.getValue jq

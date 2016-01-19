@@ -144,6 +144,13 @@ type Env = StrMap (List (Tuple (List Binding) Expr))
 defsToEnv :: (List Definition) -> Env
 defsToEnv = foldl insertDef Map.empty
 
+envToDefs :: Env -> (List Definition)
+envToDefs env = concat $ map tupleToDef $ Data.StrMap.toList env
+  where
+    tupleToDef (Tuple name defs) = map
+                                    (\(Tuple bin expr) -> Def name bin expr)
+                                    defs
+
 insertDef :: Env -> Definition -> Env
 insertDef env (Def name bindings body) = case Map.lookup name env of
   Nothing   -> Map.insert name (singleton $ Tuple bindings body) env

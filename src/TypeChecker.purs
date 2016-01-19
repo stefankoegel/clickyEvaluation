@@ -549,6 +549,11 @@ typeTreeProgramn defs exp = case m of
   where
     m = (infer <$> (buildTypeEnv defs) <*> pure exp)
 
+typeTreeProgramnEnv:: TypeEnv -> Expr -> Either TypeError TypeTree
+typeTreeProgramnEnv env expr = case evalState (runExceptT (infer env expr)) initUnique of
+      Left err -> Left err
+      Right res -> Right $ closeOver' res
+
 
 closeOver' :: (Tuple (Map.Map TVar Type) TypeTree) -> TypeTree
 closeOver' (Tuple s tt) = apply s tt
