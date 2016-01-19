@@ -38,7 +38,7 @@ test name expected actuall = if eqTypErrScheme expected actuall
   else log $ "\n \n Typing fail (" ++ name ++ ") :  expected result: \n"
     ++ show expected ++ "\n actuall result: \n" ++ show actuall ++ "\n \n"
      ++ "Pretty Print expected: \n" ++ prettyPrint expected
-      ++ "\n Pritty Print actuall: \n" ++ prettyPrint actuall ++ "\n \n"
+      ++ "\n Pretty Print actuall: \n" ++ prettyPrint actuall ++ "\n \n"
 
 eqTypErrScheme:: Either TypeError Scheme -> Either TypeError Scheme -> Boolean
 eqTypErrScheme (Left a) (Left a') = (a == a')
@@ -172,7 +172,9 @@ runTests = do
   testInfer "ListLit Binding" (Def "list" (toList [ListLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"])))
     inferDef (Left ((InfiniteType (TVar "t_4") (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_7"))))))
   testInfer "NTupleLit Binding LetExp"  (LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (App (aname "a") (toList [aname "b"])))
-    inferType(Right (Forall (Nil) (TypCon "Char")))
+    inferType (Right (Forall (Nil) (TypCon "Char")))
+  testInfer "Lambda App" (App (Lambda (Cons (Lit (Name "f")) (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (App (Atom (Name "f")) (Cons (Atom (Name "a")) (Cons (Atom (Name "b")) (Nil))))) (Cons (PrefixOp Add) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))
+    inferType (Right (Forall (Nil) (TypCon "Int")))
 
   testInfer "zipWith - Group" (toList [Def "zipWith" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
       (App (PrefixOp Colon) (toList [App (aname "f") (toList [aname "x",aname "y"]), App (aname "zipWith") (toList [aname "f",aname"xs",aname "ys"])])),

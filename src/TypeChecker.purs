@@ -299,7 +299,7 @@ infer env ex = case ex of
     tv <- fresh
     (Tuple s1 t1) <- infer env e1
     (Tuple s2 t2) <- infer (apply s1 env) e2
-    s3       <- unify (apply s2 (extractType t1)) (TypArr (extractType t2) tv)
+    s3       <- unify (apply (s1  `compose` s2) (extractType t1)) (TypArr (extractType t2) tv)
     return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 $ TApp t1 (Cons t2 Nil) tv))
 
   App e1 (Cons e2 xs) -> do
