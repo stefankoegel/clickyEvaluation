@@ -590,3 +590,27 @@ prettyPrintType = f
 prettyPrintAD:: AD -> String
 prettyPrintAD (TList a) = "[" ++ prettyPrintType a ++ "]"
 prettyPrintAD (TTuple a) = "(" ++ foldr (\t s -> prettyPrintType t ++","++s) ")" a
+
+emptyType:: Type
+emptyType = TypCon ""
+
+buildEmptyTypeTree:: Expr -> TypeTree
+buildEmptyTypeTree e = f e
+  where
+  f (Atom _) = TAtom emptyType
+  f (List ls) = TListTree (map f ls) emptyType
+  f (NTuple ls) = TNTuple (map f ls) emptyType
+  f (Binary _ e1 e2) = TBinary emptyType (f e1) (f e2) emptyType
+  f (SectL e _) = TSectL (f e) emptyType emptyType
+  f (SectR _ e) = TSectR emptyType (f e) emptyType
+  f (PrefixOp _) = TPrefixOp emptyType
+  f (IfExpr e1 e2 e3) = TIfExpr (f e1) (f e2) (f e3) emptyType
+  f (LetExpr b1 e1 e2) = TLetExpr (g b1) (f e1) (f e2) emptyType
+  f (Lambda bs e) = TLambda (map g bs) (f e) emptyType
+  f (App e es) = TApp (f e) (map f es) emptyType
+
+-- Binding to BindingType
+  g (Lit _) = TLit emptyType
+  g (ConsLit b1 b2) = TConsLit (g b1) (g b2) emptyType
+  g (ListLit bs) = TListLit (map g bs) emptyType
+  g (NTupleLit bs) = TNTupleLit (map g bs) emptyType

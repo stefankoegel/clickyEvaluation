@@ -29,7 +29,7 @@ import AST
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
 import JSHelpers
-import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv())
+import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -59,11 +59,16 @@ startEvaluation = do
           markText (line - 1) column
         Right env -> case buildTypeEnv (envToDefs env) of --  type Env
           Left err -> showInfo "Definitions" (show err)
-          Right typEnv -> case typeTreeProgramnEnv typEnv expr of --  type expr
-            Left err -> showInfo "Expression" (show err)
-            Right typ -> do
-              clearInfo
-              void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ}, history: Nil, typEnv:typEnv }
+          Right typEnv -> do
+            let eitherTyp = typeTreeProgramnEnv typEnv expr
+            outIfErr "Expression" eitherTyp
+            let typ = either (\_ -> buildEmptyTypeTree expr) id eitherTyp
+            void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ}, history: Nil, typEnv:typEnv }
+
+outIfErr::forall a b. (Show a) => String -> Either a b -> DOMEff Unit
+outIfErr origin either = case either of
+  Left err -> showInfo origin (show err)
+  Right _ -> clearInfo --TODO do Nothing
 
 markText :: Int -> Int -> DOMEff Unit
 markText line column = do
@@ -194,12 +199,13 @@ evalExpr path = do
   liftEff $ print path
   case evalPath1 env path expr of
     Left msg   -> liftEff $ showInfo "execution" (show msg)
-    Right expr' -> case typeTreeProgramnEnv typEnv expr' of -- typ expr'
-        Left err -> liftEff $ showInfo "Expression" (show err)
-        Right typ' -> do
-          modify (\es -> es { out = {expr:expr', typ:typ'} })
-          modify (\es -> es { history = out : es.history })
-          showEvaluationState
+    Right expr' -> do
+        let eitherTyp = typeTreeProgramnEnv typEnv expr'
+        let typ' = either (\_ -> buildEmptyTypeTree expr') id eitherTyp
+        liftEff $ outIfErr "Expression" eitherTyp
+        modify (\es -> es { out = {expr:expr', typ:typ'} })
+        modify (\es -> es { history = out : es.history })
+        showEvaluationState
 
 getValue :: J.JQuery -> DOMEff String
 getValue jq = unsafeFromForeign <$> J.getValue jq
