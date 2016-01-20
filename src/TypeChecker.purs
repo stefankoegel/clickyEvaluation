@@ -331,7 +331,8 @@ infer env ex = case ex of
         t'   = generalize env' (apply (s1 `compose` s2) (extractType t1))
         env'' = apply s2 (foldr (\a b -> extend b a) env' list)
     (Tuple s3 t2) <- infer env'' e2
-    return (Tuple (s1 `compose` s2 `compose` s3) t2)
+    let sC = (s1 `compose` s2 `compose` s3)
+    return (Tuple sC $ apply sC (TLetExpr typ t1 t2 (extractType t2)))
 
 
   IfExpr cond tr fl -> do
