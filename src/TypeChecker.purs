@@ -478,9 +478,12 @@ extractListLit (Cons a b) = do
 extractListLit Nil = return Nil
 
 extractBinding:: Binding -> Infer (Tuple (List (Tuple Atom Scheme)) TypeBinding)
-extractBinding (Lit a) = do
+extractBinding (Lit a@(Name _)) = do
   tv <- fresh
   return $ Tuple (toList [(Tuple a (Forall Nil tv))]) (TLit tv)
+extractBinding (Lit (Bool _)) = return $ Tuple Nil $ TLit (TypCon "Bool")
+extractBinding (Lit (Char _)) = return $ Tuple Nil $ TLit (TypCon "Char")
+extractBinding (Lit (AInt _)) = return $ Tuple Nil $ TLit (TypCon "Int")
 
 extractBinding a@(ConsLit _ _) = do
   tv <- fresh
