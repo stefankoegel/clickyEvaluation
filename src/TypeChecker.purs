@@ -341,7 +341,8 @@ infer env ex = case ex of
     (Tuple s3 t3) <- infer env fl
     s4 <- unify (extractType t1) (TypCon "Bool")
     s5 <- unify (extractType t2) (extractType t3)
-    return (Tuple (s5 `compose` s4 `compose` s3 `compose` s2 `compose` s1) (apply s5 t2))
+    let sC = (s5 `compose` s4 `compose` s3 `compose` s2 `compose` s1)
+    return $ Tuple sC (apply sC $ TIfExpr t1 t2 t3 (extractType t2))
 
   PrefixOp op -> do
     Tuple s t <- inferOp op

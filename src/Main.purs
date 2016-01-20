@@ -79,6 +79,7 @@ showEvaluationState = do
 
   { env = env, out = out, history = histExprs } <- get :: EvalM EvalState
   liftEff $ print out.expr
+  liftEff $ print out.typ
 
   liftEff $ exprToJQuery out >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
@@ -160,7 +161,7 @@ makeClickable jq = do
     path <- getPath jq
     case evalPath1 env path expr of
       Left err -> void $ J.setAttr "titles" (show err) jq
-      Right _  -> void $ J.addClass "clickable" jq *> J.setAttr "title" "" jq
+      Right _  -> void $ J.addClass "clickable" jq *> J.setAttr "titles" "" jq
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
 addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
