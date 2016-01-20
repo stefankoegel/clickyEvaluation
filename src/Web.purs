@@ -67,7 +67,7 @@ exprToJQuery output = go id output
     {expr:App func args, typ:TApp tt ts t} -> do
       jFunc <- go (p <<< Fst) {expr:func, typ:tt}
       jArgs <- zipWithA (\i (Tuple e t) -> go (p <<< Nth i) {expr:e, typ:t}) (0 .. (length args - 1)) (zip args ts)
-      app jFunc jArgs
+      app jFunc jArgs t
 
 
 atom :: forall eff. Atom -> Type -> Eff (dom :: DOM | eff) J.JQuery
@@ -190,9 +190,9 @@ string es t = do
   dstring <- makeDiv str (toList ["list", "string"]) >>= addTypetoDiv t
   return dstring
 
-app :: forall eff. J.JQuery -> List J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-app jFunc jArgs = do
-  dApp <- makeDiv "" (singleton "app")
+app :: forall eff. J.JQuery -> List J.JQuery -> Type -> Eff (dom :: DOM | eff) J.JQuery
+app jFunc jArgs t = do
+  dApp <- makeDiv "" (singleton "app") >>= addTypetoDiv t
   J.addClass "func" jFunc
   J.append jFunc dApp
   for jArgs (flip J.append dApp)
