@@ -79,21 +79,26 @@ data Expr = Atom Atom
 
 -- last type para is type of expr at this level
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
--- bindings are ignored
 data TypeTree
-          = TAtom                                Type
-          | TListTree (List TypeTree)            Type
-          | TNTuple (List TypeTree)              Type
-          | TBinary Type TypeTree TypeTree       Type
-          | TUnary Type TypeTree                 Type
-          | TSectL TypeTree Type                 Type
-          | TSectR Type TypeTree                 Type
-          | TPrefixOp                            Type
-          | TIfExpr TypeTree TypeTree TypeTree   Type
-          | TLetExpr TypeTree TypeTree           Type
-          | TLambda TypeTree                     Type
-          | TApp TypeTree (List TypeTree)        Type
+          = TAtom                                   Type
+          | TListTree (List TypeTree)               Type
+          | TNTuple (List TypeTree)                 Type
+          | TBinary Type TypeTree TypeTree          Type
+          | TUnary Type TypeTree                    Type
+          | TSectL TypeTree Type                    Type
+          | TSectR Type TypeTree                    Type
+          | TPrefixOp                               Type
+          | TIfExpr TypeTree TypeTree TypeTree      Type
+          | TLetExpr TypeBinding TypeTree TypeTree  Type
+          | TLambda (List TypeBinding) TypeTree     Type
+          | TApp TypeTree (List TypeTree)           Type
 
+
+
+data TypeBinding  = TLit                              Type
+                  | TConsLit TypeBinding TypeBinding  Type
+                  | TListLit (List TypeBinding)       Type
+                  | TNTupleLit (List TypeBinding)     Type
 
 data TVar = TVar String
 
@@ -265,6 +270,13 @@ instance showTypeTree :: Show TypeTree where
   show (TSectR t1 tt t) = "(TSectR " ++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
   show (TPrefixOp t) = "(TPrefixOp " ++ show t ++ ")"
   show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show tt3 ++ " " ++ show t ++ ")"
-  show (TLetExpr tt1 tt2 t) = "(TLetExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show t ++ ")"
-  show (TLambda tt t ) = "(TLambda " ++ show tt ++ " " ++ show t ++ ")"
+  show (TLetExpr b tt1 tt2 t) = "(TLetExpr " ++ show b ++ " " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show t ++ ")"
+  show (TLambda lb tt t ) = "(TLambda " ++ show lb ++ " " ++ show tt ++ " " ++ show t ++ ")"
   show (TApp tt1 tl t) = "(TApp " ++ show tt1 ++ " (" ++ show tl ++ ") " ++ show t ++ ")"
+
+
+instance showTypeBinding:: Show TypeBinding where
+  show (TLit t) = "(TLit "++ show t ++")"
+  show (TConsLit b1 b2 t) = "(TConsLit "++ show b1 ++ " " ++ show b2 ++ " " ++ show t ++")"
+  show (TListLit lb t) = "(TListLit " ++ show lb ++ " "++ show t ++")"
+  show (TNTupleLit lb t) = "(TNTupleLit " ++ show lb ++ " "++ show t ++")"

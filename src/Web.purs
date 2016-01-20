@@ -60,8 +60,8 @@ exprToJQuery output = go id output
       jt <- go (p <<< Snd) {expr:thenExpr, typ:tt2}
       je <- go (p <<< Thrd) {expr:elseExpr, typ:tt3}
       ifexpr jc jt je t
-    {expr:Lambda binds body, typ:TLambda tt t} -> do
-      jBinds <- for binds binding
+    {expr:Lambda binds body, typ:TLambda lb tt t} -> do
+      jBinds <- for (zip binds lb) binding
       jBody <- go (p <<< Fst) {expr:body, typ:tt}
       lambda jBinds jBody t
     {expr:App func args, typ:TApp tt ts t} -> do
@@ -77,27 +77,29 @@ atom (Bool false) t = makeDiv "False" (toList ["atom", "bool"]) >>= addTypetoDiv
 atom (Char c) t    = (makeDiv ("'" ++ c ++ "'") (toList ["atom", "char"])) >>= addTypetoDiv t
 atom (Name name) t = makeDiv name (toList ["atom", "name"]) >>= addTypetoDiv t
 
-binding :: forall eff. Binding -> Eff (dom :: DOM | eff) J.JQuery
+binding :: forall eff. Tuple Binding  TypeBinding -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
-  Lit a        -> atom a $ TypCon "NO REAL TYPE - FIX IT"
-  ConsLit b bs -> do
-    jCons <- makeDiv "" Nil
+  Tuple (Lit a) (TLit t)       -> atom a t
+  Tuple (ConsLit b bs) (TConsLit tb tbs t)-> do
+    jCons <- makeDiv "" Nil >>= addTypetoDiv t
     makeDiv "(" (singleton "brace") >>= flip J.append jCons
-    binding b             >>= flip J.append jCons
+    binding (Tuple b tb)            >>= flip J.append jCons
     makeDiv ":" (singleton "colon") >>= flip J.append jCons
-    binding bs            >>= flip J.append jCons
+    binding (Tuple bs tbs)           >>= flip J.append jCons
     makeDiv ")" (singleton "brace") >>= flip J.append jCons
-  ListLit bs -> do
-    jList <- makeDiv "" Nil
+  Tuple (ListLit bs) (TListLit tbs t) -> do
+    jList <- makeDiv "" Nil >>= addTypetoDiv t
     makeDiv "[" (singleton "brace") >>= flip J.append jList
-    for bs $ \b -> do
+    let bx = zip bs tbs
+    for bx $ \b -> do
       binding b >>= flip J.append jList
       makeDiv "," (singleton "comma") >>= flip J.append jList
     makeDiv "]" (singleton "brace") >>= flip J.append jList
-  NTupleLit bs -> do
-    jTuple <- makeDiv "" Nil
+  Tuple (NTupleLit bs) (TNTupleLit tbs t)-> do
+    jTuple <- makeDiv "" Nil >>= addTypetoDiv t
     makeDiv "(" (singleton "brace") >>= flip J.append jTuple
-    interleaveM_ (binding >=> flip J.append jTuple) (makeDiv "," (singleton "comma") >>= flip J.append jTuple) bs
+    let b = (zip bs tbs)
+    interleaveM_ (binding >=> flip J.append jTuple) (makeDiv "," (singleton "comma") >>= flip J.append jTuple) b
     makeDiv ")" (singleton "brace") >>= flip J.append jTuple
     return jTuple
 

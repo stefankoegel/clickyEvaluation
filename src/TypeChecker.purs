@@ -121,8 +121,8 @@ instance subTypeTree :: Substitutable TypeTree where
   apply s (TSectR op tt t) = TSectR (apply s op) (apply s tt) (apply s t)
   apply s (TPrefixOp t) = TPrefixOp $ apply s t
   apply s (TIfExpr tt1 tt2 tt3 t) = TIfExpr (apply s tt1) (apply s tt2) (apply s tt2) (apply s t)
-  apply s (TLetExpr tt1 tt2 t) = TLetExpr (apply s tt1) (apply s tt2) (apply s t)
-  apply s (TLambda tt t) = TLambda (apply s tt) (apply s t)
+  apply s (TLetExpr b tt1 tt2 t) = TLetExpr (apply s b) (apply s tt1) (apply s tt2) (apply s t)
+  apply s (TLambda lb tt t) = TLambda (apply s lb) (apply s tt) (apply s t)
   apply s (TApp tt1 l t) = TApp (apply s tt1) (apply s l) (apply s t)
 
   ftv (TAtom t)  = ftv t
@@ -134,9 +134,20 @@ instance subTypeTree :: Substitutable TypeTree where
   ftv (TSectR _ _ t)  = ftv t
   ftv (TPrefixOp t)  = ftv t
   ftv (TIfExpr _ _ _ t)  = ftv t
-  ftv (TLetExpr _ _ t)  = ftv t
-  ftv (TLambda _ t)  = ftv t
+  ftv (TLetExpr _ _ _ t)  = ftv t
+  ftv (TLambda _ _ t)  = ftv t
   ftv (TApp _ _ t)  = ftv t
+
+instance subTypeBinding :: Substitutable TypeBinding where
+  apply s (TLit t) = TLit $ apply s t
+  apply s (TConsLit b1 b2 t) = TConsLit (apply s b1) (apply s b2) (apply s t)
+  apply s (TListLit lb t) = TListLit (apply s lb) (apply s t)
+  apply s (TNTupleLit lb t) = TListLit (apply s lb) (apply s t)
+
+  ftv (TLit t) = ftv t
+  ftv (TConsLit _ _ t) = ftv t
+  ftv (TListLit _ t) = ftv t
+  ftv (TNTupleLit _ t) = ftv t
 
 initInfer :: InferState
 initInfer = InferState { count : 0}
@@ -255,9 +266,15 @@ extractType (TSectL _ _ t)  =  t
 extractType (TSectR _ _ t)  =  t
 extractType (TPrefixOp t)  =  t
 extractType (TIfExpr _ _ _ t)  =  t
-extractType (TLetExpr _ _ t)  =  t
-extractType (TLambda _ t)  =  t
+extractType (TLetExpr _ _ _ t)  =  t
+extractType (TLambda _ _ t)  =  t
 extractType (TApp tt1 _ t)  =  t
+
+extractBindingType:: TypeBinding -> Type
+extractBindingType (TLit t) = t
+extractBindingType (TConsLit _ _ t) = t
+extractBindingType (TListLit _ t) = t
+extractBindingType (TNTupleLit _ t) = t
 
 
 inferType :: TypeEnv -> Expr -> Infer (Tuple Subst Type)
@@ -280,17 +297,17 @@ infer env ex = case ex of
     tv <- fresh
     Tuple envL tvB <- extractBinding bin
     let env' = foldr (\a b -> extend b a) env envL
-    s0 <- unify tv tvB
+    s0 <- unify tv (extractBindingType tvB)
     (Tuple s1 t1) <- infer env' e
-    return (Tuple s1 (TLambda (apply (s0 `compose` s1) t1) (apply (s0 `compose` s1) tv `TypArr` (extractType t1)))) --TODO move apply out
+    return (Tuple s1 $ apply (s0 `compose` s1) (TLambda (Cons tvB Nil) t1 $ tv `TypArr` (extractType t1)))
 
   Lambda (Cons bin xs) e -> do
     tv <- fresh
     Tuple envL tvB <- extractBinding bin
     let env' = foldr (\a b -> extend b a) env envL
-    s0 <- unify tv tvB
-    (Tuple s1 (TLambda tt t1)) <- infer env' (Lambda xs e)
-    return (Tuple s1 (TLambda (apply (s0 `compose` s1) tt) (apply (s0 `compose` s1) tv `TypArr` t1))) -- TODO move apply out
+    s0 <- unify tv (extractBindingType tvB)
+    (Tuple s1 (TLambda tb tt t1)) <- infer env' (Lambda xs e)
+    return (Tuple s1 $ apply (s0 `compose` s1) (TLambda (Cons tvB tb) tt (tv `TypArr` t1)))
 
   Lambda Nil e -> infer env e
 
@@ -309,7 +326,7 @@ infer env ex = case ex of
   LetExpr bin e1 e2 -> do
     (Tuple s1 t1) <- infer env e1
     (Tuple list typ) <- extractBinding bin
-    s2 <- unify typ (extractType t1)
+    s2 <- unify (extractBindingType typ) (extractType t1)
     let env' = apply (s1 `compose` s2) env
         t'   = generalize env' (apply (s1 `compose` s2) (extractType t1))
         env'' = apply s2 (foldr (\a b -> extend b a) env' list)
@@ -418,35 +435,35 @@ inferDef env (Def str bin exp) = do
     return $ Tuple (s3 `compose` s1) (apply s3 (apply s1 t1))
 
 
-extractConsLit:: Type -> Binding -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
+extractConsLit:: Type -> Binding -> Infer (Tuple (List (Tuple Atom Scheme)) TypeBinding)
 extractConsLit tv (ConsLit a b@(ConsLit _ _)) = do
   Tuple list1 typ1 <- extractBinding a
-  s1 <- unify typ1  tv
+  s1 <- unify (extractBindingType typ1) tv
   let list1' = apply s1 list1
-  Tuple listB (AD ( TList typB)) <- extractConsLit tv b
+  Tuple listB b@(TConsLit b1 b2 (AD ( TList typB))) <- extractConsLit tv b
   s2 <- unify typB (apply s1 tv)
-  return $ Tuple (apply s2 (list1' ++ listB)) (AD $ TList (apply s2 typB))
+  return $ Tuple (apply s2 (list1' ++ listB)) $ apply s2 (TConsLit typ1 b (AD $ TList (apply s2 typB)))
 
 extractConsLit tv (ConsLit a (Lit b)) = do
   Tuple list typ <- extractBinding a
-  s1 <- unify tv typ
+  s1 <- unify tv (extractBindingType typ)
   let list' = apply s1 list
   let ltyp = AD $ TList (apply s1 tv)
-  return $ Tuple (Cons (Tuple b $ Forall Nil ltyp) list') ltyp
+  return $ Tuple (Cons (Tuple b $ Forall Nil ltyp) list') $ (apply s1 (TConsLit typ (TLit ltyp) ltyp))
 
 
 extractConsLit tv (ConsLit a b) = do
   Tuple list typ <- extractBinding a
   Tuple list2 typ2 <- extractBinding b
-  s1 <- unify typ2 typ
-  s2 <- unify (apply s1 typ) tv
+  s1 <- unify (extractBindingType typ2) (extractBindingType typ)
+  s2 <- unify (apply s1 (extractBindingType typ)) tv
   let sC =  s2 `compose` s1
   let list' = map (\(Tuple a b) -> Tuple a $ apply sC b) list
   let list2' = map (\ (Tuple a b) -> Tuple a $  apply sC b) list2
-  return $ Tuple (list' ++ list2') $ AD $ TList tv
+  return $ Tuple (list' ++ list2') $ apply sC $ TConsLit typ typ2 $ AD $ TList tv
 
 
-extractListLit :: List Binding -> Infer (List (Tuple (List (Tuple Atom Scheme)) Type))
+extractListLit :: List Binding -> Infer (List (Tuple (List (Tuple Atom Scheme)) TypeBinding))
 extractListLit (Cons a Nil) = do
   b1 <- extractBinding a
   return (Cons b1 Nil)
@@ -458,34 +475,34 @@ extractListLit (Cons a b) = do
 
 extractListLit Nil = return Nil
 
-extractBinding:: Binding -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
+extractBinding:: Binding -> Infer (Tuple (List (Tuple Atom Scheme)) TypeBinding)
 extractBinding (Lit a) = do
   tv <- fresh
-  return $ Tuple (toList [(Tuple a (Forall Nil tv))]) tv
+  return $ Tuple (toList [(Tuple a (Forall Nil tv))]) (TLit tv)
 
 extractBinding a@(ConsLit _ _) = do
   tv <- fresh
   extractConsLit tv a
 
-extractBinding (ListLit a) = do
+extractBinding (ListLit a) = do -- Tuple TypEnv  (TListLit (List TypeBinding) Type)
   bs <- extractListLit a
   tv <- fresh
-  let ini = Tuple Nil tv
-  Tuple list typ <- foldM f ini bs
-  return $ Tuple list (AD $ TList typ)
+  let ini = Tuple Nil (TListLit Nil tv)
+  Tuple list (TListLit lb typ) <- foldM f ini bs
+  return $ Tuple list (TListLit lb (AD $ TList typ))
   where
--- :: Tuple (List (Tuple Atom Scheme)) Type -> Tuple (List (Tuple Atom Scheme)) Type
---           -> Infer (Tuple (List (Tuple Atom Scheme)) Type)
-    f (Tuple l1 t1) (Tuple l2 t2) = do
+-- :: Tuple (List (Tuple Atom Scheme)) BindingType -> Tuple (List (Tuple Atom Scheme)) BindingType
+--           -> Infer (Tuple (List (Tuple Atom Scheme)) BindingType)
+    f (Tuple l1 (TListLit lb1 t1)) (Tuple l2 b) = do
       let ls = l1 ++ l2
-      s1 <- unify t1 t2
-      return $ Tuple (apply s1 ls) (apply s1 t1)
+      s1 <- unify t1 (extractBindingType b)
+      return $ Tuple (apply s1 ls) (apply s1 (TListLit (Cons b lb1) t1))
 
 
 extractBinding (NTupleLit a) = do
   bs <- extractListLit a
   let tup = unzip bs
-  return $ Tuple (concat $ fst tup) (AD $ TTuple $ snd tup)
+  return $ Tuple (concat $ fst tup) (TNTupleLit (snd tup) (AD $ TTuple $ (map extractBindingType (snd tup))))
 
 
 inferGroup:: TypeEnv -> List Definition -> Infer (Tuple Subst Type)
