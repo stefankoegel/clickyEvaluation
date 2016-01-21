@@ -37,7 +37,7 @@ exprToJQuery output = go id output
     {expr:(Binary op e1 e2), typ:(TBinary opt tt1 tt2 t)} -> do
       j1 <- go (p <<< Fst) {expr:e1, typ:tt1}
       j2 <- go (p <<< Snd) {expr:e2, typ:tt2}
-      binary op opt t j1 j2 
+      binary op opt t j1 j2
 
     {expr:(List es), typ:(TListTree ts t)} -> case isString es of
                   true  -> string es t
@@ -68,10 +68,12 @@ exprToJQuery output = go id output
       jFunc <- go (p <<< Fst) {expr:func, typ:tt}
       jArgs <- zipWithA (\i (Tuple e t) -> go (p <<< Nth i) {expr:e, typ:t}) (0 .. (length args - 1)) (zip args ts)
       app jFunc jArgs t
+    {} -> makeDiv "You found a Bug" (Cons "" Nil)
+
 
 
 atom :: forall eff. Atom -> Type -> Eff (dom :: DOM | eff) J.JQuery
-atom (AInt n) t     = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv (TypCon "HALLO") >>= addTypetoDiv t
+atom (AInt n) t     = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv t
 atom (Bool true) t  = makeDiv "True"  (toList ["atom", "bool"]) >>= addTypetoDiv t
 atom (Bool false) t = makeDiv "False" (toList ["atom", "bool"]) >>= addTypetoDiv t
 atom (Char c) t    = (makeDiv ("'" ++ c ++ "'") (toList ["atom", "char"])) >>= addTypetoDiv t
