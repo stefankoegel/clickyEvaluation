@@ -186,6 +186,11 @@ runTests = do
       (Def "foldr" (Cons (Lit (Name "f")) (Cons (Lit (Name "ini")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (App (Atom (Name "f")) (Cons (Atom (Name "x")) (Cons (App (Atom (Name "foldr")) (Cons (Atom (Name "f")) (Cons (Atom (Name "ini")) (Cons (Atom (Name "xs")) (Nil))))) (Nil)))))])
     inferGroup ((Right (Forall ((Cons ((TVar "t_4")) (Cons ((TVar "t_7")) Nil))) (TypArr (TypArr (TypVar  (TVar "t_7")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_4")))) (TypArr (TypVar  (TVar "t_4")) (TypArr (AD (TList (TypVar  (TVar "t_7")))) (TypVar  (TVar "t_4"))))))))
 
+  testInfer "scanl - Group" (toList [Def "scanl" (Cons (Lit (Name "f")) (Cons (Lit (Name "b")) (Cons (ListLit (Nil)) (Nil)))) (List (Cons (Atom (Name "b")) (Nil))),
+                                     Def "scanl" (Cons (Lit (Name "f")) (Cons (Lit (Name "b")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (Binary Colon (Atom (Name "b")) (App (Atom (Name "scanl")) (Cons (Atom (Name "f")) (Cons (App (Atom (Name "f")) (Cons (Atom (Name "b")) (Cons (Atom (Name "x")) (Nil)))) (Cons (Atom (Name "xs")) (Nil))))))])
+          inferGroup (Right (Forall (Cons ((TVar "t_39")) (Cons ((TVar "t_48")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_48")) (TypArr (TypVar  (TVar "t_39")) (TypVar  (TVar "t_48")))) (TypArr (TypVar  (TVar "t_48")) (TypArr (AD (TList (TypVar  (TVar "t_39")))) (AD (TList (TypVar  (TVar "t_48")))))))))
+
+
   testProgramm "Prelude with exp" Test.Parser.parsedPrelude
     ((App (Atom (Name "sum")) (Cons (App (Atom (Name "map")) (Cons (SectR Power (Atom (AInt 2))) (Cons (List (Cons (Atom (AInt 1)) (Cons (Atom (AInt 2)) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))) (Nil)))) (Nil))))
     (Right (Forall (Nil) (TypCon "Int")))
