@@ -22,7 +22,7 @@ import Control.Monad.State.Trans
 import Control.Monad.State.Class
 import Control.Monad.Eff.Class
 
-import Web (exprToJQuery, getPath)
+import Web (exprToJQuery, getPath,typetoJQuery,idExpr)
 import Parser
 import Evaluator (evalPath1, Env(), Path(), defsToEnv,envToDefs)
 import AST
@@ -63,7 +63,8 @@ startEvaluation = do
             let eitherTyp = typeTreeProgramnEnv typEnv expr
             outIfErr "Expression" eitherTyp
             let typ = either (\_ -> buildEmptyTypeTree expr) id eitherTyp
-            void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ}, history: Nil, typEnv:typEnv }
+            let idTree = idExpr expr
+            void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ, idTree:idTree}, history: Nil, typEnv:typEnv }
 
 outIfErr::forall a b. (Show a) => String -> Either a b -> DOMEff Unit
 outIfErr origin either = case either of
@@ -81,6 +82,7 @@ showEvaluationState :: EvalM Unit
 showEvaluationState = do
   output <- liftEff $ prepareContainer "output"
   history <- liftEff $ prepareContainer "history"
+  typContainer <- liftEff $ prepareContainer "typ"
 
   { env = env, out = out, history = histExprs } <- get :: EvalM EvalState
   liftEff $ print out.expr
@@ -88,6 +90,9 @@ showEvaluationState = do
 
   liftEff $ exprToJQuery out >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
+
+  typDiv  <- liftEff $ typetoJQuery out
+  liftEff $ J.append typDiv typContainer
 
   liftEff (J.find ".binary, .app, .func, .list, .if" output)
      >>= makeClickable
@@ -203,7 +208,7 @@ evalExpr path = do
         let eitherTyp = typeTreeProgramnEnv typEnv expr'
         let typ' = either (\_ -> buildEmptyTypeTree expr') id eitherTyp
         liftEff $ outIfErr "Expression" eitherTyp
-        modify (\es -> es { out = {expr:expr', typ:typ'} })
+        modify (\es -> es { out = {expr:expr', typ:typ', idTree:idExpr expr'} })
         modify (\es -> es { history = out : es.history })
         showEvaluationState
 

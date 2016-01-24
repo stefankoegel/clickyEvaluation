@@ -1,6 +1,8 @@
 module Web
   ( exprToJQuery
   , getPath
+  , typetoJQuery
+  , idExpr
   ) where
 
 import Control.Monad.Eff
@@ -8,7 +10,7 @@ import Control.Monad.Eff.JQuery as J
 import DOM
 import Prelude
 
-import Data.Foldable (all)
+import Data.Foldable (all,foldr)
 import Data.Traversable (for)
 import Data.List
 import Data.Tuple
@@ -16,10 +18,12 @@ import Data.String (joinWith)
 import Data.Foreign (unsafeFromForeign)
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
+import Control.Monad.State
+import Control.Monad.Eff.Class
 
 import AST
 import Evaluator (Path(..))
-import TypeChecker (prettyPrintType,extractType)
+import TypeChecker (prettyPrintType,extractType,mapM)
 
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
@@ -33,81 +37,81 @@ exprToJQuery output = go id output
   where
   go :: (Path -> Path) -> Output -> Eff (dom :: DOM | eff) J.JQuery
   go p o = J.setProp pathPropName (p End) =<< case o of
-    {expr:(Atom a), typ:(TAtom t)} -> atom a t
-    {expr:(Binary op e1 e2), typ:(TBinary opt tt1 tt2 t)} -> do
-      j1 <- go (p <<< Fst) {expr:e1, typ:tt1}
-      j2 <- go (p <<< Snd) {expr:e2, typ:tt2}
-      binary op opt t j1 j2
+    {expr:(Atom a), typ:(TAtom t), idTree:(IAtom i)} -> atom a t i
+    {expr:(Binary op e1 e2), typ:(TBinary opt tt1 tt2 t), idTree:(IBinary opi i1 i2 i)} -> do
+      j1 <- go (p <<< Fst) {expr:e1, typ:tt1, idTree:i1}
+      j2 <- go (p <<< Snd) {expr:e2, typ:tt2, idTree:i2}
+      binary op opt opi t i j1 j2
 
-    {expr:(List es), typ:(TListTree ts t)} -> case isString es of
-                  true  -> string es t
-                  false -> do js <- zipWithA (\i (Tuple e t) -> go (p <<< Nth i) {expr:e, typ:t}) (0 .. (length es - 1)) (zip es ts)
-                              list js (map extractType ts) t
-    {expr:NTuple es, typ:TNTuple ts t} -> do
-      js <- zipWithA (\i (Tuple e t) -> go (p <<< Nth i) {expr:e, typ:t}) (0 .. (length es - 1)) (zip es ts)
-      tuple js (map extractType ts) t
-    {expr:SectL e op, typ:TSectL tt opt t} -> do
-      j <- go (p <<< Fst) {expr:e, typ:tt}
-      jop <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt
-      section j jop t
-    {expr:SectR op e, typ:TSectR opt tt t} -> do
-      jop <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt
-      j <- go (p <<< Snd) {expr:e, typ:tt}
-      section jop j t
-    {expr:PrefixOp op, typ:TPrefixOp t} -> makeDiv ("(" ++ pPrintOp op ++ ")") (toList ["prefix", "op"]) >>= addTypetoDiv t
-    {expr:IfExpr cond thenExpr elseExpr, typ:TIfExpr tt1 tt2  tt3 t} -> do
-      jc <- go (p <<< Fst) {expr:cond, typ:tt1}
-      jt <- go (p <<< Snd) {expr:thenExpr, typ:tt2}
-      je <- go (p <<< Thrd) {expr:elseExpr, typ:tt3}
-      ifexpr jc jt je t
-    {expr:Lambda binds body, typ:TLambda lb tt t} -> do
-      jBinds <- for (zip binds lb) binding
-      jBody <- go (p <<< Fst) {expr:body, typ:tt}
-      lambda jBinds jBody t
-    {expr:App func args, typ:TApp tt ts t} -> do
-      jFunc <- go (p <<< Fst) {expr:func, typ:tt}
-      jArgs <- zipWithA (\i (Tuple e t) -> go (p <<< Nth i) {expr:e, typ:t}) (0 .. (length args - 1)) (zip args ts)
-      app jFunc jArgs t
-    {} -> makeDiv "You found a Bug" (Cons "" Nil)
+    {expr:(List es), typ:(TListTree ts t), idTree:(IListTree is i)} -> case isString es of
+                  true  -> string es t i
+                  false -> do js <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t, idTree:i'}) (0 .. (length es - 1)) (zip is (zip es ts))
+                              list js t i
+    {expr:NTuple es, typ:TNTuple ts t,idTree: INTuple is i} -> do
+      js <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t,idTree:i'}) (0 .. (length es - 1)) (zip is (zip es ts))
+      tuple js t i
+    {expr:SectL e op, typ:TSectL tt opt t, idTree:(ISectL i opi i')} -> do
+      j <- go (p <<< Fst) {expr:e, typ:tt, idTree: i}
+      jop <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
+      section j jop t i'
+    {expr:SectR op e, typ:TSectR opt tt t, idTree: (ISectR opi i i')} -> do
+      jop <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
+      j <- go (p <<< Snd) {expr:e, typ:tt, idTree: i}
+      section jop j t i'
+    {expr:PrefixOp op, typ:TPrefixOp t, idTree: (IPrefixOp i)} -> makeDiv ("(" ++ pPrintOp op ++ ")") (toList ["prefix", "op"]) >>= addTypetoDiv t
+    {expr:IfExpr cond thenExpr elseExpr, typ:TIfExpr tt1 tt2  tt3 t,idTree:IIfExpr i1 i2 i3 i} -> do
+      jc <- go (p <<< Fst) {expr:cond, typ:tt1, idTree: i1}
+      jt <- go (p <<< Snd) {expr:thenExpr, typ:tt2, idTree: i2}
+      je <- go (p <<< Thrd) {expr:elseExpr, typ:tt3, idTree: i3}
+      ifexpr jc jt je t i
+    {expr:Lambda binds body, typ:TLambda lb tt t, idTree: (ILambda bis i i')} -> do
+      jBinds <- for (zip bis (zip binds lb)) binding
+      jBody <- go (p <<< Fst) {expr:body, typ:tt, idTree: i}
+      lambda jBinds jBody t i'
+    {expr:App func args, typ:TApp tt ts t, idTree:IApp i1 is i} -> do
+      jFunc <- go (p <<< Fst) {expr:func, typ:tt, idTree: i1}
+      jArgs <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t, idTree: i'}) (0 .. (length args - 1)) (zip is (zip args ts))
+      app jFunc jArgs t i
+    {} -> makeDiv "You found a Bug" Nil
 
 
 
-atom :: forall eff. Atom -> Type -> Eff (dom :: DOM | eff) J.JQuery
-atom (AInt n) t     = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv t
-atom (Bool true) t  = makeDiv "True"  (toList ["atom", "bool"]) >>= addTypetoDiv t
-atom (Bool false) t = makeDiv "False" (toList ["atom", "bool"]) >>= addTypetoDiv t
-atom (Char c) t    = (makeDiv ("'" ++ c ++ "'") (toList ["atom", "char"])) >>= addTypetoDiv t
-atom (Name name) t = makeDiv name (toList ["atom", "name"]) >>= addTypetoDiv t
+atom :: forall eff. Atom -> Type -> Int ->  Eff (dom :: DOM | eff) J.JQuery
+atom (AInt n) t  i   = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv t >>= addIdtoDiv i
+atom (Bool true) t i = makeDiv "True"  (toList ["atom", "bool"]) >>= addTypetoDiv t >>= addIdtoDiv i
+atom (Bool false) t i= makeDiv "False" (toList ["atom", "bool"]) >>= addTypetoDiv t >>= addIdtoDiv i
+atom (Char c) t  i  = (makeDiv ("'" ++ c ++ "'") (toList ["atom", "char"])) >>= addTypetoDiv t >>= addIdtoDiv i
+atom (Name name) t i = makeDiv name (toList ["atom", "name"]) >>= addTypetoDiv t >>= addIdtoDiv i
 
-binding :: forall eff. Tuple Binding  TypeBinding -> Eff (dom :: DOM | eff) J.JQuery
+binding :: forall eff. Tuple IBinding (Tuple Binding  TypeBinding) -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
-  Tuple (Lit a) (TLit t)       -> atom a t
-  Tuple (ConsLit b bs) (TConsLit tb tbs t)-> do
-    jCons <- makeDiv "" Nil >>= addTypetoDiv t
+  Tuple (ILit i) (Tuple (Lit a) (TLit t))       -> atom a t i
+  Tuple (IConsLit i1 i2 i) (Tuple (ConsLit b bs) (TConsLit tb tbs t))-> do
+    jCons <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
     makeDiv "(" (singleton "brace") >>= flip J.append jCons
-    binding (Tuple b tb)            >>= flip J.append jCons
+    binding (Tuple i1 (Tuple b tb))            >>= flip J.append jCons
     makeDiv ":" (singleton "colon") >>= flip J.append jCons
-    binding (Tuple bs tbs)           >>= flip J.append jCons
+    binding (Tuple i2 (Tuple bs tbs))           >>= flip J.append jCons
     makeDiv ")" (singleton "brace") >>= flip J.append jCons
-  Tuple (ListLit bs) (TListLit tbs t) -> do
-    jList <- makeDiv "" Nil >>= addTypetoDiv t
+  Tuple (IListLit is i)(Tuple (ListLit bs) (TListLit tbs t)) -> do
+    jList <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
     makeDiv "[" (singleton "brace") >>= flip J.append jList
-    let bx = zip bs tbs
+    let bx = zip is (zip bs tbs)
     for bx $ \b -> do
       binding b >>= flip J.append jList
       makeDiv "," (singleton "comma") >>= flip J.append jList
     makeDiv "]" (singleton "brace") >>= flip J.append jList
-  Tuple (NTupleLit bs) (TNTupleLit tbs t)-> do
-    jTuple <- makeDiv "" Nil >>= addTypetoDiv t
+  Tuple (INTupleLit is i)(Tuple (NTupleLit bs) (TNTupleLit tbs t))-> do
+    jTuple <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
     makeDiv "(" (singleton "brace") >>= flip J.append jTuple
-    let b = (zip bs tbs)
+    let b = (zip is (zip bs tbs))
     interleaveM_ (binding >=> flip J.append jTuple) (makeDiv "," (singleton "comma") >>= flip J.append jTuple) b
     makeDiv ")" (singleton "brace") >>= flip J.append jTuple
     return jTuple
 
-lambda :: forall eff. List J.JQuery -> J.JQuery -> Type -> Eff (dom :: DOM | eff) J.JQuery
-lambda jBinds jBody t = do
-  jLam <- makeDiv "" (singleton "lambda") >>= addTypetoDiv t
+lambda :: forall eff. List J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+lambda jBinds jBody t i = do
+  jLam <- makeDiv "" (singleton "lambda") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "(" (singleton "brace")
   J.append open jLam
   bs <- makeDiv "\\" (singleton "backslash")
@@ -120,18 +124,18 @@ lambda jBinds jBody t = do
   J.append close jLam
   return jLam
 
-binary :: forall eff. Op -> Type -> Type -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-binary op opt t j1 j2 = do
-  dBin <- makeDiv "" (singleton "binary") >>= addTypetoDiv t
+binary :: forall eff. Op -> Type -> Int -> Type -> Int -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+binary op opt opi t i j1 j2 = do
+  dBin <- makeDiv "" (singleton "binary") >>= addTypetoDiv t >>= addIdtoDiv i
   J.append j1 dBin
-  dOp <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt
+  dOp <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv i
   J.append dOp dBin
   J.append j2 dBin
   return dBin
 
-section :: forall eff. J.JQuery -> J.JQuery -> Type -> Eff (dom :: DOM | eff) J.JQuery
-section j1 j2 t = do
-  jSect <- makeDiv "" (singleton "section") >>= addTypetoDiv t
+section :: forall eff. J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+section j1 j2 t i = do
+  jSect <- makeDiv "" (singleton "section") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "(" (singleton "brace")
   J.append open jSect
   J.append j1 jSect
@@ -140,9 +144,9 @@ section j1 j2 t = do
   J.append close jSect
   return jSect
 
-ifexpr :: forall eff. J.JQuery -> J.JQuery -> J.JQuery -> Type -> Eff (dom :: DOM | eff) J.JQuery
-ifexpr cond thenExpr elseExpr t = do
-  dIf <- makeDiv "" (singleton "if") >>= addTypetoDiv t
+ifexpr :: forall eff. J.JQuery -> J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+ifexpr cond thenExpr elseExpr t i = do
+  dIf <- makeDiv "" (singleton "if") >>= addTypetoDiv t >>= addIdtoDiv i
   makeDiv "if" (singleton "keyword") >>= flip J.append dIf
   J.append cond dIf
   makeDiv "then" (singleton "keyword") >>= flip J.append dIf
@@ -158,24 +162,22 @@ interleaveM_ f sep = go
   go (Cons x Nil)    = void $ f x
   go (Cons x xs) = f x *> sep *> go xs
 
-tuple :: forall eff. List J.JQuery -> List Type -> Type -> Eff (dom :: DOM | eff) J.JQuery
-tuple js ts t = do
-  dtuple <- makeDiv "" (singleton "tuple") >>= addTypetoDiv t
+tuple :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+tuple js t i = do
+  dtuple <- makeDiv "" (singleton "tuple") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "(" (singleton "brace")
-  js' <- zipWithA (\j t -> addTypetoDiv t j) js ts
   J.append open dtuple
-  interleaveM_ (flip J.append dtuple) (makeDiv "," (singleton "comma") >>= flip J.append dtuple) js'
+  interleaveM_ (flip J.append dtuple) (makeDiv "," (singleton "comma") >>= flip J.append dtuple) js
   close <- makeDiv ")" (singleton "brace")
   J.append close dtuple
   return dtuple
 
-list :: forall eff. List J.JQuery -> List Type -> Type -> Eff (dom :: DOM | eff) J.JQuery
-list js ts t = do
-  dls <- makeDiv "" (singleton "list") >>= addTypetoDiv t
+list :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+list js t   i  = do
+  dls <- makeDiv "" (singleton "list") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "[" (singleton "brace")
-  js' <- zipWithA (\j t -> addTypetoDiv t j) js ts
   J.append open dls
-  interleaveM_ (flip J.append dls) (makeDiv "," (singleton "comma") >>= flip J.append dls) js'
+  interleaveM_ (flip J.append dls) (makeDiv "," (singleton "comma") >>= flip J.append dls) js
   close <- makeDiv "]" (singleton "brace")
   J.append close dls
   return dls
@@ -186,15 +188,15 @@ isString es = length es > 0 && all isChar es
   isChar (Atom (Char _)) = true
   isChar _               = false
 
-string :: forall eff. List Expr -> Type -> Eff (dom :: DOM | eff) J.JQuery
-string es t = do
+string :: forall eff. List Expr -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+string es t i = do
   let str = "\"" ++ joinWith "" (fromList ((\(Atom (Char s)) -> s) <$> es)) ++ "\""
-  dstring <- makeDiv str (toList ["list", "string"]) >>= addTypetoDiv t
+  dstring <- makeDiv str (toList ["list", "string"]) >>= addTypetoDiv t >>= addIdtoDiv i
   return dstring
 
-app :: forall eff. J.JQuery -> List J.JQuery -> Type -> Eff (dom :: DOM | eff) J.JQuery
-app jFunc jArgs t = do
-  dApp <- makeDiv "" (singleton "app") >>= addTypetoDiv t
+app :: forall eff. J.JQuery -> List J.JQuery -> Type -> Int  -> Eff (dom :: DOM | eff) J.JQuery
+app jFunc jArgs t i = do
+  dApp <- makeDiv "" (singleton "app") >>= addTypetoDiv t >>= addIdtoDiv i
   J.addClass "func" jFunc
   J.append jFunc dApp
   for jArgs (flip J.append dApp)
@@ -209,6 +211,209 @@ makeDiv text classes = do
   for classes (flip J.addClass d)
   return d
 
+emptyJQuery:: forall eff . Eff (dom :: DOM | eff) J.JQuery
+emptyJQuery = J.create ""
+
 
 addTypetoDiv:: forall eff. Type -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-addTypetoDiv typ = J.setAttr "title" (prettyPrintType typ)
+addTypetoDiv typ d = do
+  J.setAttr "title" (prettyPrintType typ) d
+
+
+addIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+addIdtoDiv id d = do
+    J.setAttr "id" ("expr"++(show id)) d
+
+addTypIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+addTypIdtoDiv id d = do
+    J.setAttr "id" ("typ"++(show id)) d
+
+
+dummyExpr:: Expr
+dummyExpr =  Atom $ AInt 0
+
+typetoJQuery:: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
+typetoJQuery {typ:TListTree ls t, idTree: IListTree is i} = do
+    container <- makeDiv "" $ Cons "output" Nil
+    list <- mapM (\(Tuple t i) -> typetoJQuery {typ:t , idTree:i ,expr:dummyExpr}) (zip ls is)
+    for list $ (\l -> J.append l container)
+    return $ container
+typetoJQuery {typ:TNTuple ls t, idTree: INTuple is i} = do
+    container <- makeDiv "" $ Cons "output" Nil
+    list <- mapM (\(Tuple t i) -> typetoJQuery {typ:t , idTree:i ,expr:dummyExpr}) (zip ls is)
+    for list $ (\l -> J.append l container)
+    return $ container
+typetoJQuery {typ:TBinary t1 tt1 tt2 t, idTree:IBinary i1 it1 it2 i} = do
+    container <- makeDiv "" Nil
+    typContainer <- makeDiv "" $ Cons "output" Nil
+    div1 <- makeDiv (prettyPrintType (extractType tt1)) $ Cons "output" Nil
+    div2 <- makeDiv (prettyPrintType (extractType tt2)) $ Cons "output" Nil
+    div3 <- makeDiv (prettyPrintType t) $ Cons "output" Nil
+    arr <- makeDiv " -> " Nil
+    arr2 <- makeDiv " -> " Nil
+    J.append div1 typContainer
+    J.append arr typContainer
+    J.append div2 typContainer
+    J.append arr2 typContainer
+    J.append div3 typContainer
+    J.append typContainer container
+    br <- J.create "<br>"
+    J.append br container
+    subContainer <- makeDiv "" $ Cons "subtypes output" Nil
+    jExp1 <- typetoJQuery {typ:tt1 ,idTree:it1, expr:dummyExpr}
+    jExp2 <- typetoJQuery {typ:tt2 ,idTree:it2, expr:dummyExpr}
+    J.append jExp1 subContainer
+    J.append jExp2 subContainer
+    J.append subContainer container
+typetoJQuery {typ: TUnary t1 tt t, idTree: IUnary i1 it i} = emptyJQuery --TODO
+
+typetoJQuery {typ: TSectL tt _ _, idTree: ISectL it _ _} = typetoJQuery {typ:tt, idTree:it, expr:dummyExpr}
+typetoJQuery {typ: TSectR _ tt _, idTree: ISectR _ it _} = typetoJQuery {typ:tt, idTree:it, expr:dummyExpr}
+
+typetoJQuery {typ: TIfExpr t1 t2 t3 t, idTree: IIfExpr i1 i2 i3 i} = do
+    container <- makeDiv "" $ Cons "output" Nil
+    div1 <- typetoJQuery {typ:t1,idTree:i1,expr:dummyExpr}
+    div2 <- typetoJQuery {typ:t2,idTree:i2,expr:dummyExpr}
+    div3 <- typetoJQuery {typ:t3,idTree:i3,expr:dummyExpr}
+    J.append div1 container
+    J.append div2 container
+    J.append div3 container
+
+typetoJQuery {typ: TLetExpr _ tt1 tt2 t,idTree: ILetExpr _ it1 it2 i} = emptyJQuery --TODO
+
+typetoJQuery {typ: TLambda _ tt t, idTree: ILambda _ it i} = typetoJQuery {typ:tt,idTree:it,expr:dummyExpr}
+
+typetoJQuery {typ:TApp t1 tl t, idTree:IApp i1 is i} = do
+    container <- makeDiv "" Nil
+    typContainer <- (makeDiv "" $ Cons "output" Nil) >>= addTypIdtoDiv (extractIndex i1)
+    list <- mapM (\(Tuple t i) -> (makeDiv (prettyPrintType (extractType t)) $ Cons "output" Nil) >>= (addTypIdtoDiv (extractIndex i))) (zip tl is)
+    for list $ (\l -> do
+                  J.append l typContainer
+                  arr <- makeDiv " -> " Nil
+                  J.append arr typContainer)
+    exprType <- (makeDiv (prettyPrintType t) $ Cons "output" Nil) >>= addTypIdtoDiv i
+    J.append exprType typContainer
+    J.append typContainer container
+    br <- J.create "<br>"
+    J.append br container
+    subContainer <- makeDiv "" $ Cons "subtypes output" Nil
+    divExpr <- typetoJQuery {typ: t1,idTree:i1,expr:dummyExpr}
+    J.append divExpr subContainer
+    list <- mapM (\(Tuple t i) -> typetoJQuery {typ:t,idTree:i, expr:dummyExpr}) (zip tl is)
+    for list $ (\l -> J.append l subContainer)
+    J.append subContainer container
+
+
+typetoJQuery {typ:typ} = emptyJQuery
+
+
+
+
+
+-- findConnections:: IndexTree -> List Int --TODO
+
+
+
+
+
+idExpr:: Expr -> IndexTree
+idExpr e = fst $ runState (indexExpr e) {count:0}
+
+indexExpr:: Expr -> State {count:: Int} IndexTree
+indexExpr (Atom _) = do
+                  i <- fresh
+                  return $ IAtom i
+indexExpr (List es) = do
+                  is <- mapM indexExpr es
+                  i <- fresh
+                  return $ IListTree is i
+indexExpr (NTuple es) = do
+                  is <- mapM indexExpr es
+                  i <- fresh
+                  return $ INTuple is i
+indexExpr (Binary _ e1 e2) = do
+                  i1 <- indexExpr e1
+                  i2 <- indexExpr e2
+                  i <- fresh
+                  i' <- fresh
+                  return $ (IBinary i' i1 i2 i)
+indexExpr (Unary _ e) = do
+                  i <- indexExpr e
+                  i' <- fresh
+                  i'' <- fresh
+                  return $ IUnary i'' i i'
+indexExpr (SectL e _) = do
+                  i <- indexExpr e
+                  i' <- fresh
+                  i'' <- fresh
+                  return $ ISectL i i'' i'
+indexExpr (SectR _ e) = do
+                  i <- indexExpr e
+                  i' <- fresh
+                  i'' <- fresh
+                  return $ ISectR i'' i i'
+indexExpr (PrefixOp _) = do
+                  i <- fresh
+                  return $ IPrefixOp i
+indexExpr (IfExpr e1 e2 e3) = do
+                  i1 <- indexExpr e1
+                  i2 <- indexExpr e2
+                  i3 <- indexExpr e3
+                  i <- fresh
+                  return $ IIfExpr i1 i2 i3 i
+indexExpr (LetExpr b e1 e2) = do
+                  ib <- indexBinding b
+                  i1 <- indexExpr e1
+                  i2 <- indexExpr e2
+                  i <- fresh
+                  return $ ILetExpr ib i1 i2 i
+indexExpr (Lambda bs e) = do
+                 ibs <- mapM indexBinding bs
+                 i <- indexExpr e
+                 i' <- fresh
+                 return $ ILambda ibs i i'
+indexExpr (App e es) = do
+                e1 <- indexExpr e
+                is <- mapM indexExpr es
+                i <- fresh
+                return $ IApp e1 is i
+
+
+indexBinding:: Binding -> State {count :: Int} IBinding
+indexBinding (Lit _) = do
+                    i <- fresh
+                    return $ ILit i
+indexBinding (ConsLit b1 b2 ) = do
+                      i1 <- indexBinding b1
+                      i2 <- indexBinding b2
+                      i <- fresh
+                      return $ IConsLit i1 i2 i
+indexBinding (ListLit bs) = do
+                        is <- mapM indexBinding bs
+                        i <- fresh
+                        return $ IListLit is i
+indexBinding (NTupleLit bs) = do
+                      is <- mapM indexBinding bs
+                      i <- fresh
+                      return $ INTupleLit is i
+
+fresh ::State {count:: Int} Int
+fresh = do
+  {count = count} <- get
+  put {count:count+1}
+  return count
+
+
+extractIndex:: IndexTree -> Int
+extractIndex (IAtom i)  =  i
+extractIndex (IListTree _ i)  =  i
+extractIndex (INTuple _ i)  =  i
+extractIndex (IBinary _ _ _ i)  =  i
+extractIndex (IUnary _ _ i)  =  i
+extractIndex (ISectL _ _ i)  =  i
+extractIndex (ISectR _ _ i)  =  i
+extractIndex (IPrefixOp i)  =  i
+extractIndex (IIfExpr _ _ _ i)  =  i
+extractIndex (ILetExpr _ _ _ i)  =  i
+extractIndex (ILambda _ _ i)  =  i
+extractIndex (IApp _ _ i)  =  i

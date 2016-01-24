@@ -94,11 +94,32 @@ data TypeTree
           | TApp TypeTree (List TypeTree)           Type
 
 
+data IndexTree
+          = IAtom                                  Int
+          | IListTree (List IndexTree)             Int
+          | INTuple (List IndexTree)               Int
+          | IBinary Int  IndexTree IndexTree           Int
+          | IUnary Int IndexTree                      Int
+          | ISectL IndexTree Int                      Int
+          | ISectR Int IndexTree                      Int
+          | IPrefixOp                              Int
+          | IIfExpr IndexTree IndexTree IndexTree  Int
+          | ILetExpr IBinding IndexTree IndexTree  Int
+          | ILambda (List IBinding) IndexTree      Int
+          | IApp IndexTree (List IndexTree)        Int
+
+
 
 data TypeBinding  = TLit                              Type
                   | TConsLit TypeBinding TypeBinding  Type
                   | TListLit (List TypeBinding)       Type
                   | TNTupleLit (List TypeBinding)     Type
+
+
+data IBinding  = ILit                       Int
+              | IConsLit IBinding IBinding  Int
+              | IListLit (List IBinding)    Int
+              | INTupleLit (List IBinding)  Int
 
 data TVar = TVar String
 
@@ -150,7 +171,8 @@ data Definition = Def String (List Binding) Expr
 
 type Output = {
     expr :: Expr,
-    typ :: TypeTree
+    typ :: TypeTree,
+    idTree :: IndexTree
   }
 
 instance eqDefinition :: Eq Definition where

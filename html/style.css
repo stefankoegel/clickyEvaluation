@@ -153,3 +153,14 @@ div.op, div.brace, div.comma {
   position: absolute;
   background: #fbb;
 }
+
+.subtypes {
+  margin-left: 100px;
+}
+
+
+#typ-container {
+  margin-left: 25%; /*TODO */
+  display: inline-block;
+
+}
