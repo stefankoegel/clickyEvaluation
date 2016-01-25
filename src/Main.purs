@@ -22,7 +22,7 @@ import Control.Monad.State.Trans
 import Control.Monad.State.Class
 import Control.Monad.Eff.Class
 
-import Web (exprToJQuery, getPath,typetoJQuery,idExpr)
+import Web (exprToJQuery, getPath,topLevelTypetoJQuery,idExpr)
 import Parser
 import Evaluator (evalPath1, Env(), Path(), defsToEnv,envToDefs)
 import AST
@@ -91,7 +91,7 @@ showEvaluationState = do
   liftEff $ exprToJQuery out >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
 
-  typDiv  <- liftEff $ typetoJQuery out
+  typDiv  <- liftEff $ topLevelTypetoJQuery out
   liftEff $ J.append typDiv typContainer
 
   liftEff (J.find ".binary, .app, .func, .list, .if" output)

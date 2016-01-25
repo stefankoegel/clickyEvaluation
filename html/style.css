@@ -160,7 +160,10 @@ div.op, div.brace, div.comma {
 
 
 #typ-container {
-  margin-left: 25%; /*TODO */
   display: inline-block;
+  text-align: left;
+}
 
+#topLevelOutput-container {
+  text-align: center;
 }

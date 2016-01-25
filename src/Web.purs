@@ -1,7 +1,7 @@
 module Web
   ( exprToJQuery
   , getPath
-  , typetoJQuery
+  , topLevelTypetoJQuery
   , idExpr
   ) where
 
@@ -249,20 +249,6 @@ typetoJQuery {typ:TNTuple ls t, idTree: INTuple is i} = do
     return $ container
 typetoJQuery {typ:TBinary t1 tt1 tt2 t, idTree:IBinary i1 it1 it2 i} = do
     container <- makeDiv "" Nil
-    typContainer <- makeDiv "" $ Cons "output" Nil
-    div1 <- makeDiv (prettyPrintType (extractType tt1)) $ Cons "output" Nil
-    div2 <- makeDiv (prettyPrintType (extractType tt2)) $ Cons "output" Nil
-    div3 <- makeDiv (prettyPrintType t) $ Cons "output" Nil
-    arr <- makeDiv " -> " Nil
-    arr2 <- makeDiv " -> " Nil
-    J.append div1 typContainer
-    J.append arr typContainer
-    J.append div2 typContainer
-    J.append arr2 typContainer
-    J.append div3 typContainer
-    J.append typContainer container
-    br <- J.create "<br>"
-    J.append br container
     subContainer <- makeDiv "" $ Cons "subtypes output" Nil
     jExp1 <- typetoJQuery {typ:tt1 ,idTree:it1, expr:dummyExpr}
     jExp2 <- typetoJQuery {typ:tt2 ,idTree:it2, expr:dummyExpr}
@@ -316,6 +302,43 @@ typetoJQuery {typ:TApp t1 tl t, idTree:IApp i1 is i} = do
 
 
 typetoJQuery {typ:typ} = emptyJQuery
+
+-- to show type even is no application
+topLevelTypetoJQuery :: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
+topLevelTypetoJQuery {typ:TBinary t1 tt1 tt2 t, idTree:IBinary i1 it1 it2 i} = do
+        container <- makeDiv "" Nil
+        typContainer <- makeDiv "" $ Cons "output" Nil
+        div1 <- makeDiv (prettyPrintType (extractType tt1)) $ Cons "output" Nil
+        div2 <- makeDiv (prettyPrintType (extractType tt2)) $ Cons "output" Nil
+        div3 <- makeDiv (prettyPrintType t) $ Cons "output" Nil
+        arr <- makeDiv " -> " Nil
+        arr2 <- makeDiv " -> " Nil
+        J.append div1 typContainer
+        J.append arr typContainer
+        J.append div2 typContainer
+        J.append arr2 typContainer
+        J.append div3 typContainer
+        J.append typContainer container
+        br <- J.create "<br>"
+        J.append br container
+        subContainer <- makeDiv "" $ Cons "subtypes output" Nil
+        jExp1 <- typetoJQuery {typ:tt1 ,idTree:it1, expr:dummyExpr}
+        jExp2 <- typetoJQuery {typ:tt2 ,idTree:it2, expr:dummyExpr}
+        J.append jExp1 subContainer
+        J.append jExp2 subContainer
+        contentSub <- J.getText subContainer
+        if Data.String.length contentSub == 0 then J.setAttr "class" "" subContainer else emptyJQuery
+        J.append subContainer container
+
+topLevelTypetoJQuery t@{typ:tt, idTree: it} = do
+        container <- makeDiv "" Nil
+        typContainer <- makeDiv (prettyPrintType (extractType tt)) $ Cons "output" Nil
+        addTypIdtoDiv (extractIndex it) typContainer
+        J.append typContainer container
+        br <- J.create "<br>"
+        J.append br container
+        types <- typetoJQuery t
+        J.append types container
 
 
 
