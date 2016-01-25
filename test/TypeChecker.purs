@@ -45,29 +45,6 @@ eqTypErrScheme (Left a) (Left a') = (a == a')
 eqTypErrScheme (Right a) (Right a') = eqScheme a a'
 eqTypErrScheme _ _ = false
 
-eqScheme :: Scheme -> Scheme -> Boolean
-eqScheme (Forall l1 t1) (Forall l2 t2)
-  = ((length l1) == (length l2)) && (fst (eqType Map.empty t1 t2))
-
-eqType:: Map.Map TVar TVar -> Type -> Type ->Tuple Boolean (Map.Map TVar TVar)
-eqType map (TypVar a) (TypVar b) = case  Map.lookup a map of
-  (Just b') -> Tuple (b' == b) (map)
-  Nothing -> Tuple true (Map.insert a b map)
-eqType map (TypCon a) (TypCon b) = Tuple (a == b) map
-eqType map (TypArr a b) (TypArr a' b') = Tuple (fst tup1 && fst tup2) (snd tup2)
-  where
-  tup1 = eqType map a a'
-  tup2 = eqType (snd tup1) b b'
-eqType map (AD (TList a)) (AD (TList b)) = eqType map a b
-eqType map (AD (TTuple a)) (AD (TTuple b)) = eqTypeList map a b
-eqType map _ _ = Tuple false map
-
-eqTypeList:: Map.Map TVar TVar -> List Type -> List Type -> Tuple Boolean (Map.Map TVar TVar)
-eqTypeList map (Cons a as) (Cons b bs) = let tup1 = eqType map a b in if (fst tup1)
-  then eqTypeList (snd tup1) as bs
-  else Tuple false (snd tup1)
-eqTypeList map Nil Nil = Tuple true map
-eqTypeList map _ _ = Tuple false map
 
 aint :: Int -> Expr
 aint i = Atom $ AInt i

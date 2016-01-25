@@ -120,7 +120,7 @@ instance subTypeTree :: Substitutable TypeTree where
   apply s (TSectL tt op t) = TSectL (apply s tt) (apply s op) (apply s t)
   apply s (TSectR op tt t) = TSectR (apply s op) (apply s tt) (apply s t)
   apply s (TPrefixOp t) = TPrefixOp $ apply s t
-  apply s (TIfExpr tt1 tt2 tt3 t) = TIfExpr (apply s tt1) (apply s tt2) (apply s tt2) (apply s t)
+  apply s (TIfExpr tt1 tt2 tt3 t) = TIfExpr (apply s tt1) (apply s tt2) (apply s tt3) (apply s t)
   apply s (TLetExpr b tt1 tt2 t) = TLetExpr (apply s b) (apply s tt1) (apply s tt2) (apply s t)
   apply s (TLambda lb tt t) = TLambda (apply s lb) (apply s tt) (apply s t)
   apply s (TApp tt1 l t) = TApp (apply s tt1) (apply s l) (apply s t)
@@ -336,13 +336,12 @@ infer env ex = case ex of
 
 
   IfExpr cond tr fl -> do
-    (Tuple s1 t1) <- infer env cond
-    (Tuple s2 t2) <- infer env tr
-    (Tuple s3 t3) <- infer env fl
-    s4 <- unify (extractType t1) (TypCon "Bool")
-    s5 <- unify (extractType t2) (extractType t3)
-    let sC = (s5 `compose` s4 `compose` s3 `compose` s2 `compose` s1)
-    return $ Tuple sC (apply sC $ TIfExpr t1 t2 t3 (extractType t2))
+    tv <- fresh
+    t@(TypVar t') <- fresh
+    let name = Name $ "if"
+    let env' = env `extend` (Tuple name (Forall (Cons t' Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
+    Tuple s (TApp tt (Cons tcond (Cons ttr (Cons tfl Nil))) ift) <- infer env' (App (Atom  name) (toList [cond, tr, fl]))
+    return (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
 
   PrefixOp op -> do
     Tuple s t <- inferOp op
@@ -617,3 +616,28 @@ buildEmptyTypeTree e = f e
   g (ConsLit b1 b2) = TConsLit (g b1) (g b2) emptyType
   g (ListLit bs) = TListLit (map g bs) emptyType
   g (NTupleLit bs) = TNTupleLit (map g bs) emptyType
+
+
+eqScheme :: Scheme -> Scheme -> Boolean
+eqScheme (Forall l1 t1) (Forall l2 t2)
+  = ((length l1) == (length l2)) && (fst (eqType Map.empty t1 t2))
+
+eqType:: Map.Map TVar TVar -> Type -> Type ->Tuple Boolean (Map.Map TVar TVar)
+eqType map (TypVar a) (TypVar b) = case  Map.lookup a map of
+  (Just b') -> Tuple (b' == b) (map)
+  Nothing -> Tuple true (Map.insert a b map)
+eqType map (TypCon a) (TypCon b) = Tuple (a == b) map
+eqType map (TypArr a b) (TypArr a' b') = Tuple (fst tup1 && fst tup2) (snd tup2)
+  where
+  tup1 = eqType map a a'
+  tup2 = eqType (snd tup1) b b'
+eqType map (AD (TList a)) (AD (TList b)) = eqType map a b
+eqType map (AD (TTuple a)) (AD (TTuple b)) = eqTypeList map a b
+eqType map _ _ = Tuple false map
+
+eqTypeList:: Map.Map TVar TVar -> List Type -> List Type -> Tuple Boolean (Map.Map TVar TVar)
+eqTypeList map (Cons a as) (Cons b bs) = let tup1 = eqType map a b in if (fst tup1)
+  then eqTypeList (snd tup1) as bs
+  else Tuple false (snd tup1)
+eqTypeList map Nil Nil = Tuple true map
+eqTypeList map _ _ = Tuple false map
