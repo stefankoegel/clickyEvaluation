@@ -237,11 +237,15 @@ typetoJQuery {typ:TListTree ls t, idTree: IListTree is i} = do
     container <- makeDiv "" $ Cons "output" Nil
     list <- mapM (\(Tuple t i) -> typetoJQuery {typ:t , idTree:i ,expr:dummyExpr}) (zip ls is)
     for list $ (\l -> J.append l container)
+    containerContent <- J.getText container
+    if Data.String.length containerContent == 0 then J.setAttr "class" "" container else emptyJQuery
     return $ container
 typetoJQuery {typ:TNTuple ls t, idTree: INTuple is i} = do
     container <- makeDiv "" $ Cons "output" Nil
     list <- mapM (\(Tuple t i) -> typetoJQuery {typ:t , idTree:i ,expr:dummyExpr}) (zip ls is)
     for list $ (\l -> J.append l container)
+    containerContent <- J.getText container
+    if Data.String.length containerContent == 0 then J.setAttr "class" "" container else emptyJQuery
     return $ container
 typetoJQuery {typ:TBinary t1 tt1 tt2 t, idTree:IBinary i1 it1 it2 i} = do
     container <- makeDiv "" Nil
@@ -264,6 +268,8 @@ typetoJQuery {typ:TBinary t1 tt1 tt2 t, idTree:IBinary i1 it1 it2 i} = do
     jExp2 <- typetoJQuery {typ:tt2 ,idTree:it2, expr:dummyExpr}
     J.append jExp1 subContainer
     J.append jExp2 subContainer
+    contentSub <- J.getText subContainer
+    if Data.String.length contentSub == 0 then J.setAttr "class" "" subContainer else emptyJQuery
     J.append subContainer container
 typetoJQuery {typ: TUnary t1 tt t, idTree: IUnary i1 it i} = emptyJQuery --TODO
 
@@ -278,6 +284,9 @@ typetoJQuery {typ: TIfExpr t1 t2 t3 t, idTree: IIfExpr i1 i2 i3 i} = do
     J.append div1 container
     J.append div2 container
     J.append div3 container
+    containerContent <- J.getText container
+    if Data.String.length containerContent == 0 then J.setAttr "class" "" container else emptyJQuery
+    return container
 
 typetoJQuery {typ: TLetExpr _ tt1 tt2 t,idTree: ILetExpr _ it1 it2 i} = emptyJQuery --TODO
 
@@ -301,6 +310,8 @@ typetoJQuery {typ:TApp t1 tl t, idTree:IApp i1 is i} = do
     J.append divExpr subContainer
     list <- mapM (\(Tuple t i) -> typetoJQuery {typ:t,idTree:i, expr:dummyExpr}) (zip tl is)
     for list $ (\l -> J.append l subContainer)
+    contentSub <- J.getText subContainer
+    if Data.String.length contentSub == 0 then J.setAttr "class" "" subContainer else emptyJQuery
     J.append subContainer container
 
 
