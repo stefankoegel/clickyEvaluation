@@ -94,6 +94,8 @@ showEvaluationState = do
   typDiv  <- liftEff $ topLevelTypetoJQuery out
   liftEff $ J.append typDiv typContainer
 
+  svgCanvas <- liftEff $ createCanvas
+
   liftEff (J.find ".binary, .app, .func, .list, .if" output)
      >>= makeClickable
   liftEff (J.find ".clickable" output)

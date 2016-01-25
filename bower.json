@@ -25,6 +25,7 @@
     "purescript-globals": "*",
     "purescript-math": "*",
     "purescript-ace": "*",
-    "purescript-sets": "~0.5.4"
+    "purescript-sets": "~0.5.4",
+    "purescript-foreign": "~0.7.2"
   }
 }

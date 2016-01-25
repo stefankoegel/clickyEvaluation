@@ -167,3 +167,8 @@ div.op, div.brace, div.comma {
 #topLevelOutput-container {
   text-align: center;
 }
+
+#svg-container {
+  position: absolute;
+  pointer-events: none;
+}
