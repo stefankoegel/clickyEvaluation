@@ -61,6 +61,23 @@ anyLetter = lowerCaseLetter <|> upperCaseLetter <|> char '\''
 reservedWords :: List String
 reservedWords = toList ["if", "then", "else", "let", "in"]
 
+character' :: Parser String Char
+character' =
+      (char '\\' *>
+        (    (char 'n' *> return '\n')
+         <|> (char 'r' *> return '\r')
+         <|> char '\\'
+         <|> char '"'
+         <|> char '\''))
+  <|> (noneOf ['\\', '\'', '"'])
+
+character :: Parser String Atom
+character = do
+  char '\''
+  c <- character'
+  char '\''
+  return (Char $ String.fromChar c)
+
 -- | Parser for variables names
 name :: Parser String String
 name = do
@@ -77,7 +94,7 @@ variable = Name <$> name
 
 -- | Parser for atoms
 atom :: Parser String Atom
-atom = int <|> variable <|> bool
+atom = int <|> variable <|> bool <|> character
 
 ---------------------------------------------------------
 -- Parsers for Expressions
@@ -137,6 +154,7 @@ base expr =
   <|> PC.try (lambda expr)
   <|> section expr
   <|> list expr
+  <|> charList
   <|> (Atom <$> atom)
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
@@ -212,6 +230,14 @@ list expr = do
   eatSpaces
   char ']'
   return $ List exprs
+
+-- | Parser for strings ("example")
+charList :: Parser String Expr
+charList = do
+  char '"'
+  strs <- many character'
+  char '"'
+  return (List ((Atom <<< Char <<< String.fromChar) <$> strs))
 
 -- | Parse a lambda expression
 lambda :: Parser String Expr -> Parser String Expr
