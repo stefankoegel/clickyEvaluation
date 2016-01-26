@@ -63,7 +63,7 @@ markText line column = do
   editor <- Ace.edit "definitions" Ace.ace
   session <- Editor.getSession editor
   rang <- Range.create line column 100000 100000
-  Session.addMarker rang "syntaxError" "" false session
+  void $ Session.addMarker rang "syntaxError" "" false session
 
 showEvaluationState :: EvalM Unit
 showEvaluationState = do
