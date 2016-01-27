@@ -22,14 +22,14 @@ import Control.Monad.State.Trans
 import Control.Monad.State.Class
 import Control.Monad.Eff.Class
 
-import Web (exprToJQuery, getPath,topLevelTypetoJQuery,idExpr)
+import Web (exprToJQuery, getPath,topLevelTypetoJQuery,idExpr,drawLines,findConnections)
 import Parser
 import Evaluator (evalPath1, Env(), Path(), defsToEnv,envToDefs)
 import AST
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
 import JSHelpers
-import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree)
+import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -83,6 +83,7 @@ showEvaluationState = do
   output <- liftEff $ prepareContainer "output"
   history <- liftEff $ prepareContainer "history"
   typContainer <- liftEff $ prepareContainer "typ"
+  svgContainer <- liftEff $ prepareContainer "svg"
 
   { env = env, out = out, history = histExprs } <- get :: EvalM EvalState
   liftEff $ print out.expr
@@ -94,7 +95,9 @@ showEvaluationState = do
   typDiv  <- liftEff $ topLevelTypetoJQuery out
   liftEff $ J.append typDiv typContainer
 
+  let cons = findConnections out.idTree
   svgCanvas <- liftEff $ createCanvas
+  liftEff $ drawLines svgCanvas svgContainer cons
 
   liftEff (J.find ".binary, .app, .func, .list, .if" output)
      >>= makeClickable

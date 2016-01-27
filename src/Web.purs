@@ -3,6 +3,8 @@ module Web
   , getPath
   , topLevelTypetoJQuery
   , idExpr
+  , drawLines
+  , findConnections
   ) where
 
 import Control.Monad.Eff
@@ -15,7 +17,7 @@ import Data.Traversable (for)
 import Data.List
 import Data.Tuple
 import Data.String (joinWith)
-import Data.Foreign (unsafeFromForeign)
+import Data.Foreign (unsafeFromForeign, Foreign())
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
 import Control.Monad.State
@@ -24,6 +26,7 @@ import Control.Monad.Eff.Class
 import AST
 import Evaluator (Path(..))
 import TypeChecker (prettyPrintType,extractType,mapM)
+import JSHelpers
 
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
@@ -128,7 +131,7 @@ binary :: forall eff. Op -> Type -> Int -> Type -> Int -> J.JQuery -> J.JQuery -
 binary op opt opi t i j1 j2 = do
   dBin <- makeDiv "" (singleton "binary") >>= addTypetoDiv t >>= addIdtoDiv i
   J.append j1 dBin
-  dOp <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv i
+  dOp <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
   J.append dOp dBin
   J.append j2 dBin
   return dBin
@@ -228,6 +231,9 @@ addTypIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff
 addTypIdtoDiv id d = do
     J.setAttr "id" ("typ"++(show id)) d
 
+addResultIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+addResultIdtoDiv id d = do
+    J.setAttr "id" ("typ" ++ (show id) ++ "result") d
 
 dummyExpr:: Expr
 dummyExpr =  Atom $ AInt 0
@@ -286,7 +292,7 @@ typetoJQuery {typ:TApp t1 tl t, idTree:IApp i1 is i} = do
                   J.append l typContainer
                   arr <- makeDiv " -> " Nil
                   J.append arr typContainer)
-    exprType <- (makeDiv (prettyPrintType t) $ Cons "output" Nil) >>= addTypIdtoDiv i
+    exprType <- (makeDiv (prettyPrintType t) $ Cons "output" Nil) >>= addResultIdtoDiv i
     J.append exprType typContainer
     J.append typContainer container
     br <- J.create "<br>"
@@ -307,10 +313,10 @@ typetoJQuery {typ:typ} = emptyJQuery
 topLevelTypetoJQuery :: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
 topLevelTypetoJQuery {typ:TBinary t1 tt1 tt2 t, idTree:IBinary i1 it1 it2 i} = do
         container <- makeDiv "" Nil
-        typContainer <- makeDiv "" $ Cons "output" Nil
-        div1 <- makeDiv (prettyPrintType (extractType tt1)) $ Cons "output" Nil
-        div2 <- makeDiv (prettyPrintType (extractType tt2)) $ Cons "output" Nil
-        div3 <- makeDiv (prettyPrintType t) $ Cons "output" Nil
+        typContainer <- (makeDiv "" $ Cons "output" Nil) >>= addTypIdtoDiv i1
+        div1 <- (makeDiv (prettyPrintType (extractType tt1)) $ Cons "output" Nil) >>= (addTypIdtoDiv (extractIndex it1))
+        div2 <- (makeDiv (prettyPrintType (extractType tt2)) $ Cons "output" Nil) >>= (addTypIdtoDiv (extractIndex it2))
+        div3 <- (makeDiv (prettyPrintType t) $ Cons "output" Nil) >>= (addResultIdtoDiv i)
         arr <- makeDiv " -> " Nil
         arr2 <- makeDiv " -> " Nil
         J.append div1 typContainer
@@ -344,11 +350,55 @@ topLevelTypetoJQuery t@{typ:tt, idTree: it} = do
 
 
 
--- findConnections:: IndexTree -> List Int --TODO
+findConnections:: IndexTree -> List (Tuple String String)
+findConnections (IBinary i1 it1 it2 i) = Cons (buildPairResult i) $  Cons (buildPair i1) $ Cons (buildPair (extractIndex it1)) $ Cons (buildPair (extractIndex it2)) $ findOtherConnections it1 ++ findOtherConnections it2
+findConnections id = Cons (buildPair (extractIndex id)) $ findOtherConnections id
+
+findOtherConnections:: IndexTree -> List (Tuple String String)
+findOtherConnections (IListTree ls _) = concat $ map findOtherConnections ls
+findOtherConnections (INTuple ls _) = concat $ map findOtherConnections ls
+findOtherConnections (IBinary _ it1 it2 _) = findOtherConnections it1 ++ findOtherConnections it2
+findOtherConnections (IUnary _ it _) = findOtherConnections it
+findOtherConnections (ISectL it _ _ ) = findOtherConnections it
+findOtherConnections (ISectR _ it _ ) = findOtherConnections it
+findOtherConnections (IIfExpr it1 it2 it3 _ ) = findOtherConnections it1 ++ findOtherConnections it2 ++ findOtherConnections it3
+findOtherConnections (ILetExpr _ it1 it2 _ ) = findOtherConnections it1 ++ findOtherConnections it2
+findOtherConnections (ILambda _ it _) = findOtherConnections it
+findOtherConnections (IApp it its i) =  Cons (buildPair (extractIndex it))  $  Cons (buildPairResult i) $ (map (\i -> buildPair $ extractIndex i) its) ++ (concat (map findOtherConnections its)) -- Cons buildPair i
+findOtherConnections _ = Nil -- atom prefixOP
+
+buildPair:: Int -> (Tuple String String)
+buildPair i = Tuple ("typ" ++ show i) ("expr" ++ show i)
+
+buildPairResult:: Int -> (Tuple String String)
+buildPairResult i = Tuple ("expr" ++ show i) ("typ"++ (show i) ++ "result")
+
+-- draws a line between two divs
+-- canvas obj1 obj2 svgContainer
+-- Foreign JQuery JQuery JQuery
+drawLines::forall eff. Foreign -> J.JQuery -> List (Tuple String String) -> Eff (dom :: DOM | eff) Unit
+drawLines canvas svgContainer lines' = do
+      lines <- mapM toJQueryPair lines'
+      for lines $ (\(Tuple l1 l2) -> do
+              y1 <- yOffset l1
+              x1 <- xOffset l1
+              y2 <- yOffset l2
+              x2 <- xOffset l2
+              path canvas $ "M" ++ (show x1) ++ " " ++ (show y1) ++ "L" ++ (show x2) ++ " " ++ (show y2)
+          )
+      return unit
+    where
+    -- calculates x and y offset to svgContainer
+    yOffset jObj = offsetTop jObj >>= (\y -> offsetTop svgContainer >>= (\x -> return (y - x)))
+    xOffset jObj = offsetLeft jObj >>= (\y -> offsetLeft svgContainer >>= (\x -> return (y - x)))
 
 
-
-
+-- fings matching typ expr pair
+toJQueryPair::forall eff. Tuple String String -> Eff (dom :: DOM | eff) (Tuple J.JQuery J.JQuery)
+toJQueryPair (Tuple id1 id2) = do
+  typ <- J.select ("#" ++ id1)
+  expr <- J.select ("#" ++ id2)
+  return $ Tuple typ expr
 
 idExpr:: Expr -> IndexTree
 idExpr e = fst $ runState (indexExpr e) {count:0}
