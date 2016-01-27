@@ -276,6 +276,16 @@ runTests = do
               (Nil))))
         (Nil)))
 
+  test "char_atom1" atom "'a'" (Char "a")
+  test "char_atom2" atom "'\\\\'" (Char "\\")
+  test "char_atom3" atom "'\\n'" (Char "\n")
+  test "char_expr1" expression "'\\r'" (Atom (Char "\r"))
+  test "char_expr2" expression "['\\\\', '\\'', '\\\"']" (List $ toList [Atom (Char "\\"), Atom (Char "'"), Atom (Char "\"")])
+
+  test "string1" expression "\"asdf\"" (List $ toList [Atom (Char "a"), Atom (Char "s"), Atom (Char "d"), Atom (Char "f")])
+  test "string2" expression "\"\\\\\\n\\\"\\\'\"" (List $ toList [Atom (Char "\\"), Atom (Char "\n"), Atom (Char "\""), Atom (Char "'")])
+
+
 prelude :: String
 prelude =
   "and (True:xs)  = and xs\n" ++

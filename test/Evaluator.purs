@@ -62,6 +62,8 @@ runTests = do
   eval1test "pattern_matching2" "(\\[a, b, c] -> c) [1, 2, 3]" "3"
   eval1test "pattern_matching3" "(\\(a, b) (c, d, e) -> d) (1, 2) (3, 2*2, 5)" "2*2"
   eval1test "lambda2" "(\\x y -> [0, x, y, x + y]) 1 2" "[0, 1, 2, 1 + 2]"
+  eval1test "string1" "\"as\" ++ \"df\"" "\"asdf\""
+  eval1test "string2" "'a' : \"sdf\"" "\"asdf\""
 
   eval1EnvTest "double_func" "double x = x + x" "double 10" "10 + 10"
   eval1EnvTest "map_func1" "map f [] = []\nmap f (x:xs) = f x : map f xs" "map (^2) []" "[]"
@@ -88,3 +90,6 @@ runTests = do
   evalEnvTest "fix" "f x = f x" "f 10" "f 10"
 
   evalEnvTest "fac" "fac 1 = 1\nfac n = n * fac (n - 1)" "fac 6" "720"
+
+  evalEnvTest "string_third1" "thrd (_:(_:(x:_))) = x" "thrd \"1234\"" "'3'"
+  evalEnvTest "string_third2" "thrd [_,_,x,_] = x" "thrd \"1234\"" "'3'"
