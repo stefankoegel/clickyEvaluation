@@ -61,7 +61,7 @@ exprToJQuery output = go id output
       jop <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
       j <- go (p <<< Snd) {expr:e, typ:tt, idTree: i}
       section jop j t i'
-    {expr:PrefixOp op, typ:TPrefixOp t, idTree: (IPrefixOp i)} -> makeDiv ("(" ++ pPrintOp op ++ ")") (toList ["prefix", "op"]) >>= addTypetoDiv t
+    {expr:PrefixOp op, typ:TPrefixOp t, idTree: (IPrefixOp i)} -> makeDiv ("(" ++ pPrintOp op ++ ")") (toList ["prefix", "op"]) >>= addTypetoDiv t >>= addIdtoDiv i
     {expr:IfExpr cond thenExpr elseExpr, typ:TIfExpr tt1 tt2  tt3 t,idTree:IIfExpr i1 i2 i3 i} -> do
       jc <- go (p <<< Fst) {expr:cond, typ:tt1, idTree: i1}
       jt <- go (p <<< Snd) {expr:thenExpr, typ:tt2, idTree: i2}
