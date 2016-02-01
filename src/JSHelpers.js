@@ -23,8 +23,8 @@ exports.createCanvas = function(){
       svgContainer.removeChild(svgContainer.lastChild);
     }
     var outContainer = document.getElementById("topLevelOutput-container");
+    svgContainer.style.top = "-" + $(outContainer).outerHeight() + "px";
     var canvas = Raphael(svgContainer,$(outContainer).width(),$(outContainer).height());
-    svgContainer.style.top = $(outContainer).position().top + "px";
     return canvas;
 };
 

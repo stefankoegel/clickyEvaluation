@@ -115,7 +115,7 @@ showHistoryList :: (List Output) -> EvalM J.JQuery
 showHistoryList exprs = do
   box <- liftEff $ J.create "<div></div>" >>= J.addClass "historyBox"
   forIndex exprs $ \expr i -> do
-    showHistory expr i >>= liftEff <<< wrapInDiv "vertical" >>= liftEff <<< flip J.append box
+    showHistory expr i >>= liftEff <<< wrapInDiv "vertical" >>= liftEff <<< wrapInDiv "frame" >>= liftEff <<< flip J.append box
   return box
 
 (!!!) :: forall a. (List a) -> Int -> a

@@ -100,6 +100,7 @@ div.historyBox {
   background: none;
   border: none;
   box-shadow: none;
+  display: block;
 }
 
 .history {
@@ -166,9 +167,21 @@ div.op, div.brace, div.comma {
 
 #topLevelOutput-container {
   text-align: center;
+  white-space: nowrap;
+  display: inline-block;
 }
 
 #svg-container {
-  position: absolute;
+  position: relative;
   pointer-events: none;
+}
+
+.vertical{
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.frame {
+  overflow-x: auto;
+  text-align: center;
 }
