@@ -1,6 +1,7 @@
 # Clicky Evaluation
 
 [![Build Status](https://travis-ci.org/stefankoegel/clickyEvaluation.svg?branch=master)](https://travis-ci.org/stefankoegel/clickyEvaluation)
+[![Dependency Status](https://www.versioneye.com/user/projects/56b075193d82b9003761e3e6/badge.svg?style=flat)](https://www.versioneye.com/user/projects/56b075193d82b9003761e3e6)
 
 ## Description
 
