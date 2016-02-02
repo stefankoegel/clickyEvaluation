@@ -15,15 +15,14 @@
     "html/dist/*"
   ],
   "dependencies": {
-    "purescript-arrays": "~0.4.2",
-    "purescript-lists": "~0.7.6",
-    "purescript-transformers": "~0.8.1",
-    "purescript-parsing": "~0.7.1",
-    "purescript-dom": "~0.2.8",
-    "purescript-maps": "~0.5.0",
-    "purescript-jquery": "0.6.0",
-    "purescript-globals": "*",
-    "purescript-math": "*",
-    "purescript-ace": "*"
+    "purescript-arrays": "0.4.x",
+    "purescript-lists": "~0.7.x",
+    "purescript-transformers": "~0.8.x",
+    "purescript-parsing": "~0.7.x",
+    "purescript-dom": "~0.2.x",
+    "purescript-maps": "~0.5.x",
+    "purescript-jquery": "0.6.x",
+    "purescript-globals": "0.2.x",
+    "purescript-ace": "0.11.x"
   }
 }
