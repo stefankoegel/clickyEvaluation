@@ -1,8 +1,5 @@
 module Test.Parser where
 
-import AST
-import Parser
-
 import Prelude
 import Data.Either
 import Data.List
@@ -11,14 +8,21 @@ import Text.Parsing.Parser
 
 import Control.Monad.Eff
 import Control.Monad.Eff.Console
+import Control.Monad.Writer
 
-test :: forall a eff. (Show a, Eq a) => String -> Parser String a -> String -> a -> Eff (console :: CONSOLE | eff ) Unit
+import AST
+import Parser
+
+tell' :: forall a. a -> Writer (List a) Unit
+tell' = tell <<< singleton
+
+test :: forall a. (Show a, Eq a) => String -> Parser String a -> String -> a -> Writer (List String) Unit
 test name p input expected = case runParser input p of
-  Left  (ParseError { position = p, message = m }) -> log $ "Parse fail (" ++ name ++ "): " ++ show p ++ " " ++ m
+  Left  (ParseError { position = p, message = m }) -> tell' $ "Parse fail (" ++ name ++ "): " ++ show p ++ " " ++ m
   Right result           -> 
     if result == expected
-      then log $ "Parse success (" ++ name ++ ")"
-      else log $ "Parse fail (" ++ name ++ "): " ++ show result ++ " /= " ++ show expected
+      then return unit --tell $ "Parse success (" ++ name ++ ")"
+      else tell' $ "Parse fail (" ++ name ++ "): " ++ show result ++ " /= " ++ show expected
 
 aint :: Int -> Expr
 aint i = Atom $ AInt i
@@ -26,10 +30,8 @@ aint i = Atom $ AInt i
 aname :: String -> Expr
 aname s = Atom $ Name s
 
-runTests :: forall eff. Eff (console :: CONSOLE | eff) Unit
+runTests :: Writer (List String) Unit
 runTests = do
-  log "Running tests:"
-
   test "0" int "0" (AInt 0)
   test "1" int "1" (AInt 1)
   test "all" int "0123456789" (AInt 123456789)
