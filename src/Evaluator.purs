@@ -1,34 +1,21 @@
 module Evaluator where
 
 import Prelude hiding (apply)
-import qualified Data.Array as Arr
-import Data.Int
 import Data.List
-import Data.StrMap (StrMap(..))
-import qualified Data.StrMap as Map
-import Data.Tuple    (Tuple(Tuple))
-import Data.Maybe
-import Data.Foldable (foldl, foldr, foldMap, any, product)
+import Data.StrMap (StrMap)
+import Data.StrMap as Map
+import Data.Tuple (Tuple(Tuple))
+import Data.Maybe (Maybe(..))
+import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
-import Data.Identity
-import Data.Either
-import Data.Monoid
+import Data.Identity (Identity, runIdentity)
+import Data.Either (Either(..))
+import Data.Monoid (class Monoid)
 
 import Control.Apply ((*>))
 import Control.Alt ((<|>))
-import qualified Control.Plus as P
-import Control.Monad.State
-import Control.Monad.State.Trans
-import Control.Monad.State.Class
-
-import Control.Monad.Writer
-import Control.Monad.Writer.Trans
-import Control.Monad.Writer.Class
-
-import Control.Monad.Except
-import Control.Monad.Except.Trans
-
-import Control.Monad.Trans
+import Control.Monad.State.Trans (StateT, modify, execStateT)
+import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
 import AST
 
@@ -126,7 +113,7 @@ mapWithPath p f = go p
     App e es -> App e <$> mapIndex n (go p) es
     _        -> throwError $ PathError (Nth n p) e
 
-mapIndex :: forall m a. Int -> (a -> Evaluator a) -> (List a) -> Evaluator (List a)
+mapIndex :: forall a. Int -> (a -> Evaluator a) -> (List a) -> Evaluator (List a)
 mapIndex i f as = do
   case as !! i of
     Nothing -> throwError $ IndexError i (length as)
@@ -199,6 +186,7 @@ eval env expr = case expr of
           then eval env appEF
           else return appEF
       _ -> return (App ef args)
+  _                  -> return expr
 
 wrapLambda :: (List Binding) -> (List Expr) -> Expr -> Evaluator Expr
 wrapLambda binds args body =
@@ -293,7 +281,6 @@ match' (ListLit bs)      (List es)           = case length bs == length es of
                                                  false -> throwError $ MatchingError (ListLit bs) (List es)
 match' (ListLit bs)      e                   = throwError $ checkStrictness (ListLit bs) e
 
-match' (NTupleLit bs)    (NTuple es)         = match' (ListLit bs) (List es)
 match' (NTupleLit bs)    (NTuple es)         = case length bs == length es of
                                                  true  -> void $ zipWithA match' bs es
                                                  false -> throwError $ MatchingError (NTupleLit bs) (NTuple es)
@@ -349,3 +336,4 @@ boundNames = go
   go (ConsLit b1 b2)   = go b1 ++ go b2
   go (ListLit bs)      = foldMap go bs
   go (NTupleLit bs)    = foldMap go bs
+  go _                 = Nil

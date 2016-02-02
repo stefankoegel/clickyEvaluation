@@ -1,23 +1,23 @@
 module Parser where
 
 import Prelude
-import Global              (readInt)
-import qualified Data.String as String
-import Data.Int            (floor)
+import Global (readInt)
+import Data.String as String
+import Data.Int (floor)
 import Data.List
-import Data.Maybe
-import Data.Tuple.Nested
+import Data.Maybe (Maybe(..))
+import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
 
-import Control.Alt         ((<|>))
-import Control.Apply       ((<*), (*>))
-import Control.Lazy        (fix)
-import Data.Identity
-import Data.Either
+import Control.Alt ((<|>))
+import Control.Apply ((<*), (*>))
+import Control.Lazy (fix)
+import Data.Identity (Identity)
+import Data.Either (Either)
 
-import Text.Parsing.Parser
+import Text.Parsing.Parser (ParseError, Parser, runParser, fail)
 import Text.Parsing.Parser.Combinators as PC
-import Text.Parsing.Parser.Expr
-import Text.Parsing.Parser.String
+import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix), buildExprParser)
+import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
 
 import AST
 

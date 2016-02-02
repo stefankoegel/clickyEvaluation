@@ -1,32 +1,31 @@
 module Main where
 
-import Control.Monad.Eff.JQuery as J
-import Control.Monad.Eff
-import Control.Monad.Eff.Console
-import DOM
-import Data.Foreign (unsafeFromForeign)
 import Prelude
+import Data.Either (Either(..))
+import Data.Maybe (maybe)
+import Data.List
+import Data.Foreign (unsafeFromForeign)
 
+import Control.Apply ((*>))
+import Control.Monad.Eff.JQuery as J
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Console (CONSOLE, print)
+import Control.Monad.State.Trans (StateT, modify, get, runStateT)
+import Control.Monad.Eff.Class (liftEff)
+
+import Text.Parsing.Parser (ParseError(ParseError))
+import Text.Parsing.Parser.Pos (Position(Position))
+import DOM (DOM)
 import Ace.Types (ACE())
 import Ace.Editor as Editor
 import Ace.EditSession as Session
 import Ace.Range as  Range
 
-import Data.Either
-import Data.Maybe
-import Data.List
-import Control.Apply ((*>))
-import Control.Monad.State.Trans
-import Control.Monad.State.Class
-import Control.Monad.Eff.Class
-
 import Web (exprToJQuery, getPath)
-import Parser
+import Parser (parseDefs, parseExpr)
 import Evaluator (evalPath1, Env(), Path(), defsToEnv)
-import AST
-import Text.Parsing.Parser (ParseError(ParseError))
-import Text.Parsing.Parser.Pos (Position(Position))
-import JSHelpers
+import AST (Expr)
+import JSHelpers (jqMap, isEnterKey)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -95,9 +94,6 @@ showHistoryList exprs = do
     showHistory expr i >>= liftEff <<< wrapInDiv "vertical" >>= liftEff <<< flip J.append box
   return box
 
-(!!!) :: forall a. (List a) -> Int -> a
-(!!!) xs i = case xs !! i of Just x -> x
-
 showHistory :: Expr -> Int -> EvalM J.JQuery
 showHistory expr i = do
   history <- liftEff $ J.create "<div></div>" >>= J.addClass "history"
@@ -112,7 +108,7 @@ showHistory expr i = do
     >>= J.on "click" deleteHandler
   liftEff $ J.append delete history
   let restoreHandler = \_ _ -> do
-                         let es' = es { history = drop (i + 1) es.history, expr = es.history !!! i }
+                         let es' = es { history = drop (i + 1) es.history, expr = maybe es.expr id (es.history !! i) }
                          void $ runStateT showEvaluationState es'
   restore <- liftEff $ J.create "<button></button>"
     >>= J.setText "Restore"
@@ -183,7 +179,7 @@ evalExpr path = do
   { env = env, expr = expr } <- get
   liftEff $ print path
   case evalPath1 env path expr of
-    -- Left msg   -> liftEff $ showInfo "execution" msg
+    Left msg    -> liftEff $ showInfo "execution" (show msg)
     Right expr' -> do
       modify (\es -> es { expr = expr' })
       modify (\es -> es { history = expr : es.history })

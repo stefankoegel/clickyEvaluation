@@ -3,18 +3,19 @@ module Web
   , getPath
   ) where
 
-import Control.Monad.Eff
-import Control.Monad.Eff.JQuery as J
-import DOM
 import Prelude
-
 import Data.Foldable (all)
 import Data.Traversable (for)
 import Data.List
 import Data.String (joinWith)
 import Data.Foreign (unsafeFromForeign)
+import Data.Maybe (Maybe(..))
+
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.JQuery as J
+import DOM (DOM)
 
 import AST
 import Evaluator (Path(..))
@@ -35,10 +36,11 @@ exprToJQuery expr = go id expr
       j1 <- go (p <<< Fst) e1
       j2 <- go (p <<< Snd) e2
       binary op j1 j2
-    List es -> case isString es of
-                  true  -> string es
-                  false -> do js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
-                              list js
+    List es -> case toStr es of
+      Just str -> string str
+      Nothing  -> do
+        js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
+        list js
     NTuple es -> do
       js <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length es - 1)) es
       tuple js
@@ -175,11 +177,15 @@ isString es = length es > 0 && all isChar es
   isChar (Atom (Char _)) = true
   isChar _               = false
 
-string :: forall eff. List Expr -> Eff (dom :: DOM | eff) J.JQuery
-string es = do
-  let str = "\"" ++ joinWith "" (fromList ((\(Atom (Char s)) -> s) <$> es)) ++ "\""
-  dstring <- makeDiv str (toList ["list", "string"])
-  return dstring
+string :: forall eff. String -> Eff (dom :: DOM | eff) J.JQuery
+string str = makeDiv ("\"" ++ str ++ "\"") (toList ["list", "string"])
+
+toStr :: List Expr -> Maybe String
+toStr ls = (joinWith "" <<< fromList) <$> for ls extract
+  where
+   extract:: Expr -> Maybe String
+   extract (Atom (Char s)) = Just s
+   extract _               = Nothing
 
 app :: forall eff. J.JQuery -> List J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 app jFunc jArgs = do
