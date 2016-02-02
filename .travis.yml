@@ -1,9 +1,14 @@
-language : haskell
-ghc : 7.6.3
-install :
-  - 'wget -O purescript.tar.gz https://github.com/purescript/purescript/releases/download/v0.6.9.5/linux64.tar.gz'
-  - 'tar -xvf purescript.tar.gz'
-  - 'npm install'
-  - '$(npm bin)/bower update'
-script :
-  - 'PATH=purescript:$PATH $(npm bin)/grunt'
+language: node_js
+sudo: false
+node_js:
+  - 4.1
+env:
+  - PATH=$HOME/purescript:$PATH
+install:
+  - wget -O $HOME/purescript.tar.gz https://github.com/purescript/purescript/releases/download/v0.8.0/linux64.tar.gz
+  - tar -xvf $HOME/purescript.tar.gz -C $HOME/
+  - chmod a+x $HOME/purescript
+  - npm install
+script:
+  - npm run build
+  - npm run test

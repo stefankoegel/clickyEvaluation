@@ -47,19 +47,19 @@ Everything not on the above list. Especially:
 
 ## Building
 
-You will need to install the Haskell Platform (7.6.3 should be enough), nodejs and npm.
-This project won't work with purescript-0.7.0 or higher (I will fix this soon),
-that is why the following instructions use an older version.
-
+Install `npm` and `purescript` (at least 0.8.0).
+You can get `purescript` via `cabal install purescript` or `npm install purescript`.
+Then run:
 ```
-wget -O purescript.tar.gz https://github.com/purescript/purescript/releases/download/v0.6.9.5/linux64.tar.gz
-tar -xvf purescript.tar.gz
 npm install
-$(npm bin)/bower update
-PATH=purescript:$PATH $(npm bin)/grunt
+npm run build
+```
+For the unit tests you can also run:
+```
+npm run test
 ```
 
-Run with:
+After a successful build use:
 
 ```
 <your_browser> html/index.html
