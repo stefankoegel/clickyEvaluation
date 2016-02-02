@@ -181,7 +181,8 @@ string :: forall eff. String -> Eff (dom :: DOM | eff) J.JQuery
 string str = makeDiv ("\"" ++ str ++ "\"") (toList ["list", "string"])
 
 toStr :: List Expr -> Maybe String
-toStr ls = (joinWith "" <<< fromList) <$> for ls extract
+toStr Nil = Nothing
+toStr ls  = (joinWith "" <<< fromList) <$> for ls extract
   where
    extract:: Expr -> Maybe String
    extract (Atom (Char s)) = Just s
