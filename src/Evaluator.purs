@@ -9,7 +9,7 @@ import Data.Maybe (Maybe(..))
 import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
 import Data.Identity (Identity, runIdentity)
-import Data.Either (Either(..))
+import Data.Either (Either(..), either)
 import Data.Monoid (class Monoid)
 
 import Control.Apply ((*>))
@@ -153,40 +153,26 @@ eval1 env expr = case expr of
   (App (App func es) es')            -> return $ App func (es ++ es')
   _                                  -> throwError $ CannotEvaluate expr
 
-eval :: Env -> Expr -> Evaluator Expr
-eval env expr = case expr of
-  (Atom (Name name)) -> apply env name Nil <|> return (Atom (Name name))
-  (Atom a)           -> return (Atom a)
-  (Binary op e1 e2)  -> do
-    ee1 <- eval env e1 <|> return e1
-    ee2 <- eval env e2 <|> return e2
-    result <- binary op ee1 ee2 <|> return (Binary op ee1 ee2)
-    if result /= (Binary op ee1 ee2)
-      then eval env result
-      else return result
-
-  (Unary op e)       -> do
-    ee <- eval env e <|> return e
-    unary op ee <|> return (Unary op e)
-  (IfExpr c t e)     -> do
-    ec <- eval env c <|> return c
-    case ec of
-      (Atom (Bool true))  -> eval env t
-      (Atom (Bool false)) -> eval env e
-      _ -> do
-        et <- eval env t <|> return t
-        ee <- eval env e <|> return e
-        return (IfExpr ec et ee)
-  (App f args)       -> do
-    ef <- eval env f <|> return f
-    case ef of
-      (Atom (Name name)) -> do
-        appEF <- apply env name args <|> return (App ef args)
-        if appEF /= (App ef args)
-          then eval env appEF
-          else return appEF
-      _ -> return (App ef args)
-  _                  -> return expr
+eval :: Env -> Expr -> Expr
+eval env expr =
+  if expr == evald
+    then expr
+    else eval env evald
+  where
+  evald :: Expr
+  evald = either (const expr') id $ runEvalM $ eval1 env expr'
+  expr' :: Expr
+  expr' = case expr of
+    (Binary op e1 e2)  ->
+      Binary op (eval env e1) (eval env e2)
+    (Unary op e)       ->
+      Unary op (eval env e)
+    (IfExpr c t e)     ->
+      IfExpr (eval env c) t e
+    (App f args)       -> do
+      App (eval env f) args
+    _                  ->
+      expr
 
 wrapLambda :: (List Binding) -> (List Expr) -> Expr -> Evaluator Expr
 wrapLambda binds args body =
