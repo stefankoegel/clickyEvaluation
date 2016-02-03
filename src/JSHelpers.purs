@@ -1,10 +1,10 @@
-module JSHelpers where
+module JSHelpers (jqMap, isEnterKey, offsetTop, offsetLeft, outerHeight, outerWidth,path,createCanvas) where
 
-import Control.Monad.Eff
-import Control.Monad.Eff.JQuery
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.JQuery (JQuery, JQueryEvent)
+import DOM (DOM)
+import Prelude (Unit)
 import Data.Foreign
-import DOM
-import Prelude hiding (append)
 
 foreign import jqMap :: forall eff. (JQuery -> Eff (dom :: DOM | eff) Unit) -> JQuery -> Eff (dom :: DOM | eff) Unit
 

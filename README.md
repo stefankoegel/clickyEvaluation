@@ -1,6 +1,7 @@
 # Clicky Evaluation
 
 [![Build Status](https://travis-ci.org/stefankoegel/clickyEvaluation.svg?branch=master)](https://travis-ci.org/stefankoegel/clickyEvaluation)
+[![Dependency Status](https://www.versioneye.com/user/projects/56b075193d82b9003761e3e6/badge.svg?style=flat)](https://www.versioneye.com/user/projects/56b075193d82b9003761e3e6)
 
 ## Description
 
@@ -11,7 +12,7 @@ clicking on them.
 This is intended as a simple learning tool for beginners,
 which shows them how their Haskell code **might** be evaluated.
 
-You can try it [here](http://stefankoegel.github.io/clickyEvaluation/html/).
+You can try it [here](http://stefankoegel.github.io/clickyEvaluation/).
 
 The projects name is a play on *lazy evaluation* and *clicking* to evaluate an expression.
 
@@ -47,16 +48,19 @@ Everything not on the above list. Especially:
 
 ## Building
 
-You will need to install the Haskell Platform (7.6.3 should be enough), nodejs and npm.
-
+Install `npm` and `purescript` (at least 0.8.0).
+You can get `purescript` via `cabal install purescript` or `npm install purescript`.
+Then run:
 ```
-cabal update && cabal install purescript
 npm install
-$(npm bin)/bower update
-$(npm bin)/grunt
+npm run build
+```
+For the unit tests you can also run:
+```
+npm run test
 ```
 
-Run with:
+After a successful build use:
 
 ```
 <your_browser> html/index.html

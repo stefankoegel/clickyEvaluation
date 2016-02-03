@@ -1,36 +1,23 @@
 module Evaluator where
 
-import Prelude hiding (apply)
-import qualified Data.Array as Arr
-import Data.Int
-import Data.List
-import Data.StrMap (StrMap(..))
-import qualified Data.StrMap as Map
-import Data.Tuple    (Tuple(Tuple))
-import Data.Maybe
-import Data.Foldable (foldl, foldr, foldMap, any, product)
+import Prelude (class Show, class Semigroup, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
+import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
+import Data.StrMap (StrMap)
+import Data.StrMap as Map
+import Data.Tuple (Tuple(Tuple))
+import Data.Maybe (Maybe(..))
+import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
-import Data.Identity
-import Data.Either
-import Data.Monoid
+import Data.Identity (Identity, runIdentity)
+import Data.Either (Either(..), either)
+import Data.Monoid (class Monoid)
 
 import Control.Apply ((*>))
 import Control.Alt ((<|>))
-import qualified Control.Plus as P
-import Control.Monad.State
-import Control.Monad.State.Trans
-import Control.Monad.State.Class
+import Control.Monad.State.Trans (StateT, modify, execStateT)
+import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
-import Control.Monad.Writer
-import Control.Monad.Writer.Trans
-import Control.Monad.Writer.Class
-
-import Control.Monad.Except
-import Control.Monad.Except.Trans
-
-import Control.Monad.Trans
-
-import AST
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
 
 data EvalError =
     PathError Path Expr
@@ -126,7 +113,7 @@ mapWithPath p f = go p
     App e es -> App e <$> mapIndex n (go p) es
     _        -> throwError $ PathError (Nth n p) e
 
-mapIndex :: forall m a. Int -> (a -> Evaluator a) -> (List a) -> Evaluator (List a)
+mapIndex :: forall a. Int -> (a -> Evaluator a) -> (List a) -> Evaluator (List a)
 mapIndex i f as = do
   case as !! i of
     Nothing -> throwError $ IndexError i (length as)
@@ -173,39 +160,26 @@ eval1 env expr = case expr of
   (App (App func es) es')            -> return $ App func (es ++ es')
   _                                  -> throwError $ CannotEvaluate expr
 
-eval :: Env -> Expr -> Evaluator Expr
-eval env expr = case expr of
-  (Atom (Name name)) -> apply env name Nil <|> return (Atom (Name name))
-  (Atom a)           -> return (Atom a)
-  (Binary op e1 e2)  -> do
-    ee1 <- eval env e1 <|> return e1
-    ee2 <- eval env e2 <|> return e2
-    result <- binary op ee1 ee2 <|> return (Binary op ee1 ee2)
-    if result /= (Binary op ee1 ee2)
-      then eval env result
-      else return result
-
-  (Unary op e)       -> do
-    ee <- eval env e <|> return e
-    unary op ee <|> return (Unary op e)
-  (IfExpr c t e)     -> do
-    ec <- eval env c <|> return c
-    case ec of
-      (Atom (Bool true))  -> eval env t
-      (Atom (Bool false)) -> eval env e
-      _ -> do
-        et <- eval env t <|> return t
-        ee <- eval env e <|> return e
-        return (IfExpr ec et ee)
-  (App f args)       -> do
-    ef <- eval env f <|> return f
-    case ef of
-      (Atom (Name name)) -> do
-        appEF <- apply env name args <|> return (App ef args)
-        if appEF /= (App ef args)
-          then eval env appEF
-          else return appEF
-      _ -> return (App ef args)
+eval :: Env -> Expr -> Expr
+eval env expr =
+  if expr == evald
+    then expr
+    else eval env evald
+  where
+  evald :: Expr
+  evald = either (const expr') id $ runEvalM $ eval1 env expr'
+  expr' :: Expr
+  expr' = case expr of
+    (Binary op e1 e2)  ->
+      Binary op (eval env e1) (eval env e2)
+    (Unary op e)       ->
+      Unary op (eval env e)
+    (IfExpr c t e)     ->
+      IfExpr (eval env c) t e
+    (App f args)       -> do
+      App (eval env f) args
+    _                  ->
+      expr
 
 wrapLambda :: (List Binding) -> (List Expr) -> Expr -> Evaluator Expr
 wrapLambda binds args body =
@@ -300,7 +274,6 @@ match' (ListLit bs)      (List es)           = case length bs == length es of
                                                  false -> throwError $ MatchingError (ListLit bs) (List es)
 match' (ListLit bs)      e                   = throwError $ checkStrictness (ListLit bs) e
 
-match' (NTupleLit bs)    (NTuple es)         = match' (ListLit bs) (List es)
 match' (NTupleLit bs)    (NTuple es)         = case length bs == length es of
                                                  true  -> void $ zipWithA match' bs es
                                                  false -> throwError $ MatchingError (NTupleLit bs) (NTuple es)
@@ -356,3 +329,4 @@ boundNames = go
   go (ConsLit b1 b2)   = go b1 ++ go b2
   go (ListLit bs)      = foldMap go bs
   go (NTupleLit bs)    = foldMap go bs
+  go _                 = Nil

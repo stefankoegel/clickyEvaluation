@@ -1,7 +1,7 @@
 module AST where
 
-import Prelude
-import Data.List
+import Prelude (class Show, class Eq,class Ord, show, (++), (==), (&&),eq, compare,Ordering(..))
+import Data.List (List)
 
 -- | Operators
 -- |

@@ -7,26 +7,27 @@ module Web
   , findConnections
   ) where
 
-import Control.Monad.Eff
-import Control.Monad.Eff.JQuery as J
-import DOM
-import Prelude
-
+import Prelude (class Monad, Unit, return, flip, bind, (<<<), (<$>), (++), (&&), (>), (>>=), void, ($), unit, show, id, (-),(+),map,(==), class Show)
 import Data.Foldable (all,foldr)
 import Data.Traversable (for)
-import Data.List
-import Data.Tuple
+import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA,concat,zip)
 import Data.String (joinWith)
 import Data.Foreign (unsafeFromForeign, Foreign())
+import Data.Maybe (Maybe(..))
+import Data.Tuple
+
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.JQuery as J
 import Control.Monad.State
-import Control.Monad.Eff.Class
+import DOM (DOM)
 
-import AST
+
+import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type,IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..))
 import Evaluator (Path(..))
 import TypeChecker (prettyPrintType,extractType,mapM)
-import JSHelpers
+import JSHelpers (offsetTop,offsetLeft,path)
 
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
@@ -45,11 +46,10 @@ exprToJQuery output = go id output
       j1 <- go (p <<< Fst) {expr:e1, typ:tt1, idTree:i1}
       j2 <- go (p <<< Snd) {expr:e2, typ:tt2, idTree:i2}
       binary op opt opi t i j1 j2
-
-    {expr:(List es), typ:(TListTree ts t), idTree:(IListTree is i)} -> case isString es of
-                  true  -> string es t i
-                  false -> do js <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t, idTree:i'}) (0 .. (length es - 1)) (zip is (zip es ts))
-                              list js t i
+    {expr:(List es), typ:(TListTree ts t), idTree:(IListTree is i)} -> case toStr es of
+                  Just str  -> string str t i
+                  Nothing -> do js <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t, idTree:i'}) (0 .. (length es - 1)) (zip is (zip es ts))
+                                list js t i
     {expr:NTuple es, typ:TNTuple ts t,idTree: INTuple is i} -> do
       js <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t,idTree:i'}) (0 .. (length es - 1)) (zip is (zip es ts))
       tuple js t i
@@ -191,11 +191,16 @@ isString es = length es > 0 && all isChar es
   isChar (Atom (Char _)) = true
   isChar _               = false
 
-string :: forall eff. List Expr -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
-string es t i = do
-  let str = "\"" ++ joinWith "" (fromList ((\(Atom (Char s)) -> s) <$> es)) ++ "\""
-  dstring <- makeDiv str (toList ["list", "string"]) >>= addTypetoDiv t >>= addIdtoDiv i
-  return dstring
+string :: forall eff. String -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+string str t i = makeDiv ("\"" ++ str ++ "\"") (toList ["list", "string"]) >>= addTypetoDiv t >>= addIdtoDiv i
+
+toStr :: List Expr -> Maybe String
+toStr Nil = Nothing
+toStr ls  = (joinWith "" <<< fromList) <$> for ls extract
+  where
+   extract:: Expr -> Maybe String
+   extract (Atom (Char s)) = Just s
+   extract _               = Nothing
 
 app :: forall eff. J.JQuery -> List J.JQuery -> Type -> Int  -> Eff (dom :: DOM | eff) J.JQuery
 app jFunc jArgs t i = do
