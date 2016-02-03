@@ -580,13 +580,11 @@ closeOver' :: (Tuple (Map.Map TVar Type) TypeTree) -> TypeTree
 closeOver' (Tuple s tt) = apply s tt
 
 
-prettyPrintType:: Type -> String -- TODO
-prettyPrintType = f
-  where
-  f (TypVar (TVar a)) = show a
-  f (TypCon a) = show a
-  f (TypArr t1 t2) = "(" ++ f t1 ++ " -> " ++ f t2 ++ ")"
-  f (AD a) = prettyPrintAD a
+prettyPrintType:: Type -> String
+prettyPrintType (TypVar (TVar a)) = a
+prettyPrintType (TypCon a) =  a
+prettyPrintType (TypArr t1 t2) = "(" ++ prettyPrintType t1 ++ " -> " ++ prettyPrintType t2 ++ ")"
+prettyPrintType (AD a) = prettyPrintAD a
 
 
 prettyPrintAD:: AD -> String
