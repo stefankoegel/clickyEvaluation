@@ -3,10 +3,10 @@ module Web
   , getPath
   ) where
 
-import Prelude
+import Prelude (class Monad, Unit, return, flip, bind, (<<<), (<$>), (++), (&&), (>), (>>=), void, ($), unit, show, id, (-))
 import Data.Foldable (all)
 import Data.Traversable (for)
-import Data.List
+import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA)
 import Data.String (joinWith)
 import Data.Foreign (unsafeFromForeign)
 import Data.Maybe (Maybe(..))
@@ -17,7 +17,7 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
-import AST
+import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp)
 import Evaluator (Path(..))
 
 pathPropName :: String
@@ -66,6 +66,7 @@ exprToJQuery expr = go id expr
       jFunc <- go (p <<< Fst) func
       jArgs <- zipWithA (\i e -> go (p <<< Nth i) e) (0 .. (length args - 1)) args
       app jFunc jArgs
+    e -> makeDiv ("Not yet supported: " ++ show e) Nil
 
 atom :: forall eff. Atom -> Eff (dom :: DOM | eff) J.JQuery
 atom (AInt n)      = makeDiv (show n) (toList ["atom", "num"])

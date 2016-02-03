@@ -1,17 +1,17 @@
 module Test.Main where
 
-import Prelude
-import Data.List
+import Prelude (Unit, show, (++), ($), bind, (==), (+))
+import Data.List (length)
 import Data.Traversable (for)
 
 import Test.Parser as Parser
 import Test.Evaluator as Evaluator
 
-import Control.Monad.Eff
-import Control.Monad.Eff.Console
-import Control.Monad.Writer
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Console (CONSOLE, log)
+import Control.Monad.Writer (execWriter)
 
-import Node.Process
+import Node.Process (PROCESS, exit)
 
 main :: forall eff. Eff (console :: CONSOLE, process :: PROCESS | eff) Unit
 main = do

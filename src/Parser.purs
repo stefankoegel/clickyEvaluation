@@ -1,10 +1,10 @@
 module Parser where
 
-import Prelude
+import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void)
 import Global (readInt)
 import Data.String as String
 import Data.Int (floor)
-import Data.List
+import Data.List (List(Cons), many, toList, concat, elemIndex, fromList)
 import Data.Maybe (Maybe(..))
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
 
@@ -19,7 +19,7 @@ import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix), buildExprParser)
 import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
 
-import AST
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
 
 ---------------------------------------------------------
 -- Parsers for Atoms

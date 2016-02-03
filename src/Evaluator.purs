@@ -1,7 +1,7 @@
 module Evaluator where
 
-import Prelude hiding (apply)
-import Data.List
+import Prelude (class Show, class Semigroup, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show)
+import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWithA, length, (:), replicate, drop, updateAt, (!!))
 import Data.StrMap (StrMap)
 import Data.StrMap as Map
 import Data.Tuple (Tuple(Tuple))
@@ -17,7 +17,7 @@ import Control.Alt ((<|>))
 import Control.Monad.State.Trans (StateT, modify, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
-import AST
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
 
 data EvalError =
     PathError Path Expr

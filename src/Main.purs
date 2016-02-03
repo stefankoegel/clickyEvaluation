@@ -1,9 +1,9 @@
 module Main where
 
-import Prelude
+import Prelude (class Applicative, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
 import Data.Either (Either(..))
 import Data.Maybe (maybe)
-import Data.List
+import Data.List (List(Nil), (:), (!!), drop, deleteAt, length, (..), zipWithA)
 import Data.Foreign (unsafeFromForeign)
 
 import Control.Apply ((*>))

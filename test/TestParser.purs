@@ -1,17 +1,15 @@
 module Test.Parser where
 
-import Prelude
-import Data.Either
-import Data.List
+import Prelude (class Eq, class Show, Unit, (++), ($), bind, show, unit, return, (==), (<<<))
+import Data.Either (Either(..))
+import Data.List (List(..), toList, singleton)
 
-import Text.Parsing.Parser
+import Text.Parsing.Parser  (Parser, ParseError(ParseError), runParser)
 
-import Control.Monad.Eff
-import Control.Monad.Eff.Console
-import Control.Monad.Writer
+import Control.Monad.Writer (Writer, tell)
 
-import AST
-import Parser
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
+import Parser (expression, atom, definitions, definition, binding, variable, bool, int)
 
 tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton

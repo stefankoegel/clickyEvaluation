@@ -1,18 +1,16 @@
 module Test.Evaluator where
 
-import Prelude
-import Data.Either
-import Data.Tuple
+import Prelude (Unit, bind, (++), ($), show, unit, return, (==), (<<<))
+import Data.Either (Either(..))
+import Data.Tuple (Tuple(..))
 import Data.StrMap as M
-import Data.List
+import Data.List (List, singleton)
 
-import Text.Parsing.Parser
+import Text.Parsing.Parser (runParser)
 
-import Control.Monad.Eff
-import Control.Monad.Eff.Console
-import Control.Monad.Writer
+import Control.Monad.Writer (Writer, tell)
 
-import Parser
+import Parser (definitions, expression)
 import Evaluator (eval, eval1, runEvalM, defsToEnv)
 
 tell' :: forall a. a -> Writer (List a) Unit
