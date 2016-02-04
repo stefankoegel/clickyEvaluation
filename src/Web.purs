@@ -225,7 +225,15 @@ emptyJQuery = J.create ""
 
 addTypetoDiv:: forall eff. Type -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 addTypetoDiv typ d = do
-  J.setAttr "title" (prettyPrintType typ) d
+  text <- J.getText d
+  J.clear d
+  outer <- makeDiv "" $ Cons "tooltip-outer" Nil
+  inner <- makeDiv (prettyPrintType typ) $ Cons "tooltip-inner" Nil
+  J.append inner outer
+  J.append outer d
+  J.appendText text d
+  J.on "mouseover" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.css {visibility: "visible"} outer) d
+  J.on "mouseout" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.css {visibility: "hidden"} outer) d
 
 
 addIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
