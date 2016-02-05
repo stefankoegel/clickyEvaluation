@@ -34,7 +34,7 @@ h3 {
 }
 
 
-div.list, div.lambda {
+div.list, div.lambda, div.section, div.name{
   font-family: monospace;
   font-size: 15px;
   border: none;
@@ -43,6 +43,14 @@ div.list, div.lambda {
   margin: 5px;
   border-radius: 10px;
   box-shadow: 1.5px 1.5px 5px 0 #333;
+}
+
+div.func{
+  background: inherit;
+  box-shadow: none;
+  border-width: thin;
+  border-style: solid;
+  border-color: rgba(0, 0, 0, 0.3);
 }
 
 button.delete {
