@@ -26,10 +26,7 @@ main = do
   log $ "  ...found " ++ show (length evaluatorLog) ++ " errors"
   for evaluatorLog log
 
-  log $ "Running typing tests..."
-  let evaluatorLog = execWriter TypeChecker.runTests
-  log $ "  ...found " ++ show (length evaluatorLog) ++ " errors"
-  for evaluatorLog log
+  TypeChecker.runTests
 
   let errorCount = length parserLog + length evaluatorLog
   if errorCount == 0
