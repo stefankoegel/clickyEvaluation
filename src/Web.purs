@@ -1,10 +1,7 @@
 module Web
   ( exprToJQuery
   , getPath
-  , topLevelTypetoJQuery
   , idExpr
-  , drawLines
-  , findConnections
   ) where
 
 import Prelude (class Monad, Unit, return, flip, bind, (<<<), (<$>), (++), (&&), (>), (>>=), void, ($), unit, show, id, (-),(+),map,(==), class Show)
@@ -27,7 +24,6 @@ import DOM (DOM)
 import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type,IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..))
 import Evaluator (Path(..))
 import TypeChecker (prettyPrintType,extractType,mapM)
-import JSHelpers (offsetTop,offsetLeft,path)
 
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
@@ -248,144 +244,6 @@ addResultIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | 
 addResultIdtoDiv id d = do
     J.setAttr "id" ("typ" ++ (show id) ++ "result") d
 
-dummyExpr:: Expr
-dummyExpr =  Atom $ AInt 0
-
-typetoJQuery:: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
-typetoJQuery {typ:TListTree ls t, idTree: IListTree is i} = do
-    container <- makeDiv "" $ Cons "output" Nil
-    list <- mapM (\(Tuple t i) -> typetoJQuery {typ:t , idTree:i ,expr:dummyExpr}) (zip ls is)
-    for list $ (\l -> J.append l container)
-    containerContent <- J.getText container
-    if Data.String.length containerContent == 0 then J.setAttr "class" "" container else emptyJQuery
-    return $ container
-typetoJQuery {typ:TNTuple ls t, idTree: INTuple is i} = do
-    container <- makeDiv "" $ Cons "output" Nil
-    list <- mapM (\(Tuple t i) -> typetoJQuery {typ:t , idTree:i ,expr:dummyExpr}) (zip ls is)
-    for list $ (\l -> J.append l container)
-    containerContent <- J.getText container
-    if Data.String.length containerContent == 0 then J.setAttr "class" "" container else emptyJQuery
-    return $ container
-typetoJQuery {typ:TBinary t1 tt1 tt2 t, idTree:IBinary i1 it1 it2 i} = do
-    container <- makeDiv "" Nil
-    subContainer <- makeDiv "" $ Cons "subtypes output" Nil
-    jExp1 <- typetoJQuery {typ:tt1 ,idTree:it1, expr:dummyExpr}
-    jExp2 <- typetoJQuery {typ:tt2 ,idTree:it2, expr:dummyExpr}
-    J.append jExp1 subContainer
-    J.append jExp2 subContainer
-    contentSub <- J.getText subContainer
-    if Data.String.length contentSub == 0 then J.setAttr "class" "" subContainer else emptyJQuery
-    J.append subContainer container
-typetoJQuery {typ: TUnary t1 tt t, idTree: IUnary i1 it i} = emptyJQuery --TODO
-
-typetoJQuery {typ: TSectL tt _ _, idTree: ISectL it _ _} = typetoJQuery {typ:tt, idTree:it, expr:dummyExpr}
-typetoJQuery {typ: TSectR _ tt _, idTree: ISectR _ it _} = typetoJQuery {typ:tt, idTree:it, expr:dummyExpr}
-
-typetoJQuery {typ: TIfExpr t1 t2 t3 t, idTree: IIfExpr i1 i2 i3 i} = do
-    container <- makeDiv "" $ Cons "output" Nil
-    div1 <- typetoJQuery {typ:t1,idTree:i1,expr:dummyExpr}
-    div2 <- typetoJQuery {typ:t2,idTree:i2,expr:dummyExpr}
-    div3 <- typetoJQuery {typ:t3,idTree:i3,expr:dummyExpr}
-    J.append div1 container
-    J.append div2 container
-    J.append div3 container
-    containerContent <- J.getText container
-    if Data.String.length containerContent == 0 then J.setAttr "class" "" container else emptyJQuery
-    return container
-
-typetoJQuery {typ: TLetExpr _ tt1 tt2 t,idTree: ILetExpr _ it1 it2 i} = emptyJQuery --TODO
-
-typetoJQuery {typ: TLambda _ tt t, idTree: ILambda _ it i} = typetoJQuery {typ:tt,idTree:it,expr:dummyExpr}
-
-typetoJQuery {typ:TApp t1 tl t, idTree:IApp i1 is i} = do
-    container <- makeDiv "" Nil
-    typContainer <- (makeDiv "" $ Cons "output" Nil) >>= addTypIdtoDiv (extractIndex i1)
-    list <- mapM (\(Tuple t i) -> (makeDiv (prettyPrintType (extractType t)) $ Cons "output" Nil) >>= (addTypIdtoDiv (extractIndex i))) (zip tl is)
-    for list $ (\l -> do
-                  J.append l typContainer
-                  arr <- makeDiv " -> " Nil
-                  J.append arr typContainer)
-    exprType <- (makeDiv (prettyPrintType t) $ Cons "output" Nil) >>= addResultIdtoDiv i
-    J.append exprType typContainer
-    J.append typContainer container
-    br <- J.create "<br>"
-    J.append br container
-    subContainer <- makeDiv "" $ Cons "subtypes output" Nil
-    divExpr <- typetoJQuery {typ: t1,idTree:i1,expr:dummyExpr}
-    J.append divExpr subContainer
-    list <- mapM (\(Tuple t i) -> typetoJQuery {typ:t,idTree:i, expr:dummyExpr}) (zip tl is)
-    for list $ (\l -> J.append l subContainer)
-    contentSub <- J.getText subContainer
-    if Data.String.length contentSub == 0 then J.setAttr "class" "" subContainer else emptyJQuery
-    J.append subContainer container
-
-
-typetoJQuery {typ:typ} = emptyJQuery
-
--- to show type even is no application
-topLevelTypetoJQuery :: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
-topLevelTypetoJQuery t@{typ:tt, idTree: it} = do
-        container <- makeDiv "" Nil
-        typContainer <- makeDiv (prettyPrintType (extractType tt)) $ Cons "output" Nil
-        addTypIdtoDiv (extractIndex it) typContainer
-        J.append typContainer container
-        br <- J.create "<br>"
-        J.append br container
-        types <- typetoJQuery t
-        J.append types container
-
-
-
-
-
-findConnections:: IndexTree -> List (Tuple String String)
-findConnections id = Cons (buildPair (extractIndex id)) $ findOtherConnections id
-
-findOtherConnections:: IndexTree -> List (Tuple String String)
-findOtherConnections (IListTree ls _) = concat $ map findOtherConnections ls
-findOtherConnections (INTuple ls _) = concat $ map findOtherConnections ls
-findOtherConnections (IBinary _ it1 it2 _) = findOtherConnections it1 ++ findOtherConnections it2
-findOtherConnections (IUnary _ it _) = findOtherConnections it
-findOtherConnections (ISectL it _ _ ) = findOtherConnections it
-findOtherConnections (ISectR _ it _ ) = findOtherConnections it
-findOtherConnections (IIfExpr it1 it2 it3 _ ) = findOtherConnections it1 ++ findOtherConnections it2 ++ findOtherConnections it3
-findOtherConnections (ILetExpr _ it1 it2 _ ) = findOtherConnections it1 ++ findOtherConnections it2
-findOtherConnections (ILambda _ it _) = findOtherConnections it
-findOtherConnections (IApp it its i) =  Cons (buildPair (extractIndex it))  $  Cons (buildPairResult i) $ (map (\i -> buildPair $ extractIndex i) its) ++ (concat (map findOtherConnections its)) -- Cons buildPair i
-findOtherConnections _ = Nil -- atom prefixOP
-
-buildPair:: Int -> (Tuple String String)
-buildPair i = Tuple ("typ" ++ show i) ("expr" ++ show i)
-
-buildPairResult:: Int -> (Tuple String String)
-buildPairResult i = Tuple ("expr" ++ show i) ("typ"++ (show i) ++ "result")
-
--- draws a line between two divs
--- canvas obj1 obj2 svgContainer
--- Foreign JQuery JQuery JQuery
-drawLines::forall eff. Foreign -> J.JQuery -> List (Tuple String String) -> Eff (dom :: DOM | eff) Unit
-drawLines canvas svgContainer lines' = do
-      lines <- mapM toJQueryPair lines'
-      for lines $ (\(Tuple l1 l2) -> do
-              y1 <- yOffset l1
-              x1 <- xOffset l1
-              y2 <- yOffset l2
-              x2 <- xOffset l2
-              path canvas $ "M" ++ (show x1) ++ " " ++ (show y1) ++ "L" ++ (show x2) ++ " " ++ (show y2)
-          )
-      return unit
-    where
-    -- calculates x and y offset to svgContainer
-    yOffset jObj = offsetTop jObj >>= (\y -> offsetTop svgContainer >>= (\x -> return (y - x)))
-    xOffset jObj = offsetLeft jObj >>= (\y -> offsetLeft svgContainer >>= (\x -> return (y - x)))
-
-
--- fings matching typ expr pair
-toJQueryPair::forall eff. Tuple String String -> Eff (dom :: DOM | eff) (Tuple J.JQuery J.JQuery)
-toJQueryPair (Tuple id1 id2) = do
-  typ <- J.select ("#" ++ id1)
-  expr <- J.select ("#" ++ id2)
-  return $ Tuple typ expr
 
 idExpr:: Expr -> IndexTree
 idExpr e = fst $ runState (indexExpr e) {count:0}

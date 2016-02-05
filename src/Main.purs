@@ -31,7 +31,7 @@ import Control.Monad.State.Trans
 import Control.Monad.State.Class
 import Control.Monad.Eff.Class
 
-import Web (exprToJQuery, getPath,topLevelTypetoJQuery,idExpr,drawLines,findConnections)
+import Web (exprToJQuery, getPath,idExpr)
 import Parser
 import Evaluator (evalPath1, Env(), Path(), defsToEnv,envToDefs)
 import AST
@@ -105,13 +105,6 @@ showEvaluationState = do
 
   liftEff $ exprToJQuery out >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
-
-  typDiv  <- liftEff $ topLevelTypetoJQuery out
-  liftEff $ J.append typDiv typContainer
-
-  let cons = findConnections out.idTree
-  svgCanvas <- liftEff $ createCanvas
-  liftEff $ drawLines svgCanvas svgContainer cons
 
   liftEff (J.find ".binary, .app, .func, .list, .if" output)
      >>= makeClickable
