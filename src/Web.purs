@@ -230,6 +230,8 @@ app jFunc jArgs t i = do
   J.addClass "func" jFunc
   J.addClass "funcContainer" jFunc
   innerExpr <- J.find ".expr" jFunc
+  innerTyp <- J.find ".type" jFunc
+  J.setVisible false innerTyp
   J.addClass "func" innerExpr
   J.append jFunc dApp
   for jArgs (flip J.append dApp)
