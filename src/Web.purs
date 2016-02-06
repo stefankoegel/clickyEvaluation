@@ -68,7 +68,7 @@ exprToJQuery output = go id output
       jBody <- go (p <<< Fst) {expr:body, typ:tt, idTree: i}
       lambda jBinds jBody t i'
     {expr:App func args, typ:TApp tt ts t, idTree:IApp i1 is i} -> do
-      jFunc <- go ((p <<< Fst) <<< Snd) {expr:func, typ:tt, idTree: i1}
+      jFunc <- go (p <<< Fst) {expr:func, typ:tt, idTree: i1}
       jArgs <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t, idTree: i'}) (0 .. (length args - 1)) (zip is (zip args ts))
       app jFunc jArgs t i
     {} -> makeDiv "You found a Bug" Nil
