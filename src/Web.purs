@@ -68,7 +68,7 @@ exprToJQuery output = go id output
       jBody <- go (p <<< Fst) {expr:body, typ:tt, idTree: i}
       lambda jBinds jBody t i'
     {expr:App func args, typ:TApp tt ts t, idTree:IApp i1 is i} -> do
-      jFunc <- go (p <<< Fst) {expr:func, typ:tt, idTree: i1}
+      jFunc <- go ((p <<< Fst) <<< Snd) {expr:func, typ:tt, idTree: i1}
       jArgs <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t, idTree: i'}) (0 .. (length args - 1)) (zip is (zip args ts))
       app jFunc jArgs t i
     {} -> makeDiv "You found a Bug" Nil
@@ -80,7 +80,13 @@ atom (AInt n) t  i   = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDi
 atom (Bool true) t i = makeDiv "True"  (toList ["atom", "bool"]) >>= addTypetoDiv t >>= addIdtoDiv i
 atom (Bool false) t i= makeDiv "False" (toList ["atom", "bool"]) >>= addTypetoDiv t >>= addIdtoDiv i
 atom (Char c) t  i  = (makeDiv ("'" ++ c ++ "'") (toList ["atom", "char"])) >>= addTypetoDiv t >>= addIdtoDiv i
-atom (Name name) t i = makeDiv name (toList ["atom", "name"]) >>= addTypetoDiv t >>= addIdtoDiv i
+atom (Name name) t i = do
+ jtypExp <- makeDiv "" (singleton "atom name typExpContainer")
+ jExpand <- buildExpandDiv t
+ J.append jExpand jtypExp
+ jName <- makeDiv name (toList ["atom", "name", "expr"]) >>= addTypetoDiv t >>= addIdtoDiv i
+ J.append jName jtypExp
+ return jtypExp
 
 binding :: forall eff. Tuple IBinding (Tuple Binding  TypeBinding) -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
@@ -110,7 +116,10 @@ binding b = case b of
 
 lambda :: forall eff. List J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 lambda jBinds jBody t i = do
-  jLam <- makeDiv "" (singleton "lambda") >>= addTypetoDiv t >>= addIdtoDiv i
+  jtypExp <- makeDiv "" (singleton "lambda typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  jLam <- makeDiv "" (singleton "lambda expr") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "(" (singleton "brace")
   J.append open jLam
   bs <- makeDiv "\\" (singleton "backslash")
@@ -121,7 +130,8 @@ lambda jBinds jBody t i = do
   J.append jBody jLam
   close <- makeDiv ")" (singleton "brace")
   J.append close jLam
-  return jLam
+  J.append jLam jtypExp
+  return jtypExp
 
 binary :: forall eff. Op -> Type -> Int -> Type -> Int -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 binary op opt opi t i j1 j2 = do
@@ -134,25 +144,33 @@ binary op opt opi t i j1 j2 = do
 
 section :: forall eff. J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 section j1 j2 t i = do
-  jSect <- makeDiv "" (singleton "section") >>= addTypetoDiv t >>= addIdtoDiv i
+  jtypExp <- makeDiv "" (singleton "section typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  jSect <- makeDiv "" (singleton "section expr") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "(" (singleton "brace")
   J.append open jSect
   J.append j1 jSect
   J.append j2 jSect
   close <- makeDiv ")" (singleton "brace")
   J.append close jSect
-  return jSect
+  J.append jSect jtypExp
+  return jtypExp
 
 ifexpr :: forall eff. J.JQuery -> J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 ifexpr cond thenExpr elseExpr t i = do
-  dIf <- makeDiv "" (singleton "if") >>= addTypetoDiv t >>= addIdtoDiv i
+  jtypExp <- makeDiv "" (singleton "if typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  dIf <- makeDiv "" (singleton "if expr") >>= addTypetoDiv t >>= addIdtoDiv i
   makeDiv "if" (singleton "keyword") >>= flip J.append dIf
   J.append cond dIf
   makeDiv "then" (singleton "keyword") >>= flip J.append dIf
   J.append thenExpr dIf
   makeDiv "else" (singleton "keyword") >>= flip J.append dIf
   J.append elseExpr dIf
-  return dIf
+  J.append dIf jtypExp
+  return jtypExp
 
 interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> List a -> m Unit
 interleaveM_ f sep = go
@@ -163,7 +181,8 @@ interleaveM_ f sep = go
 
 tuple :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 tuple js t i = do
-  dtuple <- makeDiv "" (singleton "tuple") >>= addTypetoDiv t >>= addIdtoDiv i
+  jtypExp <- makeDiv "" (singleton "tuple typExpContainer")
+  dtuple <- makeDiv "" (singleton "tuple expr") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "(" (singleton "brace")
   J.append open dtuple
   interleaveM_ (flip J.append dtuple) (makeDiv "," (singleton "comma") >>= flip J.append dtuple) js
@@ -173,13 +192,17 @@ tuple js t i = do
 
 list :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 list js t   i  = do
-  dls <- makeDiv "" (singleton "list") >>= addTypetoDiv t >>= addIdtoDiv i
+  jtypExp <- makeDiv "" (singleton "list typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  dls <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "[" (singleton "brace")
   J.append open dls
   interleaveM_ (flip J.append dls) (makeDiv "," (singleton "comma") >>= flip J.append dls) js
   close <- makeDiv "]" (singleton "brace")
   J.append close dls
-  return dls
+  J.append dls jtypExp
+  return jtypExp
 
 isString :: List Expr -> Boolean
 isString es = length es > 0 && all isChar es
@@ -200,11 +223,18 @@ toStr ls  = (joinWith "" <<< fromList) <$> for ls extract
 
 app :: forall eff. J.JQuery -> List J.JQuery -> Type -> Int  -> Eff (dom :: DOM | eff) J.JQuery
 app jFunc jArgs t i = do
-  dApp <- makeDiv "" (singleton "app") >>= addTypetoDiv t >>= addIdtoDiv i
+  jtypExp <- makeDiv "" (singleton "app typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  dApp <- makeDiv "" (singleton "app expr") >>= addTypetoDiv t >>= addIdtoDiv i
   J.addClass "func" jFunc
+  J.addClass "funcContainer" jFunc
+  innerExpr <- J.find ".expr" jFunc
+  J.addClass "func" innerExpr
   J.append jFunc dApp
   for jArgs (flip J.append dApp)
-  return dApp
+  J.append dApp jtypExp
+  return jtypExp
 
 type Class = String
 
@@ -228,8 +258,8 @@ addTypetoDiv typ d = do
   J.append inner outer
   J.append outer d
   J.appendText text d
-  J.on "mouseover" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.css {visibility: "visible"} outer) d
-  J.on "mouseout" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.css {visibility: "hidden"} outer) d
+  -- J.on "mouseover" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.css {visibility: "visible"} outer) d
+  -- J.on "mouseout" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.css {visibility: "hidden"} outer) d
 
 
 addIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
@@ -244,6 +274,16 @@ addResultIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | 
 addResultIdtoDiv id d = do
     J.setAttr "id" ("typ" ++ (show id) ++ "result") d
 
+
+buildExpandDiv:: forall eff. Type  -> Eff (dom :: DOM | eff) J.JQuery
+buildExpandDiv t  = do
+  typC <- makeDiv (prettyPrintType t) $ Cons "type" Nil
+  expandC <- makeDiv "▾" $ Cons "expand"  Nil
+  J.append typC expandC
+  J.on "click" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.setVisible true typC) expandC
+  J.on "click" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.setVisible false typC) typC
+  J.css {display: "inline-block"} typC
+  return expandC
 
 idExpr:: Expr -> IndexTree
 idExpr e = fst $ runState (indexExpr e) {count:0}

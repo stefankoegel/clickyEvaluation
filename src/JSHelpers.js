@@ -10,3 +10,8 @@ exports.jqMap = function(func) {
         };
     };
 };
+
+
+exports.isEnterKey = function(event) {
+     return event.which == 13;
+};
