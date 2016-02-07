@@ -45,7 +45,7 @@ exprToJQuery output = go (output.expr)
     go _ = exprToJQuery' output
 
     topLevel = do
-      jtypExp <- makeDiv "" (singleton "atom name typExpContainer")
+      jtypExp <- makeDiv "" (singleton "top typExpContainer")
       jExpand <- buildExpandDiv (extractType output.typ)
       J.append jExpand jtypExp
       jExpr <- exprToJQuery' output
@@ -203,10 +203,10 @@ interleaveM_ f sep = go
 
 tuple :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 tuple js t i = do
-  jtypExp <- makeDiv "" (singleton "tuple name typExpContainer")
+  jtypExp <- makeDiv "" (singleton "tuple  typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  dtuple <- makeDiv "" (singleton "tuple name expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  dtuple <- makeDiv "" (singleton "tuple  expr") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "(" (singleton "brace")
   J.append open dtuple
   interleaveM_ (flip J.append dtuple) (makeDiv "," (singleton "comma") >>= flip J.append dtuple) js
