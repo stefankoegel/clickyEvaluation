@@ -24,6 +24,7 @@ import DOM (DOM)
 import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type,IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..))
 import Evaluator (Path(..))
 import TypeChecker (prettyPrintType,extractType,mapM)
+import JSHelpers
 
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
@@ -260,8 +261,7 @@ addTypetoDiv typ d = do
   J.append inner outer
   J.append outer d
   J.appendText text d
-  -- J.on "mouseover" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.css {visibility: "visible"} outer) d
-  -- J.on "mouseout" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.css {visibility: "hidden"} outer) d
+  J.on "mouseenter" (\e div -> J.stopImmediatePropagation e >>= \_ -> showTooltip div outer e) d
 
 
 addIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery

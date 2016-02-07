@@ -101,6 +101,13 @@ button.restore:hover {
   margin: 5px;
 }
 
+
+.history, .historyBox {
+  border-radius: 10px;
+  background: #bbb;
+  box-shadow: 2px 2px 5px 0 #333;
+}
+
 div.historyBox {
   background: none;
   border: none;
@@ -192,9 +199,7 @@ div.op, div.brace, div.comma {
 }
 
 .tooltip-outer {
-  position: relative;
-  top: -20px;
-  left: 0px;
+  position: absolute;
   width: 0px;
   margin: 0px !important;
   z-index: 2;
@@ -228,8 +233,11 @@ div.op, div.brace, div.comma {
 .type {
   color: rgb(68, 68, 68);
   padding: 3px;
-  text-align: center;
+  text-align: left;
   font-size: medium;
+  width: 100%;
+  padding-left: 1.3em;
+  margin-left: -1em !important;
 }
 
 .typExpContainer{
