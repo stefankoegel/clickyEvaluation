@@ -229,6 +229,7 @@ div.op, div.brace, div.comma {
   font-size: x-small;
   border-top-right-radius: 4px;
   border-top-left-radius: 4px;
+  margin: 0px !important;
 }
 
 .type {
