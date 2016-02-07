@@ -261,6 +261,8 @@ app jFunc jArgs t i = do
   J.addClass "funcContainer" jFunc
   innerExpr <- J.find ".expr" jFunc
   innerTyp <- J.find ".type" jFunc
+  typeArr <- J.find ".type-arr" jFunc
+  J.css {transform: "rotate(180deg)"} typeArr
   J.setVisible false innerTyp
   J.addClass "func" innerExpr
   J.append jFunc dApp
@@ -309,10 +311,20 @@ addResultIdtoDiv id d = do
 buildExpandDiv:: forall eff. Type  -> Eff (dom :: DOM | eff) J.JQuery
 buildExpandDiv t  = do
   typC <- makeDiv (prettyPrintType t) $ Cons "type" Nil
-  expandC <- makeDiv "▾" $ Cons "expand"  Nil
+  expandC <- makeDiv "" $ Cons "expand"  Nil
+  jArrow <- makeDiv "▾" $ Cons "type-arr" Nil
+  J.append jArrow expandC
   J.append typC expandC
-  J.on "click" (\e _ -> J.stopPropagation e >>= \_ -> J.setVisible true typC) expandC
-  J.on "click" (\e _ -> J.stopPropagation e >>= \_ -> J.setVisible false typC) typC
+  J.on "click" (\e _ -> do
+      J.stopPropagation e
+      J.setVisible true typC
+      J.css {transform: "rotate(0deg)"} jArrow
+      ) expandC
+  J.on "click" (\e _ -> do
+      J.stopPropagation e
+      J.setVisible false typC
+      J.css {transform: "rotate(180deg)"} jArrow
+      ) typC
   J.on "mouseenter" (\e _ -> J.stopImmediatePropagation e) expandC -- otherwise tooltip shows
   J.on "mousemove" (\e _ -> J.stopImmediatePropagation e) expandC
   J.setAttr "title" "show Type" expandC
