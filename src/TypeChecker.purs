@@ -582,7 +582,7 @@ prettyPrintType (AD a) = prettyPrintAD a
 
 prettyPrintAD:: AD -> String
 prettyPrintAD (TList a) = "[" ++ prettyPrintType a ++ "]"
-prettyPrintAD (TTuple a) = "(" ++ foldr (\t s -> prettyPrintType t ++","++s) ")" a
+prettyPrintAD (TTuple (Cons t1 a)) = "(" ++ foldr (\t s -> prettyPrintType t ++","++s) (prettyPrintType t1 ++ ")") a
 
 emptyType:: Type
 emptyType = TypCon ""
