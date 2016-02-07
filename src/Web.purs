@@ -282,8 +282,12 @@ buildExpandDiv t  = do
   typC <- makeDiv (prettyPrintType t) $ Cons "type" Nil
   expandC <- makeDiv "▾" $ Cons "expand"  Nil
   J.append typC expandC
-  J.on "click" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.setVisible true typC) expandC
-  J.on "click" (\e _ -> J.stopImmediatePropagation e >>= \_ -> J.setVisible false typC) typC
+  J.on "click" (\e _ -> J.stopPropagation e >>= \_ -> J.setVisible true typC) expandC
+  J.on "click" (\e _ -> J.stopPropagation e >>= \_ -> J.setVisible false typC) typC
+  J.on "mouseenter" (\e _ -> J.stopImmediatePropagation e) expandC -- otherwise tooltip shows
+  J.on "mousemove" (\e _ -> J.stopImmediatePropagation e) expandC
+  J.setAttr "title" "show Type" expandC
+  J.setAttr "title" "hide Type" typC
   J.css {display: "inline-block"} typC
   return expandC
 
