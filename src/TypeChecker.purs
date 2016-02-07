@@ -161,15 +161,7 @@ extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
 nullSubst:: Subst
 nullSubst = Map.empty
 
--- not used right now
--- use later to replace t_xx with letters on output
-letters:: List String
-letters = map String.fromCharArray letters'
-  where
-    letters' = inf 1 >>= flip Array.replicateM
-      (toList $ String.toCharArray "abcdefghijklmnopqrstuvwxyz")
-    inf 2 = 2:Nil --TODO remove limit somehow -- nessary because of strict evaluation
-    inf x = x:inf(x+1)
+
 
 fresh :: Infer Type
 fresh = do
@@ -583,7 +575,8 @@ closeOver' (Tuple s tt) = apply s tt
 prettyPrintType:: Type -> String
 prettyPrintType (TypVar (TVar a)) = a
 prettyPrintType (TypCon a) =  a
-prettyPrintType (TypArr t1 t2) = "(" ++ prettyPrintType t1 ++ " -> " ++ prettyPrintType t2 ++ ")"
+prettyPrintType (TypArr t1@(TypArr _ _) t2) = "(" ++ prettyPrintType t1 ++ ")" ++ " -> " ++ prettyPrintType t2
+prettyPrintType (TypArr t1 t2) = prettyPrintType t1 ++ " -> " ++ prettyPrintType t2
 prettyPrintType (AD a) = prettyPrintAD a
 
 

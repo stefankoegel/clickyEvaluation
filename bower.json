@@ -24,6 +24,7 @@
     "purescript-jquery": "0.6.x",
     "purescript-globals": "0.2.x",
     "purescript-ace": "0.11.x",
-    "purescript-node-process": "0.4.x"
+    "purescript-node-process": "0.4.x",
+    "purescript-words-lines": "~0.0.2"
   }
 }

@@ -2,16 +2,19 @@ module Web
   ( exprToJQuery
   , getPath
   , idExpr
+  , txToABC
   ) where
 
-import Prelude (class Monad, Unit, return, flip, bind, (<<<), (<$>), (++), (&&), (>), (>>=), void, ($), unit, show, id, (-),(+),map,(==), class Show)
+import Prelude (class Monad, Unit, return, flip, bind, (<<<), (<$>), (++), (&&), (>), (>>=), void, ($), unit, show, id, (-),(+),map,(==), class Show, div ,mod)
 import Data.Foldable (all,foldr)
 import Data.Traversable (for)
-import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA,concat,zip)
-import Data.String (joinWith)
+import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA,concat,zip, (!!))
+import Data.String (joinWith, toCharArray)
 import Data.Foreign (unsafeFromForeign, Foreign())
 import Data.Maybe (Maybe(..))
-import Data.Tuple
+import Data.Tuple (Tuple(..),fst,snd)
+import Data.Map (Map(..), insert, lookup, empty)
+import Data.List.WordsLines (fromCharList)
 
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
@@ -21,7 +24,7 @@ import Control.Monad.State
 import DOM (DOM)
 
 
-import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type,IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..))
+import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type(..), TVar (..),IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..),AD(..))
 import Evaluator (Path(..))
 import TypeChecker (prettyPrintType,extractType,mapM)
 import JSHelpers
@@ -392,3 +395,133 @@ extractIndex (IIfExpr _ _ _ i)  =  i
 extractIndex (ILetExpr _ _ _ i)  =  i
 extractIndex (ILambda _ _ i)  =  i
 extractIndex (IApp _ _ i)  =  i
+
+
+
+txToABC:: TypeTree -> TypeTree
+txToABC tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
+
+helptxToABC:: TypeTree -> State {count:: Int, env:: Map String String} TypeTree
+helptxToABC tt = go tt
+  where
+    go (TAtom t) = helpTypeToABC t >>= \t -> return $ TAtom t
+    go (TListTree tts t) = do
+      tts' <- mapM helptxToABC tts
+      t' <- helpTypeToABC t
+      return $ TListTree tts' t'
+    go (TNTuple tts t) = do
+      tts' <- mapM helptxToABC tts
+      t' <- helpTypeToABC t
+      return $ TNTuple tts' t'
+    go (TBinary t1 tt1 tt2 t) = do
+      t1' <- helpTypeToABC t1
+      tt1' <- helptxToABC tt1
+      tt2' <- helptxToABC tt2
+      t' <- helpTypeToABC t
+      return $ TBinary t1' tt1' tt2' t'
+    go (TUnary t1 tt t) = do
+      t1' <- helpTypeToABC t1
+      tt' <- helptxToABC tt
+      t' <- helpTypeToABC t
+      return $ (TUnary t1' tt' t')
+    go (TSectL tt t1 t) = do
+      t1' <- helpTypeToABC t1
+      tt' <- helptxToABC tt
+      t' <- helpTypeToABC t
+      return $ TSectL tt' t1' t'
+    go (TSectR t1 tt t) = do
+      t1' <- helpTypeToABC t1
+      tt' <- helptxToABC tt
+      t' <- helpTypeToABC t
+      return $ TSectR t1' tt' t'
+    go (TPrefixOp t) = helpTypeToABC t >>= \t -> return $ TPrefixOp t
+    go (TIfExpr tt1 tt2 tt3 t) = do
+      tt1' <- helptxToABC tt1
+      tt2' <- helptxToABC tt2
+      tt3' <- helptxToABC tt3
+      t' <- helpTypeToABC t
+      return $ TIfExpr tt1' tt2' tt3' t'
+    go (TLetExpr tb tt1 tt2 t) = do
+      tb' <- helpBindingToABC tb
+      tt1' <- helptxToABC tt1
+      tt2' <- helptxToABC tt2
+      t' <- helpTypeToABC t
+      return $ TLetExpr tb' tt1' tt2' t'
+    go (TLambda tbs tt t) = do
+      tbs' <- mapM helpBindingToABC tbs
+      tt' <- helptxToABC tt
+      t' <- helpTypeToABC t
+      return $ TLambda tbs' tt' t'
+    go (TApp tt tts t) = do
+      tt' <- helptxToABC tt
+      tts' <- mapM helptxToABC tts
+      t' <- helpTypeToABC t
+      return $ TApp tt' tts' t'
+
+
+helpTypeToABC:: Type  -> State {count :: Int, env:: (Map String String)} Type
+helpTypeToABC t = go t
+  where
+   go (TypVar (TVar var)) = do
+      {env = env :: Map String String} <- get
+      case lookup var env of
+        Just var' -> return $ TypVar (TVar var')
+        Nothing -> do
+          var' <- freshLetter
+          let env' = (insert var var' env)
+          {count=count:: Int} <- get
+          put {count:count, env:env'}
+          return $ TypVar (TVar var')
+   go (TypArr t1 t2) = do
+        t1' <- helpTypeToABC t1
+        t2' <- helpTypeToABC t2
+        return $ TypArr t1' t2'
+   go (AD a) = helpADTypeToABC a >>= \a -> return $ AD a
+   go a = return a
+
+helpADTypeToABC:: AD -> State {count :: Int, env:: (Map String String)} AD
+helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> return $ TList t
+helpADTypeToABC (TTuple ts) = mapM helpTypeToABC ts >>= \ts -> return $ TTuple ts
+
+helpBindingToABC:: TypeBinding -> State {count :: Int, env:: (Map String String)} TypeBinding
+helpBindingToABC bin = go bin
+  where
+    go (TLit t) = helpTypeToABC t >>= \t ->return $ TLit t
+    go (TConsLit tb1 tb2 t) = do
+      tb1' <- helpBindingToABC tb1
+      tb2' <- helpBindingToABC tb2
+      t' <- helpTypeToABC t
+      return $ TConsLit tb1' tb2' t'
+    go (TListLit tbs t) = do
+      tbs' <- mapM helpBindingToABC tbs
+      t' <- helpTypeToABC t
+      return $ TListLit tbs' t'
+    go (TNTupleLit tbs t) = do
+      tbs' <- mapM helpBindingToABC tbs
+      t' <- helpTypeToABC t
+      return $ TNTupleLit tbs' t'
+
+freshLetter:: State {count:: Int, env:: Map String String} String
+freshLetter = do
+    {count = count, env = env :: Map String String} <- get
+    put {count:count+1, env:env}
+    return $ fromCharList $ newTypVar count
+
+
+letters:: List Char
+letters = (toList $ toCharArray "abcdefghijklmnopqrstuvwxyz")
+
+letters1:: List Char
+letters1 = (toList $ toCharArray " abcdefghijklmnopqrstuvwxyz")
+
+newTypVar:: Int -> List Char
+newTypVar i = case (letters !! i) of
+  Just c ->  Cons c Nil
+  Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) ++ (newTypVar i2)
+
+-- workaround
+-- if i  subtract one from i => stack overflow at ~50
+newTypVar1:: Int -> List Char
+newTypVar1 i = case (letters1 !! (i)) of
+  Just c ->  Cons c Nil
+  Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) ++ (newTypVar i2)
