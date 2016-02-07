@@ -27,8 +27,8 @@ h3 {
   border: none;
   background: #ddd;
   padding: 10px;
-  margin: 10px;
-  border-radius: 10px;
+  margin: 5px;
+  border-radius: 4px;
   box-shadow: 3px 3px 10px 0 #333;
   transition: background .25s ease-in-out;
 }
@@ -220,6 +220,7 @@ div.op, div.brace, div.comma {
 
 
 .expand {
+  color: rgb(68, 68, 68);
   min-height: 5px;
   width: auto;
   background-color: inherit;
@@ -231,7 +232,6 @@ div.op, div.brace, div.comma {
 }
 
 .type {
-  color: rgb(68, 68, 68);
   padding: 3px;
   text-align: left;
   font-size: medium;

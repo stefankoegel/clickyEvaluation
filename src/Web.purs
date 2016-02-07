@@ -35,9 +35,27 @@ pathPropName = "clickyEvaluation_path"
 getPath :: forall eff. J.JQuery -> Eff (dom :: DOM | eff) Path
 getPath j = unsafeFromForeign <$> J.getProp pathPropName j
 
+exprToJQuery:: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
+exprToJQuery output = go (output.expr)
+  where
+    go (Atom (Name _)) = exprToJQuery' output
+    go (Atom _) = topLevel
+    go (Binary _ _ _) = topLevel
+    go (PrefixOp _) = topLevel
+    go _ = exprToJQuery' output
+
+    topLevel = do
+      jtypExp <- makeDiv "" (singleton "atom name typExpContainer")
+      jExpand <- buildExpandDiv (extractType output.typ)
+      J.append jExpand jtypExp
+      jExpr <- exprToJQuery' output
+      J.addClass "expr" jExpr
+      J.append jExpr jtypExp
+      return jtypExp
+
 -- TODO rename to fit new Type
-exprToJQuery :: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
-exprToJQuery output = go id output
+exprToJQuery' :: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
+exprToJQuery' output = go id output
   where
   go :: (Path -> Path) -> Output -> Eff (dom :: DOM | eff) J.JQuery
   go p o = J.setProp pathPropName (p End) =<< case o of
@@ -185,14 +203,17 @@ interleaveM_ f sep = go
 
 tuple :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 tuple js t i = do
-  jtypExp <- makeDiv "" (singleton "tuple typExpContainer")
-  dtuple <- makeDiv "" (singleton "tuple expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  jtypExp <- makeDiv "" (singleton "tuple name typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  dtuple <- makeDiv "" (singleton "tuple name expr") >>= addTypetoDiv t >>= addIdtoDiv i
   open <- makeDiv "(" (singleton "brace")
   J.append open dtuple
   interleaveM_ (flip J.append dtuple) (makeDiv "," (singleton "comma") >>= flip J.append dtuple) js
   close <- makeDiv ")" (singleton "brace")
   J.append close dtuple
-  return dtuple
+  J.append dtuple jtypExp
+  return jtypExp
 
 list :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 list js t   i  = do
@@ -215,7 +236,12 @@ isString es = length es > 0 && all isChar es
   isChar _               = false
 
 string :: forall eff. String -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
-string str t i = makeDiv ("\"" ++ str ++ "\"") (toList ["list", "string"]) >>= addTypetoDiv t >>= addIdtoDiv i
+string str t i = do
+  jtypExp <- makeDiv "" (singleton "list string typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  jString <- makeDiv ("\"" ++ str ++ "\"") (toList ["list", "string", "expr"]) >>= addTypetoDiv t >>= addIdtoDiv i
+  J.append jString  jtypExp
 
 toStr :: List Expr -> Maybe String
 toStr Nil = Nothing
