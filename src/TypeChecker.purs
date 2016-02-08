@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Monad, class Eq, class Show, (&&), (==), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+))
+import Prelude (class Monad, class Eq, class Show, (&&), (==), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod)
 
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
 import Control.Monad.State (State, evalState, put, get)
@@ -13,7 +13,17 @@ import Data.Set as Set
 import Data.Foldable (foldl, foldr)
 import Data.Maybe (Maybe(..), fromMaybe)
 
-import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..))
+import Data.Tuple (Tuple(..),fst,snd)
+import Data.Map (Map(..), insert, lookup, empty)
+import Data.List.WordsLines (fromCharList)
+import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA,concat,zip, (!!))
+import Data.String (joinWith, toCharArray)
+
+import Control.Apply ((*>))
+import Control.Bind ((=<<), (>=>))
+import Control.Monad.State
+
+import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..),TypeError(..))
 
 data Scheme = Forall (List TVar) Type
 
@@ -36,27 +46,6 @@ data Env = TypEnv {types:: Map.Map Atom Scheme}
 type Constraint = Tuple Type Type
 type Subst = Map.Map TVar Type
 
-data TypeError
-  = UnificationFail Type Type
-  | InfiniteType TVar Type
-  | UnboundVariable String
-  | UnificationMismatch (List Type) (List Type)
-  | UnknownError String
-
-instance showTypeError :: Show TypeError where
-  show (UnificationFail a b) = "(UnificationFail "++ show a ++ " " ++ show b ++")"
-  show (InfiniteType a b ) = "(InfiniteType " ++ show a ++ " " ++ show b ++ ")"
-  show (UnboundVariable a) = "(UnboundVariable " ++ show a ++ ")"
-  show (UnificationMismatch a b) = "(UnificationMismatch " ++ show a ++ " " ++ show b ++ ")"
-  show (UnknownError a) = "(UnknownError " ++ show a ++ ")"
-
-instance eqTypeError :: Eq TypeError where
-  eq (UnificationFail a b) (UnificationFail a' b') = (a == a') && (b == b')
-  eq (InfiniteType a b) (InfiniteType a' b') = (a == a') && (b == b')
-  eq (UnboundVariable a) (UnboundVariable a') = (a == a')
-  eq (UnificationMismatch a b) (UnificationMismatch a' b') = (a == a') && (b == b')
-  eq (UnknownError a) (UnknownError a') = (a == a')
-  eq _ _ = false
 
 
 class Substitutable a where
@@ -575,6 +564,7 @@ prettyPrintType (TypCon a) =  a
 prettyPrintType (TypArr t1@(TypArr _ _) t2) = "(" ++ prettyPrintType t1 ++ ")" ++ " -> " ++ prettyPrintType t2
 prettyPrintType (TypArr t1 t2) = prettyPrintType t1 ++ " -> " ++ prettyPrintType t2
 prettyPrintType (AD a) = prettyPrintAD a
+prettyPrintType (TypeError a) = prettyPrintTypeError a
 
 
 prettyPrintAD:: AD -> String
@@ -591,25 +581,29 @@ emptyType = TypCon ""
 buildEmptyTypeTree:: TypeEnv -> Expr  -> TypeTree
 buildEmptyTypeTree env e = case typeTreeProgramnEnv env e of
   Right tt -> tt
-  Left _ -> f e
+  Left err -> f err e
   where
-  f (Atom _) = TAtom emptyType
-  f (List ls) = TListTree (map (buildEmptyTypeTree env) ls) emptyType
-  f (NTuple ls) = TNTuple (map (buildEmptyTypeTree env) ls) emptyType
-  f (Binary _ e1 e2) = TBinary emptyType (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) emptyType
-  f (SectL e _) = TSectL (buildEmptyTypeTree env e) emptyType emptyType
-  f (SectR _ e) = TSectR emptyType (buildEmptyTypeTree env e) emptyType
-  f (PrefixOp _) = TPrefixOp emptyType
-  f (IfExpr e1 e2 e3) = TIfExpr (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) (buildEmptyTypeTree env e3) emptyType
-  f (LetExpr b1 e1 e2) = TLetExpr (g b1) (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) emptyType
-  f (Lambda bs e) = TLambda (map g bs) (buildEmptyTypeTree env e) emptyType
-  f (App e es) = TApp (buildEmptyTypeTree env e) (map (buildEmptyTypeTree env) es) emptyType
+  f err (Atom _) = TAtom (TypeError err)
+  f err (List ls) = TListTree (map (buildEmptyTypeTree env) ls) (TypeError err)
+  f err (NTuple ls) = TNTuple (map (buildEmptyTypeTree env) ls) (TypeError err)
+  f err (Binary op e1 e2) = TBinary (typeOP op) (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) (TypeError err)
+  f err (SectL e op) = TSectL (buildEmptyTypeTree env e) (typeOP op) (TypeError err)
+  f err (SectR op e) = TSectR (typeOP op) (buildEmptyTypeTree env e) (TypeError err)
+  f err (PrefixOp _) = TPrefixOp (TypeError err)
+  f err (IfExpr e1 e2 e3) = TIfExpr (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) (buildEmptyTypeTree env e3) (TypeError err)
+  f err (LetExpr b1 e1 e2) = TLetExpr (g b1) (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) (TypeError err)
+  f err (Lambda bs e) = TLambda (map g bs) (buildEmptyTypeTree env e) (TypeError err)
+  f err (App e es) = TApp (buildEmptyTypeTree env e) (map (buildEmptyTypeTree env) es) (TypeError err)
 
 -- Binding to BindingType
   g (Lit _) = TLit emptyType
   g (ConsLit b1 b2) = TConsLit (g b1) (g b2) emptyType
   g (ListLit bs) = TListLit (map g bs) emptyType
   g (NTupleLit bs) = TNTupleLit (map g bs) emptyType
+
+  typeOP op = case typeTreeProgramnEnv env (PrefixOp op) of
+    Left err -> TypeError err
+    Right (TPrefixOp typ) -> typ
 
 
 eqScheme :: Scheme -> Scheme -> Boolean
@@ -635,3 +629,158 @@ eqTypeList map (Cons a as) (Cons b bs) = let tup1 = eqType map a b in if (fst tu
   else Tuple false (snd tup1)
 eqTypeList map Nil Nil = Tuple true map
 eqTypeList map _ _ = Tuple false map
+
+
+txToABC:: TypeTree -> TypeTree
+txToABC tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
+
+helptxToABC:: TypeTree -> State {count:: Int, env:: Map String String} TypeTree
+helptxToABC tt = go tt
+  where
+    go (TAtom t) = helpTypeToABC t >>= \t -> return $ TAtom t
+    go (TListTree tts t) = do
+      tts' <- mapM helptxToABC tts
+      t' <- helpTypeToABC t
+      return $ TListTree tts' t'
+    go (TNTuple tts t) = do
+      tts' <- mapM helptxToABC tts
+      t' <- helpTypeToABC t
+      return $ TNTuple tts' t'
+    go (TBinary t1 tt1 tt2 t) = do
+      t1' <- helpTypeToABC t1
+      tt1' <- helptxToABC tt1
+      tt2' <- helptxToABC tt2
+      t' <- helpTypeToABC t
+      return $ TBinary t1' tt1' tt2' t'
+    go (TUnary t1 tt t) = do
+      t1' <- helpTypeToABC t1
+      tt' <- helptxToABC tt
+      t' <- helpTypeToABC t
+      return $ (TUnary t1' tt' t')
+    go (TSectL tt t1 t) = do
+      t1' <- helpTypeToABC t1
+      tt' <- helptxToABC tt
+      t' <- helpTypeToABC t
+      return $ TSectL tt' t1' t'
+    go (TSectR t1 tt t) = do
+      t1' <- helpTypeToABC t1
+      tt' <- helptxToABC tt
+      t' <- helpTypeToABC t
+      return $ TSectR t1' tt' t'
+    go (TPrefixOp t) = helpTypeToABC t >>= \t -> return $ TPrefixOp t
+    go (TIfExpr tt1 tt2 tt3 t) = do
+      tt1' <- helptxToABC tt1
+      tt2' <- helptxToABC tt2
+      tt3' <- helptxToABC tt3
+      t' <- helpTypeToABC t
+      return $ TIfExpr tt1' tt2' tt3' t'
+    go (TLetExpr tb tt1 tt2 t) = do
+      tb' <- helpBindingToABC tb
+      tt1' <- helptxToABC tt1
+      tt2' <- helptxToABC tt2
+      t' <- helpTypeToABC t
+      return $ TLetExpr tb' tt1' tt2' t'
+    go (TLambda tbs tt t) = do
+      tbs' <- mapM helpBindingToABC tbs
+      tt' <- helptxToABC tt
+      t' <- helpTypeToABC t
+      return $ TLambda tbs' tt' t'
+    go (TApp tt tts t) = do
+      tt' <- helptxToABC tt
+      tts' <- mapM helptxToABC tts
+      t' <- helpTypeToABC t
+      return $ TApp tt' tts' t'
+
+typeToABC:: Type -> Type
+typeToABC t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
+
+
+helpTypeToABC:: Type  -> State {count :: Int, env:: (Map String String)} Type
+helpTypeToABC t = go t
+  where
+   go (TypVar (TVar var)) = do
+      {env = env :: Map String String} <- get
+      case lookup var env of
+        Just var' -> return $ TypVar (TVar var')
+        Nothing -> do
+          var' <- freshLetter
+          let env' = (insert var var' env)
+          {count=count:: Int} <- get
+          put {count:count, env:env'}
+          return $ TypVar (TVar var')
+   go (TypArr t1 t2) = do
+        t1' <- helpTypeToABC t1
+        t2' <- helpTypeToABC t2
+        return $ TypArr t1' t2'
+   go (AD a) = helpADTypeToABC a >>= \a -> return $ AD a
+   go a = return a
+
+helpADTypeToABC:: AD -> State {count :: Int, env:: (Map String String)} AD
+helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> return $ TList t
+helpADTypeToABC (TTuple ts) = mapM helpTypeToABC ts >>= \ts -> return $ TTuple ts
+
+helpBindingToABC:: TypeBinding -> State {count :: Int, env:: (Map String String)} TypeBinding
+helpBindingToABC bin = go bin
+  where
+    go (TLit t) = helpTypeToABC t >>= \t ->return $ TLit t
+    go (TConsLit tb1 tb2 t) = do
+      tb1' <- helpBindingToABC tb1
+      tb2' <- helpBindingToABC tb2
+      t' <- helpTypeToABC t
+      return $ TConsLit tb1' tb2' t'
+    go (TListLit tbs t) = do
+      tbs' <- mapM helpBindingToABC tbs
+      t' <- helpTypeToABC t
+      return $ TListLit tbs' t'
+    go (TNTupleLit tbs t) = do
+      tbs' <- mapM helpBindingToABC tbs
+      t' <- helpTypeToABC t
+      return $ TNTupleLit tbs' t'
+
+freshLetter:: State {count:: Int, env:: Map String String} String
+freshLetter = do
+    {count = count, env = env :: Map String String} <- get
+    put {count:count+1, env:env}
+    return $ fromCharList $ newTypVar count
+
+
+letters:: List Char
+letters = (toList $ toCharArray "abcdefghijklmnopqrstuvwxyz")
+
+letters1:: List Char
+letters1 = (toList $ toCharArray " abcdefghijklmnopqrstuvwxyz")
+
+newTypVar:: Int -> List Char
+newTypVar i = case (letters !! i) of
+  Just c ->  Cons c Nil
+  Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) ++ (newTypVar i2)
+
+-- workaround
+-- if i  subtract one from i => stack overflow at ~50
+newTypVar1:: Int -> List Char
+newTypVar1 i = case (letters1 !! (i)) of
+  Just c ->  Cons c Nil
+  Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) ++ (newTypVar i2)
+
+
+
+prettyPrintTypeError:: TypeError -> String
+prettyPrintTypeError (UnificationFail t1 t2) = let t1t2 = twoTypesToABC t1 t2  in
+                                                "UnificationFail: Can't unify "
+                                                ++ prettyPrintType (fst t1t2) ++ " with "
+                                                ++ prettyPrintType (snd t1t2)
+prettyPrintTypeError (InfiniteType a b) = let ab = twoTypesToABC (TypVar a) b in
+                                              "InfiniteType: cannot construct the infinite type: "
+                                              ++ prettyPrintType (fst ab)++ " ~ "
+                                              ++ prettyPrintType (snd ab)
+prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope "
+                                              ++ var
+prettyPrintTypeError (UnificationMismatch ts1 ts2) = let ts1ts2 = twoTypeListsToABC ts1 ts2 in
+    "UnificationMismatch: " ++ toStr (fst ts1ts2) ++ " " ++ toStr (snd ts1ts2)
+  where
+    toStr ts = "[" ++ (foldr (\t s -> t ++ "," ++ s) "]" (map (\a -> prettyPrintType (typeToABC a)) ts))
+prettyPrintTypeError (UnknownError str) = "UnknownError: " ++ str
+
+
+twoTypesToABC t1 t2 = (\(TypArr t1' t2') -> Tuple t1' t2') (typeToABC (TypArr t1 t2))
+twoTypeListsToABC t1 t2 = (\(TypArr (AD (TTuple t1')) (AD (TTuple t2'))) -> Tuple t1' t2') (typeToABC (TypArr (AD (TTuple t1)) (AD (TTuple t2)) ))

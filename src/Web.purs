@@ -2,8 +2,6 @@ module Web
   ( exprToJQuery
   , getPath
   , idExpr
-  , txToABC
-  , prettyPrintTypeError
   ) where
 
 import Prelude (class Monad, Unit, return, flip, bind, (<<<), (<$>), (++), (&&), (>), (>>=), void, ($), unit, show, id, (-),(+),map,(==), class Show, div ,mod)
@@ -25,9 +23,9 @@ import Control.Monad.State
 import DOM (DOM)
 
 
-import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type(..), TVar (..),IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..),AD(..))
+import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type(..), TVar (..),IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..),AD(..),TypeError(..))
 import Evaluator (Path(..))
-import TypeChecker (prettyPrintType,extractType,mapM,TypeError(..))
+import TypeChecker (prettyPrintType,extractType,mapM)
 import JSHelpers
 
 pathPropName :: String
@@ -49,14 +47,16 @@ exprToJQuery output = go (output.expr)
     go (PrefixOp _) = topLevel
     go _ = exprToJQuery' output
 
-    topLevel = do
-      jtypExp <- makeDiv "" (singleton "top typExpContainer")
-      jExpand <- buildExpandDiv (extractType output.typ)
-      J.append jExpand jtypExp
-      jExpr <- exprToJQuery' output
-      J.addClass "expr" jExpr
-      J.append jExpr jtypExp
-      return jtypExp
+    topLevel = case extractType output.typ of
+        TypeError _ -> exprToJQuery' output
+        _ -> do
+          jtypExp <- makeDiv "" (singleton "top typExpContainer")
+          jExpand <- buildExpandDiv (extractType output.typ)
+          J.append jExpand jtypExp
+          jExpr <- exprToJQuery' output
+          J.addClass "expr" jExpr
+          J.append jExpr jtypExp
+          return jtypExp
 
 -- TODO rename to fit new Type
 exprToJQuery' :: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
@@ -97,7 +97,7 @@ exprToJQuery' output = go id output
     {expr:App func args, typ:TApp tt ts t, idTree:IApp i1 is i} -> do
       jFunc <- go (p <<< Fst) {expr:func, typ:tt, idTree: i1}
       jArgs <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t, idTree: i'}) (0 .. (length args - 1)) (zip is (zip args ts))
-      app jFunc jArgs t i
+      app jFunc jArgs (extractType tt) t i
     {} -> makeDiv "You found a Bug" Nil
 
 
@@ -167,7 +167,16 @@ binary op opt opi t i j1 j2 = do
   dOp <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
   J.append dOp dBin
   J.append j2 dBin
-  return dBin
+  case t of
+    (TypeError _) -> do
+      jtypExp <- makeDiv "" (singleton "binary typExpContainer")
+      jExpand <- buildExpandDiv t
+      J.append jExpand jtypExp
+      J.addClass "expr" dBin
+      J.append dBin jtypExp
+      return jtypExp
+    _ -> return dBin
+
 
 section :: forall eff. J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 section j1 j2 t i = do
@@ -256,8 +265,8 @@ toStr ls  = (joinWith "" <<< fromList) <$> for ls extract
    extract (Atom (Char s)) = Just s
    extract _               = Nothing
 
-app :: forall eff. J.JQuery -> List J.JQuery -> Type -> Int  -> Eff (dom :: DOM | eff) J.JQuery
-app jFunc jArgs t i = do
+app :: forall eff. J.JQuery -> List J.JQuery -> Type -> Type -> Int  -> Eff (dom :: DOM | eff) J.JQuery
+app jFunc jArgs tFunc t i = do
   jtypExp <- makeDiv "" (singleton "app typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
@@ -268,7 +277,9 @@ app jFunc jArgs t i = do
   innerTyp <- J.find ".type" jFunc
   typeArr <- J.find ".type-arr" jFunc
   J.css {transform: "rotate(180deg)"} typeArr
-  J.setVisible false innerTyp
+  case tFunc of
+    TypeError _ -> J.setVisible true innerTyp
+    _ -> J.setVisible false innerTyp
   J.addClass "func" innerExpr
   J.append jFunc dApp
   for jArgs (flip J.append dApp)
@@ -316,6 +327,9 @@ addResultIdtoDiv id d = do
 buildExpandDiv:: forall eff. Type  -> Eff (dom :: DOM | eff) J.JQuery
 buildExpandDiv t  = do
   typC <- makeDiv (prettyPrintType t) $ Cons "type" Nil
+  case t of
+    (TypeError _) -> J.css {color: "red"} typC
+    _ -> return typC
   expandC <- makeDiv "" $ Cons "expand"  Nil
   jArrow <- makeDiv "▾" $ Cons "type-arr" Nil
   J.append jArrow expandC
@@ -438,159 +452,3 @@ extractIndex (IIfExpr _ _ _ i)  =  i
 extractIndex (ILetExpr _ _ _ i)  =  i
 extractIndex (ILambda _ _ i)  =  i
 extractIndex (IApp _ _ i)  =  i
-
-
-
-txToABC:: TypeTree -> TypeTree
-txToABC tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
-
-helptxToABC:: TypeTree -> State {count:: Int, env:: Map String String} TypeTree
-helptxToABC tt = go tt
-  where
-    go (TAtom t) = helpTypeToABC t >>= \t -> return $ TAtom t
-    go (TListTree tts t) = do
-      tts' <- mapM helptxToABC tts
-      t' <- helpTypeToABC t
-      return $ TListTree tts' t'
-    go (TNTuple tts t) = do
-      tts' <- mapM helptxToABC tts
-      t' <- helpTypeToABC t
-      return $ TNTuple tts' t'
-    go (TBinary t1 tt1 tt2 t) = do
-      t1' <- helpTypeToABC t1
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      t' <- helpTypeToABC t
-      return $ TBinary t1' tt1' tt2' t'
-    go (TUnary t1 tt t) = do
-      t1' <- helpTypeToABC t1
-      tt' <- helptxToABC tt
-      t' <- helpTypeToABC t
-      return $ (TUnary t1' tt' t')
-    go (TSectL tt t1 t) = do
-      t1' <- helpTypeToABC t1
-      tt' <- helptxToABC tt
-      t' <- helpTypeToABC t
-      return $ TSectL tt' t1' t'
-    go (TSectR t1 tt t) = do
-      t1' <- helpTypeToABC t1
-      tt' <- helptxToABC tt
-      t' <- helpTypeToABC t
-      return $ TSectR t1' tt' t'
-    go (TPrefixOp t) = helpTypeToABC t >>= \t -> return $ TPrefixOp t
-    go (TIfExpr tt1 tt2 tt3 t) = do
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      tt3' <- helptxToABC tt3
-      t' <- helpTypeToABC t
-      return $ TIfExpr tt1' tt2' tt3' t'
-    go (TLetExpr tb tt1 tt2 t) = do
-      tb' <- helpBindingToABC tb
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      t' <- helpTypeToABC t
-      return $ TLetExpr tb' tt1' tt2' t'
-    go (TLambda tbs tt t) = do
-      tbs' <- mapM helpBindingToABC tbs
-      tt' <- helptxToABC tt
-      t' <- helpTypeToABC t
-      return $ TLambda tbs' tt' t'
-    go (TApp tt tts t) = do
-      tt' <- helptxToABC tt
-      tts' <- mapM helptxToABC tts
-      t' <- helpTypeToABC t
-      return $ TApp tt' tts' t'
-
-typeToABC:: Type -> Type
-typeToABC t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
-
-
-helpTypeToABC:: Type  -> State {count :: Int, env:: (Map String String)} Type
-helpTypeToABC t = go t
-  where
-   go (TypVar (TVar var)) = do
-      {env = env :: Map String String} <- get
-      case lookup var env of
-        Just var' -> return $ TypVar (TVar var')
-        Nothing -> do
-          var' <- freshLetter
-          let env' = (insert var var' env)
-          {count=count:: Int} <- get
-          put {count:count, env:env'}
-          return $ TypVar (TVar var')
-   go (TypArr t1 t2) = do
-        t1' <- helpTypeToABC t1
-        t2' <- helpTypeToABC t2
-        return $ TypArr t1' t2'
-   go (AD a) = helpADTypeToABC a >>= \a -> return $ AD a
-   go a = return a
-
-helpADTypeToABC:: AD -> State {count :: Int, env:: (Map String String)} AD
-helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> return $ TList t
-helpADTypeToABC (TTuple ts) = mapM helpTypeToABC ts >>= \ts -> return $ TTuple ts
-
-helpBindingToABC:: TypeBinding -> State {count :: Int, env:: (Map String String)} TypeBinding
-helpBindingToABC bin = go bin
-  where
-    go (TLit t) = helpTypeToABC t >>= \t ->return $ TLit t
-    go (TConsLit tb1 tb2 t) = do
-      tb1' <- helpBindingToABC tb1
-      tb2' <- helpBindingToABC tb2
-      t' <- helpTypeToABC t
-      return $ TConsLit tb1' tb2' t'
-    go (TListLit tbs t) = do
-      tbs' <- mapM helpBindingToABC tbs
-      t' <- helpTypeToABC t
-      return $ TListLit tbs' t'
-    go (TNTupleLit tbs t) = do
-      tbs' <- mapM helpBindingToABC tbs
-      t' <- helpTypeToABC t
-      return $ TNTupleLit tbs' t'
-
-freshLetter:: State {count:: Int, env:: Map String String} String
-freshLetter = do
-    {count = count, env = env :: Map String String} <- get
-    put {count:count+1, env:env}
-    return $ fromCharList $ newTypVar count
-
-
-letters:: List Char
-letters = (toList $ toCharArray "abcdefghijklmnopqrstuvwxyz")
-
-letters1:: List Char
-letters1 = (toList $ toCharArray " abcdefghijklmnopqrstuvwxyz")
-
-newTypVar:: Int -> List Char
-newTypVar i = case (letters !! i) of
-  Just c ->  Cons c Nil
-  Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) ++ (newTypVar i2)
-
--- workaround
--- if i  subtract one from i => stack overflow at ~50
-newTypVar1:: Int -> List Char
-newTypVar1 i = case (letters1 !! (i)) of
-  Just c ->  Cons c Nil
-  Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) ++ (newTypVar i2)
-
-
-
-prettyPrintTypeError:: TypeError -> String
-prettyPrintTypeError (UnificationFail t1 t2) = let t1t2 = twoTypesToABC t1 t2  in
-                                                "UnificationFail: Can't unify "
-                                                ++ prettyPrintType (fst t1t2) ++ " with "
-                                                ++ prettyPrintType (snd t1t2)
-prettyPrintTypeError (InfiniteType a b) = let ab = twoTypesToABC (TypVar a) b in
-                                              "InfiniteType: cannot construct the infinite type: "
-                                              ++ prettyPrintType (fst ab)++ " ~ "
-                                              ++ prettyPrintType (snd ab)
-prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope "
-                                              ++ var
-prettyPrintTypeError (UnificationMismatch ts1 ts2) = let ts1ts2 = twoTypeListsToABC ts1 ts2 in
-    "UnificationMismatch: " ++ toStr (fst ts1ts2) ++ " " ++ toStr (snd ts1ts2)
-  where
-    toStr ts = "[" ++ (foldr (\t s -> t ++ "," ++ s) "]" (map (\a -> prettyPrintType (typeToABC a)) ts))
-prettyPrintTypeError (UnknownError str) = "UnknownError: " ++ str
-
-
-twoTypesToABC t1 t2 = (\(TypArr t1' t2') -> Tuple t1' t2') (typeToABC (TypArr t1 t2))
-twoTypeListsToABC t1 t2 = (\(TypArr (AD (TTuple t1')) (AD (TTuple t2'))) -> Tuple t1' t2') (typeToABC (TypArr (AD (TTuple t1)) (AD (TTuple t2)) ))

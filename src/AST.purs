@@ -128,10 +128,19 @@ data Type
     | TypCon String -- Typ Constants e.x Int
     | TypArr Type Type -- e.x Int -> Int
     | AD AD
+    | TypeError TypeError
 
 data AD
     = TList Type
     | TTuple (List Type)
+
+
+data TypeError
+  = UnificationFail Type Type
+  | InfiniteType TVar Type
+  | UnboundVariable String
+  | UnificationMismatch (List Type) (List Type)
+  | UnknownError String
 
 
 instance eqExpr :: Eq Expr where
@@ -257,12 +266,14 @@ instance showType :: Show Type where
   show (TypCon con) = "(TypCon " ++ show con ++ ")"
   show (TypArr t1 t2) = "(TypArr "++ show t1 ++" " ++ show t2 ++ ")"
   show (AD ad) = "(AD "++ show ad ++ ")"
+  show (TypeError err) ="(TypeError "++ show err ++")"
 
 instance eqType :: Eq Type where
   eq (TypVar a) (TypVar b) = a == b
   eq (TypCon a) (TypCon b) = a == b
   eq (TypArr a b) (TypArr a' b') = (a == a') && (b == b')
   eq (AD a) (AD b) = eq a b
+  eq (TypeError a) (TypeError b) = (a == b)
   eq _ _ = false
 
 instance ordTVar :: Ord TVar where
@@ -281,6 +292,21 @@ instance showAD :: Show AD where
 instance eqAD :: Eq AD where
   eq (TList a) (TList b) = eq a b
   eq (TTuple a) (TTuple b) = eq a b
+
+instance showTypeError :: Show TypeError where
+  show (UnificationFail a b) = "(UnificationFail "++ show a ++ " " ++ show b ++")"
+  show (InfiniteType a b ) = "(InfiniteType " ++ show a ++ " " ++ show b ++ ")"
+  show (UnboundVariable a) = "(UnboundVariable " ++ show a ++ ")"
+  show (UnificationMismatch a b) = "(UnificationMismatch " ++ show a ++ " " ++ show b ++ ")"
+  show (UnknownError a) = "(UnknownError " ++ show a ++ ")"
+
+instance eqTypeError :: Eq TypeError where
+  eq (UnificationFail a b) (UnificationFail a' b') = (a == a') && (b == b')
+  eq (InfiniteType a b) (InfiniteType a' b') = (a == a') && (b == b')
+  eq (UnboundVariable a) (UnboundVariable a') = (a == a')
+  eq (UnificationMismatch a b) (UnificationMismatch a' b') = (a == a') && (b == b')
+  eq (UnknownError a) (UnknownError a') = (a == a')
+  eq _ _ = false
 
 instance showTypeTree :: Show TypeTree where
   show (TAtom t) = "(TAtom " ++ show t ++ ")"

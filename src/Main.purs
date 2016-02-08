@@ -38,11 +38,11 @@ import AST
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
 import JSHelpers
-import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM, TypeError(..))
-import Web (exprToJQuery, getPath, txToABC, prettyPrintTypeError)
+import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM, txToABC, prettyPrintTypeError)
+import Web (exprToJQuery, getPath)
 import Parser (parseDefs, parseExpr)
 import Evaluator (evalPath1, Env(), Path(), defsToEnv)
-import AST (Expr)
+import AST (Expr, TypeError(..))
 import JSHelpers (jqMap, isEnterKey)
 
 main :: DOMEff J.JQuery
@@ -75,7 +75,6 @@ startEvaluation = do
           Left err -> showInfo "Definitions" (prettyPrintTypeError err)
           Right typEnv -> do
             let eitherTyp = typeTreeProgramnEnv typEnv expr
-            outIfErr "Expression" eitherTyp
             let typ' = either (\_ -> buildEmptyTypeTree typEnv expr) id eitherTyp
             let typ = txToABC typ'
             let idTree = idExpr expr
@@ -225,7 +224,6 @@ evalExpr path = do
         let eitherTyp = typeTreeProgramnEnv typEnv expr'
         let typ'' = either (\_ -> buildEmptyTypeTree typEnv expr') id eitherTyp
         let typ' = txToABC typ''
-        liftEff $ outIfErr "Expression" eitherTyp
         modify (\es -> es { out = {expr:expr', typ:typ', idTree:idExpr expr'} })
         modify (\es -> es { history = out : es.history })
         showEvaluationState
