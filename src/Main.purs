@@ -179,10 +179,13 @@ makeClickable jq = do
   where
   testEval :: Env -> Expr -> J.JQuery -> DOMEff Unit
   testEval env expr jq = do
-    path <- getPath jq
-    case evalPath1 env path expr of
-      Left err -> void $ J.setAttr "title-hide" (show err) jq
-      Right _  -> void $ J.addClass "clickable" jq *> J.setAttr "title-hide" "" jq
+    mpath <- getPath jq
+    case mpath of
+      Nothing   -> return unit
+      Just path ->
+        case evalPath1 env path expr of
+          Left err -> void $ J.setAttr "title-hide" (show err) jq
+          Right _  -> void $ J.addClass "clickable" jq *> J.setAttr "title-hide" "" jq
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
 addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
@@ -202,8 +205,11 @@ addClickListener jq = do
   handler :: EvalState -> J.JQueryEvent -> J.JQuery -> DOMEff Unit
   handler evaluationState jEvent jq = do
     J.stopImmediatePropagation jEvent
-    path <- getPath jq
-    void $ runStateT (evalExpr path) evaluationState
+    mpath <- getPath jq
+    case mpath of
+      Nothing   -> return unit
+      Just path ->
+        void $ runStateT (evalExpr path) evaluationState
 
 removeMouseOver :: DOMEff Unit
 removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"

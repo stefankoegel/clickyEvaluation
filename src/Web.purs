@@ -11,7 +11,7 @@ import Data.Foldable (all,foldr)
 import Data.Traversable (for)
 import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA,concat,zip, (!!))
 import Data.String (joinWith, toCharArray)
-import Data.Foreign (unsafeFromForeign, Foreign())
+import Data.Foreign (unsafeFromForeign, Foreign(), isUndefined)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..),fst,snd)
 import Data.Map (Map(..), insert, lookup, empty)
@@ -33,8 +33,12 @@ import JSHelpers
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
 
-getPath :: forall eff. J.JQuery -> Eff (dom :: DOM | eff) Path
-getPath j = unsafeFromForeign <$> J.getProp pathPropName j
+getPath :: forall eff. J.JQuery -> Eff (dom :: DOM | eff) (Maybe Path)
+getPath j = do
+  fpath <- J.getProp pathPropName j
+  if isUndefined fpath
+    then return Nothing
+    else return $ Just $ unsafeFromForeign fpath
 
 exprToJQuery:: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery output = go (output.expr)
@@ -293,7 +297,7 @@ addTypetoDiv typ d = do
   J.append inner outer
   J.append outer d
   J.appendText text d
-  J.on "mouseenter" (\e div -> J.stopImmediatePropagation e >>= \_ -> showTooltip div outer e) d
+  J.on "mouseenter" (\e div -> showTooltip div outer e) d
 
 
 addIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
