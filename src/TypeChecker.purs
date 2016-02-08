@@ -1,31 +1,19 @@
 module TypeChecker where
 
-import Prelude hiding (apply,compose)
-import Control.Monad.Eff
-import Control.Monad.Eff.Console
+import Prelude (class Monad, class Eq, class Show, (&&), (==), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+))
 
-import Control.Monad.Except
-import Control.Monad.RWS.Trans
-import Control.Monad.Except.Trans
-import Control.Monad.State
+import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
+import Control.Monad.State (State, evalState, put, get)
 
-import Control.Monad.Trans
-import Control.Monad.Writer
-import Control.Monad.Writer.Class
-import Control.Monad.Error.Class
-import Control.Monad.Except.Trans
-
-import Data.Either
-import Data.List
+import Data.Either (Either(Left, Right))
+import Data.List (List(..), length, delete, concat, unzip, foldM, toList, (:), zip)
 import Data.Map as Map
-import Data.Tuple
+import Data.Tuple (Tuple(Tuple), snd, fst)
 import Data.Set as Set
-import Data.Foldable
-import Data.Maybe
-import Data.String as String
-import Data.Array as Array
+import Data.Foldable (foldl, foldr)
+import Data.Maybe (Maybe(..), fromMaybe)
 
-import AST
+import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..))
 
 data Scheme = Forall (List TVar) Type
 
@@ -68,6 +56,7 @@ instance eqTypeError :: Eq TypeError where
   eq (UnboundVariable a) (UnboundVariable a') = (a == a')
   eq (UnificationMismatch a b) (UnificationMismatch a' b') = (a == a') && (b == b')
   eq (UnknownError a) (UnknownError a') = (a == a')
+  eq _ _ = false
 
 
 class Substitutable a where
@@ -246,6 +235,7 @@ lookupEnv (TypeEnv env) x = do
                   return (Tuple nullSubst t)
   where
     f (Name x) = x
+    f x = show x
 
 
 extractType:: TypeTree -> Type
@@ -314,6 +304,8 @@ infer env ex = case ex of
   App e1 (Cons e2 xs) -> do
     Tuple s (TApp (TApp tt lt _) lt' t') <- infer env  (App (App e1 (Cons e2 Nil)) xs)
     return $ Tuple s (TApp tt (lt++lt') t')
+
+  App _ Nil -> throwError $ UnknownError "congrats you found a bug TypeChecker.infer (App Nil)"
 
   LetExpr bin e1 e2 -> do
     (Tuple s1 t1) <- infer env e1
@@ -385,6 +377,8 @@ infer env ex = case ex of
     (Tuple s2 t2) <- infer (apply s1 env) e1
     return (Tuple (s2 `compose` s1) $ TNTuple (Cons t2 lt) (AD $ TTuple (Cons (extractType t2) t1)))
 
+  NTuple Nil -> throwError $ UnknownError "congrats you found a bug in TypeChecker.infer (NTuple Nil)"
+
 inferOp :: Op -> Infer (Tuple Subst Type)
 inferOp op = do
   a <- fresh
@@ -455,6 +449,8 @@ extractConsLit tv (ConsLit a b) = do
   let list2' = map (\ (Tuple a b) -> Tuple a $  apply sC b) list2
   return $ Tuple (list' ++ list2') $ apply sC $ TConsLit typ typ2 $ AD $ TList tv
 
+extractConsLit _ _ = throwError $ UnknownError "congrats you found a bug in TypeChecker.extractConsLit"
+
 
 extractListLit :: List Binding -> Infer (List (Tuple (List (Tuple Atom Scheme)) TypeBinding))
 extractListLit (Cons a Nil) = do
@@ -493,6 +489,7 @@ extractBinding (ListLit a) = do -- Tuple TypEnv  (TListLit (List TypeBinding) Ty
       let ls = l1 ++ l2
       s1 <- unify t1 (extractBindingType b)
       return $ Tuple (apply s1 ls) (apply s1 (TListLit (Cons b lb1) t1))
+    f _ _ = throwError $ UnknownError "congrats you found a bug in TypeChecker.extractBinding"
 
 
 extractBinding (NTupleLit a) = do
@@ -556,7 +553,7 @@ typeProgramn defs exp = case runInfer <$>
 typeTreeProgramn:: List Definition -> Expr -> Either TypeError TypeTree
 typeTreeProgramn defs exp = case m of
   Left e -> Left e
-  Right m -> case evalState (runExceptT m) initUnique of
+  Right m' -> case evalState (runExceptT m') initUnique of
     Left err -> Left err
     Right res -> Right $ closeOver' res
   where
@@ -583,6 +580,7 @@ prettyPrintType (AD a) = prettyPrintAD a
 prettyPrintAD:: AD -> String
 prettyPrintAD (TList a) = "[" ++ prettyPrintType a ++ "]"
 prettyPrintAD (TTuple (Cons t1 a)) = foldl (\s t -> s ++ "," ++ prettyPrintType t) ("(" ++ prettyPrintType t1 ) a  ++ ")"
+prettyPrintAD (TTuple Nil) = "()"
 
 emptyType:: Type
 emptyType = TypCon ""
