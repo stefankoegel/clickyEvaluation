@@ -23,7 +23,7 @@ import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
 import Control.Monad.State
 
-import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..),TypeError(..))
+import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..))
 
 data Scheme = Forall (List TVar) Type
 
@@ -784,3 +784,38 @@ prettyPrintTypeError (UnknownError str) = "UnknownError: " ++ str
 
 twoTypesToABC t1 t2 = (\(TypArr t1' t2') -> Tuple t1' t2') (typeToABC (TypArr t1 t2))
 twoTypeListsToABC t1 t2 = (\(TypArr (AD (TTuple t1')) (AD (TTuple t2'))) -> Tuple t1' t2') (typeToABC (TypArr (AD (TTuple t1)) (AD (TTuple t2)) ))
+
+
+checkForError:: Path -> TypeTree -> Boolean
+checkForError p' tt = case p' of
+  (End) -> isTypeError $ extractType tt
+  (Fst p) -> case tt of
+      TBinary op e1 e2 _-> checkForError p e1
+      TUnary op e      _-> checkForError p e
+      TSectL e op      _-> checkForError p e
+      TIfExpr ce te ee _-> checkForError p ce
+      TLambda bs body  _-> checkForError p body
+      TApp e es        _-> checkForError p e
+      _               -> true
+  (Snd p) -> case tt of
+      TBinary op e1 e2 _-> checkForError p e2
+      TSectR op e      _-> checkForError p e
+      TIfExpr ce te ee _-> checkForError p te
+      _               -> true
+  (Thrd p) -> case tt of
+      TIfExpr ce te ee _-> checkForError p ee
+      _ -> true
+  (Nth n p) -> case tt of
+      TListTree es  _-> nth n es p
+      TNTuple es _-> nth n es p
+      TApp e' es _-> nth n es p
+      _        -> true
+  where
+    nth n es p = case (!!) es n of
+                  Nothing -> true
+                  Just e -> checkForError p e
+
+isTypeError:: Type -> Boolean
+isTypeError t = case t of
+  (TypeError _) -> true
+  _ -> false

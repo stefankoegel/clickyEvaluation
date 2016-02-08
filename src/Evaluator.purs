@@ -17,7 +17,7 @@ import Control.Alt ((<|>))
 import Control.Monad.State.Trans (StateT, modify, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..),Path(..))
 
 data EvalError =
     PathError Path Expr
@@ -73,19 +73,6 @@ type Matcher = ExceptT MatchingError Identity
 runMatcherM :: forall a. Matcher a -> Either MatchingError a
 runMatcherM = runIdentity <<< runExceptT
 
-data Path = Nth Int Path
-          | Fst Path
-          | Snd Path
-          | Thrd Path
-          | End
-
-instance showPath :: Show Path where
-  show p = case p of
-    Nth i p -> "(Nth " ++ show i ++ " " ++ show p ++")"
-    Fst   p -> "(Fst " ++ show p ++")"
-    Snd   p -> "(Snd " ++ show p ++")"
-    Thrd   p -> "(Thrd " ++ show p ++")"
-    End     -> "End"
 
 mapWithPath :: Path -> (Expr -> Evaluator Expr) -> Expr -> Evaluator Expr
 mapWithPath p f = go p

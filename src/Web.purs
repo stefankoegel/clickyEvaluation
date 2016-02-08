@@ -23,8 +23,8 @@ import Control.Monad.State
 import DOM (DOM)
 
 
-import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type(..), TVar (..),IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..),AD(..),TypeError(..))
-import Evaluator (Path(..))
+import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type(..), TVar (..),IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..),AD(..),TypeError(..), Path(..))
+import Evaluator ()
 import TypeChecker (prettyPrintType,extractType,mapM)
 import JSHelpers
 

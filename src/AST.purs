@@ -184,6 +184,20 @@ type Output = {
     idTree :: IndexTree
   }
 
+data Path = Nth Int Path
+          | Fst Path
+          | Snd Path
+          | Thrd Path
+          | End
+
+instance showPath :: Show Path where
+  show p = case p of
+    Nth i p -> "(Nth " ++ show i ++ " " ++ show p ++")"
+    Fst   p -> "(Fst " ++ show p ++")"
+    Snd   p -> "(Snd " ++ show p ++")"
+    Thrd   p -> "(Thrd " ++ show p ++")"
+    End     -> "End"
+
 instance eqDefinition :: Eq Definition where
   eq (Def n1 b1 e1) (Def n2 b2 e2) = n1 == n2 && b1 == b2 && e1 == e2
 

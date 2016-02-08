@@ -33,16 +33,16 @@ import Control.Monad.Eff.Class
 
 import Web (exprToJQuery, getPath,idExpr)
 import Parser
-import Evaluator (evalPath1, Env(), Path(), defsToEnv,envToDefs)
+import Evaluator (evalPath1, Env(), defsToEnv,envToDefs)
 import AST
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
 import JSHelpers
-import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM, txToABC, prettyPrintTypeError)
+import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM, txToABC, prettyPrintTypeError,checkForError)
 import Web (exprToJQuery, getPath)
 import Parser (parseDefs, parseExpr)
-import Evaluator (evalPath1, Env(), Path(), defsToEnv)
-import AST (Expr, TypeError(..))
+import Evaluator (evalPath1, Env(),  defsToEnv)
+import AST (Expr, TypeError(..),Path())
 import JSHelpers (jqMap, isEnterKey)
 
 main :: DOMEff J.JQuery
@@ -174,17 +174,20 @@ makeClickable :: J.JQuery -> EvalM Unit
 makeClickable jq = do
   { env = env, out = out } <- get
   let expr = out.expr
-  liftEff $ jqMap (testEval env expr) jq
+  let typeTree = out.typ
+  liftEff $ jqMap (testEval env expr typeTree) jq
   where
-  testEval :: Env -> Expr -> J.JQuery -> DOMEff Unit
-  testEval env expr jq = do
+  testEval :: Env -> Expr -> TypeTree -> J.JQuery -> DOMEff Unit
+  testEval env expr typeTree jq = do
     mpath <- getPath jq
     case mpath of
       Nothing   -> return unit
       Just path ->
         case evalPath1 env path expr of
           Left err -> void $ J.setAttr "title-hide" (show err) jq
-          Right _  -> void $ J.addClass "clickable" jq *> J.setAttr "title-hide" "" jq
+          Right _  -> if checkForError path typeTree
+            then return unit
+            else void $ J.addClass "clickable" jq *> J.setAttr "title-hide" "" jq
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
 addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
