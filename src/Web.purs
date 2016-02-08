@@ -63,7 +63,16 @@ exprToJQuery' :: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery' output = go id output
   where
   go :: (Path -> Path) -> Output -> Eff (dom :: DOM | eff) J.JQuery
-  go p o = J.setProp pathPropName (p End) =<< case o of
+  go p o =
+    (\jObj -> do
+          let f = J.setProp pathPropName (p End)
+          jExpr <- children ".expr" jObj
+          isNotEmpty <- J.hasClass "expr" jExpr
+          if isNotEmpty then f jExpr else f jObj
+          return jObj
+          )
+    =<<
+    case o of
     {expr:(Atom a), typ:(TAtom t), idTree:(IAtom i)} -> atom a t i
     {expr:(Binary op e1 e2), typ:(TBinary opt tt1 tt2 t), idTree:(IBinary opi i1 i2 i)} -> do
       j1 <- go (p <<< Fst) {expr:e1, typ:tt1, idTree:i1}
@@ -273,9 +282,10 @@ app jFunc jArgs tFunc t i = do
   dApp <- makeDiv "" (singleton "app expr") >>= addTypetoDiv t >>= addIdtoDiv i
   J.addClass "func" jFunc
   J.addClass "funcContainer" jFunc
-  innerExpr <- J.find ".expr" jFunc
-  innerTyp <- J.find ".type" jFunc
-  typeArr <- J.find ".type-arr" jFunc
+  innerExpr <- children ".expr" jFunc
+  jExpand <- children ".expand" jFunc
+  innerTyp <- children ".type" jExpand
+  typeArr <- children ".type-arr" jExpand
   J.css {transform: "rotate(180deg)"} typeArr
   case tFunc of
     TypeError _ -> J.setVisible true innerTyp

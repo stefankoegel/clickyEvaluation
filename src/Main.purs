@@ -43,7 +43,7 @@ import Web (exprToJQuery, getPath)
 import Parser (parseDefs, parseExpr)
 import Evaluator (evalPath1, Env(),  defsToEnv)
 import AST (Expr, TypeError(..),Path())
-import JSHelpers (jqMap, isEnterKey)
+import JSHelpers (jqMap, isEnterKey, children)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do

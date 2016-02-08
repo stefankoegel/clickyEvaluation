@@ -50,3 +50,12 @@ exports.showTooltip = function(div) {
     };
   };
 };
+
+
+exports.children = function(selector) {
+    return function(ob) {
+        return function() {
+            return ob.children(selector);
+        };
+    };
+};
