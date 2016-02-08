@@ -36,13 +36,13 @@ exports.showTooltip = function(div) {
         var delay = setTimeout(function () {timeoutFunc(e)},delayTime);
 
         d.onmousemove = function(e){
-          event.stopPropagation();
+          e.stopPropagation();
           clearTimeout(delay);
           delay = setTimeout(function () {timeoutFunc(e)},delayTime);
         }
 
-        d.onmouseout = function(){
-          event.stopPropagation();
+        d.onmouseout = function(e){
+          e.stopPropagation();
           out.style.visibility = "hidden";
           clearTimeout(delay);
         }
