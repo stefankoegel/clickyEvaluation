@@ -38,8 +38,8 @@ import AST
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
 import JSHelpers
-import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM)
-import Web (exprToJQuery, getPath, txToABC)
+import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM, TypeError(..))
+import Web (exprToJQuery, getPath, txToABC, prettyPrintTypeError)
 import Parser (parseDefs, parseExpr)
 import Evaluator (evalPath1, Env(), Path(), defsToEnv)
 import AST (Expr)
@@ -72,7 +72,7 @@ startEvaluation = do
           showInfo "Definitions" (show err)
           markText (line - 1) column
         Right env -> case buildTypeEnv (envToDefs env) of --  type Env
-          Left err -> showInfo "Definitions" (show err)
+          Left err -> showInfo "Definitions" (prettyPrintTypeError err)
           Right typEnv -> do
             let eitherTyp = typeTreeProgramnEnv typEnv expr
             outIfErr "Expression" eitherTyp
@@ -81,10 +81,10 @@ startEvaluation = do
             let idTree = idExpr expr
             void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ, idTree:idTree}, history: Nil, typEnv:typEnv }
 
-outIfErr::forall a b. (Show a) => String -> Either a b -> DOMEff Unit
+outIfErr::forall b. String -> Either TypeError b -> DOMEff Unit
 outIfErr origin either = case either of
-  Left err -> showInfo origin (show err)
-  Right _ -> clearInfo --TODO do Nothing
+  Left err -> showInfo origin (prettyPrintTypeError err)
+  Right _ -> return unit
 
 markText :: Int -> Int -> DOMEff Unit
 markText line column = do

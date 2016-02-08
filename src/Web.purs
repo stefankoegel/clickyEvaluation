@@ -3,6 +3,7 @@ module Web
   , getPath
   , idExpr
   , txToABC
+  , prettyPrintTypeError
   ) where
 
 import Prelude (class Monad, Unit, return, flip, bind, (<<<), (<$>), (++), (&&), (>), (>>=), void, ($), unit, show, id, (-),(+),map,(==), class Show, div ,mod)
@@ -26,7 +27,7 @@ import DOM (DOM)
 
 import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type(..), TVar (..),IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..),AD(..))
 import Evaluator (Path(..))
-import TypeChecker (prettyPrintType,extractType,mapM)
+import TypeChecker (prettyPrintType,extractType,mapM,TypeError(..))
 import JSHelpers
 
 pathPropName :: String
@@ -496,6 +497,9 @@ helptxToABC tt = go tt
       t' <- helpTypeToABC t
       return $ TApp tt' tts' t'
 
+typeToABC:: Type -> Type
+typeToABC t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
+
 
 helpTypeToABC:: Type  -> State {count :: Int, env:: (Map String String)} Type
 helpTypeToABC t = go t
@@ -563,3 +567,26 @@ newTypVar1:: Int -> List Char
 newTypVar1 i = case (letters1 !! (i)) of
   Just c ->  Cons c Nil
   Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) ++ (newTypVar i2)
+
+
+
+prettyPrintTypeError:: TypeError -> String
+prettyPrintTypeError (UnificationFail t1 t2) = let t1t2 = twoTypesToABC t1 t2  in
+                                                "UnificationFail: Can't unify "
+                                                ++ prettyPrintType (fst t1t2) ++ " with "
+                                                ++ prettyPrintType (snd t1t2)
+prettyPrintTypeError (InfiniteType a b) = let ab = twoTypesToABC (TypVar a) b in
+                                              "InfiniteType: cannot construct the infinite type: "
+                                              ++ prettyPrintType (fst ab)++ " ~ "
+                                              ++ prettyPrintType (snd ab)
+prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope "
+                                              ++ var
+prettyPrintTypeError (UnificationMismatch ts1 ts2) = let ts1ts2 = twoTypeListsToABC ts1 ts2 in
+    "UnificationMismatch: " ++ toStr (fst ts1ts2) ++ " " ++ toStr (snd ts1ts2)
+  where
+    toStr ts = "[" ++ (foldr (\t s -> t ++ "," ++ s) "]" (map (\a -> prettyPrintType (typeToABC a)) ts))
+prettyPrintTypeError (UnknownError str) = "UnknownError: " ++ str
+
+
+twoTypesToABC t1 t2 = (\(TypArr t1' t2') -> Tuple t1' t2') (typeToABC (TypArr t1 t2))
+twoTypeListsToABC t1 t2 = (\(TypArr (AD (TTuple t1')) (AD (TTuple t2'))) -> Tuple t1' t2') (typeToABC (TypArr (AD (TTuple t1)) (AD (TTuple t2)) ))
