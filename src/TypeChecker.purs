@@ -587,20 +587,25 @@ prettyPrintAD (TTuple (Cons t1 a)) = foldl (\s t -> s ++ "," ++ prettyPrintType 
 emptyType:: Type
 emptyType = TypCon ""
 
-buildEmptyTypeTree:: Expr -> TypeTree
-buildEmptyTypeTree e = f e
+
+-- typeTreeProgramnEnv env expr
+-- types subtree if typ correct
+buildEmptyTypeTree:: TypeEnv -> Expr  -> TypeTree
+buildEmptyTypeTree env e = case typeTreeProgramnEnv env e of
+  Right tt -> tt
+  Left _ -> f e
   where
   f (Atom _) = TAtom emptyType
-  f (List ls) = TListTree (map f ls) emptyType
-  f (NTuple ls) = TNTuple (map f ls) emptyType
-  f (Binary _ e1 e2) = TBinary emptyType (f e1) (f e2) emptyType
-  f (SectL e _) = TSectL (f e) emptyType emptyType
-  f (SectR _ e) = TSectR emptyType (f e) emptyType
+  f (List ls) = TListTree (map (buildEmptyTypeTree env) ls) emptyType
+  f (NTuple ls) = TNTuple (map (buildEmptyTypeTree env) ls) emptyType
+  f (Binary _ e1 e2) = TBinary emptyType (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) emptyType
+  f (SectL e _) = TSectL (buildEmptyTypeTree env e) emptyType emptyType
+  f (SectR _ e) = TSectR emptyType (buildEmptyTypeTree env e) emptyType
   f (PrefixOp _) = TPrefixOp emptyType
-  f (IfExpr e1 e2 e3) = TIfExpr (f e1) (f e2) (f e3) emptyType
-  f (LetExpr b1 e1 e2) = TLetExpr (g b1) (f e1) (f e2) emptyType
-  f (Lambda bs e) = TLambda (map g bs) (f e) emptyType
-  f (App e es) = TApp (f e) (map f es) emptyType
+  f (IfExpr e1 e2 e3) = TIfExpr (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) (buildEmptyTypeTree env e3) emptyType
+  f (LetExpr b1 e1 e2) = TLetExpr (g b1) (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) emptyType
+  f (Lambda bs e) = TLambda (map g bs) (buildEmptyTypeTree env e) emptyType
+  f (App e es) = TApp (buildEmptyTypeTree env e) (map (buildEmptyTypeTree env) es) emptyType
 
 -- Binding to BindingType
   g (Lit _) = TLit emptyType
