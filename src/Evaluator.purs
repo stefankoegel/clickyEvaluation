@@ -183,44 +183,50 @@ wrapLambda binds args body =
 
 
 binary :: Op -> Expr -> Expr -> Evaluator Expr
-binary = go
+binary op = case op of
+  Power  -> aint Power (\i j -> product $ replicate j i)
+  Mul    -> aint Mul (*)
+  Div    -> aint Div div
+  Mod    -> aint Mod mod
+  Add    -> aint Add (+)
+  Sub    -> aint Sub (-)
+  Colon  -> \e es -> case es of
+    (List ls) -> return $ List $ e:ls
+    _         -> throwError $ BinaryOpError Colon e es
+  Append -> \es1 es2 -> case (Tuple es1 es2) of
+    (Tuple (List ls1) (List ls2)) -> return $ List $ ls1 ++ ls2
+    _                             -> throwError $ BinaryOpError Append es1 es2
+  Equ    -> ord Equ (==) (==) (==)
+  Neq    -> ord Neq (/=) (/=) (/=)
+  Leq    -> ord Leq (<=) (<=) (<=)
+  Lt     -> ord Lt  (<)  (<)  (<)
+  Geq    -> ord Geq (>=) (>=) (>=)
+  Gt     -> ord Gt  (>)  (>)  (>)
+  And    -> \e1 e2 -> case (Tuple e1 e2) of
+    (Tuple (Atom (Bool false)) _                  ) -> return $ Atom $ Bool false
+    (Tuple _                   (Atom (Bool false))) -> return $ Atom $ Bool false
+    (Tuple (Atom (Bool true))  (Atom (Bool true)) ) -> return $ Atom $ Bool true
+    (Tuple _                   _                  ) -> throwError $ BinaryOpError And e1 e2
+  Or     -> \e1 e2 -> case (Tuple e1 e2) of
+    (Tuple (Atom (Bool true))  _                   ) -> return $ Atom $ Bool true
+    (Tuple _                   (Atom (Bool true))  ) -> return $ Atom $ Bool true
+    (Tuple (Atom (Bool false))  (Atom (Bool false))) -> return $ Atom $ Bool false
+    (Tuple _                   _                   ) -> throwError $ BinaryOpError And e1 e2
+  Dollar -> (\f e -> return $ App f (singleton e))
+  Composition -> \e1 e2 -> throwError $ BinaryOpError And e1 e2
   where
-  retA = return <<< Atom
-  go Power (Atom (AInt i)) (Atom (AInt j)) = retA $ AInt $ product $ replicate j i
+    aint :: Op -> (Int -> Int -> Int) -> Expr -> Expr -> Evaluator Expr
+    aint Div f (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
+    aint Mod f (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
+    aint _   f (Atom (AInt i)) (Atom (AInt j)) = return $ Atom $ AInt $ f i j
+    aint op  _ e1              e2              = throwError $ BinaryOpError op e1 e2
 
-  go Mul (Atom (AInt i)) (Atom (AInt j)) = retA $ AInt $ i * j
-  go Div (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
-  go Div (Atom (AInt i)) (Atom (AInt j)) = retA $ AInt $ (i `div` j)
-  go Mod (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
-  go Mod (Atom (AInt i)) (Atom (AInt j)) = retA $ AInt $ i `mod` j
+    ord :: Op -> (Int -> Int -> Boolean) -> (String -> String -> Boolean) -> (Boolean -> Boolean -> Boolean)-> Expr -> Expr -> Evaluator Expr
+    ord _  fi _  _  (Atom (AInt i))  (Atom (AInt j))  = return $ Atom $ Bool $ fi i j
+    ord _  _  fs _  (Atom (Char s1)) (Atom (Char s2)) = return $ Atom $ Bool $ fs s1 s2
+    ord _  _  _  fb (Atom (Bool b1)) (Atom (Bool b2)) = return $ Atom $ Bool $ fb b1 b2
+    ord op _  _  _  e1               e2               = throwError $ BinaryOpError op e1 e2
 
-  go Add (Atom (AInt i)) (Atom (AInt j)) = retA $ AInt $ i + j
-  go Sub (Atom (AInt i)) (Atom (AInt j)) = retA $ AInt $ i - j
-
-  go Colon  e          (List es)  = return $ List $ e:es
-  go Append (List es1) (List es2) = return $ List $ es1 ++ es2
-
-  go Equ  (Atom a1) (Atom a2) = retA $ Bool $ a1 == a2
-  go Neq (Atom a1) (Atom a2) = retA $ Bool $ a1 /= a2
-  go Leq (Atom (AInt i)) (Atom (AInt j)) = retA $ Bool $ i <= j
-  go Lt  (Atom (AInt i)) (Atom (AInt j)) = retA $ Bool $ i < j
-  go Geq (Atom (AInt i)) (Atom (AInt j)) = retA $ Bool $ i >= j
-  go Gt  (Atom (AInt i)) (Atom (AInt j)) = retA $ Bool $ i > j
-
-  go Leq (Atom (Char c1)) (Atom (Char c2)) = retA $ Bool $ c1 <= c2
-  go Lt  (Atom (Char c1)) (Atom (Char c2)) = retA $ Bool $ c1 < c2
-  go Geq (Atom (Char c1)) (Atom (Char c2)) = retA $ Bool $ c1 >= c2
-  go Gt  (Atom (Char c1)) (Atom (Char c2)) = retA $ Bool $ c1 > c2
-
-  go And (Atom (Bool true))  b = return b
-  go And (Atom (Bool false)) _ = retA $ Bool $ false
-
-  go Or  (Atom (Bool true))  _ = retA $ Bool $ true
-  go Or  (Atom (Bool false)) b = return b
-
-  go Dollar f e = return $ App f (singleton e)
-
-  go op e1 e2 = throwError $ BinaryOpError op e1 e2
 
 unary :: Op -> Expr -> Evaluator Expr
 unary Sub (Atom (AInt i)) = return $ Atom $ AInt (-i)
