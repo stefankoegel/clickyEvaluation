@@ -207,6 +207,11 @@ binary = go
   go Geq (Atom (AInt i)) (Atom (AInt j)) = retA $ Bool $ i >= j
   go Gt  (Atom (AInt i)) (Atom (AInt j)) = retA $ Bool $ i > j
 
+  go Leq (Atom (Char c1)) (Atom (Char c2)) = retA $ Bool $ c1 <= c2
+  go Lt  (Atom (Char c1)) (Atom (Char c2)) = retA $ Bool $ c1 < c2
+  go Geq (Atom (Char c1)) (Atom (Char c2)) = retA $ Bool $ c1 >= c2
+  go Gt  (Atom (Char c1)) (Atom (Char c2)) = retA $ Bool $ c1 > c2
+
   go And (Atom (Bool true))  b = return b
   go And (Atom (Bool false)) _ = retA $ Bool $ false
 
