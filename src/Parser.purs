@@ -55,7 +55,7 @@ upperCaseLetter = oneOf $ String.toCharArray "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 -- | Parser for all characters after the first in names
 anyLetter :: Parser String Char
-anyLetter = lowerCaseLetter <|> upperCaseLetter <|> char '\''
+anyLetter = lowerCaseLetter <|> upperCaseLetter <|> char '\'' <|> anyDigit
 
 -- | List of reserved key words
 reservedWords :: List String

@@ -42,6 +42,7 @@ runTests = do
   test "lower" variable "a_bcdefghijklmnopqrstuvwxyz_" (Name "a_bcdefghijklmnopqrstuvwxyz_")
   test "upper" variable "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'" (Name "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'")
   test "special" variable "_____''''" (Name "_____''''")
+  test "with_numbers1" variable "a1" (Name "a1")
 
   test "composition" expression "f . g" (Binary Composition (aname "f") (aname "g"))
   test "power" expression "2 ^ 10" (Binary Power (aint 2) (aint 10))

@@ -100,4 +100,4 @@ runTests = do
   evalEnvTest "pattern_matching4" "f ( x :  y : z : rs  ) = (x + y + z) * length rs\nlength (_:xs) = 1 + length xs\nlength [] = 0" "f [2, 3, 5, 8, 11]" "20"
   evalEnvTest "pattern_matching5" "f ( [ x ] : [ y , z ] : [ ] ) = x + y + z" "f [[1],[2,3]]" "6"
   evalEnvTest "pattern_matching6" "f [  [ x ] , [ y , z ] ] = x + y + z" "f [[1],[2,3]]" "6"
-  evalEnvTest "pattern_matching7" "f [(a:b:c:_), (x:y:z:_)] = a * x + b * y + c * z" "f [[1, 2, 3], [100, 10, 1]]" "123"
+  evalEnvTest "pattern_matching7" "f [(a:b:c:rs1), (x:y:z:rs2)] = a * x + b * y + c * z" "f [[1, 2, 3], [100, 10, 1]]" "123"
