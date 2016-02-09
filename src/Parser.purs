@@ -281,11 +281,16 @@ lit = Lit <$> atom
 consLit :: Parser String Binding -> Parser String Binding
 consLit bnd = do
   char '(' *> eatSpaces
-  b <- bnd
-  eatSpaces *> char ':' *> eatSpaces
-  bs <- bnd
+  b <- consLit'
   eatSpaces *> char ')'
-  return $ ConsLit b bs
+  return b
+  where
+    consLit' :: Parser String Binding
+    consLit' = do
+      b <- bnd
+      eatSpaces *> char ':' *> eatSpaces
+      bs <- PC.try consLit' <|> bnd
+      return $ ConsLit b bs
 
 listLit :: Parser String Binding -> Parser String Binding
 listLit bnd = do
@@ -304,7 +309,7 @@ tupleLit bnd = do
   return $ NTupleLit (Cons b bs)
 
 binding :: Parser String Binding
-binding = fix  $ \bnd ->
+binding = fix $ \bnd ->
       (PC.try $ consLit bnd)
   <|> (tupleLit bnd)
   <|> (listLit bnd)

@@ -78,12 +78,10 @@ atom (Name name)  = makeDiv name (toList ["atom", "name"])
 binding :: forall eff. Binding -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
   Lit a        -> atom a
-  ConsLit b bs -> do
+  cl@(ConsLit b bs) -> do
     jCons <- makeDiv "" Nil
     makeDiv "(" (singleton "brace") >>= flip J.append jCons
-    binding b             >>= flip J.append jCons
-    makeDiv ":" (singleton "colon") >>= flip J.append jCons
-    binding bs            >>= flip J.append jCons
+    consBinding cl jCons
     makeDiv ")" (singleton "brace") >>= flip J.append jCons
   ListLit bs -> do
     jList <- makeDiv "" Nil
@@ -99,6 +97,13 @@ binding b = case b of
     interleaveM_ (binding >=> flip J.append jTuple) (makeDiv "," (singleton "comma") >>= flip J.append jTuple) bs
     makeDiv ")" (singleton "brace") >>= flip J.append jTuple
     return jTuple
+  where
+    consBinding :: Binding -> J.JQuery-> Eff (dom :: DOM | eff) Unit
+    consBinding (ConsLit b bs) jCons = do
+      binding b                       >>= flip J.append jCons
+      makeDiv ":" (singleton "colon") >>= flip J.append jCons
+      consBinding bs jCons
+    consBinding b jCons = void $ binding b >>= flip J.append jCons
 
 lambda :: forall eff. List J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 lambda jBinds jBody = do
