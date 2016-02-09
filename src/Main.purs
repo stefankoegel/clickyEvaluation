@@ -60,6 +60,7 @@ type EvalM a = StateT EvalState DOMEff a
 
 startEvaluation :: DOMEff Unit
 startEvaluation = do
+  clearInfo
   editor <- Ace.edit "definitions" Ace.ace
   definitions <- Editor.getValue editor
   input       <- J.select "#input"       >>= getValue
