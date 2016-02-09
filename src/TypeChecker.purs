@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Monad, class Eq, class Show, (&&), (==), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod)
+import Prelude (class Monad, class Eq, class Show, (&&), (==), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod, flip)
 
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
 import Control.Monad.State (State, evalState, put, get)
@@ -487,6 +487,19 @@ extractBinding (NTupleLit a) = do
   return $ Tuple (concat $ fst tup) (TNTupleLit (snd tup) (AD $ TTuple $ (map extractBindingType (snd tup))))
 
 
+getTypEnv:: Binding -> TypeEnv -> Maybe TypeEnv
+getTypEnv b  env= case evalState (runExceptT (extractBinding b)) initUnique of
+    Left _ -> Nothing
+    Right (Tuple bs _) -> Just $ foldr (\a b -> extend b a) env bs
+
+getTypEnvFromList::  List Binding -> TypeEnv-> Maybe TypeEnv
+getTypEnvFromList bs env = do
+                  mTypList <-  mapM (flip getTypEnv emptyTyenv) bs
+                  return $ foldr (\a b -> unionTypeEnv a b) env mTypList
+
+unionTypeEnv :: TypeEnv -> TypeEnv -> TypeEnv
+unionTypeEnv (TypeEnv a) (TypeEnv b) = TypeEnv (Map.union a b)
+
 inferGroup:: TypeEnv -> List Definition -> Infer (Tuple Subst Type)
 inferGroup _ Nil = throwError $ UnknownError "Cant type empty Group"
 inferGroup env (Cons def1 Nil) = inferDef env def1
@@ -591,8 +604,14 @@ buildEmptyTypeTree env e = case typeTreeProgramnEnv env e of
   f err (SectR op e) = TSectR (typeOP op) (buildEmptyTypeTree env e) (TypeError err)
   f err (PrefixOp _) = TPrefixOp (TypeError err)
   f err (IfExpr e1 e2 e3) = TIfExpr (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) (buildEmptyTypeTree env e3) (TypeError err)
-  f err (LetExpr b1 e1 e2) = TLetExpr (g b1) (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) (TypeError err)
-  f err (Lambda bs e) = TLambda (map g bs) (buildEmptyTypeTree env e) (TypeError err)
+  f err (LetExpr b1 e1 e2) =let f env' =  TLetExpr (g b1) (buildEmptyTypeTree env' e1) (buildEmptyTypeTree env' e2) (TypeError err) in
+                        case getTypEnv b1 env of
+                          Nothing -> f env
+                          Just env' -> f env'
+  f err (Lambda bs e) = let f env' = TLambda (map g bs) (buildEmptyTypeTree env' e) (TypeError err) in
+                    case getTypEnvFromList bs env of
+                          Nothing -> f env
+                          Just env' -> f env'
   f err (App e es) = TApp (buildEmptyTypeTree env e) (map (buildEmptyTypeTree env) es) (TypeError err)
 
 -- Binding to BindingType
