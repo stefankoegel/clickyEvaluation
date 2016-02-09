@@ -414,11 +414,10 @@ inferDef env (Def str bin exp) = do
 extractConsLit:: Type -> Binding -> Infer (Tuple (List (Tuple Atom Scheme)) TypeBinding)
 extractConsLit tv (ConsLit a b@(ConsLit _ _)) = do
   Tuple list1 typ1 <- extractBinding a
-  s1 <- unify (extractBindingType typ1) tv
-  let list1' = apply s1 list1
-  Tuple listB b@(TConsLit b1 b2 (AD ( TList typB))) <- extractConsLit tv b
-  s2 <- unify typB (apply s1 tv)
-  return $ Tuple (apply s2 (list1' ++ listB)) $ apply s2 (TConsLit typ1 b (AD $ TList (apply s2 typB)))
+  Tuple list2 t2@(TConsLit b1 b2 (AD (TList typ2))) <- extractBinding b
+  s1 <- unify tv (extractBindingType typ1)
+  s2 <- unify (apply s1 tv) (typ2)
+  return $ Tuple (apply s2 (apply s1 (list1 ++ list2))) (apply s2 (apply s1 (TConsLit typ1 t2 (AD $ TList typ2))))
 
 extractConsLit tv (ConsLit a (Lit b)) = do
   Tuple list typ <- extractBinding a
@@ -426,17 +425,6 @@ extractConsLit tv (ConsLit a (Lit b)) = do
   let list' = apply s1 list
   let ltyp = AD $ TList (apply s1 tv)
   return $ Tuple (Cons (Tuple b $ Forall Nil ltyp) list') $ (apply s1 (TConsLit typ (TLit ltyp) ltyp))
-
-
-extractConsLit tv (ConsLit a b) = do
-  Tuple list typ <- extractBinding a
-  Tuple list2 typ2 <- extractBinding b
-  s1 <- unify (extractBindingType typ2) (extractBindingType typ)
-  s2 <- unify (apply s1 (extractBindingType typ)) tv
-  let sC =  s2 `compose` s1
-  let list' = map (\(Tuple a b) -> Tuple a $ apply sC b) list
-  let list2' = map (\ (Tuple a b) -> Tuple a $  apply sC b) list2
-  return $ Tuple (list' ++ list2') $ apply sC $ TConsLit typ typ2 $ AD $ TList tv
 
 extractConsLit _ _ = throwError $ UnknownError "congrats you found a bug in TypeChecker.extractConsLit"
 
