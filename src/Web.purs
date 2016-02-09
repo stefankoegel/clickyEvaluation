@@ -88,9 +88,10 @@ binding b = case b of
   ListLit bs -> do
     jList <- makeDiv "" Nil
     makeDiv "[" (singleton "brace") >>= flip J.append jList
-    for bs $ \b -> do
-      binding b >>= flip J.append jList
-      makeDiv "," (singleton "comma") >>= flip J.append jList
+    interleaveM_
+      (\b -> binding b >>= flip J.append jList)
+      (makeDiv "," (singleton "comma") >>= flip J.append jList)
+      bs
     makeDiv "]" (singleton "brace") >>= flip J.append jList
   NTupleLit bs -> do
     jTuple <- makeDiv "" Nil
@@ -102,10 +103,8 @@ binding b = case b of
 lambda :: forall eff. List J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 lambda jBinds jBody = do
   jLam <- makeDiv "" (singleton "lambda")
-  open <- makeDiv "(" (singleton "brace")
+  open <- makeDiv "(\\" (Cons "brace" (Cons "backslash" Nil))
   J.append open jLam
-  bs <- makeDiv "\\" (singleton "backslash")
-  J.append bs jLam
   for jBinds (flip J.append jLam)
   arrow <- makeDiv "->" (singleton "arrow")
   J.append arrow jLam
