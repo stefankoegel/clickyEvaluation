@@ -67,6 +67,8 @@ runTests = do
   test "or" expression "be || notBe" (Binary Or (aname "be") (aname "notBe"))
   test "dollar" expression "f $ 1 + 2"  (Binary Dollar (aname "f") (Binary Add (aint 1) (aint 2)))
 
+  test "unary_minus" expression "-10"  (Unary Sub (aint 10))
+
   test "1" expression "1" (aint 1)
   test "add" expression "1 + 2" (Binary Add (aint 1) (aint 2))
   test "precedence" expression "1 * 2 + 3 * 4" (Binary Add 

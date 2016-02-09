@@ -1,6 +1,6 @@
 module Test.Evaluator where
 
-import Prelude (Unit, bind, (++), ($), show, unit, return, (==), (<<<))
+import Prelude (Unit, bind, (++), ($), show, unit, return, (==), (<<<), (+), negate, (*))
 import Data.Either (Either(..))
 import Data.Tuple (Tuple(..))
 import Data.StrMap as M
@@ -75,6 +75,12 @@ runTests = do
   evalEnvTest "evalAll4" "" "x + y" "x + y"
   evalEnvTest "evalAll5" "" "(2 * 5) * x + 2 ^ 3" "10 * x + 8"
   evalEnvTest "evalAll6" "" "1 / 0" "1 / 0"
+
+  evalEnvTest "evalNegNumber1" "" "(-3) - (-4)" "1"
+  evalEnvTest "evalNegNumber2" "" "(-2) * (-2)" "4"
+  evalEnvTest "evalNegNumber3" "" "-(-(5*5) + 6*6) + 7*7" (show (-(-(5*5) + 6*6) + 7*7)) -- 38
+  evalEnvTest "evalNegNumber4" "" "-3 * 7 + 23" "2"
+
 
   evalEnvTest "if1" "" "if 10 > 5 then 10 else 5" "10"
   evalEnvTest "if2" "" "if 2 /= 2 then 1 else 0" "0"
