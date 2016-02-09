@@ -45,7 +45,7 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParser input expres
       if evalExp == expExp
         then return unit -- log $ "Eval success (" ++ name ++ ")"
         else tell' $ "Eval fail (" ++ name ++ "): " ++ show evalExp ++ " should be " ++ show expExp
-  _ -> tell' $ "Parse fail (" ++ name ++ ")"
+  (Tuple (Tuple pi pe) pd) -> tell' $ "Parse fail (" ++ name ++ "): (input: " ++ show pi ++ ", expected: " ++ show pe ++ ", definitions: " ++ show pd ++ ")"
 
 runTests :: Writer (List String) Unit
 runTests = do
@@ -86,6 +86,7 @@ runTests = do
   evalEnvTest "env4" "double x = x + x" "double (double (double 10))" "80"
   evalEnvTest "env5" "double x = x + x" "double $ double $ double 10" "80"
   evalEnvTest "env6" "double x = x + x" "(double . double . double) 10" "80"
+  evalEnvTest "env6" "length (_:xs) = 1 + length xs\nlength [] = 0" "length [1, 2, 3, 4, 5]" "5"
 
   evalEnvTest "fix" "f x = f x" "f 10" "f 10"
 
@@ -95,3 +96,8 @@ runTests = do
 
   evalEnvTest "string_third1" "thrd (_:(_:(x:_))) = x" "thrd \"1234\"" "'3'"
   evalEnvTest "string_third2" "thrd [_,_,x,_] = x" "thrd \"1234\"" "'3'"
+
+  evalEnvTest "pattern_matching4" "f ( x :  y : z : rs  ) = (x + y + z) * length rs\nlength (_:xs) = 1 + length xs\nlength [] = 0" "f [2, 3, 5, 8, 11]" "20"
+  evalEnvTest "pattern_matching5" "f ( [ x ] : [ y , z ] : [ ] ) = x + y + z" "f [[1],[2,3]]" "6"
+  evalEnvTest "pattern_matching6" "f [  [ x ] , [ y , z ] ] = x + y + z" "f [[1],[2,3]]" "6"
+  evalEnvTest "pattern_matching7" "f [(a:b:c:rs1), (x:y:z:rs2)] = a * x + b * y + c * z" "f [[1, 2, 3], [100, 10, 1]]" "123"

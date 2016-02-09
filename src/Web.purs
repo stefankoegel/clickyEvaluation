@@ -127,20 +127,18 @@ atom (Name name) t i = do
 binding :: forall eff. Tuple IBinding (Tuple Binding  TypeBinding) -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
   Tuple (ILit i) (Tuple (Lit a) (TLit t))       -> atom a t i
-  Tuple (IConsLit i1 i2 i) (Tuple (ConsLit b bs) (TConsLit tb tbs t))-> do
+  cl@(Tuple (IConsLit i1 i2 i) (Tuple (ConsLit b bs) (TConsLit tb tbs t))) -> do
     jCons <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
     makeDiv "(" (singleton "brace") >>= flip J.append jCons
-    binding (Tuple i1 (Tuple b tb))            >>= flip J.append jCons
-    makeDiv ":" (singleton "colon") >>= flip J.append jCons
-    binding (Tuple i2 (Tuple bs tbs))           >>= flip J.append jCons
+    consBinding cl jCons
     makeDiv ")" (singleton "brace") >>= flip J.append jCons
   Tuple (IListLit is i)(Tuple (ListLit bs) (TListLit tbs t)) -> do
     jList <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
     makeDiv "[" (singleton "brace") >>= flip J.append jList
-    let bx = zip is (zip bs tbs)
-    for bx $ \b -> do
-      binding b >>= flip J.append jList
-      makeDiv "," (singleton "comma") >>= flip J.append jList
+    interleaveM_
+      (\b -> binding b >>= flip J.append jList)
+      (makeDiv "," (singleton "comma") >>= flip J.append jList)
+      (zip is (zip bs tbs))
     makeDiv "]" (singleton "brace") >>= flip J.append jList
   Tuple (INTupleLit is i)(Tuple (NTupleLit bs) (TNTupleLit tbs t))-> do
     jTuple <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
@@ -149,6 +147,13 @@ binding b = case b of
     interleaveM_ (binding >=> flip J.append jTuple) (makeDiv "," (singleton "comma") >>= flip J.append jTuple) b
     makeDiv ")" (singleton "brace") >>= flip J.append jTuple
     return jTuple
+  where
+    consBinding :: Tuple IBinding (Tuple Binding  TypeBinding) -> J.JQuery-> Eff (dom :: DOM | eff) Unit
+    consBinding (Tuple (IConsLit i1 i2 i) (Tuple (ConsLit b bs) (TConsLit tb tbs t))) jCons = do
+      binding (Tuple i1 (Tuple b tb)) >>= flip J.append jCons
+      makeDiv ":" (singleton "colon") >>= flip J.append jCons
+      consBinding (Tuple i2 (Tuple bs tbs)) jCons
+    consBinding b jCons = void $ binding b >>= flip J.append jCons
 
 lambda :: forall eff. List J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 lambda jBinds jBody t i = do
@@ -156,10 +161,8 @@ lambda jBinds jBody t i = do
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
   jLam <- makeDiv "" (singleton "lambda expr") >>= addTypetoDiv t >>= addIdtoDiv i
-  open <- makeDiv "(" (singleton "brace")
+  open <- makeDiv "(\\" (Cons "brace" (Cons "backslash" Nil))
   J.append open jLam
-  bs <- makeDiv "\\" (singleton "backslash")
-  J.append bs jLam
   for jBinds (flip J.append jLam)
   arrow <- makeDiv "->" (singleton "arrow")
   J.append arrow jLam
