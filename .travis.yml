@@ -10,5 +10,6 @@ install:
   - chmod a+x $HOME/purescript
   - npm install
 script:
+  - npm run build_components
   - npm run build
   - npm run test
