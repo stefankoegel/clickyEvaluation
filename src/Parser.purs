@@ -1,12 +1,13 @@
 module Parser where
 
-import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void)
+import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void, id, flip)
 import Global (readInt)
 import Data.String as String
 import Data.Int (floor)
 import Data.List (List(Cons), many, toList, concat, elemIndex, fromList)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
+import Data.Array (modifyAt, snoc)
 
 import Control.Alt ((<|>))
 import Control.Apply ((<*), (*>))
@@ -16,7 +17,7 @@ import Data.Either (Either)
 
 import Text.Parsing.Parser (ParseError, Parser, runParser, fail)
 import Text.Parsing.Parser.Combinators as PC
-import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix), buildExprParser)
+import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
 import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
 
 import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
@@ -133,7 +134,12 @@ infixOperators =
 
 -- | Table of operators (math, boolean, ...)
 operatorTable :: OperatorTable Identity String Expr
-operatorTable = ((uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$>) <$> infixOperators
+operatorTable = maybe infixTable id (modifyAt 3 (flip snoc unaryMinus) infixTable)
+  where
+    infixTable :: OperatorTable Identity String Expr
+    infixTable = ((uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$>) <$> infixOperators
+    unaryMinus :: Operator Identity String Expr
+    unaryMinus = Prefix (spaced (string "-") *> return (Unary Sub))
 
 -- | Parser for operators
 opParser :: Parser String Op

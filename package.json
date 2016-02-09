@@ -5,11 +5,13 @@
     "npm": "*"
   },
   "dependencies": {
-    "pulp": "6.0.1"
+    "pulp": "*",
+    "bower": "*"
   },
   "scripts": {
-    "postinstall": "pulp dep install",
+    "postinstall": "pulp --version && bower --version && bower update",
     "build": "pulp build --to html/Main.js",
+    "build_components": "psc \"bower_components/purescript-*/src/**/*.purs\" \"bower_components/purescript-*/src/**/*.js\" --json-errors 2> errors.json",
     "test": "pulp test",
     "watch": "pulp -w test"
   }
