@@ -194,7 +194,7 @@ addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
   where
   handler :: J.JQueryEvent -> J.JQuery -> DOMEff Unit
   handler jEvent jq = do
-    J.stopImmediatePropagation jEvent
+    J.stopPropagation jEvent
     removeMouseOver
     J.addClass "mouseOver" jq
     return unit

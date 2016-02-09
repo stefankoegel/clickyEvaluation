@@ -321,7 +321,7 @@ addTypetoDiv typ d = do
   J.append inner outer
   J.append outer d
   J.appendText text d
-  J.on "mouseenter" (\e div -> showTooltip div outer e) d
+  J.on "mouseenter" (\e div -> J.stopPropagation e >>= \_ -> showTooltip div outer e) d
 
 
 addIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
