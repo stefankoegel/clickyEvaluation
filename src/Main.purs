@@ -7,7 +7,6 @@ import Data.List (List(Nil), (:), (!!), drop, deleteAt, length, (..), zipWithA, 
 import Data.Foreign (unsafeFromForeign)
 import Data.Foldable (any)
 
-import Control.Apply ((*>))
 import Control.Monad.Eff.JQuery as J
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, print)
