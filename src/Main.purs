@@ -3,8 +3,9 @@ module Main where
 import Prelude (class Applicative, class Show, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
 import Data.Either (Either(..))
 import Data.Maybe (maybe)
-import Data.List (List(Nil), (:), (!!), drop, deleteAt, length, (..), zipWithA)
+import Data.List (List(Nil), (:), (!!), drop, deleteAt, length, (..), zipWithA, singleton)
 import Data.Foreign (unsafeFromForeign)
+import Data.Foldable (any)
 
 import Control.Apply ((*>))
 import Control.Monad.Eff.JQuery as J
@@ -31,9 +32,9 @@ import Control.Monad.State.Trans
 import Control.Monad.State.Class
 import Control.Monad.Eff.Class
 
-import Web (exprToJQuery, getPath,idExpr)
+import Web (exprToJQuery, getPath, idExpr, makeDiv)
 import Parser
-import Evaluator (evalPath1, Env(), defsToEnv,envToDefs)
+import Evaluator (evalPath1, Env(), defsToEnv, envToDefs, EvalError(..), MatchingError(..))
 import AST
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
@@ -185,10 +186,22 @@ makeClickable jq = do
       Nothing   -> return unit
       Just path ->
         case evalPath1 env path expr of
-          Left err -> void $ J.setAttr "title-hide" (show err) jq
+          Left err -> displayEvalError err jq
           Right _  -> if checkForError path typeTree
             then return unit
-            else void $ J.addClass "clickable" jq *> J.setAttr "title-hide" "" jq
+            else void $ J.addClass "clickable" jq
+
+displayEvalError :: EvalError -> J.JQuery -> DOMEff Unit
+displayEvalError err jq = case err of
+  DivByZero -> void $ makeDiv "Division by zero!" (singleton "evalError") >>= flip J.append jq
+  NoMatchingFunction _ errs -> if (any missesArguments errs)
+    then return unit
+    else void $ makeDiv "No matching function!" (singleton "evalError") >>= flip J.append jq
+  _         -> return unit
+  where
+    missesArguments (TooFewArguments _ _) = true
+    missesArguments (StrictnessError _ _) = true
+    missesArguments _                     = false
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
 addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq

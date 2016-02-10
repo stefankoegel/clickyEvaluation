@@ -256,3 +256,14 @@ div.op, div.brace, div.comma {
 .funcContainer {
   border-style: solid !important;
 }
+
+div.evalError {
+  background: #bbb;
+  display: block;
+  color: red;
+  border-radius: 5px;
+  box-shadow: 2px 2px 5px 0 #333;
+  padding: 3px;
+  margin: 10px -10px -10px -10px;
+  font-size: medium;
+}
