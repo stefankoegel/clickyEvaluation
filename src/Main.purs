@@ -3,8 +3,9 @@ module Main where
 import Prelude (class Applicative, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
 import Data.Either (Either(..))
 import Data.Maybe (maybe)
-import Data.List (List(Nil), (:), (!!), drop, deleteAt, length, (..), zipWithA)
+import Data.List (List(Nil), (:), (!!), drop, deleteAt, length, (..), zipWithA, singleton)
 import Data.Foreign (unsafeFromForeign)
+import Data.Foldable (any)
 
 import Control.Apply ((*>))
 import Control.Monad.Eff.JQuery as J
@@ -21,9 +22,9 @@ import Ace.Editor as Editor
 import Ace.EditSession as Session
 import Ace.Range as  Range
 
-import Web (exprToJQuery, getPath)
+import Web (exprToJQuery, getPath, makeDiv)
 import Parser (parseDefs, parseExpr)
-import Evaluator (evalPath1, Env(), Path(), defsToEnv)
+import Evaluator (evalPath1, Env(), Path(), defsToEnv, EvalError(..), MatchingError(..))
 import AST (Expr)
 import JSHelpers (jqMap, isEnterKey)
 
@@ -147,8 +148,20 @@ makeClickable jq = do
   testEval env expr jq = do
     path <- getPath jq
     case evalPath1 env path expr of
-      Left err -> void $ J.setAttr "title" (show err) jq
-      Right _  -> void $ J.addClass "clickable" jq *> J.setAttr "title" "" jq
+      Left err -> displayEvalError err jq
+      Right _  -> void $ J.addClass "clickable" jq
+
+displayEvalError :: EvalError -> J.JQuery -> DOMEff Unit
+displayEvalError err jq = case err of
+  DivByZero -> void $ makeDiv "Division by zero!" (singleton "evalError") >>= flip J.append jq
+  NoMatchingFunction _ errs -> if (any missesArguments errs)
+    then return unit
+    else void $ makeDiv "No matching function!" (singleton "evalError") >>= flip J.append jq
+  _         -> return unit
+  where
+    missesArguments (TooFewArguments _ _) = true
+    missesArguments (StrictnessError _ _) = true
+    missesArguments _                     = false
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
 addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq

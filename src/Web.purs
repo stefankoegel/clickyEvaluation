@@ -1,6 +1,7 @@
 module Web
   ( exprToJQuery
   , getPath
+  , makeDiv
   ) where
 
 import Prelude (class Monad, Unit, return, flip, bind, (<<<), (<$>), (++), (&&), (>), (>>=), void, ($), unit, show, id, (-))
