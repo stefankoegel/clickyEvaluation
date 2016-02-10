@@ -147,6 +147,8 @@ binding b = case b of
     interleaveM_ (binding >=> flip J.append jTuple) (makeDiv "," (singleton "comma") >>= flip J.append jTuple) b
     makeDiv ")" (singleton "brace") >>= flip J.append jTuple
     return jTuple
+
+  _ -> makeDiv ("congrats you found a bug in Web.binding") Nil
   where
     consBinding :: Tuple IBinding (Tuple Binding  TypeBinding) -> J.JQuery-> Eff (dom :: DOM | eff) Unit
     consBinding (Tuple (IConsLit i1 i2 i) (Tuple (ConsLit b bs) (TConsLit tb tbs t))) jCons = do

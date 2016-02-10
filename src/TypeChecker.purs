@@ -120,7 +120,7 @@ instance subTypeBinding :: Substitutable TypeBinding where
   apply s (TLit t) = TLit $ apply s t
   apply s (TConsLit b1 b2 t) = TConsLit (apply s b1) (apply s b2) (apply s t)
   apply s (TListLit lb t) = TListLit (apply s lb) (apply s t)
-  apply s (TNTupleLit lb t) = TListLit (apply s lb) (apply s t)
+  apply s (TNTupleLit lb t) = TNTupleLit (apply s lb) (apply s t)
 
   ftv (TLit t) = ftv t
   ftv (TConsLit _ _ t) = ftv t
@@ -265,20 +265,16 @@ infer env ex = case ex of
   (Atom (AInt _)) -> return (Tuple nullSubst $ TAtom (TypCon "Int"))
 
   Lambda (Cons bin Nil) e -> do
-    tv <- fresh
     Tuple envL tvB <- extractBinding bin
     let env' = foldr (\a b -> extend b a) env envL
-    s0 <- unify tv (extractBindingType tvB)
     (Tuple s1 t1) <- infer env' e
-    return (Tuple s1 $ apply (s0 `compose` s1) (TLambda (Cons tvB Nil) t1 $ tv `TypArr` (extractType t1)))
+    return (Tuple s1 $ apply s1 (TLambda (Cons tvB Nil) t1 $ (extractBindingType tvB) `TypArr` (extractType t1)))
 
   Lambda (Cons bin xs) e -> do
-    tv <- fresh
     Tuple envL tvB <- extractBinding bin
     let env' = foldr (\a b -> extend b a) env envL
-    s0 <- unify tv (extractBindingType tvB)
     (Tuple s1 (TLambda tb tt t1)) <- infer env' (Lambda xs e)
-    return (Tuple s1 $ apply (s0 `compose` s1) (TLambda (Cons tvB tb) tt (tv `TypArr` t1)))
+    return (Tuple s1 $ apply s1 (TLambda (Cons tvB tb) tt ((extractBindingType tvB) `TypArr` t1)))
 
   Lambda Nil e -> infer env e
 
