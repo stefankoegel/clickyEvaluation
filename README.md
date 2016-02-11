@@ -33,6 +33,8 @@ The projects name is a play on *lazy evaluation* and *clicking* to evaluate an e
 * Anonymous functions (lambdas)
 * Sections `(^2) 4 => 4^2 => 16`
 * Most of the simple Prelude functions on lists `head, map, foldr, scanr, filter, all, ...`
+* Types for Bool, Char, Int, List, Tupel and Prelude functions
+* Type inference for user defined functions and expressions
 
 ## Missing Features
 
@@ -41,10 +43,10 @@ Everything not on the above list. Especially:
 * `case`, `where`, `let`
 * Multi-line expressions, significant whitespace
 * Floating point numbers
-* Types (and other sanity checks)
 * ADTs
 * Comments
 * List comprehensions
+* Type classes
 
 ## Building
 
@@ -65,3 +67,12 @@ After a successful build use:
 ```
 <your_browser> html/index.html
 ```
+
+## Hosting
+
+You can build and host a specific version of ClickyEvaluation yourself by providing the following files on your webserver:
+* index.html
+* source.css
+* Main.js (generated with `npm run test` or `pulp build --to Main.js`)
+
+Or you can link to the most recent version [here](http://stefankoegel.github.io/clickyEvaluation/).
