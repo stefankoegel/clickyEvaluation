@@ -342,12 +342,12 @@ addResultIdtoDiv id d = do
 
 buildExpandDiv:: forall eff. Type  -> Eff (dom :: DOM | eff) J.JQuery
 buildExpandDiv t  = do
-  typC <- makeDiv (prettyPrintType t) $ Cons "type" Nil
+  typC <- makeDiv ("::" ++ prettyPrintType t) $ Cons "type" Nil
   case t of
     (TypeError _) -> J.css {color: "red"} typC
     _ -> return typC
   expandC <- makeDiv "" $ Cons "expand"  Nil
-  jArrow <- makeDiv "▾" $ Cons "type-arr" Nil
+  jArrow <- makeDiv "▼" $ Cons "type-arr" Nil
   J.append jArrow expandC
   J.append typC expandC
   J.on "click" (\e _ -> do
