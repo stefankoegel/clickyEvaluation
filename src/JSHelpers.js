@@ -59,3 +59,11 @@ exports.children = function(selector) {
         };
     };
 };
+
+exports.prepend = function(child) {
+  return function(parent) {
+    return function() {
+      return parent.prepend(child);
+    }
+  }
+}

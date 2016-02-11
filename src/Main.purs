@@ -44,7 +44,7 @@ import Web (exprToJQuery, getPath)
 import Parser (parseDefs, parseExpr)
 import Evaluator (evalPath1, Env(),  defsToEnv)
 import AST (Expr, TypeError(..),Path())
-import JSHelpers (jqMap, isEnterKey, children)
+import JSHelpers (jqMap, isEnterKey, children, prepend)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -193,10 +193,10 @@ makeClickable jq = do
 
 displayEvalError :: EvalError -> J.JQuery -> DOMEff Unit
 displayEvalError err jq = case err of
-  DivByZero -> void $ makeDiv "Division by zero!" (singleton "evalError") >>= flip J.append jq
+  DivByZero -> void $ makeDiv "Division by zero!" (singleton "evalError") >>= flip prepend jq
   NoMatchingFunction _ errs -> if (any missesArguments errs)
     then return unit
-    else void $ makeDiv "No matching function!" (singleton "evalError") >>= flip J.append jq
+    else void $ makeDiv "No matching function!" (singleton "evalError") >>= flip prepend jq
   _         -> return unit
   where
     missesArguments (TooFewArguments _ _) = true

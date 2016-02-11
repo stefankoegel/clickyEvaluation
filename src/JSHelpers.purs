@@ -1,4 +1,4 @@
-module JSHelpers (jqMap, isEnterKey, showTooltip, children) where
+module JSHelpers (jqMap, isEnterKey, showTooltip, children, prepend) where
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery (JQuery, JQueryEvent,Selector)
@@ -13,3 +13,5 @@ foreign import isEnterKey :: JQueryEvent -> Boolean
 foreign import showTooltip ::forall eff. JQuery -> JQuery -> JQueryEvent -> Eff (dom :: DOM | eff) Unit
 
 foreign import children :: forall eff. Selector -> JQuery -> Eff (dom :: DOM | eff) JQuery
+
+foreign import prepend :: forall eff. JQuery -> JQuery -> Eff (dom :: DOM | eff) JQuery
