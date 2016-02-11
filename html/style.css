@@ -1,5 +1,6 @@
 body {
   background: #999;
+  overflow-x: hidden;
 }
 
 h3 {
@@ -21,28 +22,36 @@ h3 {
   padding: 10px;
 }
 
-#input, #definitions, .output, .historyBox, div.clickable, button {
+#input, #definitions,  .historyBox, div.clickable, button {
   font-family: monospace;
   font-size: 15px;
   border: none;
   background: #ddd;
   padding: 10px;
-  margin: 10px;
-  border-radius: 10px;
+  margin: 5px;
+  border-radius: 4px;
   box-shadow: 3px 3px 10px 0 #333;
   transition: background .25s ease-in-out;
 }
 
 
-div.list, div.lambda {
+div.list, div.lambda, div.section, div.name, div.top, div.tuple{
   font-family: monospace;
   font-size: 15px;
   border: none;
   background: #aaa;
-  padding: 10px;
+  padding: 4px;
   margin: 5px;
-  border-radius: 10px;
+  border-radius: 4px;
   box-shadow: 1.5px 1.5px 5px 0 #333;
+}
+
+div.func{
+  background: inherit;
+  box-shadow: none;
+  border-width: thin;
+  border-top-style: solid;
+  border-color: rgba(0, 0, 0, 0.3);
 }
 
 button.delete {
@@ -91,6 +100,10 @@ button.restore:hover {
   font-weight: bold;
   padding: 10px;
   margin: 5px;
+}
+
+
+.history, .historyBox {
   border-radius: 10px;
   background: #bbb;
   box-shadow: 2px 2px 5px 0 #333;
@@ -100,6 +113,7 @@ div.historyBox {
   background: none;
   border: none;
   box-shadow: none;
+  display: block;
 }
 
 .history {
@@ -154,6 +168,95 @@ div.op, div.brace, div.comma {
   background: #fbb;
 }
 
+.subtypes {
+  margin-left: 100px;
+}
+
+
+#typ-container {
+  display: inline-block;
+  text-align: left;
+}
+
+#topLevelOutput-container {
+  text-align: center;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+#svg-container {
+  position: relative;
+  pointer-events: none;
+}
+
+.vertical{
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.frame {
+  overflow-x: auto;
+  text-align: center;
+}
+
+.tooltip-outer {
+  position: absolute;
+  width: 0px;
+  margin: 0px !important;
+  z-index: 2;
+  visibility: hidden;
+}
+
+.tooltip-inner {
+  color: white;
+  -webkit-border-radius: 3px;
+  -moz-border-radius: 3px;
+  border-radius: 3px;
+  background-color: #000;
+  background-color: hsla(0, 0%, 20%,1);
+  line-height: 1.2;
+  padding: 1px 3px 1px 3px;
+  margin: 0px !important;
+}
+
+
+.expand {
+  color: rgb(68, 68, 68);
+  min-height: 5px;
+  width: auto;
+  background-color: inherit;
+  display: block !important;
+  text-align: left;
+  font-size: x-small;
+  border-top-right-radius: 4px;
+  border-top-left-radius: 4px;
+  margin: 0px !important;
+}
+
+.type {
+  padding: 3px;
+  text-align: left;
+  font-size: medium;
+  width: 100%;
+  padding-left: 1.3em;
+  margin-left: -1em !important;
+}
+
+.typExpContainer{
+  padding: 0px !important;
+}
+
+.expr {
+  margin-left: 0px !important;
+  margin-right: 0px !important;
+  width: auto;
+  display: block !important;
+}
+
+.funcContainer {
+  border-style: solid !important;
+}
+
 div.evalError {
   background: #bbb;
   display: block;
@@ -161,6 +264,6 @@ div.evalError {
   border-radius: 5px;
   box-shadow: 2px 2px 5px 0 #333;
   padding: 3px;
-  margin: 10px -10px -10px -10px;
+  margin: 0px 0px 10px 0px;
   font-size: medium;
 }

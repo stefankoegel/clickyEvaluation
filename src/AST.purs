@@ -1,6 +1,6 @@
 module AST where
 
-import Prelude (class Show, class Eq, show, (++), (==), (&&))
+import Prelude (class Show, class Eq,class Ord, show, (++), (==), (&&),eq, compare,Ordering(..))
 import Data.List (List)
 
 -- | Operators
@@ -40,7 +40,7 @@ instance eqOp :: Eq Op where
 
 -- | Atoms
 -- |
--- | Primitive data types 
+-- | Primitive data types
 data Atom = AInt Int
           | Bool Boolean
           | Char String
@@ -52,6 +52,13 @@ instance eqAtom :: Eq Atom where
   eq (Char s1) (Char s2) = s1 == s2
   eq (Name s1) (Name s2) = s1 == s2
   eq _ _ = false
+
+instance ordAtom :: Ord Atom where
+  compare (AInt a) (AInt b) = compare a b
+  compare (Bool a) (Bool b) = compare a b
+  compare (Char a) (Char b) = compare a b
+  compare (Name a) (Name b) = compare a b
+  compare _ _ = EQ
 
 -- | Expressions
 -- |
@@ -68,6 +75,73 @@ data Expr = Atom Atom
           | LetExpr Binding Expr Expr
           | Lambda (List Binding) Expr
           | App Expr (List Expr)
+
+
+-- last type para is type of expr at this level
+-- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
+data TypeTree
+          = TAtom                                   Type
+          | TListTree (List TypeTree)               Type
+          | TNTuple (List TypeTree)                 Type
+          | TBinary Type TypeTree TypeTree          Type
+          | TUnary Type TypeTree                    Type
+          | TSectL TypeTree Type                    Type
+          | TSectR Type TypeTree                    Type
+          | TPrefixOp                               Type
+          | TIfExpr TypeTree TypeTree TypeTree      Type
+          | TLetExpr TypeBinding TypeTree TypeTree  Type
+          | TLambda (List TypeBinding) TypeTree     Type
+          | TApp TypeTree (List TypeTree)           Type
+
+
+data IndexTree
+          = IAtom                                  Int
+          | IListTree (List IndexTree)             Int
+          | INTuple (List IndexTree)               Int
+          | IBinary Int  IndexTree IndexTree           Int
+          | IUnary Int IndexTree                      Int
+          | ISectL IndexTree Int                      Int
+          | ISectR Int IndexTree                      Int
+          | IPrefixOp                              Int
+          | IIfExpr IndexTree IndexTree IndexTree  Int
+          | ILetExpr IBinding IndexTree IndexTree  Int
+          | ILambda (List IBinding) IndexTree      Int
+          | IApp IndexTree (List IndexTree)        Int
+
+
+
+data TypeBinding  = TLit                              Type
+                  | TConsLit TypeBinding TypeBinding  Type
+                  | TListLit (List TypeBinding)       Type
+                  | TNTupleLit (List TypeBinding)     Type
+
+
+data IBinding  = ILit                       Int
+              | IConsLit IBinding IBinding  Int
+              | IListLit (List IBinding)    Int
+              | INTupleLit (List IBinding)  Int
+
+data TVar = TVar String
+
+data Type
+    = TypVar TVar -- Typ Variables e.x. a
+    | TypCon String -- Typ Constants e.x Int
+    | TypArr Type Type -- e.x Int -> Int
+    | AD AD
+    | TypeError TypeError
+
+data AD
+    = TList Type
+    | TTuple (List Type)
+
+
+data TypeError
+  = UnificationFail Type Type
+  | InfiniteType TVar Type
+  | UnboundVariable String
+  | UnificationMismatch (List Type) (List Type)
+  | UnknownError String
+
 
 instance eqExpr :: Eq Expr where
   eq (Atom a1)           (Atom a2)         = a1 == a2
@@ -103,6 +177,26 @@ instance eqBinding :: Eq Binding where
 -- |
 -- | Definitions for functions and constants
 data Definition = Def String (List Binding) Expr
+
+type Output = {
+    expr :: Expr,
+    typ :: TypeTree,
+    idTree :: IndexTree
+  }
+
+data Path = Nth Int Path
+          | Fst Path
+          | Snd Path
+          | Thrd Path
+          | End
+
+instance showPath :: Show Path where
+  show p = case p of
+    Nth i p -> "(Nth " ++ show i ++ " " ++ show p ++")"
+    Fst   p -> "(Fst " ++ show p ++")"
+    Snd   p -> "(Snd " ++ show p ++")"
+    Thrd   p -> "(Thrd " ++ show p ++")"
+    End     -> "End"
 
 instance eqDefinition :: Eq Definition where
   eq (Def n1 b1 e1) (Def n2 b2 e2) = n1 == n2 && b1 == b2 && e1 == e2
@@ -180,3 +274,72 @@ instance showBinding :: Show Binding where
 
 instance showDefinition :: Show Definition where
   show (Def name bindings body) = "Def " ++ show name ++ " (" ++ show bindings ++ ") (" ++ show body ++ ")"
+
+instance showType :: Show Type where
+  show (TypVar var) = "(TypVar  " ++ show var ++ ")"
+  show (TypCon con) = "(TypCon " ++ show con ++ ")"
+  show (TypArr t1 t2) = "(TypArr "++ show t1 ++" " ++ show t2 ++ ")"
+  show (AD ad) = "(AD "++ show ad ++ ")"
+  show (TypeError err) ="(TypeError "++ show err ++")"
+
+instance eqType :: Eq Type where
+  eq (TypVar a) (TypVar b) = a == b
+  eq (TypCon a) (TypCon b) = a == b
+  eq (TypArr a b) (TypArr a' b') = (a == a') && (b == b')
+  eq (AD a) (AD b) = eq a b
+  eq (TypeError a) (TypeError b) = (a == b)
+  eq _ _ = false
+
+instance ordTVar :: Ord TVar where
+  compare (TVar a) (TVar b) = compare a b
+
+instance eqTVar :: Eq TVar where
+  eq (TVar a) (TVar b) = a == b
+
+instance showTVar :: Show TVar where
+  show (TVar a) = "(TVar " ++ show a ++ ")"
+
+instance showAD :: Show AD where
+  show (TList t) = "(TList "++ show t ++")"
+  show (TTuple tl) = "(TTuple ("++ show tl ++ "))"
+
+instance eqAD :: Eq AD where
+  eq (TList a) (TList b) = eq a b
+  eq (TTuple a) (TTuple b) = eq a b
+  eq _          _          = false
+
+instance showTypeError :: Show TypeError where
+  show (UnificationFail a b) = "(UnificationFail "++ show a ++ " " ++ show b ++")"
+  show (InfiniteType a b ) = "(InfiniteType " ++ show a ++ " " ++ show b ++ ")"
+  show (UnboundVariable a) = "(UnboundVariable " ++ show a ++ ")"
+  show (UnificationMismatch a b) = "(UnificationMismatch " ++ show a ++ " " ++ show b ++ ")"
+  show (UnknownError a) = "(UnknownError " ++ show a ++ ")"
+
+instance eqTypeError :: Eq TypeError where
+  eq (UnificationFail a b) (UnificationFail a' b') = (a == a') && (b == b')
+  eq (InfiniteType a b) (InfiniteType a' b') = (a == a') && (b == b')
+  eq (UnboundVariable a) (UnboundVariable a') = (a == a')
+  eq (UnificationMismatch a b) (UnificationMismatch a' b') = (a == a') && (b == b')
+  eq (UnknownError a) (UnknownError a') = (a == a')
+  eq _ _ = false
+
+instance showTypeTree :: Show TypeTree where
+  show (TAtom t) = "(TAtom " ++ show t ++ ")"
+  show (TListTree lt t) = "(TListTree (" ++ show lt ++ ") " ++ show t ++ ")"
+  show (TNTuple lt t) = "(TNTuple ("++ show lt ++ ") " ++ show t ++ ")"
+  show (TBinary t1 tt1 tt2 t) = "(TBinary " ++ show t1 ++ " " ++ show tt1 ++  " " ++ show tt2 ++ " " ++ show t ++ ")"
+  show (TUnary t1 tt t) = "(TUnary "++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
+  show (TSectL tt t1 t) = "(TSectL "++ show tt ++ " "++ show t1 ++ " " ++ show t ++ ")"
+  show (TSectR t1 tt t) = "(TSectR " ++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
+  show (TPrefixOp t) = "(TPrefixOp " ++ show t ++ ")"
+  show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show tt3 ++ " " ++ show t ++ ")"
+  show (TLetExpr b tt1 tt2 t) = "(TLetExpr " ++ show b ++ " " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show t ++ ")"
+  show (TLambda lb tt t ) = "(TLambda " ++ show lb ++ " " ++ show tt ++ " " ++ show t ++ ")"
+  show (TApp tt1 tl t) = "(TApp " ++ show tt1 ++ " (" ++ show tl ++ ") " ++ show t ++ ")"
+
+
+instance showTypeBinding:: Show TypeBinding where
+  show (TLit t) = "(TLit "++ show t ++")"
+  show (TConsLit b1 b2 t) = "(TConsLit "++ show b1 ++ " " ++ show b2 ++ " " ++ show t ++")"
+  show (TListLit lb t) = "(TListLit " ++ show lb ++ " "++ show t ++")"
+  show (TNTupleLit lb t) = "(TNTupleLit " ++ show lb ++ " "++ show t ++")"

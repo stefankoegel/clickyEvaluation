@@ -6,6 +6,7 @@ import Data.Traversable (for)
 
 import Test.Parser as Parser
 import Test.Evaluator as Evaluator
+import Test.TypeChecker as TypeChecker
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
@@ -25,6 +26,8 @@ main = do
   log $ "  ...found " ++ show (length evaluatorLog) ++ " errors"
   for evaluatorLog log
 
+  TypeChecker.runTests
+
   let errorCount = length parserLog + length evaluatorLog
   if errorCount == 0
     then do
@@ -33,4 +36,3 @@ main = do
     else do
       log $ "Found " ++ show errorCount ++ " errors!"
       exit 1
-

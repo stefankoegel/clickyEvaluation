@@ -1,7 +1,7 @@
 module Evaluator where
 
-import Prelude (class Show, class Semigroup, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show)
-import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWithA, length, (:), replicate, drop, updateAt, (!!))
+import Prelude (class Show, class Semigroup, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
+import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
 import Data.StrMap (StrMap)
 import Data.StrMap as Map
 import Data.Tuple (Tuple(Tuple))
@@ -17,7 +17,7 @@ import Control.Alt ((<|>))
 import Control.Monad.State.Trans (StateT, modify, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..),Path(..))
 
 data EvalError =
     PathError Path Expr
@@ -73,19 +73,6 @@ type Matcher = ExceptT MatchingError Identity
 runMatcherM :: forall a. Matcher a -> Either MatchingError a
 runMatcherM = runIdentity <<< runExceptT
 
-data Path = Nth Int Path
-          | Fst Path
-          | Snd Path
-          | Thrd Path
-          | End
-
-instance showPath :: Show Path where
-  show p = case p of
-    Nth i p -> "(Nth " ++ show i ++ " " ++ show p ++")"
-    Fst   p -> "(Fst " ++ show p ++")"
-    Snd   p -> "(Snd " ++ show p ++")"
-    Thrd   p -> "(Thrd " ++ show p ++")"
-    End     -> "End"
 
 mapWithPath :: Path -> (Expr -> Evaluator Expr) -> Expr -> Evaluator Expr
 mapWithPath p f = go p
@@ -130,6 +117,13 @@ type Env = StrMap (List (Tuple (List Binding) Expr))
 
 defsToEnv :: (List Definition) -> Env
 defsToEnv = foldl insertDef Map.empty
+
+envToDefs :: Env -> (List Definition)
+envToDefs env = concat $ map tupleToDef $ Data.StrMap.toList env
+  where
+    tupleToDef (Tuple name defs) = map
+                                    (\(Tuple bin expr) -> Def name bin expr)
+                                    defs
 
 insertDef :: Env -> Definition -> Env
 insertDef env (Def name bindings body) = case Map.lookup name env of

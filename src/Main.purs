@@ -1,6 +1,6 @@
 module Main where
 
-import Prelude (class Applicative, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
+import Prelude (class Applicative, class Show, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
 import Data.Either (Either(..))
 import Data.Maybe (maybe)
 import Data.List (List(Nil), (:), (!!), drop, deleteAt, length, (..), zipWithA, singleton)
@@ -21,11 +21,29 @@ import Ace.Editor as Editor
 import Ace.EditSession as Session
 import Ace.Range as  Range
 
-import Web (exprToJQuery, getPath, makeDiv)
+import Data.Either
+import Data.Maybe
+import Data.List
+import Data.Tuple
+import Data.StrMap as StrMap
+import Control.Apply ((*>))
+import Control.Monad.State.Trans
+import Control.Monad.State.Class
+import Control.Monad.Eff.Class
+
+import Web (exprToJQuery, getPath, idExpr, makeDiv)
+import Parser
+import Evaluator (evalPath1, Env(), defsToEnv, envToDefs, EvalError(..), MatchingError(..))
+import AST
+import Text.Parsing.Parser (ParseError(ParseError))
+import Text.Parsing.Parser.Pos (Position(Position))
+import JSHelpers
+import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM, txToABC, prettyPrintTypeError,checkForError)
+import Web (exprToJQuery, getPath)
 import Parser (parseDefs, parseExpr)
-import Evaluator (evalPath1, Env(), Path(), defsToEnv, EvalError(..), MatchingError(..))
-import AST (Expr)
-import JSHelpers (jqMap, isEnterKey)
+import Evaluator (evalPath1, Env(),  defsToEnv)
+import AST (Expr, TypeError(..),Path())
+import JSHelpers (jqMap, isEnterKey, children, prepend)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -36,12 +54,13 @@ main = J.ready $ do
 
 type DOMEff = Eff (dom :: DOM, console :: CONSOLE, ace :: ACE)
 
-type EvalState = { env :: Env, expr :: Expr, history :: List Expr }
+type EvalState = { env :: Env, out :: Output, history :: List Output, typEnv :: TypeEnv }
 
 type EvalM a = StateT EvalState DOMEff a
 
 startEvaluation :: DOMEff Unit
 startEvaluation = do
+  clearInfo
   editor <- Ace.edit "definitions" Ace.ace
   definitions <- Editor.getValue editor
   input       <- J.select "#input"       >>= getValue
@@ -53,9 +72,19 @@ startEvaluation = do
         Left err@(ParseError { position: (Position { line: line, column: column }) })  -> do
           showInfo "Definitions" (show err)
           markText (line - 1) column
-        Right env -> do
-          clearInfo
-          void $ runStateT showEvaluationState { env: env, expr: expr, history: Nil }
+        Right env -> case buildTypeEnv (envToDefs env) of --  type Env
+          Left err -> showInfo "Definitions" (prettyPrintTypeError err)
+          Right typEnv -> do
+            let eitherTyp = typeTreeProgramnEnv typEnv expr
+            let typ' = either (\_ -> buildEmptyTypeTree typEnv expr) id eitherTyp
+            let typ = txToABC typ'
+            let idTree = idExpr expr
+            void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ, idTree:idTree}, history: Nil, typEnv:typEnv }
+
+outIfErr::forall b. String -> Either TypeError b -> DOMEff Unit
+outIfErr origin either = case either of
+  Left err -> showInfo origin (prettyPrintTypeError err)
+  Right _ -> return unit
 
 markText :: Int -> Int -> DOMEff Unit
 markText line column = do
@@ -68,15 +97,18 @@ showEvaluationState :: EvalM Unit
 showEvaluationState = do
   output <- liftEff $ prepareContainer "output"
   history <- liftEff $ prepareContainer "history"
+  typContainer <- liftEff $ prepareContainer "typ"
+  svgContainer <- liftEff $ prepareContainer "svg"
 
-  { env = env, expr = expr, history = histExprs } <- get :: EvalM EvalState
-  liftEff $ print expr
+  { env = env, out = out, history = histExprs } <- get :: EvalM EvalState
+  liftEff $ print out.expr
+  liftEff $ print out.typ
 
-  liftEff $ exprToJQuery expr >>= wrapInDiv "output" >>= flip J.append output
+  liftEff $ exprToJQuery out >>= wrapInDiv "output" >>= flip J.append output
   showHistoryList histExprs >>= liftEff <<< flip J.append history
 
   liftEff (J.find ".binary, .app, .func, .list, .if" output)
-    >>= makeClickable
+     >>= makeClickable
   liftEff (J.find ".clickable" output)
     >>= addMouseOverListener
     >>= addClickListener
@@ -87,17 +119,18 @@ showEvaluationState = do
 forIndex :: forall m a b. (Applicative m) => (List a) -> (a -> Int -> m b) -> m (List b)
 forIndex as f = zipWithA f as (0 .. (length as - 1))
 
-showHistoryList :: (List Expr) -> EvalM J.JQuery
+showHistoryList :: (List Output) -> EvalM J.JQuery
 showHistoryList exprs = do
   box <- liftEff $ J.create "<div></div>" >>= J.addClass "historyBox"
   forIndex exprs $ \expr i -> do
-    showHistory expr i >>= liftEff <<< wrapInDiv "vertical" >>= liftEff <<< flip J.append box
+    showHistory expr i >>= liftEff <<< wrapInDiv "vertical" >>= liftEff <<< wrapInDiv "frame" >>= liftEff <<< flip J.append box
   return box
 
-showHistory :: Expr -> Int -> EvalM J.JQuery
-showHistory expr i = do
+
+showHistory :: Output -> Int -> EvalM J.JQuery
+showHistory out i = do
   history <- liftEff $ J.create "<div></div>" >>= J.addClass "history"
-  liftEff $ exprToJQuery expr >>= flip J.append history
+  liftEff $ exprToJQuery out >>= flip J.append history
   es <- get :: EvalM EvalState
   let deleteHandler = \_ _ -> do
                         let es' = es { history = maybe es.history id (deleteAt i es.history) }
@@ -108,7 +141,7 @@ showHistory expr i = do
     >>= J.on "click" deleteHandler
   liftEff $ J.append delete history
   let restoreHandler = \_ _ -> do
-                         let es' = es { history = drop (i + 1) es.history, expr = maybe es.expr id (es.history !! i) }
+                         let es' = es { history = drop (i + 1) es.history, out = maybe es.out id (es.history !! i) }
                          void $ runStateT showEvaluationState es'
   restore <- liftEff $ J.create "<button></button>"
     >>= J.setText "Restore"
@@ -140,22 +173,29 @@ wrapInDiv name jq = do
 
 makeClickable :: J.JQuery -> EvalM Unit
 makeClickable jq = do
-  { env = env, expr = expr } <- get
-  liftEff $ jqMap (testEval env expr) jq
+  { env = env, out = out } <- get
+  let expr = out.expr
+  let typeTree = out.typ
+  liftEff $ jqMap (testEval env expr typeTree) jq
   where
-  testEval :: Env -> Expr -> J.JQuery -> DOMEff Unit
-  testEval env expr jq = do
-    path <- getPath jq
-    case evalPath1 env path expr of
-      Left err -> displayEvalError err jq
-      Right _  -> void $ J.addClass "clickable" jq
+  testEval :: Env -> Expr -> TypeTree -> J.JQuery -> DOMEff Unit
+  testEval env expr typeTree jq = do
+    mpath <- getPath jq
+    case mpath of
+      Nothing   -> return unit
+      Just path ->
+        case evalPath1 env path expr of
+          Left err -> displayEvalError err jq
+          Right _  -> if checkForError path typeTree
+            then return unit
+            else void $ J.addClass "clickable" jq
 
 displayEvalError :: EvalError -> J.JQuery -> DOMEff Unit
 displayEvalError err jq = case err of
-  DivByZero -> void $ makeDiv "Division by zero!" (singleton "evalError") >>= flip J.append jq
+  DivByZero -> void $ makeDiv "Division by zero!" (singleton "evalError") >>= flip prepend jq
   NoMatchingFunction _ errs -> if (any missesArguments errs)
     then return unit
-    else void $ makeDiv "No matching function!" (singleton "evalError") >>= flip J.append jq
+    else void $ makeDiv "No matching function!" (singleton "evalError") >>= flip prepend jq
   _         -> return unit
   where
     missesArguments (TooFewArguments _ _) = true
@@ -167,7 +207,7 @@ addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
   where
   handler :: J.JQueryEvent -> J.JQuery -> DOMEff Unit
   handler jEvent jq = do
-    J.stopImmediatePropagation jEvent
+    J.stopPropagation jEvent
     removeMouseOver
     J.addClass "mouseOver" jq
     return unit
@@ -180,22 +220,29 @@ addClickListener jq = do
   handler :: EvalState -> J.JQueryEvent -> J.JQuery -> DOMEff Unit
   handler evaluationState jEvent jq = do
     J.stopImmediatePropagation jEvent
-    path <- getPath jq
-    void $ runStateT (evalExpr path) evaluationState
+    mpath <- getPath jq
+    case mpath of
+      Nothing   -> return unit
+      Just path ->
+        void $ runStateT (evalExpr path) evaluationState
 
 removeMouseOver :: DOMEff Unit
 removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
 
 evalExpr :: Path -> EvalM Unit
 evalExpr path = do
-  { env = env, expr = expr } <- get
+  { env = env, out = out, typEnv = typEnv} <- get
+  let expr = out.expr
   liftEff $ print path
   case evalPath1 env path expr of
     Left msg    -> liftEff $ showInfo "execution" (show msg)
     Right expr' -> do
-      modify (\es -> es { expr = expr' })
-      modify (\es -> es { history = expr : es.history })
-      showEvaluationState
+        let eitherTyp = typeTreeProgramnEnv typEnv expr'
+        let typ'' = either (\_ -> buildEmptyTypeTree typEnv expr') id eitherTyp
+        let typ' = txToABC typ''
+        modify (\es -> es { out = {expr:expr', typ:typ', idTree:idExpr expr'} })
+        modify (\es -> es { history = out : es.history })
+        showEvaluationState
 
 getValue :: J.JQuery -> DOMEff String
 getValue jq = unsafeFromForeign <$> J.getValue jq
