@@ -8803,7 +8803,7 @@ var PS = { };
   };                                                    
   var buildExpandDiv = function (t) {
       return function __do() {
-          var v = makeDiv(TypeChecker.prettyPrintType(t))(new Data_List.Cons("type", Data_List.Nil.value))();
+          var v = makeDiv("::" + TypeChecker.prettyPrintType(t))(new Data_List.Cons("type", Data_List.Nil.value))();
           (function () {
               if (t instanceof AST["TypeError"]) {
                   return Control_Monad_Eff_JQuery.css({
@@ -8813,7 +8813,7 @@ var PS = { };
               return Prelude["return"](Control_Monad_Eff.applicativeEff)(v);
           })()();
           var v1 = makeDiv("")(new Data_List.Cons("expand", Data_List.Nil.value))();
-          var v2 = makeDiv("\u25be")(new Data_List.Cons("type-arr", Data_List.Nil.value))();
+          var v2 = makeDiv("\u25bc")(new Data_List.Cons("type-arr", Data_List.Nil.value))();
           Control_Monad_Eff_JQuery.append(v2)(v1)();
           Control_Monad_Eff_JQuery.append(v)(v1)();
           Control_Monad_Eff_JQuery.on("click")(function (e) {
