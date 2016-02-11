@@ -23,11 +23,16 @@
     <div id="info"></div>
 
     <h3>Expression</h3>
-    <input type="text" id="input" size="120" value="sum (map (^2) [1, 2, 3, 4])">
+    <input type="text" id="input" size="120" value="sum (map (^2) [1,2,3,4])">
 
-    <div id="output-container">
+  <div class="frame">
+    <div id="topLevelOutput-container">
+        <div id="output-container">
+        </div>
     </div>
+  </div>
 
+<h3> History </h3>
     <div id="history-container">
     </div>
 
@@ -57,10 +62,10 @@ elem e []     = False
 elem e (x:xs) = if e == x then True else elem e xs
 
 max a b = if a >= b then a else b
-min a b = if b >= a then a else b
+min a b = if a <= b then a else b
 
-maximum (x:xs) = foldr max x xs
-minimum (x:xs) = foldr min x xs
+maximum (x:xs) = foldl max x xs
+minimum (x:xs) = foldl min x xs
 
 length []     = 0
 length (x:xs) = 1 + length xs
