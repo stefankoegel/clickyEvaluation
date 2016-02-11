@@ -306,6 +306,7 @@ instance showAD :: Show AD where
 instance eqAD :: Eq AD where
   eq (TList a) (TList b) = eq a b
   eq (TTuple a) (TTuple b) = eq a b
+  eq _          _          = false
 
 instance showTypeError :: Show TypeError where
   show (UnificationFail a b) = "(UnificationFail "++ show a ++ " " ++ show b ++")"
