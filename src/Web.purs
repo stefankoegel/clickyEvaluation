@@ -44,7 +44,7 @@ exprToJQuery output = go (output.expr)
   where
     go (Atom (Name _)) = exprToJQuery' output
     go (Atom _) = topLevel
-    go (Binary _ _ _) = topLevel
+    go (Binary _ _ _) = exprToJQuery' output
     go (PrefixOp _) = topLevel
     go _ = exprToJQuery' output
 
@@ -182,15 +182,13 @@ binary op opt opi t i j1 j2 = do
   dOp <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
   J.append dOp dBin
   J.append j2 dBin
-  case t of
-    (TypeError _) -> do
-      jtypExp <- makeDiv "" (singleton "binary typExpContainer")
-      jExpand <- buildExpandDiv t
-      J.append jExpand jtypExp
-      J.addClass "expr" dBin
-      J.append dBin jtypExp
-      return jtypExp
-    _ -> return dBin
+  jtypExp <- makeDiv "" (singleton "binary typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  J.addClass "expr" dBin
+  J.append dBin jtypExp
+  return jtypExp
+
 
 
 section :: forall eff. J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
