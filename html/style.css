@@ -35,7 +35,7 @@ h3 {
 }
 
 
-div.list, div.lambda, div.section, div.name, div.top, div.tuple{
+.list, .lambda, .section, .name, .top, .tuple {
   font-family: monospace;
   font-size: 15px;
   border: none;
@@ -46,7 +46,7 @@ div.list, div.lambda, div.section, div.name, div.top, div.tuple{
   box-shadow: 1.5px 1.5px 5px 0 #333;
 }
 
-div.func{
+.func {
   background: inherit;
   box-shadow: none;
   border-width: thin;
