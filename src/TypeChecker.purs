@@ -422,6 +422,13 @@ extractConsLit tv (ConsLit a (Lit b)) = do
   let ltyp = AD $ TList (apply s1 tv)
   return $ Tuple (Cons (Tuple b $ Forall Nil ltyp) list') $ (apply s1 (TConsLit typ (TLit ltyp) ltyp))
 
+extractConsLit tv (ConsLit a b@(ListLit _)) = do
+  Tuple list1 typ1 <- extractBinding a
+  Tuple list2 t2@(TListLit b1 (AD (TList typ2))) <- extractBinding b
+  s1 <- unify tv (extractBindingType typ1)
+  s2 <- unify (apply s1 tv) (typ2)
+  return $ Tuple (apply s2 (apply s1 (list1 ++ list2))) (apply s2 (apply s1 (TConsLit typ1 t2 (AD $ TList typ2))))
+
 extractConsLit _ _ = throwError $ UnknownError "congrats you found a bug in TypeChecker.extractConsLit"
 
 
