@@ -121,16 +121,18 @@ forIndex as f = zipWithA f as (0 .. (length as - 1))
 
 showHistoryList :: (List Output) -> EvalM J.JQuery
 showHistoryList exprs = do
-  box <- liftEff $ J.create "<div></div>" >>= J.addClass "historyBox"
+  box <- liftEff $ J.create "<table></table>" >>= J.addClass "historyBox" >>= J.addClass "vertical" >>= J.addClass "frame"
   forIndex exprs $ \expr i -> do
-    showHistory expr i >>= liftEff <<< wrapInDiv "vertical" >>= liftEff <<< wrapInDiv "frame" >>= liftEff <<< flip J.append box
+    showHistoryRow expr i >>= liftEff <<< flip J.append box
   return box
 
 
-showHistory :: Output -> Int -> EvalM J.JQuery
-showHistory out i = do
-  history <- liftEff $ J.create "<div></div>" >>= J.addClass "history"
-  liftEff $ exprToJQuery out >>= flip J.append history
+showHistoryRow :: Output -> Int -> EvalM J.JQuery
+showHistoryRow out i = do
+  row <- liftEff $ J.create "<tr></tr>" >>= J.addClass "history"
+  tdExpr <- liftEff $ J.create "<td></td>"
+  liftEff $ exprToJQuery out >>= flip J.append tdExpr
+  liftEff $ J.append tdExpr row
   es <- get :: EvalM EvalState
   let deleteHandler = \_ _ -> do
                         let es' = es { history = maybe es.history id (deleteAt i es.history) }
@@ -139,7 +141,9 @@ showHistory out i = do
     >>= J.setText "Delete"
     >>= J.addClass "delete"
     >>= J.on "click" deleteHandler
-  liftEff $ J.append delete history
+  tdDelete <- liftEff $ J.create "<td></td>"
+  liftEff $ J.append delete tdDelete
+  liftEff $ J.append tdDelete row
   let restoreHandler = \_ _ -> do
                          let es' = es { history = drop (i + 1) es.history, out = maybe es.out id (es.history !! i) }
                          void $ runStateT showEvaluationState es'
@@ -147,8 +151,10 @@ showHistory out i = do
     >>= J.setText "Restore"
     >>= J.addClass "restore"
     >>= J.on "click" restoreHandler
-  liftEff $ J.append restore history
-  return history
+  tdRestore <- liftEff $ J.create "<td></td>"
+  liftEff $ J.append restore tdRestore
+  liftEff $ J.append tdRestore row
+  return row
 
 showInfo :: String -> String -> DOMEff Unit
 showInfo origin msg = do
