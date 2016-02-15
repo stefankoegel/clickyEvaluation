@@ -22,7 +22,7 @@ h3 {
   padding: 10px;
 }
 
-#input, #definitions,  .historyBox, div.clickable, button {
+#input, #definitions, div.clickable, button {
   font-family: monospace;
   font-size: 15px;
   border: none;
@@ -34,8 +34,7 @@ h3 {
   transition: background .25s ease-in-out;
 }
 
-
-div.list, div.lambda, div.section, div.name, div.top, div.tuple{
+.list, .lambda, .section, .name, .top, .tuple {
   font-family: monospace;
   font-size: 15px;
   border: none;
@@ -46,7 +45,7 @@ div.list, div.lambda, div.section, div.name, div.top, div.tuple{
   box-shadow: 1.5px 1.5px 5px 0 #333;
 }
 
-div.func{
+.func {
   background: inherit;
   box-shadow: none;
   border-width: thin;
@@ -95,18 +94,24 @@ button.restore:hover {
   cursor: default;
 }
 
-.output, .history, .historyBox {
+.output, .historyBox {
   display: inline-block;
   font-weight: bold;
   padding: 10px;
   margin: 5px;
 }
 
+table.historyBox {
+  border-collapse: collapse;
+}
 
-.history, .historyBox {
-  border-radius: 10px;
-  background: #bbb;
-  box-shadow: 2px 2px 5px 0 #333;
+.historyBox td {
+  border: none;
+  padding: 10px;
+}
+
+.historyBox tr {
+  display: table-row;
 }
 
 div.historyBox {
@@ -116,10 +121,6 @@ div.historyBox {
   display: block;
 }
 
-.history {
-  margin: 15px;
-}
-
 .binary, .app, .if {
   background: #bbb;
   padding: 10px;
@@ -127,7 +128,7 @@ div.historyBox {
   box-shadow: 2px 2px 5px 0 #333;
 }
 
-.output div, .history div {
+.output div, .historyBox div {
   display: inline-block;
   margin: 0px 5px;
 }
