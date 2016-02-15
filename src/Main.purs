@@ -109,7 +109,7 @@ showEvaluationState = do
 
   liftEff (J.find ".binary, .app, .func, .list, .if, .name" output)
      >>= makeClickable
-  liftEff (J.find ".clickable" output)
+  liftEff (J.find ".output div" output)
     >>= addMouseOverListener
     >>= addClickListener
   liftEff (J.body >>= J.on "mouseover" (\_ _ -> removeMouseOver))
@@ -241,7 +241,7 @@ evalExpr path = do
   let expr = out.expr
   liftEff $ print path
   case evalPath1 env path expr of
-    Left msg    -> liftEff $ showInfo "execution" (show msg)
+    Left msg    -> return unit
     Right expr' -> do
         let eitherTyp = typeTreeProgramnEnv typEnv expr'
         let typ'' = either (\_ -> buildEmptyTypeTree typEnv expr') id eitherTyp
