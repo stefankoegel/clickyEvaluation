@@ -124,7 +124,9 @@ showHistoryList exprs = do
   box <- liftEff $ J.create "<table></table>" >>= J.addClass "historyBox" >>= J.addClass "vertical" >>= J.addClass "frame"
   forIndex exprs $ \expr i -> do
     showHistoryRow expr i >>= liftEff <<< flip J.append box
-  return box
+  scroll <- liftEff $ J.create "<div></div>" >>= J.addClass "scroll"
+  liftEff $ J.append box scroll
+  return scroll
 
 
 showHistoryRow :: Output -> Int -> EvalM J.JQuery

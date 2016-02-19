@@ -94,6 +94,16 @@ button.restore:hover {
   cursor: default;
 }
 
+div.scroll {
+  max-height: 300px;
+  max-width: 90%;
+  overflow-y: auto;
+  display: inline-block;
+  box-shadow: 3px 3px 10px 0 #333;
+  border: #888 1px solid;
+  border-radius: 5px;
+}
+
 .output, .historyBox {
   display: inline-block;
   font-weight: bold;
