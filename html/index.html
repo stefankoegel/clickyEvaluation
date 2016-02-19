@@ -52,6 +52,9 @@ any p = or . map p
 head (x:xs) = x
 tail (x:xs) = xs
 
+fst (a, _) = a
+snd (_, b) = b
+
 take 0 xs     = []
 take n (x:xs) = x : take (n - 1) xs
 
