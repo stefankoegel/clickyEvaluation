@@ -43,7 +43,7 @@ import Web (exprToJQuery, getPath)
 import Parser (parseDefs, parseExpr)
 import Evaluator (evalPath1, Env(),  defsToEnv)
 import AST (Expr, TypeError(..),Path())
-import JSHelpers (jqMap, isEnterKey, children, prepend)
+import JSHelpers (jqMap, isEnterKey, children, prepend, warnOnRefresh)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -95,6 +95,7 @@ markText line column = do
 
 showEvaluationState :: EvalM Unit
 showEvaluationState = do
+  liftEff $ warnOnRefresh
   output <- liftEff $ prepareContainer "output"
   history <- liftEff $ prepareContainer "history"
   typContainer <- liftEff $ prepareContainer "typ"

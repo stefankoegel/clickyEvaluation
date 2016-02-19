@@ -67,3 +67,10 @@ exports.prepend = function(child) {
     }
   }
 }
+
+exports.warnOnRefresh = function() {
+  window.onbeforeunload = function() {
+    return "Your changes in the Definitions will be lost when you leave or refresh! Are you sure?";
+  };
+  return {};
+};
