@@ -113,6 +113,9 @@ mapIndex i f as = do
 evalPath1 :: Env -> Path -> Expr -> Either EvalError Expr
 evalPath1 env path expr = runEvalM $ mapWithPath path (eval1 env) expr
 
+evalPathAll :: Env -> Path -> Expr -> Either EvalError Expr
+evalPathAll env path expr = runEvalM $ mapWithPath path (return <<< eval env) expr
+
 type Env = StrMap (List (Tuple (List Binding) Expr))
 
 defsToEnv :: (List Definition) -> Env

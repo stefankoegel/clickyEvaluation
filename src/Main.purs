@@ -41,9 +41,9 @@ import JSHelpers
 import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM, txToABC, prettyPrintTypeError,checkForError)
 import Web (exprToJQuery, getPath)
 import Parser (parseDefs, parseExpr)
-import Evaluator (evalPath1, Env(),  defsToEnv)
+import Evaluator (evalPath1, evalPathAll, Env(),  defsToEnv)
 import AST (Expr, TypeError(..),Path())
-import JSHelpers (jqMap, isEnterKey, children, prepend, warnOnRefresh)
+import JSHelpers (jqMap, isEnterKey, children, prepend, warnOnRefresh, shiftKeyPressed)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -232,18 +232,19 @@ addClickListener jq = do
     mpath <- getPath jq
     case mpath of
       Nothing   -> return unit
-      Just path ->
-        void $ runStateT (evalExpr path) evaluationState
+      Just path -> case shiftKeyPressed jEvent of
+        false -> void $ runStateT (evalExpr evalPath1 path) evaluationState
+        true  -> void $ runStateT (evalExpr evalPathAll path) evaluationState
 
 removeMouseOver :: DOMEff Unit
 removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
 
-evalExpr :: Path -> EvalM Unit
-evalExpr path = do
+evalExpr :: (Env -> Path -> Expr -> Either EvalError Expr) -> Path -> EvalM Unit
+evalExpr eval path = do
   { env = env, out = out, typEnv = typEnv} <- get
   let expr = out.expr
   liftEff $ print path
-  case evalPath1 env path expr of
+  case eval env path expr of
     Left msg    -> return unit
     Right expr' -> do
         let eitherTyp = typeTreeProgramnEnv typEnv expr'

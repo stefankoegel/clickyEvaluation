@@ -74,3 +74,7 @@ exports.warnOnRefresh = function() {
   };
   return {};
 };
+
+exports.shiftKeyPressed = function(event) {
+     return (!!(event.shiftKey))
+};
