@@ -3143,6 +3143,65 @@ var PS = { };
           return Prelude.compare(Prelude.ordString)(v.value0)(v1.value0);
       };
   });
+  var eqOp = new Prelude.Eq(function (v) {
+      return function (v1) {
+          if (v instanceof Composition && v1 instanceof Composition) {
+              return true;
+          };
+          if (v instanceof Power && v1 instanceof Power) {
+              return true;
+          };
+          if (v instanceof Mul && v1 instanceof Mul) {
+              return true;
+          };
+          if (v instanceof Div && v1 instanceof Div) {
+              return true;
+          };
+          if (v instanceof Mod && v1 instanceof Mod) {
+              return true;
+          };
+          if (v instanceof Add && v1 instanceof Add) {
+              return true;
+          };
+          if (v instanceof Sub && v1 instanceof Sub) {
+              return true;
+          };
+          if (v instanceof Colon && v1 instanceof Colon) {
+              return true;
+          };
+          if (v instanceof Append && v1 instanceof Append) {
+              return true;
+          };
+          if (v instanceof Equ && v1 instanceof Equ) {
+              return true;
+          };
+          if (v instanceof Neq && v1 instanceof Neq) {
+              return true;
+          };
+          if (v instanceof Lt && v1 instanceof Lt) {
+              return true;
+          };
+          if (v instanceof Leq && v1 instanceof Leq) {
+              return true;
+          };
+          if (v instanceof Gt && v1 instanceof Gt) {
+              return true;
+          };
+          if (v instanceof Geq && v1 instanceof Geq) {
+              return true;
+          };
+          if (v instanceof And && v1 instanceof And) {
+              return true;
+          };
+          if (v instanceof Or && v1 instanceof Or) {
+              return true;
+          };
+          if (v instanceof Dollar && v1 instanceof Dollar) {
+              return true;
+          };
+          return false;
+      };
+  });
   var eqAtom = new Prelude.Eq(function (v) {
       return function (v1) {
           if (v instanceof AInt && v1 instanceof AInt) {
@@ -3156,6 +3215,64 @@ var PS = { };
           };
           if (v instanceof Name && v1 instanceof Name) {
               return v.value0 === v1.value0;
+          };
+          return false;
+      };
+  });
+  var eqBinding = new Prelude.Eq(function (v) {
+      return function (v1) {
+          if (v instanceof Lit && v1 instanceof Lit) {
+              return Prelude["=="](eqAtom)(v.value0)(v1.value0);
+          };
+          if (v instanceof ConsLit && v1 instanceof ConsLit) {
+              return Prelude["=="](eqBinding)(v.value0)(v1.value0) && Prelude["=="](eqBinding)(v.value1)(v1.value1);
+          };
+          if (v instanceof ListLit && v1 instanceof ListLit) {
+              return Prelude["=="](Data_List.eqList(eqBinding))(v.value0)(v1.value0);
+          };
+          if (v instanceof NTupleLit && v1 instanceof NTupleLit) {
+              return Prelude["=="](Data_List.eqList(eqBinding))(v.value0)(v1.value0);
+          };
+          return false;
+      };
+  });
+  var eqExpr = new Prelude.Eq(function (v) {
+      return function (v1) {
+          if (v instanceof Atom && v1 instanceof Atom) {
+              return Prelude["=="](eqAtom)(v.value0)(v1.value0);
+          };
+          if (v instanceof List && v1 instanceof List) {
+              return Prelude["=="](Data_List.eqList(eqExpr))(v.value0)(v1.value0);
+          };
+          if (v instanceof NTuple && v1 instanceof NTuple) {
+              return Prelude["=="](Data_List.eqList(eqExpr))(v.value0)(v1.value0);
+          };
+          if (v instanceof Binary && v1 instanceof Binary) {
+              return Prelude["=="](eqOp)(v.value0)(v1.value0) && (Prelude["=="](eqExpr)(v.value1)(v1.value1) && Prelude["=="](eqExpr)(v.value2)(v1.value2));
+          };
+          if (v instanceof Unary && v1 instanceof Unary) {
+              return Prelude["=="](eqOp)(v.value0)(v1.value0) && Prelude["=="](eqExpr)(v.value1)(v1.value1);
+          };
+          if (v instanceof SectL && v1 instanceof SectL) {
+              return Prelude["=="](eqExpr)(v.value0)(v1.value0) && Prelude["=="](eqOp)(v.value1)(v1.value1);
+          };
+          if (v instanceof SectR && v1 instanceof SectR) {
+              return Prelude["=="](eqOp)(v.value0)(v1.value0) && Prelude["=="](eqExpr)(v.value1)(v1.value1);
+          };
+          if (v instanceof PrefixOp && v1 instanceof PrefixOp) {
+              return Prelude["=="](eqOp)(v.value0)(v1.value0);
+          };
+          if (v instanceof IfExpr && v1 instanceof IfExpr) {
+              return Prelude["=="](eqExpr)(v.value0)(v1.value0) && (Prelude["=="](eqExpr)(v.value1)(v1.value1) && Prelude["=="](eqExpr)(v.value2)(v1.value2));
+          };
+          if (v instanceof LetExpr && v1 instanceof LetExpr) {
+              return Prelude["=="](eqBinding)(v.value0)(v1.value0) && (Prelude["=="](eqExpr)(v.value1)(v1.value1) && Prelude["=="](eqExpr)(v.value2)(v1.value2));
+          };
+          if (v instanceof Lambda && v1 instanceof Lambda) {
+              return Prelude["=="](Data_List.eqList(eqBinding))(v.value0)(v1.value0) && Prelude["=="](eqExpr)(v.value1)(v1.value1);
+          };
+          if (v instanceof App && v1 instanceof App) {
+              return Prelude["=="](eqExpr)(v.value0)(v1.value0) && Prelude["=="](Data_List.eqList(eqExpr))(v.value1)(v1.value1);
           };
           return false;
       };
@@ -3320,8 +3437,11 @@ var PS = { };
   exports["Or"] = Or;
   exports["Dollar"] = Dollar;
   exports["pPrintOp"] = pPrintOp;
+  exports["eqOp"] = eqOp;
   exports["eqAtom"] = eqAtom;
   exports["ordAtom"] = ordAtom;
+  exports["eqExpr"] = eqExpr;
+  exports["eqBinding"] = eqBinding;
   exports["showPath"] = showPath;
   exports["showOp"] = showOp;
   exports["showAtom"] = showAtom;
@@ -5901,17 +6021,17 @@ var PS = { };
   var wrapLambda = function (binds) {
       return function (args) {
           return function (body) {
-              var $26 = Prelude.compare(Prelude.ordInt)(Data_List.length(binds))(Data_List.length(args));
-              if ($26 instanceof Prelude.EQ) {
+              var $27 = Prelude.compare(Prelude.ordInt)(Data_List.length(binds))(Data_List.length(args));
+              if ($27 instanceof Prelude.EQ) {
                   return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(body);
               };
-              if ($26 instanceof Prelude.GT) {
+              if ($27 instanceof Prelude.GT) {
                   return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.Lambda(Data_List.drop(Data_List.length(args))(binds), body));
               };
-              if ($26 instanceof Prelude.LT) {
+              if ($27 instanceof Prelude.LT) {
                   return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.App(body, Data_List.drop(Data_List.length(binds))(args)));
               };
-              throw new Error("Failed pattern match at Evaluator line 171, column 1 - line 172, column 1: " + [ $26.constructor.name ]);
+              throw new Error("Failed pattern match at Evaluator line 200, column 1 - line 201, column 1: " + [ $27.constructor.name ]);
           };
       };
   };
@@ -5943,32 +6063,32 @@ var PS = { };
           return new MoreErrors(e1, e2);
       };
   });
-  var runMatcherM = function ($354) {
-      return Data_Identity.runIdentity(Control_Monad_Except_Trans.runExceptT($354));
+  var runMatcherM = function ($382) {
+      return Data_Identity.runIdentity(Control_Monad_Except_Trans.runExceptT($382));
   };
-  var runEvalM = function ($355) {
-      return Data_Identity.runIdentity(Control_Monad_Except_Trans.runExceptT($355));
+  var runEvalM = function ($383) {
+      return Data_Identity.runIdentity(Control_Monad_Except_Trans.runExceptT($383));
   };                
   var mapIndex = function (i) {
       return function (f) {
           return function (as) {
-              var $62 = Data_List["!!"](as)(i);
-              if ($62 instanceof Data_Maybe.Nothing) {
+              var $63 = Data_List["!!"](as)(i);
+              if ($63 instanceof Data_Maybe.Nothing) {
                   return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new IndexError(i, Data_List.length(as)));
               };
-              if ($62 instanceof Data_Maybe.Just) {
-                  return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Data_Identity.monadIdentity))(f($62.value0))(function (v) {
-                      var $64 = Data_List.updateAt(i)(v)(as);
-                      if ($64 instanceof Data_Maybe.Nothing) {
+              if ($63 instanceof Data_Maybe.Just) {
+                  return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Data_Identity.monadIdentity))(f($63.value0))(function (v) {
+                      var $65 = Data_List.updateAt(i)(v)(as);
+                      if ($65 instanceof Data_Maybe.Nothing) {
                           return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new IndexError(i, Data_List.length(as)));
                       };
-                      if ($64 instanceof Data_Maybe.Just) {
-                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($64.value0);
+                      if ($65 instanceof Data_Maybe.Just) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($65.value0);
                       };
-                      throw new Error("Failed pattern match at Evaluator line 103, column 1 - line 104, column 1: " + [ $64.constructor.name ]);
+                      throw new Error("Failed pattern match at Evaluator line 103, column 1 - line 104, column 1: " + [ $65.constructor.name ]);
                   });
               };
-              throw new Error("Failed pattern match at Evaluator line 103, column 1 - line 104, column 1: " + [ $62.constructor.name ]);
+              throw new Error("Failed pattern match at Evaluator line 103, column 1 - line 104, column 1: " + [ $63.constructor.name ]);
           };
       };
   };
@@ -6038,14 +6158,14 @@ var PS = { };
   };
   var insertDef = function (env) {
       return function (v) {
-          var $109 = Data_StrMap.lookup(v.value0)(env);
-          if ($109 instanceof Data_Maybe.Nothing) {
+          var $110 = Data_StrMap.lookup(v.value0)(env);
+          if ($110 instanceof Data_Maybe.Nothing) {
               return Data_StrMap.insert(v.value0)(Data_List.singleton(new Data_Tuple.Tuple(v.value1, v.value2)))(env);
           };
-          if ($109 instanceof Data_Maybe.Just) {
-              return Data_StrMap.insert(v.value0)(Prelude["++"](Data_List.semigroupList)($109.value0)(Data_List.singleton(new Data_Tuple.Tuple(v.value1, v.value2))))(env);
+          if ($110 instanceof Data_Maybe.Just) {
+              return Data_StrMap.insert(v.value0)(Prelude["++"](Data_List.semigroupList)($110.value0)(Data_List.singleton(new Data_Tuple.Tuple(v.value1, v.value2))))(env);
           };
-          throw new Error("Failed pattern match at Evaluator line 128, column 1 - line 129, column 1: " + [ $109.constructor.name ]);
+          throw new Error("Failed pattern match at Evaluator line 131, column 1 - line 132, column 1: " + [ $110.constructor.name ]);
       };
   };
   var freeVariables = function (v) {
@@ -6068,7 +6188,7 @@ var PS = { };
           if (Prelude.otherwise) {
               return new StrictnessError(bs, es);
           };
-          throw new Error("Failed pattern match at Evaluator line 249, column 1 - line 250, column 1: " + [ bs.constructor.name, es.constructor.name ]);
+          throw new Error("Failed pattern match at Evaluator line 278, column 1 - line 279, column 1: " + [ bs.constructor.name, es.constructor.name ]);
       };
   };
   var match$prime = function (v) {
@@ -6077,14 +6197,14 @@ var PS = { };
               return Control_Monad_State_Class.modify(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(Data_StrMap.insert(v.value0.value0)(v1));
           };
           if (v instanceof AST.Lit && v1 instanceof AST.Atom) {
-              var $126 = Prelude["=="](AST.eqAtom)(v.value0)(v1.value0);
-              if ($126) {
+              var $127 = Prelude["=="](AST.eqAtom)(v.value0)(v1.value0);
+              if ($127) {
                   return Prelude["return"](Control_Monad_State_Trans.applicativeStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(Prelude.unit);
               };
-              if (!$126) {
+              if (!$127) {
                   return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(new MatchingError(new AST.Lit(v.value0), new AST.Atom(v1.value0)));
               };
-              throw new Error("Failed pattern match: " + [ $126.constructor.name ]);
+              throw new Error("Failed pattern match: " + [ $127.constructor.name ]);
           };
           if (v instanceof AST.Lit) {
               return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(checkStrictness(new AST.Lit(v.value0))(v1));
@@ -6105,37 +6225,32 @@ var PS = { };
               return Control_Apply["*>"](Control_Monad_State_Trans.applyStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(match$prime(v.value0.value0)(v1.value1))(match$prime(new AST.ListLit(v.value0.value1))(v1.value2));
           };
           if (v instanceof AST.ListLit && v1 instanceof AST.List) {
-              var $151 = Data_List.length(v.value0) === Data_List.length(v1.value0);
-              if ($151) {
+              var $152 = Data_List.length(v.value0) === Data_List.length(v1.value0);
+              if ($152) {
                   return Prelude["void"](Control_Monad_State_Trans.functorStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(Data_List.zipWithA(Control_Monad_State_Trans.applicativeStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(match$prime)(v.value0)(v1.value0));
               };
-              if (!$151) {
+              if (!$152) {
                   return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(new MatchingError(new AST.ListLit(v.value0), new AST.List(v1.value0)));
               };
-              throw new Error("Failed pattern match: " + [ $151.constructor.name ]);
+              throw new Error("Failed pattern match: " + [ $152.constructor.name ]);
           };
           if (v instanceof AST.ListLit) {
               return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(checkStrictness(new AST.ListLit(v.value0))(v1));
           };
           if (v instanceof AST.NTupleLit && v1 instanceof AST.NTuple) {
-              var $155 = Data_List.length(v.value0) === Data_List.length(v1.value0);
-              if ($155) {
+              var $156 = Data_List.length(v.value0) === Data_List.length(v1.value0);
+              if ($156) {
                   return Prelude["void"](Control_Monad_State_Trans.functorStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(Data_List.zipWithA(Control_Monad_State_Trans.applicativeStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(match$prime)(v.value0)(v1.value0));
               };
-              if (!$155) {
+              if (!$156) {
                   return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(new MatchingError(new AST.NTupleLit(v.value0), new AST.NTuple(v1.value0)));
               };
-              throw new Error("Failed pattern match: " + [ $155.constructor.name ]);
+              throw new Error("Failed pattern match: " + [ $156.constructor.name ]);
           };
           if (v instanceof AST.NTupleLit) {
               return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(checkStrictness(new AST.NTupleLit(v.value0))(v1));
           };
           throw new Error("Failed pattern match: " + [ v.constructor.name, v1.constructor.name ]);
-      };
-  };
-  var matchls$prime = function (bs) {
-      return function (es) {
-          return Control_Monad_State_Trans.execStateT(Control_Monad_Except_Trans.applyExceptT(Data_Identity.applyIdentity))(Data_List.zipWithA(Control_Monad_State_Trans.applicativeStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(match$prime)(bs)(es))(Data_StrMap.empty);
       };
   };
   var boundNames = (function () {
@@ -6233,9 +6348,9 @@ var PS = { };
       if (op instanceof AST.Append) {
           return function (es1) {
               return function (es2) {
-                  var $203 = new Data_Tuple.Tuple(es1, es2);
-                  if ($203.value0 instanceof AST.List && $203.value1 instanceof AST.List) {
-                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.List.create(Prelude["++"](Data_List.semigroupList)($203.value0.value0)($203.value1.value0)));
+                  var $204 = new Data_Tuple.Tuple(es1, es2);
+                  if ($204.value0 instanceof AST.List && $204.value1 instanceof AST.List) {
+                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.List.create(Prelude["++"](Data_List.semigroupList)($204.value0.value0)($204.value1.value0)));
                   };
                   return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.Append.value, es1, es2));
               };
@@ -6262,14 +6377,14 @@ var PS = { };
       if (op instanceof AST.And) {
           return function (e1) {
               return function (e2) {
-                  var $208 = new Data_Tuple.Tuple(e1, e2);
-                  if ($208.value0 instanceof AST.Atom && ($208.value0.value0 instanceof AST.Bool && !$208.value0.value0.value0)) {
+                  var $209 = new Data_Tuple.Tuple(e1, e2);
+                  if ($209.value0 instanceof AST.Atom && ($209.value0.value0 instanceof AST.Bool && !$209.value0.value0.value0)) {
                       return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(false)));
                   };
-                  if ($208.value1 instanceof AST.Atom && ($208.value1.value0 instanceof AST.Bool && !$208.value1.value0.value0)) {
+                  if ($209.value1 instanceof AST.Atom && ($209.value1.value0 instanceof AST.Bool && !$209.value1.value0.value0)) {
                       return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(false)));
                   };
-                  if ($208.value0 instanceof AST.Atom && ($208.value0.value0 instanceof AST.Bool && ($208.value0.value0.value0 && ($208.value1 instanceof AST.Atom && ($208.value1.value0 instanceof AST.Bool && $208.value1.value0.value0))))) {
+                  if ($209.value0 instanceof AST.Atom && ($209.value0.value0 instanceof AST.Bool && ($209.value0.value0.value0 && ($209.value1 instanceof AST.Atom && ($209.value1.value0 instanceof AST.Bool && $209.value1.value0.value0))))) {
                       return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(true)));
                   };
                   return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.And.value, e1, e2));
@@ -6279,14 +6394,14 @@ var PS = { };
       if (op instanceof AST.Or) {
           return function (e1) {
               return function (e2) {
-                  var $225 = new Data_Tuple.Tuple(e1, e2);
-                  if ($225.value0 instanceof AST.Atom && ($225.value0.value0 instanceof AST.Bool && $225.value0.value0.value0)) {
+                  var $226 = new Data_Tuple.Tuple(e1, e2);
+                  if ($226.value0 instanceof AST.Atom && ($226.value0.value0 instanceof AST.Bool && $226.value0.value0.value0)) {
                       return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(true)));
                   };
-                  if ($225.value1 instanceof AST.Atom && ($225.value1.value0 instanceof AST.Bool && $225.value1.value0.value0)) {
+                  if ($226.value1 instanceof AST.Atom && ($226.value1.value0 instanceof AST.Bool && $226.value1.value0.value0)) {
                       return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(true)));
                   };
-                  if ($225.value0 instanceof AST.Atom && ($225.value0.value0 instanceof AST.Bool && (!$225.value0.value0.value0 && ($225.value1 instanceof AST.Atom && ($225.value1.value0 instanceof AST.Bool && !$225.value1.value0.value0))))) {
+                  if ($226.value0 instanceof AST.Atom && ($226.value0.value0 instanceof AST.Bool && (!$226.value0.value0.value0 && ($226.value1 instanceof AST.Atom && ($226.value1.value0 instanceof AST.Bool && !$226.value1.value0.value0))))) {
                       return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(false)));
                   };
                   return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.And.value, e1, e2));
@@ -6307,28 +6422,28 @@ var PS = { };
               };
           };
       };
-      throw new Error("Failed pattern match at Evaluator line 179, column 1 - line 180, column 1: " + [ op.constructor.name ]);
+      throw new Error("Failed pattern match at Evaluator line 208, column 1 - line 209, column 1: " + [ op.constructor.name ]);
   };
   var avoidCapture = function (subs) {
       return function (binds) {
-          var $242 = Data_List.intersect(Prelude.eqString)(Data_List.concatMap(freeVariables)(Data_StrMap.values(subs)))(boundNames$prime(binds));
-          if ($242 instanceof Data_List.Nil) {
+          var $243 = Data_List.intersect(Prelude.eqString)(Data_List.concatMap(freeVariables)(Data_StrMap.values(subs)))(boundNames$prime(binds));
+          if ($243 instanceof Data_List.Nil) {
               return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(Prelude.unit);
           };
-          return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NameCaptureError($242));
+          return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NameCaptureError($243));
       };
   };
   var replace$prime = function (subs) {
       var go = function (expr) {
           if (expr instanceof AST.Atom && expr.value0 instanceof AST.Name) {
-              var $244 = Data_StrMap.lookup(expr.value0.value0)(subs);
-              if ($244 instanceof Data_Maybe.Just) {
-                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($244.value0);
+              var $245 = Data_StrMap.lookup(expr.value0.value0)(subs);
+              if ($245 instanceof Data_Maybe.Just) {
+                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($245.value0);
               };
-              if ($244 instanceof Data_Maybe.Nothing) {
+              if ($245 instanceof Data_Maybe.Nothing) {
                   return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(expr);
               };
-              throw new Error("Failed pattern match: " + [ $244.constructor.name ]);
+              throw new Error("Failed pattern match: " + [ $245.constructor.name ]);
           };
           if (expr instanceof AST.List) {
               return Prelude["<$>"](Control_Monad_Except_Trans.functorExceptT(Data_Identity.functorIdentity))(AST.List.create)(Data_Traversable.traverse(Data_List.traversableList)(Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(go)(expr.value0));
@@ -6363,65 +6478,156 @@ var PS = { };
   };
   var tryAll = function (__copy_v) {
       return function (__copy_v1) {
-          return function (__copy_name) {
-              return function (__copy_errs) {
-                  var v = __copy_v;
-                  var v1 = __copy_v1;
-                  var name = __copy_name;
-                  var errs = __copy_errs;
-                  tco: while (true) {
-                      if (v instanceof Data_List.Nil) {
-                          return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NoMatchingFunction(name, errs));
-                      };
-                      if (v instanceof Data_List.Cons && Data_List.length(v1) < Data_List.length(v.value0.value0)) {
-                          var __tco_v = v.value1;
-                          var __tco_v1 = v1;
-                          var __tco_name = name;
-                          var __tco_errs = Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton(new TooFewArguments(v.value0.value0, v1)));
-                          v = __tco_v;
-                          v1 = __tco_v1;
-                          name = __tco_name;
-                          errs = __tco_errs;
-                          continue tco;
-                      };
-                      if (v instanceof Data_List.Cons) {
-                          var $274 = runMatcherM(matchls$prime(v.value0.value0)(v1));
-                          if ($274 instanceof Data_Either.Right) {
-                              return Prelude[">>="](Control_Monad_Except_Trans.bindExceptT(Data_Identity.monadIdentity))(replace$prime($274.value0)(v.value0.value1))(wrapLambda(v.value0.value0)(v1));
+          return function (__copy_v2) {
+              return function (__copy_name) {
+                  return function (__copy_errs) {
+                      var v = __copy_v;
+                      var v1 = __copy_v1;
+                      var v2 = __copy_v2;
+                      var name = __copy_name;
+                      var errs = __copy_errs;
+                      tco: while (true) {
+                          if (v1 instanceof Data_List.Nil) {
+                              return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NoMatchingFunction(name, errs));
                           };
-                          if ($274 instanceof Data_Either.Left && $274.value0 instanceof StrictnessError) {
-                              return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NoMatchingFunction(name, Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton($274.value0))));
-                          };
-                          if ($274 instanceof Data_Either.Left) {
-                              var __tco_v = v.value1;
-                              var __tco_v1 = v1;
+                          if (v1 instanceof Data_List.Cons && Data_List.length(v2) < Data_List.length(v1.value0.value0)) {
+                              var __tco_v = v;
+                              var __tco_v1 = v1.value1;
+                              var __tco_v2 = v2;
                               var __tco_name = name;
-                              var __tco_errs = Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton($274.value0));
+                              var __tco_errs = Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton(new TooFewArguments(v1.value0.value0, v2)));
                               v = __tco_v;
                               v1 = __tco_v1;
+                              v2 = __tco_v2;
                               name = __tco_name;
                               errs = __tco_errs;
                               continue tco;
                           };
-                          throw new Error("Failed pattern match: " + [ $274.constructor.name ]);
+                          if (v1 instanceof Data_List.Cons) {
+                              var $276 = runMatcherM(matchls$prime(v)(v1.value0.value0)(v2));
+                              if ($276 instanceof Data_Either.Right) {
+                                  return Prelude[">>="](Control_Monad_Except_Trans.bindExceptT(Data_Identity.monadIdentity))(replace$prime($276.value0)(v1.value0.value1))(wrapLambda(v1.value0.value0)(v2));
+                              };
+                              if ($276 instanceof Data_Either.Left && $276.value0 instanceof StrictnessError) {
+                                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NoMatchingFunction(name, Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton($276.value0))));
+                              };
+                              if ($276 instanceof Data_Either.Left) {
+                                  var __tco_v = v;
+                                  var __tco_v1 = v1.value1;
+                                  var __tco_v2 = v2;
+                                  var __tco_name = name;
+                                  var __tco_errs = Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton($276.value0));
+                                  v = __tco_v;
+                                  v1 = __tco_v1;
+                                  v2 = __tco_v2;
+                                  name = __tco_name;
+                                  errs = __tco_errs;
+                                  continue tco;
+                              };
+                              throw new Error("Failed pattern match: " + [ $276.constructor.name ]);
+                          };
+                          throw new Error("Failed pattern match: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name, name.constructor.name, errs.constructor.name ]);
                       };
-                      throw new Error("Failed pattern match: " + [ v.constructor.name, v1.constructor.name, name.constructor.name, errs.constructor.name ]);
                   };
               };
           };
       };
   };
-  var apply = function (env) {
-      return function (name) {
-          return function (args) {
-              var $284 = Data_StrMap.lookup(name)(env);
-              if ($284 instanceof Data_Maybe.Nothing) {
-                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new UnknownFunction(name));
+  var recurse = function (env) {
+      return function (expr) {
+          return function (bind) {
+              var expr$prime = (function () {
+                  if (expr instanceof AST.Binary) {
+                      return new AST.Binary(expr.value0, evalToBinding(env)(expr.value1)(bind), evalToBinding(env)(expr.value2)(bind));
+                  };
+                  if (expr instanceof AST.Unary) {
+                      return new AST.Unary(expr.value0, evalToBinding(env)(expr.value1)(bind));
+                  };
+                  if (expr instanceof AST.List) {
+                      return new AST.List(Prelude["<$>"](Data_List.functorList)(function (e) {
+                          return evalToBinding(env)(e)(bind);
+                      })(expr.value0));
+                  };
+                  if (expr instanceof AST.NTuple) {
+                      return new AST.NTuple(Prelude["<$>"](Data_List.functorList)(function (e) {
+                          return evalToBinding(env)(e)(bind);
+                      })(expr.value0));
+                  };
+                  if (expr instanceof AST.IfExpr) {
+                      return new AST.IfExpr(evalToBinding(env)(expr.value0)(bind), expr.value1, expr.value2);
+                  };
+                  if (expr instanceof AST.App) {
+                      return new AST.App(evalToBinding(env)(expr.value0)(bind), expr.value1);
+                  };
+                  return expr;
+              })();
+              var eval1d = Data_Either.either(Prelude["const"](expr$prime))(Prelude.id(Prelude.categoryFn))(runEvalM(eval1(env)(expr$prime)));
+              var $299 = Prelude["=="](AST.eqExpr)(expr)(eval1d);
+              if ($299) {
+                  return expr;
               };
-              if ($284 instanceof Data_Maybe.Just) {
-                  return tryAll($284.value0)(args)(name)(Data_List.Nil.value);
+              if (!$299) {
+                  return evalToBinding(env)(eval1d)(bind);
               };
-              throw new Error("Failed pattern match at Evaluator line 229, column 1 - line 230, column 1: " + [ $284.constructor.name ]);
+              throw new Error("Failed pattern match: " + [ $299.constructor.name ]);
+          };
+      };
+  };
+  var matchls$prime = function (env) {
+      return function (bs) {
+          return function (es) {
+              return Control_Monad_State_Trans.execStateT(Control_Monad_Except_Trans.applyExceptT(Data_Identity.applyIdentity))(Data_List.zipWithA(Control_Monad_State_Trans.applicativeStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(function (b) {
+                  return function (e) {
+                      return match$prime(b)(evalToBinding(env)(e)(b));
+                  };
+              })(bs)(es))(Data_StrMap.empty);
+          };
+      };
+  };
+  var evalToBinding = function (env) {
+      return function (expr) {
+          return function (bind) {
+              if (bind instanceof AST.Lit && (bind.value0 instanceof AST.Name && bind.value0.value0 === "_|_")) {
+                  return recurse(env)(expr)(bind);
+              };
+              if (bind instanceof AST.Lit && bind.value0 instanceof AST.Name) {
+                  return expr;
+              };
+              if (bind instanceof AST.Lit) {
+                  if (expr instanceof AST.Atom) {
+                      return expr;
+                  };
+                  return recurse(env)(expr)(bind);
+              };
+              if (bind instanceof AST.ConsLit) {
+                  if (expr instanceof AST.Binary && expr.value0 instanceof AST.Colon) {
+                      return new AST.Binary(AST.Colon.value, evalToBinding(env)(expr.value1)(bind.value0), evalToBinding(env)(expr.value2)(bind.value1));
+                  };
+                  if (expr instanceof AST.List && expr.value0 instanceof Data_List.Cons) {
+                      return evalToBinding(env)(new AST.Binary(AST.Colon.value, expr.value0.value0, new AST.List(expr.value0.value1)))(bind);
+                  };
+                  return recurse(env)(expr)(bind);
+              };
+              if (bind instanceof AST.ListLit) {
+                  if (expr instanceof AST.List) {
+                      var $318 = Data_List.length(expr.value0) === Data_List.length(bind.value0);
+                      if ($318) {
+                          return new AST.List(Data_List.zipWith(evalToBinding(env))(expr.value0)(bind.value0));
+                      };
+                      if (!$318) {
+                          return expr;
+                      };
+                      throw new Error("Failed pattern match: " + [ $318.constructor.name ]);
+                  };
+                  return recurse(env)(expr)(bind);
+              };
+              if (bind instanceof AST.NTupleLit) {
+                  if (expr instanceof AST.NTuple) {
+                      return new AST.NTuple(Data_List.zipWith(evalToBinding(env))(expr.value0)(bind.value0));
+                  };
+                  return recurse(env)(expr)(bind);
+              };
+              throw new Error("Failed pattern match: " + [ bind.constructor.name ]);
           };
       };
   };
@@ -6446,7 +6652,7 @@ var PS = { };
               return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.App(expr.value0.value1, Data_List.singleton(new AST.App(expr.value0.value2, new Data_List.Cons(expr.value1.value0, Data_List.Nil.value)))));
           };
           if (expr instanceof AST.App && expr.value0 instanceof AST.Lambda) {
-              return tryAll(Data_List.singleton(new Data_Tuple.Tuple(expr.value0.value0, expr.value0.value1)))(expr.value1)("lambda")(Data_List.Nil.value);
+              return tryAll(env)(Data_List.singleton(new Data_Tuple.Tuple(expr.value0.value0, expr.value0.value1)))(expr.value1)("lambda")(Data_List.Nil.value);
           };
           if (expr instanceof AST.App && (expr.value0 instanceof AST.SectL && (expr.value1 instanceof Data_List.Cons && expr.value1.value1 instanceof Data_List.Nil))) {
               return Control_Alt["<|>"](Control_Monad_Except_Trans.altExceptT(semigroupEvalError)(Data_Identity.monadIdentity))(binary(expr.value0.value1)(expr.value0.value0)(expr.value1.value0))(Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.Binary(expr.value0.value1, expr.value0.value0, expr.value1.value0)));
@@ -6466,10 +6672,38 @@ var PS = { };
           return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new CannotEvaluate(expr));
       };
   };
+  var apply = function (env) {
+      return function (name) {
+          return function (args) {
+              var $380 = Data_StrMap.lookup(name)(env);
+              if ($380 instanceof Data_Maybe.Nothing) {
+                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new UnknownFunction(name));
+              };
+              if ($380 instanceof Data_Maybe.Just) {
+                  return tryAll(env)($380.value0)(args)(name)(Data_List.Nil.value);
+              };
+              throw new Error("Failed pattern match: " + [ $380.constructor.name ]);
+          };
+      };
+  };
   var evalPath1 = function (env) {
       return function (path) {
           return function (expr) {
               return runEvalM(mapWithPath(path)(eval1(env))(expr));
+          };
+      };
+  };
+  var $$eval = function (env) {
+      return function (expr) {
+          return evalToBinding(env)(expr)(new AST.Lit(new AST.Name("_|_")));
+      };
+  };
+  var evalPathAll = function (env) {
+      return function (path) {
+          return function (expr) {
+              return runEvalM(mapWithPath(path)(function ($384) {
+                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($$eval(env)($384));
+              })(expr));
           };
       };
   };
@@ -6496,10 +6730,13 @@ var PS = { };
   exports["unary"] = unary;
   exports["binary"] = binary;
   exports["wrapLambda"] = wrapLambda;
+  exports["recurse"] = recurse;
+  exports["evalToBinding"] = evalToBinding;
   exports["eval1"] = eval1;
   exports["insertDef"] = insertDef;
   exports["envToDefs"] = envToDefs;
   exports["defsToEnv"] = defsToEnv;
+  exports["evalPathAll"] = evalPathAll;
   exports["evalPath1"] = evalPath1;
   exports["mapIndex"] = mapIndex;
   exports["mapWithPath"] = mapWithPath;
@@ -6603,6 +6840,10 @@ var PS = { };
     };
     return {};
   };
+
+  exports.shiftKeyPressed = function(event) {
+       return (!!(event.shiftKey))
+  };
 })(PS["JSHelpers"] = PS["JSHelpers"] || {});
 (function(exports) {
   // Generated by psc version 0.8.0.0
@@ -6613,6 +6854,7 @@ var PS = { };
   var DOM = PS["DOM"];
   var Prelude = PS["Prelude"];
   var Data_Foreign = PS["Data.Foreign"];
+  exports["shiftKeyPressed"] = $foreign.shiftKeyPressed;
   exports["warnOnRefresh"] = $foreign.warnOnRefresh;
   exports["prepend"] = $foreign.prepend;
   exports["children"] = $foreign.children;
@@ -10373,8 +10615,8 @@ var PS = { };
       return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.create("<table></table>"))(Control_Monad_Eff_JQuery.addClass("historyBox")))(Control_Monad_Eff_JQuery.addClass("vertical")))(Control_Monad_Eff_JQuery.addClass("frame"))))(function (v) {
           return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(forIndex(Control_Monad_State_Trans.applicativeStateT(Control_Monad_Eff.monadEff))(exprs)(function (expr) {
               return function (i) {
-                  return Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(showHistoryRow(expr)(i))(function ($130) {
-                      return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v)($130));
+                  return Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(showHistoryRow(expr)(i))(function ($131) {
+                      return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v)($131));
                   });
               };
           }))(function () {
@@ -10395,8 +10637,8 @@ var PS = { };
                           return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_Console.print(AST.showExpr)(v4.out.expr)))(function () {
                               return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_Console.print(AST.showTypeTree)(v4.out.typ)))(function () {
                                   return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Web.exprToJQuery(v4.out))(wrapInDiv("output")))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v))))(function () {
-                                      return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(showHistoryList(v4.history))(function ($131) {
-                                          return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v1)($131));
+                                      return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(showHistoryList(v4.history))(function ($132) {
+                                          return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v1)($132));
                                       }))(function () {
                                           return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.find(".binary, .app, .func, .list, .if, .name")(v)))(makeClickable))(function () {
                                               return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.find(".output div")(v)))(addMouseOverListener))(addClickListener))(function () {
@@ -10419,50 +10661,52 @@ var PS = { };
           });
       });
   });
-  var evalExpr = function (path) {
-      return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.get(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff)))(function (v) {
-          return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_Console.print(AST.showPath)(path)))(function () {
-              var $93 = Evaluator.evalPath1(v.env)(path)(v.out.expr);
-              if ($93 instanceof Data_Either.Left) {
-                  return Prelude["return"](Control_Monad_State_Trans.applicativeStateT(Control_Monad_Eff.monadEff))(Prelude.unit);
-              };
-              if ($93 instanceof Data_Either.Right) {
-                  var eitherTyp = TypeChecker.typeTreeProgramnEnv(v.typEnv)($93.value0);
-                  var typ$prime$prime = Data_Either.either(function (v1) {
-                      return TypeChecker.buildEmptyTypeTree(v.typEnv)($93.value0);
-                  })(Prelude.id(Prelude.categoryFn))(eitherTyp);
-                  var typ$prime = TypeChecker.txToABC(typ$prime$prime);
-                  return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.modify(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff))(function (es) {
-                      var $96 = {};
-                      for (var $97 in es) {
-                          if (es.hasOwnProperty($97)) {
-                              $96[$97] = es[$97];
-                          };
-                      };
-                      $96.out = {
-                          expr: $93.value0, 
-                          typ: typ$prime, 
-                          idTree: Web.idExpr($93.value0)
-                      };
-                      return $96;
-                  }))(function () {
+  var evalExpr = function ($$eval) {
+      return function (path) {
+          return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.get(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff)))(function (v) {
+              return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_Console.print(AST.showPath)(path)))(function () {
+                  var $93 = $$eval(v.env)(path)(v.out.expr);
+                  if ($93 instanceof Data_Either.Left) {
+                      return Prelude["return"](Control_Monad_State_Trans.applicativeStateT(Control_Monad_Eff.monadEff))(Prelude.unit);
+                  };
+                  if ($93 instanceof Data_Either.Right) {
+                      var eitherTyp = TypeChecker.typeTreeProgramnEnv(v.typEnv)($93.value0);
+                      var typ$prime$prime = Data_Either.either(function (v1) {
+                          return TypeChecker.buildEmptyTypeTree(v.typEnv)($93.value0);
+                      })(Prelude.id(Prelude.categoryFn))(eitherTyp);
+                      var typ$prime = TypeChecker.txToABC(typ$prime$prime);
                       return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.modify(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff))(function (es) {
-                          var $98 = {};
-                          for (var $99 in es) {
-                              if (es.hasOwnProperty($99)) {
-                                  $98[$99] = es[$99];
+                          var $96 = {};
+                          for (var $97 in es) {
+                              if (es.hasOwnProperty($97)) {
+                                  $96[$97] = es[$97];
                               };
                           };
-                          $98.history = Data_List[":"](v.out)(es.history);
-                          return $98;
+                          $96.out = {
+                              expr: $93.value0, 
+                              typ: typ$prime, 
+                              idTree: Web.idExpr($93.value0)
+                          };
+                          return $96;
                       }))(function () {
-                          return showEvaluationState;
+                          return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.modify(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff))(function (es) {
+                              var $98 = {};
+                              for (var $99 in es) {
+                                  if (es.hasOwnProperty($99)) {
+                                      $98[$99] = es[$99];
+                                  };
+                              };
+                              $98.history = Data_List[":"](v.out)(es.history);
+                              return $98;
+                          }))(function () {
+                              return showEvaluationState;
+                          });
                       });
-                  });
-              };
-              throw new Error("Failed pattern match: " + [ $93.constructor.name ]);
+                  };
+                  throw new Error("Failed pattern match: " + [ $93.constructor.name ]);
+              });
           });
-      });
+      };
   };
   var addClickListener = function (jq) {
       var handler = function (evaluationState) {
@@ -10475,7 +10719,14 @@ var PS = { };
                           return Prelude.unit;
                       };
                       if (v instanceof Data_Maybe.Just) {
-                          return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_State_Trans.runStateT(evalExpr(v.value0))(evaluationState))();
+                          var $106 = JSHelpers.shiftKeyPressed(jEvent);
+                          if (!$106) {
+                              return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_State_Trans.runStateT(evalExpr(Evaluator.evalPath1)(v.value0))(evaluationState))();
+                          };
+                          if ($106) {
+                              return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_State_Trans.runStateT(evalExpr(Evaluator.evalPathAll)(v.value0))(evaluationState))();
+                          };
+                          throw new Error("Failed pattern match at Main line 229, column 3 - line 230, column 3: " + [ $106.constructor.name ]);
                       };
                       throw new Error("Failed pattern match at Main line 229, column 3 - line 230, column 3: " + [ v.constructor.name ]);
                   };
@@ -10491,44 +10742,44 @@ var PS = { };
       var v = Ace.edit("definitions")(Ace.ace)();
       var v1 = Ace_Editor.getValue(v)();
       var v2 = Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.select("#input"))(getValue)();
-      var $111 = Parser.parseExpr(v2);
-      if ($111 instanceof Data_Either.Left) {
-          return showInfo("Expression")(Prelude.show(Text_Parsing_Parser.showParseError)($111.value0))();
+      var $112 = Parser.parseExpr(v2);
+      if ($112 instanceof Data_Either.Left) {
+          return showInfo("Expression")(Prelude.show(Text_Parsing_Parser.showParseError)($112.value0))();
       };
-      if ($111 instanceof Data_Either.Right) {
-          var $113 = Prelude["<$>"](Data_Either.functorEither)(Evaluator.defsToEnv)(Parser.parseDefs(v1));
-          if ($113 instanceof Data_Either.Left) {
-              showInfo("Definitions")(Prelude.show(Text_Parsing_Parser.showParseError)($113.value0))();
-              return markText($113.value0.value0.position.value0.line - 1)($113.value0.value0.position.value0.column)();
+      if ($112 instanceof Data_Either.Right) {
+          var $114 = Prelude["<$>"](Data_Either.functorEither)(Evaluator.defsToEnv)(Parser.parseDefs(v1));
+          if ($114 instanceof Data_Either.Left) {
+              showInfo("Definitions")(Prelude.show(Text_Parsing_Parser.showParseError)($114.value0))();
+              return markText($114.value0.value0.position.value0.line - 1)($114.value0.value0.position.value0.column)();
           };
-          if ($113 instanceof Data_Either.Right) {
-              var $120 = TypeChecker.buildTypeEnv(Evaluator.envToDefs($113.value0));
-              if ($120 instanceof Data_Either.Left) {
-                  return showInfo("Definitions")(TypeChecker.prettyPrintTypeError($120.value0))();
+          if ($114 instanceof Data_Either.Right) {
+              var $121 = TypeChecker.buildTypeEnv(Evaluator.envToDefs($114.value0));
+              if ($121 instanceof Data_Either.Left) {
+                  return showInfo("Definitions")(TypeChecker.prettyPrintTypeError($121.value0))();
               };
-              if ($120 instanceof Data_Either.Right) {
-                  var eitherTyp = TypeChecker.typeTreeProgramnEnv($120.value0)($111.value0);
+              if ($121 instanceof Data_Either.Right) {
+                  var eitherTyp = TypeChecker.typeTreeProgramnEnv($121.value0)($112.value0);
                   var typ$prime = Data_Either.either(function (v3) {
-                      return TypeChecker.buildEmptyTypeTree($120.value0)($111.value0);
+                      return TypeChecker.buildEmptyTypeTree($121.value0)($112.value0);
                   })(Prelude.id(Prelude.categoryFn))(eitherTyp);
                   var typ = TypeChecker.txToABC(typ$prime);
-                  var idTree = Web.idExpr($111.value0);
+                  var idTree = Web.idExpr($112.value0);
                   return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_State_Trans.runStateT(showEvaluationState)({
-                      env: $113.value0, 
+                      env: $114.value0, 
                       out: {
-                          expr: $111.value0, 
+                          expr: $112.value0, 
                           typ: typ, 
                           idTree: idTree
                       }, 
                       history: Data_List.Nil.value, 
-                      typEnv: $120.value0
+                      typEnv: $121.value0
                   }))();
               };
-              throw new Error("Failed pattern match at Main line 61, column 1 - line 62, column 1: " + [ $120.constructor.name ]);
+              throw new Error("Failed pattern match at Main line 61, column 1 - line 62, column 1: " + [ $121.constructor.name ]);
           };
-          throw new Error("Failed pattern match at Main line 61, column 1 - line 62, column 1: " + [ $113.constructor.name ]);
+          throw new Error("Failed pattern match at Main line 61, column 1 - line 62, column 1: " + [ $114.constructor.name ]);
       };
-      throw new Error("Failed pattern match at Main line 61, column 1 - line 62, column 1: " + [ $111.constructor.name ]);
+      throw new Error("Failed pattern match at Main line 61, column 1 - line 62, column 1: " + [ $112.constructor.name ]);
   };
   var main = Control_Monad_Eff_JQuery.ready(function __do() {
       Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.select("#input"))(Control_Monad_Eff_JQuery.on("change")(function (v) {
@@ -10537,14 +10788,14 @@ var PS = { };
           };
       })))(Control_Monad_Eff_JQuery.on("keyup")(function (e) {
           return function (v) {
-              var $129 = JSHelpers.isEnterKey(e);
-              if ($129) {
+              var $130 = JSHelpers.isEnterKey(e);
+              if ($130) {
                   return startEvaluation;
               };
-              if (!$129) {
+              if (!$130) {
                   return Prelude["return"](Control_Monad_Eff.applicativeEff)(Prelude.unit);
               };
-              throw new Error("Failed pattern match at Main line 48, column 1 - line 49, column 1: " + [ $129.constructor.name ]);
+              throw new Error("Failed pattern match at Main line 48, column 1 - line 49, column 1: " + [ $130.constructor.name ]);
           };
       }))();
       return startEvaluation();
