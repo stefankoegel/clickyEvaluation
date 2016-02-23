@@ -1,7 +1,7 @@
 module Evaluator where
 
 import Prelude (class Show, class Semigroup, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
-import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
+import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
 import Data.StrMap (StrMap)
 import Data.StrMap as Map
 import Data.Tuple (Tuple(Tuple))
@@ -139,7 +139,7 @@ eval1 env expr = case expr of
   (IfExpr (Atom (Bool false)) _ ee)  -> return ee
 --  (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) (Cons e Nil)) -> return $ App f (singleton $ App g (Cons e Nil))
-  (App (Lambda binds body) args)     -> tryAll (singleton $ Tuple binds body) args "lambda" Nil
+  (App (Lambda binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
   (App (SectL e1 op) (Cons e2 Nil))           -> binary op e1 e2 <|> (return $ Binary op e1 e2)
   (App (SectR op e2) (Cons e1 Nil))           -> binary op e1 e2 <|> (return $ Binary op e1 e2)
   (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))         -> binary op e1 e2 <|> (return $ Binary op e1 e2)
@@ -148,25 +148,51 @@ eval1 env expr = case expr of
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> Expr -> Expr
-eval env expr =
-  if expr == evald
-    then expr
-    else eval env evald
+eval env expr = evalToBinding env expr (Lit (Name "_|_"))
+
+evalToBinding :: Env -> Expr -> Binding -> Expr
+evalToBinding env expr bind = case bind of
+  (Lit (Name "_|_")) -> recurse env expr bind
+  (Lit (Name _))     -> expr
+  (Lit _)            -> case expr of
+    (Atom _) -> expr
+    _        -> recurse env expr bind
+
+  (ConsLit b bs)     -> case expr of
+    (Binary Colon e es) -> Binary Colon (evalToBinding env e b) (evalToBinding env es bs)
+    (List (Cons e es))  -> evalToBinding env (Binary Colon e (List es)) bind
+    _                   -> recurse env expr bind
+
+  (ListLit bs)       -> case expr of
+    (List es) -> if (length es == length bs) then List (zipWith (evalToBinding env) es bs) else expr
+    _         -> recurse env expr bind
+
+  (NTupleLit bs)     -> case expr of
+    (NTuple es)  -> NTuple (zipWith (evalToBinding env) es bs)
+    _            -> recurse env expr bind
+
+
+recurse :: Env -> Expr -> Binding -> Expr
+recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1d bind
   where
-  evald :: Expr
-  evald = either (const expr') id $ runEvalM $ eval1 env expr'
-  expr' :: Expr
-  expr' = case expr of
-    (Binary op e1 e2)  ->
-      Binary op (eval env e1) (eval env e2)
-    (Unary op e)       ->
-      Unary op (eval env e)
-    (IfExpr c t e)     ->
-      IfExpr (eval env c) t e
-    (App f args)       -> do
-      App (eval env f) args
-    _                  ->
-      expr
+    eval1d :: Expr
+    eval1d = either (const expr') id $ runEvalM $ eval1 env expr'
+    expr' :: Expr
+    expr' = case expr of
+      (Binary op e1 e2)  ->
+        Binary op (evalToBinding env e1 bind) (evalToBinding env e2 bind)
+      (Unary op e)       ->
+        Unary op (evalToBinding env e bind)
+      (List es)          ->
+        List ((\e -> evalToBinding env e bind) <$> es)
+      (NTuple es)        ->
+        NTuple ((\e -> evalToBinding env e bind) <$> es)
+      (IfExpr c t e)     ->
+        IfExpr (evalToBinding env c bind) t e
+      (App f args)       -> do
+        App (evalToBinding env f bind) args
+      _                  ->
+        expr
 
 wrapLambda :: (List Binding) -> (List Expr) -> Expr -> Evaluator Expr
 wrapLambda binds args body =
@@ -229,15 +255,15 @@ unary op e = throwError $ UnaryOpError op e
 apply :: Env -> String -> (List Expr) -> Evaluator Expr
 apply env name args = case Map.lookup name env of
   Nothing    -> throwError $ UnknownFunction name
-  Just cases -> tryAll cases args name Nil
+  Just cases -> tryAll env cases args name Nil
 
-tryAll :: (List (Tuple (List Binding) Expr)) -> (List Expr) -> String -> (List MatchingError) -> Evaluator Expr
-tryAll Nil                        _    name errs = throwError $ NoMatchingFunction name errs
-tryAll (Cons (Tuple binds body) cases) args name errs | (length args) < (length binds) = tryAll cases args name (errs ++ (singleton $ TooFewArguments binds args))
-tryAll (Cons (Tuple binds body) cases) args name errs = case runMatcherM $ matchls' binds args of
+tryAll :: Env -> (List (Tuple (List Binding) Expr)) -> (List Expr) -> String -> (List MatchingError) -> Evaluator Expr
+tryAll _   Nil                        _    name errs = throwError $ NoMatchingFunction name errs
+tryAll env (Cons (Tuple binds body) cases) args name errs | (length args) < (length binds) = tryAll env cases args name (errs ++ (singleton $ TooFewArguments binds args))
+tryAll env (Cons (Tuple binds body) cases) args name errs = case runMatcherM $ matchls' env binds args of
   Right replMap                 -> replace' replMap body >>= wrapLambda binds args
   Left se@(StrictnessError _ _) -> throwError $ NoMatchingFunction name (errs ++ singleton se)
-  Left err                      -> tryAll cases args name (errs ++ singleton err)
+  Left err                      -> tryAll env cases args name (errs ++ singleton err)
 
 whnf :: Expr -> Boolean
 whnf (Atom (Name _)) = false
@@ -251,8 +277,8 @@ checkStrictness bs es | whnf es   = MatchingError bs es
                       | otherwise = StrictnessError bs es
 
 
-matchls' :: (List Binding) -> (List Expr) -> Matcher (StrMap Expr)
-matchls' bs es = execStateT (zipWithA match' bs es) Map.empty
+matchls' :: Env -> (List Binding) -> (List Expr) -> Matcher (StrMap Expr)
+matchls' env bs es = execStateT (zipWithA (\b e -> match' b (evalToBinding env e b)) bs es) Map.empty
 
 match' :: Binding -> Expr -> StateT (StrMap Expr) Matcher Unit
 match' (Lit (Name name)) e                   = modify (Map.insert name e)

@@ -12,6 +12,7 @@ import Control.Monad.Writer (Writer, tell)
 
 import Parser (definitions, expression)
 import Evaluator (eval, eval1, runEvalM, defsToEnv)
+import Test.Parser (prelude)
 
 tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton
@@ -94,11 +95,54 @@ runTests = do
   evalEnvTest "env6" "double x = x + x" "(double . double . double) 10" "80"
   evalEnvTest "env6" "length (_:xs) = 1 + length xs\nlength [] = 0" "length [1, 2, 3, 4, 5]" "5"
 
-  evalEnvTest "fix" "f x = f x" "f 10" "f 10"
+  evalEnvTest "eval_list" "" "[2 + 2, 3 * 3]" "[4, 9]"
+  evalEnvTest "eval_tuple" "" "(2+2, 3 * 3)" "(4, 9)"
 
   -- This test gets stuck in an endless loop,
-  -- because (((((6 - 1) - 1 ) - 1 ) - 1) - 1) does not match the base case 1.
-  -- evalEnvTest "fac" "fac 1 = 1\nfac n = n * fac (n - 1)" "fac 6" "720"
+  -- evalEnvTest "fix" "f x = f x" "f 10" "f 10"
+
+  evalEnvTest "fac" "fac 1 = 1\nfac n = n * fac (n - 1)" "fac 6" "720"
+  evalEnvTest "prelude" prelude "sum (map (^2) [1,2,3,4])" "30"
+
+  evalEnvTest "TAE2a"
+    ( prelude ++ "\n" ++
+      "pair (x:y:rs) = (x, y) : pair (y:rs)\n" ++
+      "pair _        = []")
+    "pair [1, 2, 3, 4]"
+    "[(1, 2), (2, 3), (3, 4)]"
+  evalEnvTest "TAE2b" prelude "foldr (\\a b -> a + b * 10) 0 [3, 2, 1]" "123"
+  evalEnvTest "TAE2c"
+    (prelude ++ "\nsublist f t ls = drop f (take (t + f) ls)\n")
+    "sublist 1 3 [0, 1, 2, 3, 4]"
+    "[1, 2, 3]"
+
+  evalEnvTest "TAE3a" prelude "map (>= 2) [1, 2, 3]" "[False, True, True]"
+  evalEnvTest "TAE3b" prelude "foldr (\\a b -> b ++ [a]) [] [1, 2, 3]" "[3, 2, 1]"
+  evalEnvTest "TAE3c" prelude "take 3 (iterate (3*) 1)" "[1, 3, 9]"
+  evalEnvTest "TAE3d" prelude "filter (const True) [1, 3, 5, 7]" "[1, 3, 5, 7]"
+  evalEnvTest "TAE3e" prelude "map (length . snd) [(7, \"sieben\"), (1, \"eins\")]" "[6, 4]"
+  evalEnvTest "TAE3f" prelude "foldr (:) [3, 4] [1, 2]" "[1, 2, 3, 4]"
+  evalEnvTest "TAE3g" prelude "foldl (\\(i, c) s -> (i + 1, c + length s)) (0, 0) [\"a\", \"bc\", \"defg\"]" "(3, 7)"
+
+  evalEnvTest "TAT2a"
+    (prelude ++ "\nnth ls n = head (drop n ls)\n")
+    "nth [0, 1, 2, 3] 2"
+    "2"
+  evalEnvTest "TAT2b"
+    ( prelude ++ "\n" ++
+      "smallest (x:y:rs) = if x < y then smallest (x:rs) else smallest (y:rs)\n" ++
+      "smallest [x]      = x")
+    "smallest [5, 3, 7]"
+    "3"
+  evalEnvTest "TAT2c" prelude "foldl (\\(s, p) i -> (i + s, i * p)) (0, 1) [2, 3, 4]" "(9, 24)"
+
+  evalEnvTest "TAT3a" prelude "map (2^) [1, 2, 3]" "[2, 4, 8]"
+  evalEnvTest "TAT3b" prelude "foldl (*) 1 [1, 2, 3, 4]" "24"
+  evalEnvTest "TAT3c" prelude "map (== 3) [1, 2, 3, 4]" "[False, False, True, False]"
+  evalEnvTest "TAT3d" prelude "filter (/= 's') \"asdf\"" "\"adf\""
+  evalEnvTest "TAT3e" prelude "map (fst . head) [[(1, 2)], [(3, 4)]]" "[1, 3]"
+  evalEnvTest "TAT3f" prelude "foldl (-) 10 [1, 2, 3]" "4"
+  evalEnvTest "TAT3g" prelude "zipWith (\\a b -> map (+a) b) [1, 2] [[3, 4], [5, 6]]" "[[4, 5], [7, 8]]"
 
   evalEnvTest "string_third1" "thrd (_:(_:(x:_))) = x" "thrd \"1234\"" "'3'"
   evalEnvTest "string_third2" "thrd [_,_,x,_] = x" "thrd \"1234\"" "'3'"

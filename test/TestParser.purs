@@ -334,6 +334,9 @@ prelude =
   "unzip []          = ([], [])\n" ++
   "unzip ((a, b):xs) = (\\(as, bs) -> (a:as, b:bs)) $ unzip xs\n" ++
   "\n" ++
+  "fst (x,_) = x\n" ++
+  "snd (_,x) = x\n" ++
+  "\n" ++
   "curry f a b = f (a, b)\n" ++
   "uncurry f (a, b) = f a b\n" ++
   "\n" ++
@@ -418,6 +421,8 @@ parsedPrelude = toList [
   (Def "zipWith" (Cons (Lit (Name "_")) (Cons (Lit (Name "_")) (Cons (ListLit (Nil)) (Nil)))) (List (Nil))),
   (Def "unzip" (Cons (ListLit (Nil)) (Nil)) (NTuple (Cons (List (Nil)) (Cons (List (Nil)) (Nil))))),
   (Def "unzip" (Cons (ConsLit (NTupleLit (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (Lit (Name "xs"))) (Nil)) (Binary Dollar (Lambda (Cons (NTupleLit (Cons (Lit (Name "as")) (Cons (Lit (Name "bs")) (Nil)))) (Nil)) (NTuple (Cons (Binary Colon (Atom (Name "a")) (Atom (Name "as"))) (Cons (Binary Colon (Atom (Name "b")) (Atom (Name "bs"))) (Nil))))) (App (aname "unzip") (Cons (aname "xs") Nil)))),
+  (Def "fst" (Cons (NTupleLit (Cons (Lit (Name "x")) (Cons (Lit (Name "_")) (Nil)))) Nil) (Atom (Name "x"))),
+  (Def "snd" (Cons (NTupleLit (Cons (Lit (Name "_")) (Cons (Lit (Name "x")) (Nil)))) Nil) (Atom (Name "x"))),
   (Def "curry" (Cons (Lit (Name "f")) (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (App (Atom (Name "f")) (Cons (NTuple (Cons (Atom (Name "a")) (Cons (Atom (Name "b")) (Nil)))) (Nil)))),
   (Def "uncurry" (Cons (Lit (Name "f")) (Cons (NTupleLit (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (Nil))) (App (Atom (Name "f")) (Cons (Atom (Name "a")) (Cons (Atom (Name "b")) (Nil))))),
   (Def "repeat" (Cons (Lit (Name "x")) (Nil)) (Binary Colon (Atom (Name "x")) (App (Atom (Name "repeat")) (Cons (Atom (Name "x")) (Nil))))),
