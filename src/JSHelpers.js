@@ -16,6 +16,10 @@ exports.isEnterKey = function(event) {
      return event.which == 13;
 };
 
+exports.ctrlKeyPressed = function(event) {
+     return (!!(event.ctrlKey))
+};
+
 exports.showTooltip = function(div) {
   return function(outer){
     return function(e){
@@ -73,8 +77,4 @@ exports.warnOnRefresh = function() {
     return "Your changes in the Definitions will be lost when you leave or refresh! Are you sure?";
   };
   return {};
-};
-
-exports.shiftKeyPressed = function(event) {
-     return (!!(event.shiftKey))
 };

@@ -43,7 +43,7 @@ import Web (exprToJQuery, getPath)
 import Parser (parseDefs, parseExpr)
 import Evaluator (evalPath1, evalPathAll, Env(),  defsToEnv)
 import AST (Expr, TypeError(..),Path())
-import JSHelpers (jqMap, isEnterKey, children, prepend, warnOnRefresh, shiftKeyPressed)
+import JSHelpers (jqMap, isEnterKey, children, prepend, warnOnRefresh, ctrlKeyPressed)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -232,7 +232,7 @@ addClickListener jq = do
     mpath <- getPath jq
     case mpath of
       Nothing   -> return unit
-      Just path -> case shiftKeyPressed jEvent of
+      Just path -> case ctrlKeyPressed jEvent of
         false -> void $ runStateT (evalExpr evalPath1 path) evaluationState
         true  -> void $ runStateT (evalExpr evalPathAll path) evaluationState
 
