@@ -1,11 +1,11 @@
 module Main where
 
-import Prelude (class Applicative, class Show, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
-import Data.Either (Either(..))
-import Data.Maybe (maybe)
-import Data.List (List(Nil), (:), (!!), drop, deleteAt, length, (..), zipWithA, singleton)
+import Prelude (class Applicative, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
 import Data.Foreign (unsafeFromForeign)
 import Data.Foldable (any)
+import Data.Either (Either(Right, Left), either)
+import Data.Maybe (Maybe(Just, Nothing), maybe)
+import Data.List (List(Nil), (:), singleton, (!!), drop, deleteAt, length, (..), zipWithA)
 
 import Control.Monad.Eff.JQuery as J
 import Control.Monad.Eff (Eff)
@@ -21,29 +21,12 @@ import Ace.Editor as Editor
 import Ace.EditSession as Session
 import Ace.Range as  Range
 
-import Data.Either
-import Data.Maybe
-import Data.List
-import Data.Tuple
-import Data.StrMap as StrMap
-import Control.Apply ((*>))
-import Control.Monad.State.Trans
-import Control.Monad.State.Class
-import Control.Monad.Eff.Class
-
 import Web (exprToJQuery, getPath, idExpr, makeDiv)
-import Parser
-import Evaluator (evalPath1, Env(), defsToEnv, envToDefs, EvalError(..), MatchingError(..))
-import AST
-import Text.Parsing.Parser (ParseError(ParseError))
-import Text.Parsing.Parser.Pos (Position(Position))
-import JSHelpers
-import TypeChecker (typeTreeProgramnEnv,buildTypeEnv,TypeEnv(),buildEmptyTypeTree,mapM, txToABC, prettyPrintTypeError,checkForError)
-import Web (exprToJQuery, getPath)
+import Evaluator (evalPath1, evalPathAll, Env(), defsToEnv, envToDefs, EvalError(..), MatchingError(..))
+import AST (Path, Expr, TypeTree, Output, TypeError)
+import TypeChecker (TypeEnv, txToABC, buildEmptyTypeTree, typeTreeProgramnEnv, checkForError, prettyPrintTypeError, buildTypeEnv)
 import Parser (parseDefs, parseExpr)
-import Evaluator (evalPath1, evalPathAll, Env(),  defsToEnv)
-import AST (Expr, TypeError(..),Path())
-import JSHelpers (jqMap, isEnterKey, children, prepend, warnOnRefresh, ctrlKeyPressed)
+import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do

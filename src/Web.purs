@@ -5,29 +5,26 @@ module Web
   , makeDiv
   ) where
 
-import Prelude (class Monad, Unit, return, flip, bind, (<<<), (<$>), (++), (&&), (>), (>>=), void, ($), unit, show, id, (-),(+),map,(==), class Show, div ,mod)
-import Data.Foldable (all,foldr)
+import Prelude (class Show, class Monad, Unit, return, (+), bind, ($), (++), show, (>>=), flip, (<<<), (<$>), (&&), (>), void, unit, id, (-))
+import Data.Foldable (all)
 import Data.Traversable (for)
-import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA,concat,zip, (!!))
-import Data.String (joinWith, toCharArray)
-import Data.Foreign (unsafeFromForeign, Foreign(), isUndefined)
+import Data.String (joinWith)
+import Data.List (List(Nil, Cons), singleton, fromList, toList, length, zip, (..), zipWithA)
+import Data.Foreign (unsafeFromForeign, isUndefined)
 import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple(..),fst,snd)
-import Data.Map (Map(..), insert, lookup, empty)
-import Data.List.WordsLines (fromCharList)
+import Data.Tuple (Tuple(..), fst)
 
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
-import Control.Monad.State
+import Control.Monad.State (State, put, get, runState)
 import DOM (DOM)
 
 
-import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(..),Type(..), TVar (..),IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..),AD(..),TypeError(..), Path(..))
-import Evaluator ()
+import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..))
 import TypeChecker (prettyPrintType,extractType,mapM)
-import JSHelpers
+import JSHelpers (showTooltip, children)
 
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
@@ -287,9 +284,9 @@ app jFunc jArgs tFunc t i = do
   J.addClass "func" jFunc
   J.addClass "funcContainer" jFunc
   innerExpr <- children ".expr" jFunc
-  jExpand <- children ".expand" jFunc
-  innerTyp <- children ".type" jExpand
-  typeArr <- children ".type-arr" jExpand
+  jExpand2 <- children ".expand" jFunc
+  innerTyp <- children ".type" jExpand2
+  typeArr <- children ".type-arr" jExpand2
   J.css {transform: "rotate(180deg)"} typeArr
   case tFunc of
     TypeError _ -> J.setVisible true innerTyp

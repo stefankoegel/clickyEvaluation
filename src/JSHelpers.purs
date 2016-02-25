@@ -4,7 +4,6 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery (JQuery, JQueryEvent,Selector)
 import DOM (DOM)
 import Prelude (Unit)
-import Data.Foreign
 
 foreign import jqMap :: forall eff. (JQuery -> Eff (dom :: DOM | eff) Unit) -> JQuery -> Eff (dom :: DOM | eff) Unit
 
