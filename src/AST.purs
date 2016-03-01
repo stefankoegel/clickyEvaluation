@@ -17,26 +17,7 @@ data Op = Composition
         | Or
         | Dollar
 
-instance eqOp :: Eq Op where
-  eq Composition Composition = true
-  eq Power Power = true
-  eq Mul  Mul  = true
-  eq Div  Div  = true
-  eq Mod Mod = true
-  eq Add  Add  = true
-  eq Sub Sub = true
-  eq Colon  Colon  = true
-  eq Append Append = true
-  eq Equ  Equ  = true
-  eq Neq  Neq  = true
-  eq Lt  Lt  = true
-  eq Leq  Leq  = true
-  eq Gt  Gt  = true
-  eq Geq Geq = true
-  eq And And = true
-  eq Or Or = true
-  eq Dollar Dollar = true
-  eq _ _ = false
+derive instance eqOp :: Eq Op
 
 -- | Atoms
 -- |
@@ -46,19 +27,9 @@ data Atom = AInt Int
           | Char String
           | Name String
 
-instance eqAtom :: Eq Atom where
-  eq (AInt i)   (AInt j) =  i == j
-  eq (Bool b1) (Bool b2) = b1 == b2
-  eq (Char s1) (Char s2) = s1 == s2
-  eq (Name s1) (Name s2) = s1 == s2
-  eq _ _ = false
+derive instance eqAtom :: Eq Atom
 
-instance ordAtom :: Ord Atom where
-  compare (AInt a) (AInt b) = compare a b
-  compare (Bool a) (Bool b) = compare a b
-  compare (Char a) (Char b) = compare a b
-  compare (Name a) (Name b) = compare a b
-  compare _ _ = EQ
+derive instance ordAtom :: Ord Atom
 
 -- | Expressions
 -- |
@@ -143,20 +114,7 @@ data TypeError
   | UnknownError String
 
 
-instance eqExpr :: Eq Expr where
-  eq (Atom a1)           (Atom a2)         = a1 == a2
-  eq (List l1)           (List l2)         = l1 == l2
-  eq (NTuple l1)         (NTuple l2)       = l1 == l2
-  eq (Binary o1 e1 e2)   (Binary o2 e3 e4) = o1 == o2 && e1 == e3 && e2 == e4
-  eq (Unary o1 e1)       (Unary o2 e2)     = o1 == o2 && e1 == e2
-  eq (SectL e1 o1)       (SectL e2 o2)     = e1 == e2 && o1 == o2
-  eq (SectR o1 e1)       (SectR o2 e2)     = o1 == o2 && e1 == e2
-  eq (PrefixOp o1)       (PrefixOp o2)     = o1 == o2
-  eq (IfExpr c1 t1 e1)   (IfExpr c2 t2 e2) = c1 == c2 && t1 == t2 && e1 == e2
-  eq (LetExpr a b c)     (LetExpr d e f)   = a == d && b == e && c == f
-  eq (Lambda bs1 e1)     (Lambda bs2 e2)   = bs1 == bs2 && e1 == e2
-  eq (App e1 l1)         (App e2 l2)       = e1 == e2 && l1 == l2
-  eq _                   _                 = false
+derive instance eqExpr :: Eq Expr
 
 -- | Bindings
 -- |
@@ -166,12 +124,7 @@ data Binding = Lit Atom
              | ListLit (List Binding)
              | NTupleLit (List Binding)
 
-instance eqBinding :: Eq Binding where
-  eq (Lit a1) (Lit a2) = a1 == a2
-  eq (ConsLit b1 b2) (ConsLit b3 b4) = b1 == b3 && b2 == b4
-  eq (ListLit l1) (ListLit l2) = l1 == l2
-  eq (NTupleLit l1) (NTupleLit l2) = l1 == l2
-  eq _ _ = false
+derive instance eqBinding :: Eq Binding
 
 -- | Definitions
 -- |
@@ -198,8 +151,7 @@ instance showPath :: Show Path where
     Thrd   p -> "(Thrd " ++ show p ++")"
     End     -> "End"
 
-instance eqDefinition :: Eq Definition where
-  eq (Def n1 b1 e1) (Def n2 b2 e2) = n1 == n2 && b1 == b2 && e1 == e2
+derive instance eqDefinition :: Eq Definition
 
 instance showOp :: Show Op where
   show op = case op of
@@ -282,19 +234,11 @@ instance showType :: Show Type where
   show (AD ad) = "(AD "++ show ad ++ ")"
   show (TypeError err) ="(TypeError "++ show err ++")"
 
-instance eqType :: Eq Type where
-  eq (TypVar a) (TypVar b) = a == b
-  eq (TypCon a) (TypCon b) = a == b
-  eq (TypArr a b) (TypArr a' b') = (a == a') && (b == b')
-  eq (AD a) (AD b) = eq a b
-  eq (TypeError a) (TypeError b) = (a == b)
-  eq _ _ = false
+derive instance eqType :: Eq Type
 
-instance ordTVar :: Ord TVar where
-  compare (TVar a) (TVar b) = compare a b
+derive instance ordTVar :: Ord TVar
 
-instance eqTVar :: Eq TVar where
-  eq (TVar a) (TVar b) = a == b
+derive instance eqTVar :: Eq TVar
 
 instance showTVar :: Show TVar where
   show (TVar a) = "(TVar " ++ show a ++ ")"
@@ -303,10 +247,7 @@ instance showAD :: Show AD where
   show (TList t) = "(TList "++ show t ++")"
   show (TTuple tl) = "(TTuple ("++ show tl ++ "))"
 
-instance eqAD :: Eq AD where
-  eq (TList a) (TList b) = eq a b
-  eq (TTuple a) (TTuple b) = eq a b
-  eq _          _          = false
+derive instance eqAD :: Eq AD
 
 instance showTypeError :: Show TypeError where
   show (UnificationFail a b) = "(UnificationFail "++ show a ++ " " ++ show b ++")"
@@ -315,13 +256,7 @@ instance showTypeError :: Show TypeError where
   show (UnificationMismatch a b) = "(UnificationMismatch " ++ show a ++ " " ++ show b ++ ")"
   show (UnknownError a) = "(UnknownError " ++ show a ++ ")"
 
-instance eqTypeError :: Eq TypeError where
-  eq (UnificationFail a b) (UnificationFail a' b') = (a == a') && (b == b')
-  eq (InfiniteType a b) (InfiniteType a' b') = (a == a') && (b == b')
-  eq (UnboundVariable a) (UnboundVariable a') = (a == a')
-  eq (UnificationMismatch a b) (UnificationMismatch a' b') = (a == a') && (b == b')
-  eq (UnknownError a) (UnknownError a') = (a == a')
-  eq _ _ = false
+derive instance eqTypeError :: Eq TypeError
 
 instance showTypeTree :: Show TypeTree where
   show (TAtom t) = "(TAtom " ++ show t ++ ")"
