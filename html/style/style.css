@@ -34,6 +34,15 @@ h3 {
   transition: background .25s ease-in-out;
 }
 
+/*#inputBar {
+  padding: 10px;
+  max-width: 90%;
+  margin: 5px;
+  border-radius: 4px;
+  box-shadow: 3px 3px 10px 0 #333;
+  background-color: #ddd;
+}*/
+
 .list, .lambda, .section, .name, .top, .tuple {
   font-family: monospace;
   font-size: 15px;
