@@ -26,7 +26,7 @@ import Evaluator (evalPath1, evalPathAll, Env(), defsToEnv, envToDefs, EvalError
 import AST (Path, Expr, TypeTree, Output, TypeError)
 import TypeChecker (TypeEnv, txToABC, buildEmptyTypeTree, typeTreeProgramnEnv, checkForError, prettyPrintTypeError, buildTypeEnv)
 import Parser (parseDefs, parseExpr)
-import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey)
+import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey, showTypes)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -58,11 +58,18 @@ startEvaluation = do
         Right env -> case buildTypeEnv (envToDefs env) of --  type Env
           Left err -> showInfo "Definitions" (prettyPrintTypeError err)
           Right typEnv -> do
-            let eitherTyp = typeTreeProgramnEnv typEnv expr
-            let typ' = either (\_ -> buildEmptyTypeTree typEnv expr) id eitherTyp
-            let typ = txToABC typ'
-            let idTree = idExpr expr
-            void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ, idTree:idTree}, history: Nil, typEnv:typEnv }
+            let showEvalState typ' = let typ = txToABC typ' in
+              let idTree = idExpr expr in
+              void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ, idTree:idTree}, history: Nil, typEnv:typEnv }
+            case typeTreeProgramnEnv typEnv expr of
+              Left err -> do
+                showTypes
+                let typ' = buildEmptyTypeTree typEnv expr
+                showEvalState typ'
+              Right typ' -> showEvalState typ'
+
+
+
 
 outIfErr::forall b. String -> Either TypeError b -> DOMEff Unit
 outIfErr origin either = case either of

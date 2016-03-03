@@ -78,3 +78,8 @@ exports.warnOnRefresh = function() {
   };
   return {};
 };
+
+exports.showTypes = function(){
+  $('#typecheckbox').bootstrapSwitch('state', true);
+  return {};
+};
