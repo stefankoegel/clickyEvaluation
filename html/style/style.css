@@ -10,7 +10,7 @@ h3 {
   color: #333;
 }
 
-#input, #definitions {
+#definitions {
   max-width: 90%;
 }
 
@@ -22,7 +22,7 @@ h3 {
   padding: 10px;
 }
 
-#input, #definitions, div.clickable, button {
+#definitions, div.clickable, button {
   font-family: monospace;
   font-size: 15px;
   border: none;
@@ -34,14 +34,40 @@ h3 {
   transition: background .25s ease-in-out;
 }
 
-/*#inputBar {
-  padding: 10px;
+#inputBar {
   max-width: 90%;
+  font-family: monospace;
+  font-size: 15px;
+  border: none;
+  background: #ddd;
   margin: 5px;
   border-radius: 4px;
   box-shadow: 3px 3px 10px 0 #333;
-  background-color: #ddd;
-}*/
+  transition: background .25s ease-in-out;
+  display: block;
+  margin: 0px auto 50px auto;
+  padding: 0px;
+}
+
+#input{
+  width: 100%;
+  height: 2.3em;
+  border-top-right-radius: 4px;
+  border-top-left-radius: 4px;  
+  font-family: monospace;
+  font-size: 15px;
+  transition: background .25s ease-in-out;
+  padding: 0px;
+  margin: 0px;
+  border: 0px;
+  background-color: white;
+  box-sizing: border-box;
+  padding-left: 10px;
+}
+
+#options{
+  padding: 10px;
+}
 
 .list, .lambda, .section, .name, .top, .tuple {
   font-family: monospace;
@@ -87,7 +113,7 @@ button.restore:hover {
   transition: background .25s ease-in-out;
 }
 
-#definitions, #input, #output-container, #history-container, #info {
+#definitions, #output-container, #history-container, #info {
   font-family: monospace;
   font-size: 15px;
   display: block;
