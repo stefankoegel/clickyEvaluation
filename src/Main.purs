@@ -102,7 +102,7 @@ showEvaluationState = do
      >>= makeClickable
   liftEff (J.find ".output div" output)
     >>= addMouseOverListener
-    >>= addClickListener
+    >>= addClickListener (out.typ)
   liftEff (J.body >>= J.on "mouseover" (\_ _ -> removeMouseOver))
 
   liftEff $ return unit :: DOMEff Unit
@@ -211,8 +211,8 @@ addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
     J.addClass "mouseOver" jq
     return unit
 
-addClickListener :: J.JQuery -> EvalM J.JQuery
-addClickListener jq = do
+addClickListener :: TypeTree ->  J.JQuery -> EvalM J.JQuery
+addClickListener typeTree jq = do
   evaluationState <- get
   liftEff $ J.on "click" (handler evaluationState) jq
   where
@@ -222,9 +222,13 @@ addClickListener jq = do
     mpath <- getPath jq
     case mpath of
       Nothing   -> return unit
-      Just path -> case ctrlKeyPressed jEvent of
-        false -> void $ runStateT (evalExpr evalPath1 path) evaluationState
-        true  -> void $ runStateT (evalExpr evalPathAll path) evaluationState
+      Just path -> do
+        return unit
+        if checkForError path typeTree
+          then return unit
+          else case ctrlKeyPressed jEvent of
+                false -> void $ runStateT (evalExpr evalPath1 path) evaluationState
+                true  -> void $ runStateT (evalExpr evalPathAll path) evaluationState
 
 removeMouseOver :: DOMEff Unit
 removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
