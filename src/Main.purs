@@ -24,7 +24,7 @@ import Ace.Range as  Range
 import Web (exprToJQuery, getPath, idExpr, makeDiv)
 import Evaluator (evalPath1, evalPathAll, Env(), defsToEnv, envToDefs, EvalError(..), MatchingError(..))
 import AST (Path, Expr, TypeTree, Output, TypeError)
-import TypeChecker (TypeEnv, txToABC, buildEmptyTypeTree, typeTreeProgramnEnv, checkForError, prettyPrintTypeError, buildTypeEnv)
+import TypeChecker (TypeEnv, txToABC, buildPartiallyTypedTree, typeTreeProgramnEnv, checkForError, prettyPrintTypeError, buildTypeEnv)
 import Parser (parseDefs, parseExpr)
 import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey, showTypes)
 
@@ -64,7 +64,7 @@ startEvaluation = do
             case typeTreeProgramnEnv typEnv expr of
               Left err -> do
                 showTypes
-                let typ' = buildEmptyTypeTree typEnv expr
+                let typ' = buildPartiallyTypedTree typEnv expr
                 showEvalState typ'
               Right typ' -> showEvalState typ'
 
@@ -242,7 +242,7 @@ evalExpr eval path = do
     Left msg    -> return unit
     Right expr' -> do
         let eitherTyp = typeTreeProgramnEnv typEnv expr'
-        let typ'' = either (\_ -> buildEmptyTypeTree typEnv expr') id eitherTyp
+        let typ'' = either (\_ -> buildPartiallyTypedTree typEnv expr') id eitherTyp
         let typ' = txToABC typ''
         modify (\es -> es { out = {expr:expr', typ:typ', idTree:idExpr expr'} })
         modify (\es -> es { history = out : es.history })

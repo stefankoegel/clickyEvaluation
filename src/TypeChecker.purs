@@ -582,28 +582,28 @@ emptyType = TypCon ""
 
 -- typeTreeProgramnEnv env expr
 -- types subtree if typ correct
-buildEmptyTypeTree:: TypeEnv -> Expr  -> TypeTree
-buildEmptyTypeTree env e = case typeTreeProgramnEnv env e of
+buildPartiallyTypedTree:: TypeEnv -> Expr  -> TypeTree
+buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
   Right tt -> tt
   Left err -> f err e
   where
   f err (Atom _) = TAtom (TypeError err)
-  f err (List ls) = TListTree (map (buildEmptyTypeTree env) ls) (TypeError err)
-  f err (NTuple ls) = TNTuple (map (buildEmptyTypeTree env) ls) (TypeError err)
-  f err (Binary op e1 e2) = TBinary (typeOP op) (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) (TypeError err)
-  f err (SectL e op) = TSectL (buildEmptyTypeTree env e) (typeOP op) (TypeError err)
-  f err (SectR op e) = TSectR (typeOP op) (buildEmptyTypeTree env e) (TypeError err)
+  f err (List ls) = TListTree (map (buildPartiallyTypedTree env) ls) (TypeError err)
+  f err (NTuple ls) = TNTuple (map (buildPartiallyTypedTree env) ls) (TypeError err)
+  f err (Binary op e1 e2) = TBinary (typeOP op) (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (TypeError err)
+  f err (SectL e op) = TSectL (buildPartiallyTypedTree env e) (typeOP op) (TypeError err)
+  f err (SectR op e) = TSectR (typeOP op) (buildPartiallyTypedTree env e) (TypeError err)
   f err (PrefixOp _) = TPrefixOp (TypeError err)
-  f err (IfExpr e1 e2 e3) = TIfExpr (buildEmptyTypeTree env e1) (buildEmptyTypeTree env e2) (buildEmptyTypeTree env e3) (TypeError err)
-  f err (LetExpr b1 e1 e2) =let f env' =  TLetExpr (g b1) (buildEmptyTypeTree env' e1) (buildEmptyTypeTree env' e2) (TypeError err) in
+  f err (IfExpr e1 e2 e3) = TIfExpr (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (buildPartiallyTypedTree env e3) (TypeError err)
+  f err (LetExpr b1 e1 e2) =let f env' =  TLetExpr (g b1) (buildPartiallyTypedTree env' e1) (buildPartiallyTypedTree env' e2) (TypeError err) in
                         case getTypEnv b1 env of
                           Nothing -> f env
                           Just env' -> f env'
-  f err (Lambda bs e) = let f env' = TLambda (map g bs) (buildEmptyTypeTree env' e) (TypeError err) in
+  f err (Lambda bs e) = let f env' = TLambda (map g bs) (buildPartiallyTypedTree env' e) (TypeError err) in
                     case getTypEnvFromList bs env of
                           Nothing -> f env
                           Just env' -> f env'
-  f err (App e es) = TApp (buildEmptyTypeTree env e) (map (buildEmptyTypeTree env) es) (TypeError err)
+  f err (App e es) = TApp (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTree env) es) (TypeError err)
 
 -- Binding to BindingType
   g (Lit _) = TLit emptyType
