@@ -62,11 +62,13 @@ instance subType :: Substitutable Type where
    apply s t@(TypVar a) = fromMaybe t $ Map.lookup a s
    apply s (TypArr t1 t2) =  TypArr (apply s t1) (apply s t2)
    apply s (AD a) = AD (apply s a)
+   apply _ (TypeError err) = TypeError err  --TODO make typeError Substitutable
 
    ftv (TypCon  _)         = Set.empty
    ftv (TypVar a)       = Set.singleton a
    ftv (TypArr t1 t2) =  Set.union (ftv t1) (ftv t2)
    ftv (AD a) = ftv a
+   ftv (TypeError err) = Set.empty
 
 
 instance listSub :: (Substitutable a) => Substitutable (List a) where
@@ -329,6 +331,12 @@ infer env ex = case ex of
     s3       <- unify (apply s2 b) (extractType t2)
     let s4 = (s3 `compose` s2 `compose` s1)
     return (Tuple s4 (apply s4 (TSectR t1 t2 (TypArr a c))))
+
+  Unary (Sub) e -> do
+    (Tuple s tt) <- infer env e
+    let t = extractType tt
+    s2 <- unify t (TypCon "Int")
+    return  $ Tuple (s2 `compose` s) (apply s2 (TUnary t tt t))
 
   Unary op e -> do
     tv <- fresh
@@ -604,6 +612,7 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
                           Nothing -> f env
                           Just env' -> f env'
   f err (App e es) = TApp (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTree env) es) (TypeError err)
+  f err (Unary op e) = TUnary (typeOP op) (buildPartiallyTypedTree env e) (TypeError err)
 
 -- Binding to BindingType
   g (Lit _) = TLit emptyType

@@ -105,6 +105,10 @@ exprToJQuery' output = go id output
       jFunc <- go (p <<< Fst) {expr:func, typ:tt, idTree: i1}
       jArgs <- zipWithA (\i (Tuple i' (Tuple e t)) -> go (p <<< Nth i) {expr:e, typ:t, idTree: i'}) (0 .. (length args - 1)) (zip is (zip args ts))
       app jFunc jArgs (extractType tt) t i
+    {expr: Unary op exp, typ: TUnary opt tt t, idTree:IUnary opi is i} -> do
+      jop <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
+      jexpr <- go (p <<< Fst) {expr: exp, typ: tt, idTree: is}
+      unary jop jexpr t i
     {} -> makeDiv "You found a Bug" Nil
 
 
@@ -186,6 +190,16 @@ binary op opt opi t i j1 j2 = do
   J.append dBin jtypExp
   return jtypExp
 
+unary:: forall eff. J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+unary jop jexpr t i = do
+  jtypExp <- makeDiv "" (singleton "unary typExpContainer")
+  jExpand <-  buildExpandDiv t
+  J.append jExpand jtypExp
+  jUnary <- makeDiv "" (singleton "unary expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  J.append jop jUnary
+  J.append jexpr jUnary
+  J.append jUnary jtypExp
+  return jtypExp
 
 
 section :: forall eff. J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
