@@ -333,10 +333,11 @@ infer env ex = case ex of
     return (Tuple s4 (apply s4 (TSectR t1 t2 (TypArr a c))))
 
   Unary (Sub) e -> do
-    (Tuple s tt) <- infer env e
-    let t = extractType tt
-    s2 <- unify t (TypCon "Int")
-    return  $ Tuple (s2 `compose` s) (apply s2 (TUnary t tt t))
+      tv <- fresh
+      let t1 = (TypCon "Int" `TypArr` TypCon "Int")
+      (Tuple s2 t2) <- infer env e
+      s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
+      return (Tuple (s3 `compose` s2) (apply s3 (TUnary t1 t2 tv)))
 
   Unary op e -> do
     tv <- fresh
