@@ -1,6 +1,6 @@
 module Parser where
 
-import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void, id, flip)
+import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void, id, flip, negate)
 import Global (readInt)
 import Data.String as String
 import Data.Int (floor)
@@ -139,7 +139,10 @@ operatorTable = maybe infixTable id (modifyAt 3 (flip snoc unaryMinus) infixTabl
     infixTable :: OperatorTable Identity String Expr
     infixTable = ((uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$>) <$> infixOperators
     unaryMinus :: Operator Identity String Expr
-    unaryMinus = Prefix (spaced (string "-") *> return (Unary Sub))
+    unaryMinus = Prefix (spaced (string "-") *> return  (\e -> case e of
+                                                          (Atom (AInt ai)) -> (Atom (AInt (-ai)))
+                                                          _                -> Unary Sub e
+                                                        ))
 
 -- | Parser for operators
 opParser :: Parser String Op

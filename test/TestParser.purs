@@ -1,6 +1,6 @@
 module Test.Parser where
 
-import Prelude (class Eq, class Show, Unit, (++), ($), bind, show, unit, return, (==), (<<<))
+import Prelude (class Eq, class Show, Unit, (++), ($), bind, show, unit, return, (==), (<<<), negate)
 import Data.Either (Either(..))
 import Data.List (List(..), toList, singleton)
 
@@ -67,7 +67,10 @@ runTests = do
   test "or" expression "be || notBe" (Binary Or (aname "be") (aname "notBe"))
   test "dollar" expression "f $ 1 + 2"  (Binary Dollar (aname "f") (Binary Add (aint 1) (aint 2)))
 
-  test "unary_minus" expression "-10"  (Unary Sub (aint 10))
+  test "unary_minus1" expression "- 10"  (aint (-10))
+  test "unary_minus2" expression "- x"  (Unary Sub (aname "x"))
+  test "unary_minus3" expression "-10"  (aint (-10))
+  test "unary_minus4" expression "-x"  (Unary Sub (aname "x"))
 
   test "1" expression "1" (aint 1)
   test "add" expression "1 + 2" (Binary Add (aint 1) (aint 2))
