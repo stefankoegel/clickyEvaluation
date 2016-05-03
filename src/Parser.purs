@@ -251,15 +251,11 @@ charList = do
 -- | Parse a lambda expression
 lambda :: Parser String Expr -> Parser String Expr
 lambda expr = do
-  char '(' *> eatSpaces
   char '\\' *> eatSpaces
   binds <- (binding `PC.sepEndBy1` eatSpaces)
   string "->" *> eatSpaces
   body <- expr
-  eatSpaces
-  char ')'
   return $ Lambda binds body
-
 
 -- | Parser for let expression
 letExpr :: Parser String Expr -> Parser String Expr
