@@ -206,6 +206,18 @@ runTests = do
                       (Atom (Name "g"))))))))))
       (Cons (Atom (AInt 1)) (Cons (Atom (AInt 2)) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Cons (Atom (AInt 5)) (Cons (Atom (AInt 6)) (Cons (Atom (AInt 7)) (Nil)))))))))
 
+  test "lambda6" expression "\\x -> x + 2"
+      (Lambda
+        (toList [Lit (Name "x")])
+        (Binary Add (aname "x") (aint 2)))
+
+  test "lambda7" definition "f a = \\b -> a + b"
+    (Def "f"
+      (toList [Lit (Name "a")])
+      (Lambda
+        (toList [Lit (Name "b")])
+        (Binary Add (aname "a") (aname "b"))))
+
   test "sectR1" expression "(+1)" (SectR Add (aint 1))
   test "sectR2" expression "( ^ 2 )" (SectR Power (aint 2))
   test "sectR3" expression "(++ [1])" (SectR Append (List (toList [aint 1])))
