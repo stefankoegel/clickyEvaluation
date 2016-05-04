@@ -1,6 +1,6 @@
 module Parser where
 
-import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void, id, flip, negate)
+import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void, id, flip, negate, liftM1)
 import Global (readInt)
 import Data.String as String
 import Data.Int (floor)
@@ -18,9 +18,20 @@ import Data.Either (Either)
 import Text.Parsing.Parser (ParseError, Parser, runParser, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
-import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
+import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf, skipSpaces)
 
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
+--Purescript 0.8+ required
+import Text.Parsing.Parser.Token
+import Text.Parsing.Parser.Language (haskellDef)
+
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..), pPrintOp)
+
+---------------------------------------------------------
+-- Use Haskell Language Definition --new purescript-parsing 0.8+
+---------------------------------------------------------
+
+tokenParser :: TokenParser
+tokenParser = makeTokenParser haskellDef
 
 ---------------------------------------------------------
 -- Parsers for Atoms
@@ -29,22 +40,19 @@ import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
 -- | Skip spaces and tabs
 eatSpaces :: Parser String Unit
 eatSpaces = void $ many $ oneOf [' ','\t']
+--eatSpaces = skipSpaces
 
 anyDigit :: Parser String Char
-anyDigit = oneOf $ String.toCharArray "0123456789"
+anyDigit = digit
 
 -- | Parser for Int. (0 to 2^31-1)
 int :: Parser String Atom
-int = do
-  d <- anyDigit
-  ds <- many anyDigit
-  let value = floor $ readInt 10 $ String.fromCharArray $ fromList (Cons d ds)
-  return $ AInt value
+int = AInt <$> tokenParser.decimal
 
 -- | Parser for Boolean
 bool :: Parser String Atom
-bool = do
-  PC.choice $ toList [string "True" *> return (Bool true), string "False" *> return (Bool false)]
+bool = string "True"  *> return (Bool true) 
+   <|> string "False" *> return (Bool false)
 
 -- | Parser for characters at the start of variables
 lowerCaseLetter :: Parser String Char
@@ -52,7 +60,7 @@ lowerCaseLetter = oneOf $ String.toCharArray "_abcdefghijklmnopqrstuvwxyz"
 
 -- | Parser for characters at the start of constructors and types
 upperCaseLetter :: Parser String Char
-upperCaseLetter = oneOf $ String.toCharArray "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+upperCaseLetter = upper
 
 -- | Parser for all characters after the first in names
 anyLetter :: Parser String Char
@@ -60,7 +68,7 @@ anyLetter = lowerCaseLetter <|> upperCaseLetter <|> char '\'' <|> anyDigit
 
 -- | List of reserved key words
 reservedWords :: List String
-reservedWords = toList ["if", "then", "else", "let", "in"]
+reservedWords = toList $ (unGenLanguageDef haskellDef).reservedNames
 
 character' :: Parser String Char
 character' =
@@ -73,11 +81,7 @@ character' =
   <|> (noneOf ['\\', '\'', '"'])
 
 character :: Parser String Atom
-character = do
-  char '\''
-  c <- character'
-  char '\''
-  return (Char $ String.fromChar c)
+character = liftM1 (Char <<< String.fromChar) tokenParser.charLiteral
 
 -- | Parser for variables names
 name :: Parser String String
@@ -134,7 +138,7 @@ infixOperators =
 
 -- | Table of operators (math, boolean, ...)
 operatorTable :: OperatorTable Identity String Expr
-operatorTable = maybe infixTable id (modifyAt 3 (flip snoc unaryMinus) infixTable)
+operatorTable = maybe infixTable id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
   where
     infixTable :: OperatorTable Identity String Expr
     infixTable = ((uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$>) <$> infixOperators
@@ -150,7 +154,7 @@ opParser = PC.choice $ ((uncurry3 (\p op _ -> p *> return op)) <$>) $ concat $ (
 
 -- | Parse an expression between brackets
 brackets :: forall a. Parser String a -> Parser String a
-brackets p = PC.between (char '(' *> eatSpaces) (eatSpaces *> char ')') p
+brackets = tokenParser.parens
 
 -- | Parse an expression between spaces (backtracks)
 spaced :: forall a. Parser String a -> Parser String a
@@ -170,8 +174,23 @@ base expr =
 syntax :: Parser String Expr -> Parser String Expr
 syntax expr = 
       PC.try (ifThenElse expr)
-  <|> PC.try (letExpr expr)
+  <|> PC.try (letExpr expr) 
+  <|> PC.try (infixExpr expr) 
   <|> applicationOrSingleExpression expr
+
+infixExpr :: Parser String Expr -> Parser String Expr
+infixExpr expr = do
+  e1 <- base expr
+  eatSpaces
+  char '`'
+  s  <- name
+  char '`'
+  eatSpaces
+  e2 <- base expr
+  case s of
+    "div" -> return $ Binary Div e1 e2
+    "mod" -> return $ Binary Mod e1 e2
+    _     -> return $ App (Atom (Name s)) $ toList [e1, e2]
 
 -- | Parser for function application or single expressions
 applicationOrSingleExpression :: Parser String Expr -> Parser String Expr
@@ -251,15 +270,11 @@ charList = do
 -- | Parse a lambda expression
 lambda :: Parser String Expr -> Parser String Expr
 lambda expr = do
-  char '(' *> eatSpaces
   char '\\' *> eatSpaces
   binds <- (binding `PC.sepEndBy1` eatSpaces)
   string "->" *> eatSpaces
   body <- expr
-  eatSpaces
-  char ')'
   return $ Lambda binds body
-
 
 -- | Parser for let expression
 letExpr :: Parser String Expr -> Parser String Expr
@@ -272,10 +287,11 @@ letExpr expr = do
   body <- expr
   return $ LetExpr bnd lexp body
 
-
 -- | Parse an arbitrary expression
 expression :: Parser String Expr
-expression = fix $ \expr -> buildExprParser operatorTable (syntax expr)
+expression = do
+  whiteSpace
+  fix $ \expr -> buildExprParser operatorTable (syntax expr)
 
 parseExpr :: String -> Either ParseError Expr
 parseExpr input = runParser input expression
