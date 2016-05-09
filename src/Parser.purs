@@ -7,7 +7,7 @@ import Data.Int (floor)
 import Data.List (List(Cons), many, toList, concat, elemIndex, fromList)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
-import Data.Array (modifyAt, snoc)
+import Data.Array (modifyAt, snoc, (:))
 
 import Control.Alt ((<|>))
 import Control.Apply ((<*), (*>))
@@ -138,8 +138,11 @@ infixOperators =
 
 -- | Table of operators (math, boolean, ...)
 operatorTable :: OperatorTable Identity String Expr
-operatorTable = maybe infixTable id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
+operatorTable = infixTable2 
   where
+    infixTable2 = maybe [] id (modifyAt 3 (flip snoc infixOperator) infixTable1)
+    infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
+
     infixTable :: OperatorTable Identity String Expr
     infixTable = ((uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$>) <$> infixOperators
     unaryMinus :: Operator Identity String Expr
@@ -147,6 +150,14 @@ operatorTable = maybe infixTable id (modifyAt 3 (flip snoc unaryMinus) infixTabl
                                                           (Atom (AInt ai)) -> (Atom (AInt (-ai)))
                                                           _                -> Unary Sub e
                                                         ))
+    infixOperator :: Operator Identity String Expr
+    infixOperator = Infix (spaced infixParse) AssocLeft
+      where 
+        infixParse = do
+          char '`'
+          n <- spaced name
+          char '`'
+          return $ \e1 e2 -> App (Atom (Name n)) $ toList [e1, e2]
 
 -- | Parser for operators
 opParser :: Parser String Op
@@ -175,22 +186,7 @@ syntax :: Parser String Expr -> Parser String Expr
 syntax expr = 
       PC.try (ifThenElse expr)
   <|> PC.try (letExpr expr) 
-  <|> PC.try (infixExpr expr) 
   <|> applicationOrSingleExpression expr
-
-infixExpr :: Parser String Expr -> Parser String Expr
-infixExpr expr = do
-  e1 <- base expr
-  eatSpaces
-  char '`'
-  s  <- name
-  char '`'
-  eatSpaces
-  e2 <- base expr
-  case s of
-    "div" -> return $ Binary Div e1 e2
-    "mod" -> return $ Binary Mod e1 e2
-    _     -> return $ App (Atom (Name s)) $ toList [e1, e2]
 
 -- | Parser for function application or single expressions
 applicationOrSingleExpression :: Parser String Expr -> Parser String Expr
