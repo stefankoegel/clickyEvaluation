@@ -1,9 +1,7 @@
 module Parser where
 
-import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void, id, flip, negate)
-import Global (readInt)
+import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void, id, flip, negate, liftM1)
 import Data.String as String
-import Data.Int (floor)
 import Data.List (List(Cons), many, toList, concat, elemIndex, fromList)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
@@ -19,8 +17,14 @@ import Text.Parsing.Parser (ParseError, Parser, runParser, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
 import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
+import Text.Parsing.Parser.Token
+import Text.Parsing.Parser.Language (haskellDef)
 
 import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
+
+
+tokenParser :: TokenParser
+tokenParser = makeTokenParser haskellDef
 
 ---------------------------------------------------------
 -- Parsers for Atoms
@@ -31,20 +35,16 @@ eatSpaces :: Parser String Unit
 eatSpaces = void $ many $ oneOf [' ','\t']
 
 anyDigit :: Parser String Char
-anyDigit = oneOf $ String.toCharArray "0123456789"
+anyDigit = digit
 
 -- | Parser for Int. (0 to 2^31-1)
 int :: Parser String Atom
-int = do
-  d <- anyDigit
-  ds <- many anyDigit
-  let value = floor $ readInt 10 $ String.fromCharArray $ fromList (Cons d ds)
-  return $ AInt value
+int = AInt <$> tokenParser.decimal
 
 -- | Parser for Boolean
 bool :: Parser String Atom
-bool = do
-  PC.choice $ toList [string "True" *> return (Bool true), string "False" *> return (Bool false)]
+bool = string "True"  *> return (Bool true) 
+   <|> string "False" *> return (Bool false)
 
 -- | Parser for characters at the start of variables
 lowerCaseLetter :: Parser String Char
@@ -52,7 +52,7 @@ lowerCaseLetter = oneOf $ String.toCharArray "_abcdefghijklmnopqrstuvwxyz"
 
 -- | Parser for characters at the start of constructors and types
 upperCaseLetter :: Parser String Char
-upperCaseLetter = oneOf $ String.toCharArray "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+upperCaseLetter = upper
 
 -- | Parser for all characters after the first in names
 anyLetter :: Parser String Char
@@ -60,7 +60,7 @@ anyLetter = lowerCaseLetter <|> upperCaseLetter <|> char '\'' <|> anyDigit
 
 -- | List of reserved key words
 reservedWords :: List String
-reservedWords = toList ["if", "then", "else", "let", "in"]
+reservedWords = toList $ (unGenLanguageDef haskellDef).reservedNames
 
 character' :: Parser String Char
 character' =
@@ -73,11 +73,7 @@ character' =
   <|> (noneOf ['\\', '\'', '"'])
 
 character :: Parser String Atom
-character = do
-  char '\''
-  c <- character'
-  char '\''
-  return (Char $ String.fromChar c)
+character = liftM1 (Char <<< String.fromChar) tokenParser.charLiteral
 
 -- | Parser for variables names
 name :: Parser String String
@@ -134,23 +130,38 @@ infixOperators =
 
 -- | Table of operators (math, boolean, ...)
 operatorTable :: OperatorTable Identity String Expr
-operatorTable = maybe infixTable id (modifyAt 3 (flip snoc unaryMinus) infixTable)
+operatorTable = infixTable2 
   where
-    infixTable :: OperatorTable Identity String Expr
-    infixTable = ((uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$>) <$> infixOperators
-    unaryMinus :: Operator Identity String Expr
-    unaryMinus = Prefix (spaced (string "-") *> return  (\e -> case e of
-                                                          (Atom (AInt ai)) -> (Atom (AInt (-ai)))
-                                                          _                -> Unary Sub e
-                                                        ))
+    infixTable2 = maybe [] id (modifyAt 3 (flip snoc infixOperator) infixTable1)
+    infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
 
--- | Parser for operators
+    infixTable :: OperatorTable Identity String Expr
+    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$> x) <$> infixOperators
+
+    unaryMinus :: Operator Identity String Expr
+    unaryMinus = Prefix $ spaced minusParse
+      where 
+        minusParse = do
+          string "-"
+          return $ \e -> case e of
+            Atom (AInt ai) -> (Atom (AInt (-ai)))
+            _              -> Unary Sub e
+
+    infixOperator :: Operator Identity String Expr
+    infixOperator = Infix (spaced infixParse) AssocLeft
+      where 
+        infixParse = do
+          char '`'
+          n <- name
+          char '`'
+          return $ \e1 e2 -> App (Atom (Name n)) $ toList [e1, e2]
+
 opParser :: Parser String Op
-opParser = PC.choice $ ((uncurry3 (\p op _ -> p *> return op)) <$>) $ concat $ (toList <$>) $ toList infixOperators
+opParser = PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> return op)) <$> x) $ concat $ (\x -> toList <$> x) $ toList infixOperators
 
 -- | Parse an expression between brackets
 brackets :: forall a. Parser String a -> Parser String a
-brackets p = PC.between (char '(' *> eatSpaces) (eatSpaces *> char ')') p
+brackets = tokenParser.parens
 
 -- | Parse an expression between spaces (backtracks)
 spaced :: forall a. Parser String a -> Parser String a
@@ -170,7 +181,7 @@ base expr =
 syntax :: Parser String Expr -> Parser String Expr
 syntax expr = 
       PC.try (ifThenElse expr)
-  <|> PC.try (letExpr expr)
+  <|> PC.try (letExpr expr) 
   <|> applicationOrSingleExpression expr
 
 -- | Parser for function application or single expressions
@@ -268,10 +279,11 @@ letExpr expr = do
   body <- expr
   return $ LetExpr bnd lexp body
 
-
 -- | Parse an arbitrary expression
 expression :: Parser String Expr
-expression = fix $ \expr -> buildExprParser operatorTable (syntax expr)
+expression = do
+  whiteSpace
+  fix $ \expr -> buildExprParser operatorTable (syntax expr)
 
 parseExpr :: String -> Either ParseError Expr
 parseExpr input = runParser input expression
