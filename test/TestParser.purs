@@ -25,6 +25,9 @@ test name p input expected = case runParser input p of
 aint :: Int -> Expr
 aint i = Atom $ AInt i
 
+abool :: Boolean -> Expr
+abool = Atom <<< Bool
+
 aname :: String -> Expr
 aname s = Atom $ Name s
 
@@ -33,7 +36,8 @@ runTests = do
   test "0" int "0" (AInt 0)
   test "1" int "1" (AInt 1)
   test "all" int "0123456789" (AInt 123456789)
-  test "high" int "999999999999999999" (AInt 2147483647)
+  test "high" int "2147483647" (AInt 2147483647)
+  test "overflow" int "2147483648" (AInt (negate 2147483648))
 
   test "bool1" bool "True" (Bool true)
   test "bool2" bool "False" (Bool false)
@@ -71,6 +75,10 @@ runTests = do
   test "unary_minus2" expression "- x"  (Unary Sub (aname "x"))
   test "unary_minus3" expression "-10"  (aint (-10))
   test "unary_minus4" expression "-x"  (Unary Sub (aname "x"))
+
+  test "infix_operator1" expression "1 `max` 3" (App (aname ("max")) (toList [aint 1, aint 3]))
+  test "infix_operator2" expression "5 `max` 2 `min` 1" (App (aname ("min")) (toList [App (aname ("max")) (toList [aint 5, aint 2]), aint 1]))
+  test "infix_operator3" expression "True`tight`False" (App (aname ("tight")) (toList [abool true, abool false]))
 
   test "1" expression "1" (aint 1)
   test "add" expression "1 + 2" (Binary Add (aint 1) (aint 2))
@@ -290,7 +298,6 @@ runTests = do
 
   test "string1" expression "\"asdf\"" (List $ toList [Atom (Char "a"), Atom (Char "s"), Atom (Char "d"), Atom (Char "f")])
   test "string2" expression "\"\\\\\\n\\\"\\\'\"" (List $ toList [Atom (Char "\\"), Atom (Char "\n"), Atom (Char "\""), Atom (Char "'")])
-
 
 prelude :: String
 prelude =
