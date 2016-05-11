@@ -1,13 +1,11 @@
 module Parser where
 
 import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void, id, flip, negate, liftM1)
-import Global (readInt)
 import Data.String as String
-import Data.Int (floor)
 import Data.List (List(Cons), many, toList, concat, elemIndex, fromList)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
-import Data.Array (modifyAt, snoc, (:))
+import Data.Array (modifyAt, snoc)
 
 import Control.Alt ((<|>))
 import Control.Apply ((<*), (*>))
@@ -18,17 +16,12 @@ import Data.Either (Either)
 import Text.Parsing.Parser (ParseError, Parser, runParser, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
-import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf, skipSpaces)
-
---Purescript 0.8+ required
+import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
 import Text.Parsing.Parser.Token
 import Text.Parsing.Parser.Language (haskellDef)
 
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..), pPrintOp)
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
 
----------------------------------------------------------
--- Use Haskell Language Definition --new purescript-parsing 0.8+
----------------------------------------------------------
 
 tokenParser :: TokenParser
 tokenParser = makeTokenParser haskellDef
@@ -40,7 +33,6 @@ tokenParser = makeTokenParser haskellDef
 -- | Skip spaces and tabs
 eatSpaces :: Parser String Unit
 eatSpaces = void $ many $ oneOf [' ','\t']
---eatSpaces = skipSpaces
 
 anyDigit :: Parser String Char
 anyDigit = digit
@@ -144,24 +136,28 @@ operatorTable = infixTable2
     infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
 
     infixTable :: OperatorTable Identity String Expr
-    infixTable = ((uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$>) <$> infixOperators
+    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$> x) <$> infixOperators
+
     unaryMinus :: Operator Identity String Expr
-    unaryMinus = Prefix (spaced (string "-") *> return  (\e -> case e of
-                                                          (Atom (AInt ai)) -> (Atom (AInt (-ai)))
-                                                          _                -> Unary Sub e
-                                                        ))
+    unaryMinus = Prefix $ spaced minusParse
+      where 
+        minusParse = do
+          string "-"
+          return $ \e -> case e of
+            Atom (AInt ai) -> (Atom (AInt (-ai)))
+            _              -> Unary Sub e
+
     infixOperator :: Operator Identity String Expr
     infixOperator = Infix (spaced infixParse) AssocLeft
       where 
         infixParse = do
           char '`'
-          n <- spaced name
+          n <- name
           char '`'
           return $ \e1 e2 -> App (Atom (Name n)) $ toList [e1, e2]
 
--- | Parser for operators
 opParser :: Parser String Op
-opParser = PC.choice $ ((uncurry3 (\p op _ -> p *> return op)) <$>) $ concat $ (toList <$>) $ toList infixOperators
+opParser = PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> return op)) <$> x) $ concat $ (\x -> toList <$> x) $ toList infixOperators
 
 -- | Parse an expression between brackets
 brackets :: forall a. Parser String a -> Parser String a
