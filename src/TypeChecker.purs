@@ -315,18 +315,18 @@ infer env ex = case ex of
     return (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
 
   PrefixOp op -> do
-    Tuple s t <- inferOp op
+    Tuple s t <- inferOp env op
     return (Tuple s $ TPrefixOp t)
 
   SectL e op -> do
     tv <- fresh
-    (Tuple s1 t1) <- inferOp op
+    (Tuple s1 t1) <- inferOp env op
     (Tuple s2 t2) <- infer (apply s1 env) e
     s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
     return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TSectL t2 t1 tv)))
 
   SectR op e -> do
-    (Tuple s1 t1@(TypArr a (TypArr b c))) <- inferOp op
+    (Tuple s1 t1@(TypArr a (TypArr b c))) <- inferOp env op
     (Tuple s2 t2) <- infer env e
     s3       <- unify (apply s2 b) (extractType t2)
     let s4 = (s3 `compose` s2 `compose` s1)
@@ -341,7 +341,7 @@ infer env ex = case ex of
 
   Unary op e -> do
     tv <- fresh
-    (Tuple s1 t1) <- inferOp op
+    (Tuple s1 t1) <- inferOp env op
     (Tuple s2 t2) <- infer (apply s1 env) e
     s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
     return (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TUnary t1 t2 tv)))
@@ -373,8 +373,8 @@ infer env ex = case ex of
 
   NTuple Nil -> throwError $ UnknownError "congrats you found a bug in TypeChecker.infer (NTuple Nil)"
 
-inferOp :: Op -> Infer (Tuple Subst Type)
-inferOp op = do
+inferOp :: TypeEnv -> Op -> Infer (Tuple Subst Type)
+inferOp env op = do
   a <- fresh
   b <- fresh
   c <- fresh
@@ -398,6 +398,7 @@ inferOp op = do
     And -> f (TypCon "Bool" `TypArr` (TypCon "Bool" `TypArr` TypCon "Bool"))
     Or -> f (TypCon "Bool" `TypArr` (TypCon "Bool" `TypArr` TypCon "Bool"))
     Dollar -> f ((a `TypArr` b) `TypArr` (a `TypArr` b))
+    InfixFunc name -> inferType env (Atom (Name name))
  where
   f typ = return (Tuple nullSubst typ)
   int3 = f (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))
