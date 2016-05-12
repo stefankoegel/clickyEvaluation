@@ -76,9 +76,9 @@ runTests = do
   test "unary_minus3" expression "-10"  (aint (-10))
   test "unary_minus4" expression "-x"  (Unary Sub (aname "x"))
 
-  test "infix_operator1" expression "1 `max` 3" (App (aname ("max")) (toList [aint 1, aint 3]))
-  test "infix_operator2" expression "5 `max` 2 `min` 1" (App (aname ("min")) (toList [App (aname ("max")) (toList [aint 5, aint 2]), aint 1]))
-  test "infix_operator3" expression "True`tight`False" (App (aname ("tight")) (toList [abool true, abool false]))
+  test "infix_operator1" expression "1 `max` 3" (Binary (InfixFunc "max") (aint 1) (aint 3))
+  test "infix_operator2" expression "5 `max` 2 `min` 1" (Binary (InfixFunc "min") (Binary (InfixFunc "max") (aint 5) (aint 2)) (aint 1))
+  test "infix_operator3" expression "True`tight`False" (Binary (InfixFunc "tight") (abool true) (abool false))
 
   test "1" expression "1" (aint 1)
   test "add" expression "1 + 2" (Binary Add (aint 1) (aint 2))
