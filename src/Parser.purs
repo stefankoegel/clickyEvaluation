@@ -154,7 +154,7 @@ operatorTable = infixTable2
           char '`'
           n <- name
           char '`'
-          return $ \e1 e2 -> App (Atom (Name n)) $ toList [e1, e2]
+          return $ \e1 e2 -> Binary (InfixFunc n) e1 e2
 
 opParser :: Parser String Op
 opParser = PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> return op)) <$> x) $ concat $ (\x -> toList <$> x) $ toList infixOperators

@@ -16,6 +16,7 @@ data Op = Composition
         | And
         | Or
         | Dollar
+        | InfixFunc String
 
 derive instance eqOp :: Eq Op
 
@@ -173,6 +174,7 @@ instance showOp :: Show Op where
     And    -> "And"
     Or     -> "Or"
     Dollar -> "Dollar"
+    InfixFunc name -> name
 
 pPrintOp :: Op -> String
 pPrintOp op = case op of
@@ -194,6 +196,7 @@ pPrintOp op = case op of
   And    -> "&&"
   Or     -> "||"
   Dollar -> "$"
+  InfixFunc n -> "`" ++ n ++ "`"
 
 instance showAtom :: Show Atom where
   show atom = case atom of

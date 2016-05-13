@@ -135,17 +135,17 @@ insertDef env (Def name bindings body) = case Map.lookup name env of
 
 eval1 :: Env -> Expr -> Evaluator Expr
 eval1 env expr = case expr of
-  (Binary op e1 e2)                  -> binary op e1 e2
-  (Unary op e)                       -> unary op e
+  (Binary op e1 e2)                  -> binary env op e1 e2
+  (Unary op e)                       -> unary env op e
   (Atom (Name name))                 -> apply env name Nil
   (IfExpr (Atom (Bool true)) te _)   -> return te
   (IfExpr (Atom (Bool false)) _ ee)  -> return ee
 --  (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) (Cons e Nil)) -> return $ App f (singleton $ App g (Cons e Nil))
   (App (Lambda binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
-  (App (SectL e1 op) (Cons e2 Nil))           -> binary op e1 e2 <|> (return $ Binary op e1 e2)
-  (App (SectR op e2) (Cons e1 Nil))           -> binary op e1 e2 <|> (return $ Binary op e1 e2)
-  (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))         -> binary op e1 e2 <|> (return $ Binary op e1 e2)
+  (App (SectL e1 op) (Cons e2 Nil))           -> binary env op e1 e2 <|> (return $ Binary op e1 e2)
+  (App (SectR op e2) (Cons e1 Nil))           -> binary env op e1 e2 <|> (return $ Binary op e1 e2)
+  (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))         -> binary env op e1 e2 <|> (return $ Binary op e1 e2)
   (App (Atom (Name name)) args)      -> apply env name args
   (App (App func es) es')            -> return $ App func (es ++ es')
   _                                  -> throwError $ CannotEvaluate expr
@@ -205,8 +205,8 @@ wrapLambda binds args body =
     LT -> return $ App body (drop (length binds) args)
 
 
-binary :: Op -> Expr -> Expr -> Evaluator Expr
-binary op = case op of
+binary :: Env -> Op -> Expr -> Expr -> Evaluator Expr
+binary env op = case op of
   Power  -> aint Power (\i j -> product $ replicate j i)
   Mul    -> aint Mul (*)
   Div    -> aint Div div
@@ -237,6 +237,7 @@ binary op = case op of
     (Tuple _                   _                   ) -> throwError $ BinaryOpError And e1 e2
   Dollar -> (\f e -> return $ App f (singleton e))
   Composition -> \e1 e2 -> throwError $ BinaryOpError And e1 e2
+  InfixFunc name -> \e1 e2 -> apply env name (e1 : e2 : Nil)
   where
     aint :: Op -> (Int -> Int -> Int) -> Expr -> Expr -> Evaluator Expr
     aint Div f (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
@@ -251,9 +252,9 @@ binary op = case op of
     ord op _  _  _  e1               e2               = throwError $ BinaryOpError op e1 e2
 
 
-unary :: Op -> Expr -> Evaluator Expr
-unary Sub (Atom (AInt i)) = return $ Atom $ AInt (-i)
-unary op e = throwError $ UnaryOpError op e
+unary :: Env -> Op -> Expr -> Evaluator Expr
+unary env Sub (Atom (AInt i)) = return $ Atom $ AInt (-i)
+unary env op e = throwError $ UnaryOpError op e
 
 apply :: Env -> String -> (List Expr) -> Evaluator Expr
 apply env name args = case Map.lookup name env of
