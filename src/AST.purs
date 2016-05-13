@@ -174,7 +174,7 @@ instance showOp :: Show Op where
     And    -> "And"
     Or     -> "Or"
     Dollar -> "Dollar"
-    InfixFunc name -> name
+    InfixFunc name -> "(InfixFunc " ++ name ++ ")"
 
 pPrintOp :: Op -> String
 pPrintOp op = case op of

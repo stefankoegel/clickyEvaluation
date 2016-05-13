@@ -153,3 +153,7 @@ runTests = do
   evalEnvTest "pattern_matching7" "f [(a:b:c:rs1), (x:y:z:rs2)] = a * x + b * y + c * z" "f [[1, 2, 3], [100, 10, 1]]" "123"
 
   evalEnvTest "eval_names" "nat = [1, 2, 3, 4, 5]" "nat" "[1, 2, 3, 4, 5]"
+
+  evalEnvTest "infix_functions_1" prelude "3 `take` (2 `drop` [1, 2, 3, 4, 5, 6, 7])" "[3, 4, 5]"
+  evalEnvTest "infix_functions_2" prelude "(\\x -> x `mod` 2 == 0) `filter` [1, 2, 3, 4, 5, 6]" "[2, 4, 6]"
+  evalEnvTest "infix_functions_3" prelude "(*2) `map` [1, 2, 3]" "[2, 4, 6]"
