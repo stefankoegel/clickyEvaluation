@@ -2041,6 +2041,15 @@ var PS = {};
       Dollar.value = new Dollar();
       return Dollar;
   })();
+  var InfixFunc = (function () {
+      function InfixFunc(value0) {
+          this.value0 = value0;
+      };
+      InfixFunc.create = function (value0) {
+          return new InfixFunc(value0);
+      };
+      return InfixFunc;
+  })();
   var ILit = (function () {
       function ILit(value0) {
           this.value0 = value0;
@@ -2849,7 +2858,7 @@ var PS = {};
       if (p instanceof End) {
           return "End";
       };
-      throw new Error("Failed pattern match at AST line 147, column 12 - line 154, column 1: " + [ p.constructor.name ]);
+      throw new Error("Failed pattern match at AST line 148, column 12 - line 155, column 1: " + [ p.constructor.name ]);
   });
   var showOp = new Prelude.Show(function (op) {
       if (op instanceof Composition) {
@@ -2906,7 +2915,10 @@ var PS = {};
       if (op instanceof Dollar) {
           return "Dollar";
       };
-      throw new Error("Failed pattern match at AST line 157, column 13 - line 177, column 1: " + [ op.constructor.name ]);
+      if (op instanceof InfixFunc) {
+          return op.value0;
+      };
+      throw new Error("Failed pattern match at AST line 158, column 13 - line 179, column 1: " + [ op.constructor.name ]);
   });
   var showAtom = new Prelude.Show(function (atom) {
       if (atom instanceof AInt) {
@@ -2921,7 +2933,7 @@ var PS = {};
       if (atom instanceof Name) {
           return "Name " + Prelude.show(Prelude.showString)(atom.value0);
       };
-      throw new Error("Failed pattern match at AST line 199, column 15 - line 205, column 1: " + [ atom.constructor.name ]);
+      throw new Error("Failed pattern match at AST line 202, column 15 - line 208, column 1: " + [ atom.constructor.name ]);
   });
   var showBinding = new Prelude.Show(function (binding) {
       if (binding instanceof Lit) {
@@ -2936,7 +2948,7 @@ var PS = {};
       if (binding instanceof NTupleLit) {
           return "NTupleLit (" + (Prelude.show(Data_List.showList(showBinding))(binding.value0) + ")");
       };
-      throw new Error("Failed pattern match at AST line 221, column 18 - line 227, column 1: " + [ binding.constructor.name ]);
+      throw new Error("Failed pattern match at AST line 224, column 18 - line 230, column 1: " + [ binding.constructor.name ]);
   });
   var showExpr = new Prelude.Show(function (expr) {
       if (expr instanceof Atom) {
@@ -2975,7 +2987,7 @@ var PS = {};
       if (expr instanceof App) {
           return "App (" + (Prelude.show(showExpr)(expr.value0) + (") (" + (Prelude.show(Data_List.showList(showExpr))(expr.value1) + ")")));
       };
-      throw new Error("Failed pattern match at AST line 206, column 15 - line 220, column 1: " + [ expr.constructor.name ]);
+      throw new Error("Failed pattern match at AST line 209, column 15 - line 223, column 1: " + [ expr.constructor.name ]);
   });
   var showTypeError = new Prelude.Show(function (v) {
       if (v instanceof UnificationFail) {
@@ -2993,7 +3005,7 @@ var PS = {};
       if (v instanceof UnknownError) {
           return "(UnknownError " + (Prelude.show(Prelude.showString)(v.value0) + ")");
       };
-      throw new Error("Failed pattern match at AST line 253, column 3 - line 254, column 3: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at AST line 256, column 3 - line 257, column 3: " + [ v.constructor.name ]);
   });
   var showType = new Prelude.Show(function (v) {
       if (v instanceof TypVar) {
@@ -3011,7 +3023,7 @@ var PS = {};
       if (v instanceof $$TypeError) {
           return "(TypeError " + (Prelude.show(showTypeError)(v.value0) + ")");
       };
-      throw new Error("Failed pattern match at AST line 231, column 3 - line 232, column 3: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at AST line 234, column 3 - line 235, column 3: " + [ v.constructor.name ]);
   });
   var showAD = new Prelude.Show(function (v) {
       if (v instanceof TList) {
@@ -3020,7 +3032,7 @@ var PS = {};
       if (v instanceof TTuple) {
           return "(TTuple (" + (Prelude.show(Data_List.showList(showType))(v.value0) + "))");
       };
-      throw new Error("Failed pattern match at AST line 247, column 3 - line 248, column 3: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at AST line 250, column 3 - line 251, column 3: " + [ v.constructor.name ]);
   });
   var showTypeBinding = new Prelude.Show(function (v) {
       if (v instanceof TLit) {
@@ -3035,7 +3047,7 @@ var PS = {};
       if (v instanceof TNTupleLit) {
           return "(TNTupleLit " + (Prelude.show(Data_List.showList(showTypeBinding))(v.value0) + (" " + (Prelude.show(showType)(v.value1) + ")")));
       };
-      throw new Error("Failed pattern match at AST line 277, column 3 - line 278, column 3: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at AST line 280, column 3 - line 281, column 3: " + [ v.constructor.name ]);
   });
   var showTypeTree = new Prelude.Show(function (v) {
       if (v instanceof TAtom) {
@@ -3074,7 +3086,7 @@ var PS = {};
       if (v instanceof TApp) {
           return "(TApp " + (Prelude.show(showTypeTree)(v.value0) + (" (" + (Prelude.show(Data_List.showList(showTypeTree))(v.value1) + (") " + (Prelude.show(showType)(v.value2) + ")")))));
       };
-      throw new Error("Failed pattern match at AST line 262, column 3 - line 263, column 3: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at AST line 265, column 3 - line 266, column 3: " + [ v.constructor.name ]);
   });
   var pPrintOp = function (op) {
       if (op instanceof Composition) {
@@ -3131,7 +3143,10 @@ var PS = {};
       if (op instanceof Dollar) {
           return "$";
       };
-      throw new Error("Failed pattern match at AST line 178, column 15 - line 198, column 1: " + [ op.constructor.name ]);
+      if (op instanceof InfixFunc) {
+          return "`" + (op.value0 + "`");
+      };
+      throw new Error("Failed pattern match at AST line 180, column 15 - line 201, column 1: " + [ op.constructor.name ]);
   };
   var eqTVar = new Prelude.Eq(function (x) {
       return function (y) {
@@ -3200,6 +3215,9 @@ var PS = {};
           };
           if (x instanceof Dollar && y instanceof Dollar) {
               return true;
+          };
+          if (x instanceof InfixFunc && y instanceof InfixFunc) {
+              return x.value0 === y.value0;
           };
           return false;
       };
@@ -3313,7 +3331,7 @@ var PS = {};
           if (x instanceof Name && y instanceof Name) {
               return Prelude.compare(Prelude.ordString)(x.value0)(y.value0);
           };
-          throw new Error("Failed pattern match at AST line 32, column 1 - line 37, column 1: " + [ x.constructor.name, y.constructor.name ]);
+          throw new Error("Failed pattern match at AST line 33, column 1 - line 38, column 1: " + [ x.constructor.name, y.constructor.name ]);
       };
   });
   var eqTypeError = new Prelude.Eq(function (x) {
@@ -3456,6 +3474,7 @@ var PS = {};
   exports["And"] = And;
   exports["Or"] = Or;
   exports["Dollar"] = Dollar;
+  exports["InfixFunc"] = InfixFunc;
   exports["pPrintOp"] = pPrintOp;
   exports["eqOp"] = eqOp;
   exports["eqAtom"] = eqAtom;
@@ -24268,12 +24287,14 @@ var PS = {};
       };
       return false;
   };
-  var unary = function (v) {
-      return function (v1) {
-          if (v instanceof AST.Sub && (v1 instanceof AST.Atom && v1.value0 instanceof AST.AInt)) {
-              return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.AInt(-v1.value0.value0)));
+  var unary = function (env) {
+      return function (v) {
+          return function (v1) {
+              if (v instanceof AST.Sub && (v1 instanceof AST.Atom && v1.value0 instanceof AST.AInt)) {
+                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.AInt(-v1.value0.value0)));
+              };
+              return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new UnaryOpError(v, v1));
           };
-          return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new UnaryOpError(v, v1));
       };
   }; 
   var semigroupEvalError = new Prelude.Semigroup(function (e1) {
@@ -24281,32 +24302,32 @@ var PS = {};
           return new MoreErrors(e1, e2);
       };
   });
-  var runMatcherM = function ($382) {
-      return Data_Identity.runIdentity(Control_Monad_Except_Trans.runExceptT($382));
+  var runMatcherM = function ($384) {
+      return Data_Identity.runIdentity(Control_Monad_Except_Trans.runExceptT($384));
   };
-  var runEvalM = function ($383) {
-      return Data_Identity.runIdentity(Control_Monad_Except_Trans.runExceptT($383));
+  var runEvalM = function ($385) {
+      return Data_Identity.runIdentity(Control_Monad_Except_Trans.runExceptT($385));
   };                
   var mapIndex = function (i) {
       return function (f) {
           return function (as) {
-              var $63 = Data_List["!!"](as)(i);
-              if ($63 instanceof Data_Maybe.Nothing) {
+              var $64 = Data_List["!!"](as)(i);
+              if ($64 instanceof Data_Maybe.Nothing) {
                   return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new IndexError(i, Data_List.length(as)));
               };
-              if ($63 instanceof Data_Maybe.Just) {
-                  return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Data_Identity.monadIdentity))(f($63.value0))(function (v) {
-                      var $65 = Data_List.updateAt(i)(v)(as);
-                      if ($65 instanceof Data_Maybe.Nothing) {
+              if ($64 instanceof Data_Maybe.Just) {
+                  return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Data_Identity.monadIdentity))(f($64.value0))(function (v) {
+                      var $66 = Data_List.updateAt(i)(v)(as);
+                      if ($66 instanceof Data_Maybe.Nothing) {
                           return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new IndexError(i, Data_List.length(as)));
                       };
-                      if ($65 instanceof Data_Maybe.Just) {
-                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($65.value0);
+                      if ($66 instanceof Data_Maybe.Just) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($66.value0);
                       };
-                      throw new Error("Failed pattern match at Evaluator line 109, column 7 - line 113, column 1: " + [ $65.constructor.name ]);
+                      throw new Error("Failed pattern match at Evaluator line 109, column 7 - line 113, column 1: " + [ $66.constructor.name ]);
                   });
               };
-              throw new Error("Failed pattern match at Evaluator line 105, column 3 - line 113, column 1: " + [ $63.constructor.name ]);
+              throw new Error("Failed pattern match at Evaluator line 105, column 3 - line 113, column 1: " + [ $64.constructor.name ]);
           };
       };
   };
@@ -24376,14 +24397,14 @@ var PS = {};
   };
   var insertDef = function (env) {
       return function (v) {
-          var $110 = Data_StrMap_1.lookup(v.value0)(env);
-          if ($110 instanceof Data_Maybe.Nothing) {
+          var $111 = Data_StrMap_1.lookup(v.value0)(env);
+          if ($111 instanceof Data_Maybe.Nothing) {
               return Data_StrMap_1.insert(v.value0)(Data_List.singleton(new Data_Tuple.Tuple(v.value1, v.value2)))(env);
           };
-          if ($110 instanceof Data_Maybe.Just) {
-              return Data_StrMap_1.insert(v.value0)(Prelude["++"](Data_List.semigroupList)($110.value0)(Data_List.singleton(new Data_Tuple.Tuple(v.value1, v.value2))))(env);
+          if ($111 instanceof Data_Maybe.Just) {
+              return Data_StrMap_1.insert(v.value0)(Prelude["++"](Data_List.semigroupList)($111.value0)(Data_List.singleton(new Data_Tuple.Tuple(v.value1, v.value2))))(env);
           };
-          throw new Error("Failed pattern match at Evaluator line 132, column 42 - line 136, column 1: " + [ $110.constructor.name ]);
+          throw new Error("Failed pattern match at Evaluator line 132, column 42 - line 136, column 1: " + [ $111.constructor.name ]);
       };
   };
   var freeVariables = function (v) {
@@ -24406,7 +24427,7 @@ var PS = {};
           if (Prelude.otherwise) {
               return new StrictnessError(bs, es);
           };
-          throw new Error("Failed pattern match at Evaluator line 279, column 1 - line 283, column 1: " + [ bs.constructor.name, es.constructor.name ]);
+          throw new Error("Failed pattern match at Evaluator line 280, column 1 - line 284, column 1: " + [ bs.constructor.name, es.constructor.name ]);
       };
   };
   var match$prime = function (v) {
@@ -24415,14 +24436,14 @@ var PS = {};
               return Control_Monad_State_Class.modify(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(Data_StrMap_1.insert(v.value0.value0)(v1));
           };
           if (v instanceof AST.Lit && v1 instanceof AST.Atom) {
-              var $127 = Prelude["=="](AST.eqAtom)(v.value0)(v1.value0);
-              if ($127) {
+              var $128 = Prelude["=="](AST.eqAtom)(v.value0)(v1.value0);
+              if ($128) {
                   return Prelude["return"](Control_Monad_State_Trans.applicativeStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(Prelude.unit);
               };
-              if (!$127) {
+              if (!$128) {
                   return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(new MatchingError(new AST.Lit(v.value0), new AST.Atom(v1.value0)));
               };
-              throw new Error("Failed pattern match at Evaluator line 288, column 48 - line 291, column 1: " + [ $127.constructor.name ]);
+              throw new Error("Failed pattern match at Evaluator line 289, column 48 - line 292, column 1: " + [ $128.constructor.name ]);
           };
           if (v instanceof AST.Lit) {
               return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(checkStrictness(new AST.Lit(v.value0))(v1));
@@ -24443,32 +24464,32 @@ var PS = {};
               return Control_Apply["*>"](Control_Monad_State_Trans.applyStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(match$prime(v.value0.value0)(v1.value1))(match$prime(new AST.ListLit(v.value0.value1))(v1.value2));
           };
           if (v instanceof AST.ListLit && v1 instanceof AST.List) {
-              var $152 = Data_List.length(v.value0) === Data_List.length(v1.value0);
-              if ($152) {
+              var $153 = Data_List.length(v.value0) === Data_List.length(v1.value0);
+              if ($153) {
                   return Prelude["void"](Control_Monad_State_Trans.functorStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(Data_List.zipWithA(Control_Monad_State_Trans.applicativeStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(match$prime)(v.value0)(v1.value0));
               };
-              if (!$152) {
+              if (!$153) {
                   return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(new MatchingError(new AST.ListLit(v.value0), new AST.List(v1.value0)));
               };
-              throw new Error("Failed pattern match at Evaluator line 299, column 48 - line 302, column 1: " + [ $152.constructor.name ]);
+              throw new Error("Failed pattern match at Evaluator line 300, column 48 - line 303, column 1: " + [ $153.constructor.name ]);
           };
           if (v instanceof AST.ListLit) {
               return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(checkStrictness(new AST.ListLit(v.value0))(v1));
           };
           if (v instanceof AST.NTupleLit && v1 instanceof AST.NTuple) {
-              var $156 = Data_List.length(v.value0) === Data_List.length(v1.value0);
-              if ($156) {
+              var $157 = Data_List.length(v.value0) === Data_List.length(v1.value0);
+              if ($157) {
                   return Prelude["void"](Control_Monad_State_Trans.functorStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(Data_List.zipWithA(Control_Monad_State_Trans.applicativeStateT(Control_Monad_Except_Trans.monadExceptT(Data_Identity.monadIdentity)))(match$prime)(v.value0)(v1.value0));
               };
-              if (!$156) {
+              if (!$157) {
                   return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(new MatchingError(new AST.NTupleLit(v.value0), new AST.NTuple(v1.value0)));
               };
-              throw new Error("Failed pattern match at Evaluator line 304, column 48 - line 307, column 1: " + [ $156.constructor.name ]);
+              throw new Error("Failed pattern match at Evaluator line 305, column 48 - line 308, column 1: " + [ $157.constructor.name ]);
           };
           if (v instanceof AST.NTupleLit) {
               return Control_Monad_Error_Class.throwError(Control_Monad_State_Trans.monadErrorStateT(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity)))(checkStrictness(new AST.NTupleLit(v.value0))(v1));
           };
-          throw new Error("Failed pattern match at Evaluator line 287, column 1 - line 288, column 1: " + [ v.constructor.name, v1.constructor.name ]);
+          throw new Error("Failed pattern match at Evaluator line 288, column 1 - line 289, column 1: " + [ v.constructor.name, v1.constructor.name ]);
       };
   };
   var boundNames = (function () {
@@ -24490,178 +24511,26 @@ var PS = {};
       return go;
   })();
   var boundNames$prime = Data_List.concatMap(boundNames);
-  var binary = function (op) {
-      var ord = function (v) {
-          return function (v1) {
-              return function (v2) {
-                  return function (v3) {
-                      return function (v4) {
-                          return function (v5) {
-                              if (v4 instanceof AST.Atom && (v4.value0 instanceof AST.AInt && (v5 instanceof AST.Atom && v5.value0 instanceof AST.AInt))) {
-                                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(AST.Bool.create(v1(v4.value0.value0)(v5.value0.value0))));
-                              };
-                              if (v4 instanceof AST.Atom && (v4.value0 instanceof AST.Char && (v5 instanceof AST.Atom && v5.value0 instanceof AST.Char))) {
-                                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(AST.Bool.create(v2(v4.value0.value0)(v5.value0.value0))));
-                              };
-                              if (v4 instanceof AST.Atom && (v4.value0 instanceof AST.Bool && (v5 instanceof AST.Atom && v5.value0 instanceof AST.Bool))) {
-                                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(AST.Bool.create(v3(v4.value0.value0)(v5.value0.value0))));
-                              };
-                              return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(v, v4, v5));
-                          };
-                      };
-                  };
-              };
-          };
-      };
-      var aint = function (v) {
-          return function (v1) {
-              return function (v2) {
-                  return function (v3) {
-                      if (v instanceof AST.Div && (v2 instanceof AST.Atom && (v2.value0 instanceof AST.AInt && (v3 instanceof AST.Atom && (v3.value0 instanceof AST.AInt && v3.value0.value0 === 0))))) {
-                          return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(DivByZero.value);
-                      };
-                      if (v instanceof AST.Mod && (v2 instanceof AST.Atom && (v2.value0 instanceof AST.AInt && (v3 instanceof AST.Atom && (v3.value0 instanceof AST.AInt && v3.value0.value0 === 0))))) {
-                          return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(DivByZero.value);
-                      };
-                      if (v2 instanceof AST.Atom && (v2.value0 instanceof AST.AInt && (v3 instanceof AST.Atom && v3.value0 instanceof AST.AInt))) {
-                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(AST.AInt.create(v1(v2.value0.value0)(v3.value0.value0))));
-                      };
-                      return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(v, v2, v3));
-                  };
-              };
-          };
-      };
-      if (op instanceof AST.Power) {
-          return aint(AST.Power.value)(function (i) {
-              return function (j) {
-                  return Data_Foldable.product(Data_List.foldableList)(Prelude.semiringInt)(Data_List.replicate(j)(i));
-              };
-          });
-      };
-      if (op instanceof AST.Mul) {
-          return aint(AST.Mul.value)(Prelude["*"](Prelude.semiringInt));
-      };
-      if (op instanceof AST.Div) {
-          return aint(AST.Div.value)(Prelude.div(Prelude.moduloSemiringInt));
-      };
-      if (op instanceof AST.Mod) {
-          return aint(AST.Mod.value)(Prelude.mod(Prelude.moduloSemiringInt));
-      };
-      if (op instanceof AST.Add) {
-          return aint(AST.Add.value)(Prelude["+"](Prelude.semiringInt));
-      };
-      if (op instanceof AST.Sub) {
-          return aint(AST.Sub.value)(Prelude["-"](Prelude.ringInt));
-      };
-      if (op instanceof AST.Colon) {
-          return function (e) {
-              return function (es) {
-                  if (es instanceof AST.List) {
-                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.List.create(Data_List[":"](e)(es.value0)));
-                  };
-                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.Colon.value, e, es));
-              };
-          };
-      };
-      if (op instanceof AST.Append) {
-          return function (es1) {
-              return function (es2) {
-                  var $204 = new Data_Tuple.Tuple(es1, es2);
-                  if ($204.value0 instanceof AST.List && $204.value1 instanceof AST.List) {
-                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.List.create(Prelude["++"](Data_List.semigroupList)($204.value0.value0)($204.value1.value0)));
-                  };
-                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.Append.value, es1, es2));
-              };
-          };
-      };
-      if (op instanceof AST.Equ) {
-          return ord(AST.Equ.value)(Prelude["=="](Prelude.eqInt))(Prelude["=="](Prelude.eqString))(Prelude["=="](Prelude.eqBoolean));
-      };
-      if (op instanceof AST.Neq) {
-          return ord(AST.Neq.value)(Prelude["/="](Prelude.eqInt))(Prelude["/="](Prelude.eqString))(Prelude["/="](Prelude.eqBoolean));
-      };
-      if (op instanceof AST.Leq) {
-          return ord(AST.Leq.value)(Prelude["<="](Prelude.ordInt))(Prelude["<="](Prelude.ordString))(Prelude["<="](Prelude.ordBoolean));
-      };
-      if (op instanceof AST.Lt) {
-          return ord(AST.Lt.value)(Prelude["<"](Prelude.ordInt))(Prelude["<"](Prelude.ordString))(Prelude["<"](Prelude.ordBoolean));
-      };
-      if (op instanceof AST.Geq) {
-          return ord(AST.Geq.value)(Prelude[">="](Prelude.ordInt))(Prelude[">="](Prelude.ordString))(Prelude[">="](Prelude.ordBoolean));
-      };
-      if (op instanceof AST.Gt) {
-          return ord(AST.Gt.value)(Prelude[">"](Prelude.ordInt))(Prelude[">"](Prelude.ordString))(Prelude[">"](Prelude.ordBoolean));
-      };
-      if (op instanceof AST.And) {
-          return function (e1) {
-              return function (e2) {
-                  var $209 = new Data_Tuple.Tuple(e1, e2);
-                  if ($209.value0 instanceof AST.Atom && ($209.value0.value0 instanceof AST.Bool && !$209.value0.value0.value0)) {
-                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(false)));
-                  };
-                  if ($209.value1 instanceof AST.Atom && ($209.value1.value0 instanceof AST.Bool && !$209.value1.value0.value0)) {
-                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(false)));
-                  };
-                  if ($209.value0 instanceof AST.Atom && ($209.value0.value0 instanceof AST.Bool && ($209.value0.value0.value0 && ($209.value1 instanceof AST.Atom && ($209.value1.value0 instanceof AST.Bool && $209.value1.value0.value0))))) {
-                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(true)));
-                  };
-                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.And.value, e1, e2));
-              };
-          };
-      };
-      if (op instanceof AST.Or) {
-          return function (e1) {
-              return function (e2) {
-                  var $226 = new Data_Tuple.Tuple(e1, e2);
-                  if ($226.value0 instanceof AST.Atom && ($226.value0.value0 instanceof AST.Bool && $226.value0.value0.value0)) {
-                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(true)));
-                  };
-                  if ($226.value1 instanceof AST.Atom && ($226.value1.value0 instanceof AST.Bool && $226.value1.value0.value0)) {
-                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(true)));
-                  };
-                  if ($226.value0 instanceof AST.Atom && ($226.value0.value0 instanceof AST.Bool && (!$226.value0.value0.value0 && ($226.value1 instanceof AST.Atom && ($226.value1.value0 instanceof AST.Bool && !$226.value1.value0.value0))))) {
-                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(false)));
-                  };
-                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.And.value, e1, e2));
-              };
-          };
-      };
-      if (op instanceof AST.Dollar) {
-          return function (f) {
-              return function (e) {
-                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.App(f, Data_List.singleton(e)));
-              };
-          };
-      };
-      if (op instanceof AST.Composition) {
-          return function (e1) {
-              return function (e2) {
-                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.And.value, e1, e2));
-              };
-          };
-      };
-      throw new Error("Failed pattern match at Evaluator line 209, column 13 - line 240, column 3: " + [ op.constructor.name ]);
-  };
   var avoidCapture = function (subs) {
       return function (binds) {
-          var $243 = Data_List.intersect(Prelude.eqString)(Data_List.concatMap(freeVariables)(Data_StrMap_1.values(subs)))(boundNames$prime(binds));
-          if ($243 instanceof Data_List.Nil) {
+          var $168 = Data_List.intersect(Prelude.eqString)(Data_List.concatMap(freeVariables)(Data_StrMap_1.values(subs)))(boundNames$prime(binds));
+          if ($168 instanceof Data_List.Nil) {
               return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(Prelude.unit);
           };
-          return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NameCaptureError($243));
+          return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NameCaptureError($168));
       };
   };
   var replace$prime = function (subs) {
       var go = function (expr) {
           if (expr instanceof AST.Atom && expr.value0 instanceof AST.Name) {
-              var $245 = Data_StrMap_1.lookup(expr.value0.value0)(subs);
-              if ($245 instanceof Data_Maybe.Just) {
-                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($245.value0);
+              var $170 = Data_StrMap_1.lookup(expr.value0.value0)(subs);
+              if ($170 instanceof Data_Maybe.Just) {
+                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($170.value0);
               };
-              if ($245 instanceof Data_Maybe.Nothing) {
+              if ($170 instanceof Data_Maybe.Nothing) {
                   return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(expr);
               };
-              throw new Error("Failed pattern match at Evaluator line 313, column 29 - line 316, column 5: " + [ $245.constructor.name ]);
+              throw new Error("Failed pattern match at Evaluator line 314, column 29 - line 317, column 5: " + [ $170.constructor.name ]);
           };
           if (expr instanceof AST.List) {
               return Prelude["<$>"](Control_Monad_Except_Trans.functorExceptT(Data_Identity.functorIdentity))(AST.List.create)(Data_Traversable.traverse(Data_List.traversableList)(Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(go)(expr.value0));
@@ -24722,19 +24591,19 @@ var PS = {};
                               continue tco;
                           };
                           if (v1 instanceof Data_List.Cons) {
-                              var $276 = runMatcherM(matchls$prime(v)(v1.value0.value0)(v2));
-                              if ($276 instanceof Data_Either.Right) {
-                                  return Prelude[">>="](Control_Monad_Except_Trans.bindExceptT(Data_Identity.monadIdentity))(replace$prime($276.value0)(v1.value0.value1))(wrapLambda(v1.value0.value0)(v2));
+                              var $201 = runMatcherM(matchls$prime(v)(v1.value0.value0)(v2));
+                              if ($201 instanceof Data_Either.Right) {
+                                  return Prelude[">>="](Control_Monad_Except_Trans.bindExceptT(Data_Identity.monadIdentity))(replace$prime($201.value0)(v1.value0.value1))(wrapLambda(v1.value0.value0)(v2));
                               };
-                              if ($276 instanceof Data_Either.Left && $276.value0 instanceof StrictnessError) {
-                                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NoMatchingFunction(name, Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton($276.value0))));
+                              if ($201 instanceof Data_Either.Left && $201.value0 instanceof StrictnessError) {
+                                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new NoMatchingFunction(name, Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton($201.value0))));
                               };
-                              if ($276 instanceof Data_Either.Left) {
+                              if ($201 instanceof Data_Either.Left) {
                                   var __tco_v = v;
                                   var __tco_v1 = v1.value1;
                                   var __tco_v2 = v2;
                                   var __tco_name = name;
-                                  var __tco_errs = Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton($276.value0));
+                                  var __tco_errs = Prelude["++"](Data_List.semigroupList)(errs)(Data_List.singleton($201.value0));
                                   v = __tco_v;
                                   v1 = __tco_v1;
                                   v2 = __tco_v2;
@@ -24742,9 +24611,9 @@ var PS = {};
                                   errs = __tco_errs;
                                   continue tco;
                               };
-                              throw new Error("Failed pattern match at Evaluator line 266, column 61 - line 271, column 1: " + [ $276.constructor.name ]);
+                              throw new Error("Failed pattern match at Evaluator line 267, column 61 - line 272, column 1: " + [ $201.constructor.name ]);
                           };
-                          throw new Error("Failed pattern match at Evaluator line 264, column 1 - line 265, column 1: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name, name.constructor.name, errs.constructor.name ]);
+                          throw new Error("Failed pattern match at Evaluator line 265, column 1 - line 266, column 1: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name, name.constructor.name, errs.constructor.name ]);
                       };
                   };
               };
@@ -24780,14 +24649,14 @@ var PS = {};
                   return expr;
               })();
               var eval1d = Data_Either.either(Prelude["const"](expr$prime))(Prelude.id(Prelude.categoryFn))(runEvalM(eval1(env)(expr$prime)));
-              var $299 = Prelude["=="](AST.eqExpr)(expr)(eval1d);
-              if ($299) {
+              var $224 = Prelude["=="](AST.eqExpr)(expr)(eval1d);
+              if ($224) {
                   return expr;
               };
-              if (!$299) {
+              if (!$224) {
                   return evalToBinding(env)(eval1d)(bind);
               };
-              throw new Error("Failed pattern match at Evaluator line 179, column 25 - line 180, column 3: " + [ $299.constructor.name ]);
+              throw new Error("Failed pattern match at Evaluator line 179, column 25 - line 180, column 3: " + [ $224.constructor.name ]);
           };
       };
   };
@@ -24828,14 +24697,14 @@ var PS = {};
               };
               if (bind instanceof AST.ListLit) {
                   if (expr instanceof AST.List) {
-                      var $318 = Data_List.length(expr.value0) === Data_List.length(bind.value0);
-                      if ($318) {
+                      var $243 = Data_List.length(expr.value0) === Data_List.length(bind.value0);
+                      if ($243) {
                           return new AST.List(Data_List.zipWith(evalToBinding(env))(expr.value0)(bind.value0));
                       };
-                      if (!$318) {
+                      if (!$243) {
                           return expr;
                       };
-                      throw new Error("Failed pattern match at Evaluator line 170, column 18 - line 171, column 5: " + [ $318.constructor.name ]);
+                      throw new Error("Failed pattern match at Evaluator line 170, column 18 - line 171, column 5: " + [ $243.constructor.name ]);
                   };
                   return recurse(env)(expr)(bind);
               };
@@ -24852,10 +24721,10 @@ var PS = {};
   var eval1 = function (env) {
       return function (expr) {
           if (expr instanceof AST.Binary) {
-              return binary(expr.value0)(expr.value1)(expr.value2);
+              return binary(env)(expr.value0)(expr.value1)(expr.value2);
           };
           if (expr instanceof AST.Unary) {
-              return unary(expr.value0)(expr.value1);
+              return unary(env)(expr.value0)(expr.value1);
           };
           if (expr instanceof AST.Atom && expr.value0 instanceof AST.Name) {
               return apply(env)(expr.value0.value0)(Data_List.Nil.value);
@@ -24873,13 +24742,13 @@ var PS = {};
               return tryAll(env)(Data_List.singleton(new Data_Tuple.Tuple(expr.value0.value0, expr.value0.value1)))(expr.value1)("lambda")(Data_List.Nil.value);
           };
           if (expr instanceof AST.App && (expr.value0 instanceof AST.SectL && (expr.value1 instanceof Data_List.Cons && expr.value1.value1 instanceof Data_List.Nil))) {
-              return Control_Alt["<|>"](Control_Monad_Except_Trans.altExceptT(semigroupEvalError)(Data_Identity.monadIdentity))(binary(expr.value0.value1)(expr.value0.value0)(expr.value1.value0))(Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.Binary(expr.value0.value1, expr.value0.value0, expr.value1.value0)));
+              return Control_Alt["<|>"](Control_Monad_Except_Trans.altExceptT(semigroupEvalError)(Data_Identity.monadIdentity))(binary(env)(expr.value0.value1)(expr.value0.value0)(expr.value1.value0))(Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.Binary(expr.value0.value1, expr.value0.value0, expr.value1.value0)));
           };
           if (expr instanceof AST.App && (expr.value0 instanceof AST.SectR && (expr.value1 instanceof Data_List.Cons && expr.value1.value1 instanceof Data_List.Nil))) {
-              return Control_Alt["<|>"](Control_Monad_Except_Trans.altExceptT(semigroupEvalError)(Data_Identity.monadIdentity))(binary(expr.value0.value0)(expr.value1.value0)(expr.value0.value1))(Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.Binary(expr.value0.value0, expr.value1.value0, expr.value0.value1)));
+              return Control_Alt["<|>"](Control_Monad_Except_Trans.altExceptT(semigroupEvalError)(Data_Identity.monadIdentity))(binary(env)(expr.value0.value0)(expr.value1.value0)(expr.value0.value1))(Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.Binary(expr.value0.value0, expr.value1.value0, expr.value0.value1)));
           };
           if (expr instanceof AST.App && (expr.value0 instanceof AST.PrefixOp && (expr.value1 instanceof Data_List.Cons && (expr.value1.value1 instanceof Data_List.Cons && expr.value1.value1.value1 instanceof Data_List.Nil)))) {
-              return Control_Alt["<|>"](Control_Monad_Except_Trans.altExceptT(semigroupEvalError)(Data_Identity.monadIdentity))(binary(expr.value0.value0)(expr.value1.value0)(expr.value1.value1.value0))(Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.Binary(expr.value0.value0, expr.value1.value0, expr.value1.value1.value0)));
+              return Control_Alt["<|>"](Control_Monad_Except_Trans.altExceptT(semigroupEvalError)(Data_Identity.monadIdentity))(binary(env)(expr.value0.value0)(expr.value1.value0)(expr.value1.value1.value0))(Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.Binary(expr.value0.value0, expr.value1.value0, expr.value1.value1.value0)));
           };
           if (expr instanceof AST.App && (expr.value0 instanceof AST.Atom && expr.value0.value0 instanceof AST.Name)) {
               return apply(env)(expr.value0.value0.value0)(expr.value1);
@@ -24890,17 +24759,178 @@ var PS = {};
           return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new CannotEvaluate(expr));
       };
   };
+  var binary = function (env) {
+      return function (op) {
+          var ord = function (v) {
+              return function (v1) {
+                  return function (v2) {
+                      return function (v3) {
+                          return function (v4) {
+                              return function (v5) {
+                                  if (v4 instanceof AST.Atom && (v4.value0 instanceof AST.AInt && (v5 instanceof AST.Atom && v5.value0 instanceof AST.AInt))) {
+                                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(AST.Bool.create(v1(v4.value0.value0)(v5.value0.value0))));
+                                  };
+                                  if (v4 instanceof AST.Atom && (v4.value0 instanceof AST.Char && (v5 instanceof AST.Atom && v5.value0 instanceof AST.Char))) {
+                                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(AST.Bool.create(v2(v4.value0.value0)(v5.value0.value0))));
+                                  };
+                                  if (v4 instanceof AST.Atom && (v4.value0 instanceof AST.Bool && (v5 instanceof AST.Atom && v5.value0 instanceof AST.Bool))) {
+                                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(AST.Bool.create(v3(v4.value0.value0)(v5.value0.value0))));
+                                  };
+                                  return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(v, v4, v5));
+                              };
+                          };
+                      };
+                  };
+              };
+          };
+          var aint = function (v) {
+              return function (v1) {
+                  return function (v2) {
+                      return function (v3) {
+                          if (v instanceof AST.Div && (v2 instanceof AST.Atom && (v2.value0 instanceof AST.AInt && (v3 instanceof AST.Atom && (v3.value0 instanceof AST.AInt && v3.value0.value0 === 0))))) {
+                              return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(DivByZero.value);
+                          };
+                          if (v instanceof AST.Mod && (v2 instanceof AST.Atom && (v2.value0 instanceof AST.AInt && (v3 instanceof AST.Atom && (v3.value0 instanceof AST.AInt && v3.value0.value0 === 0))))) {
+                              return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(DivByZero.value);
+                          };
+                          if (v2 instanceof AST.Atom && (v2.value0 instanceof AST.AInt && (v3 instanceof AST.Atom && v3.value0 instanceof AST.AInt))) {
+                              return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(AST.AInt.create(v1(v2.value0.value0)(v3.value0.value0))));
+                          };
+                          return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(v, v2, v3));
+                      };
+                  };
+              };
+          };
+          if (op instanceof AST.Power) {
+              return aint(AST.Power.value)(function (i) {
+                  return function (j) {
+                      return Data_Foldable.product(Data_List.foldableList)(Prelude.semiringInt)(Data_List.replicate(j)(i));
+                  };
+              });
+          };
+          if (op instanceof AST.Mul) {
+              return aint(AST.Mul.value)(Prelude["*"](Prelude.semiringInt));
+          };
+          if (op instanceof AST.Div) {
+              return aint(AST.Div.value)(Prelude.div(Prelude.moduloSemiringInt));
+          };
+          if (op instanceof AST.Mod) {
+              return aint(AST.Mod.value)(Prelude.mod(Prelude.moduloSemiringInt));
+          };
+          if (op instanceof AST.Add) {
+              return aint(AST.Add.value)(Prelude["+"](Prelude.semiringInt));
+          };
+          if (op instanceof AST.Sub) {
+              return aint(AST.Sub.value)(Prelude["-"](Prelude.ringInt));
+          };
+          if (op instanceof AST.Colon) {
+              return function (e) {
+                  return function (es) {
+                      if (es instanceof AST.List) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.List.create(Data_List[":"](e)(es.value0)));
+                      };
+                      return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.Colon.value, e, es));
+                  };
+              };
+          };
+          if (op instanceof AST.Append) {
+              return function (es1) {
+                  return function (es2) {
+                      var $342 = new Data_Tuple.Tuple(es1, es2);
+                      if ($342.value0 instanceof AST.List && $342.value1 instanceof AST.List) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.List.create(Prelude["++"](Data_List.semigroupList)($342.value0.value0)($342.value1.value0)));
+                      };
+                      return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.Append.value, es1, es2));
+                  };
+              };
+          };
+          if (op instanceof AST.Equ) {
+              return ord(AST.Equ.value)(Prelude["=="](Prelude.eqInt))(Prelude["=="](Prelude.eqString))(Prelude["=="](Prelude.eqBoolean));
+          };
+          if (op instanceof AST.Neq) {
+              return ord(AST.Neq.value)(Prelude["/="](Prelude.eqInt))(Prelude["/="](Prelude.eqString))(Prelude["/="](Prelude.eqBoolean));
+          };
+          if (op instanceof AST.Leq) {
+              return ord(AST.Leq.value)(Prelude["<="](Prelude.ordInt))(Prelude["<="](Prelude.ordString))(Prelude["<="](Prelude.ordBoolean));
+          };
+          if (op instanceof AST.Lt) {
+              return ord(AST.Lt.value)(Prelude["<"](Prelude.ordInt))(Prelude["<"](Prelude.ordString))(Prelude["<"](Prelude.ordBoolean));
+          };
+          if (op instanceof AST.Geq) {
+              return ord(AST.Geq.value)(Prelude[">="](Prelude.ordInt))(Prelude[">="](Prelude.ordString))(Prelude[">="](Prelude.ordBoolean));
+          };
+          if (op instanceof AST.Gt) {
+              return ord(AST.Gt.value)(Prelude[">"](Prelude.ordInt))(Prelude[">"](Prelude.ordString))(Prelude[">"](Prelude.ordBoolean));
+          };
+          if (op instanceof AST.And) {
+              return function (e1) {
+                  return function (e2) {
+                      var $347 = new Data_Tuple.Tuple(e1, e2);
+                      if ($347.value0 instanceof AST.Atom && ($347.value0.value0 instanceof AST.Bool && !$347.value0.value0.value0)) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(false)));
+                      };
+                      if ($347.value1 instanceof AST.Atom && ($347.value1.value0 instanceof AST.Bool && !$347.value1.value0.value0)) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(false)));
+                      };
+                      if ($347.value0 instanceof AST.Atom && ($347.value0.value0 instanceof AST.Bool && ($347.value0.value0.value0 && ($347.value1 instanceof AST.Atom && ($347.value1.value0 instanceof AST.Bool && $347.value1.value0.value0))))) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(true)));
+                      };
+                      return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.And.value, e1, e2));
+                  };
+              };
+          };
+          if (op instanceof AST.Or) {
+              return function (e1) {
+                  return function (e2) {
+                      var $364 = new Data_Tuple.Tuple(e1, e2);
+                      if ($364.value0 instanceof AST.Atom && ($364.value0.value0 instanceof AST.Bool && $364.value0.value0.value0)) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(true)));
+                      };
+                      if ($364.value1 instanceof AST.Atom && ($364.value1.value0 instanceof AST.Bool && $364.value1.value0.value0)) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(true)));
+                      };
+                      if ($364.value0 instanceof AST.Atom && ($364.value0.value0 instanceof AST.Bool && (!$364.value0.value0.value0 && ($364.value1 instanceof AST.Atom && ($364.value1.value0 instanceof AST.Bool && !$364.value1.value0.value0))))) {
+                          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(AST.Atom.create(new AST.Bool(false)));
+                      };
+                      return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.And.value, e1, e2));
+                  };
+              };
+          };
+          if (op instanceof AST.Dollar) {
+              return function (f) {
+                  return function (e) {
+                      return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))(new AST.App(f, Data_List.singleton(e)));
+                  };
+              };
+          };
+          if (op instanceof AST.Composition) {
+              return function (e1) {
+                  return function (e2) {
+                      return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new BinaryOpError(AST.And.value, e1, e2));
+                  };
+              };
+          };
+          if (op instanceof AST.InfixFunc) {
+              return function (e1) {
+                  return function (e2) {
+                      return apply(env)(op.value0)(Data_List[":"](e1)(Data_List[":"](e2)(Data_List.Nil.value)));
+                  };
+              };
+          };
+          throw new Error("Failed pattern match at Evaluator line 209, column 17 - line 241, column 3: " + [ op.constructor.name ]);
+      };
+  };
   var apply = function (env) {
       return function (name) {
           return function (args) {
-              var $380 = Data_StrMap_1.lookup(name)(env);
-              if ($380 instanceof Data_Maybe.Nothing) {
+              var $382 = Data_StrMap_1.lookup(name)(env);
+              if ($382 instanceof Data_Maybe.Nothing) {
                   return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Data_Identity.monadIdentity))(new UnknownFunction(name));
               };
-              if ($380 instanceof Data_Maybe.Just) {
-                  return tryAll(env)($380.value0)(args)(name)(Data_List.Nil.value);
+              if ($382 instanceof Data_Maybe.Just) {
+                  return tryAll(env)($382.value0)(args)(name)(Data_List.Nil.value);
               };
-              throw new Error("Failed pattern match at Evaluator line 259, column 23 - line 263, column 1: " + [ $380.constructor.name ]);
+              throw new Error("Failed pattern match at Evaluator line 260, column 23 - line 264, column 1: " + [ $382.constructor.name ]);
           };
       };
   };
@@ -24919,8 +24949,8 @@ var PS = {};
   var evalPathAll = function (env) {
       return function (path) {
           return function (expr) {
-              return runEvalM(mapWithPath(path)(function ($384) {
-                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($$eval(env)($384));
+              return runEvalM(mapWithPath(path)(function ($386) {
+                  return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Data_Identity.applicativeIdentity))($$eval(env)($386));
               })(expr));
           };
       };
@@ -25431,7 +25461,7 @@ var PS = {};
           var i2 = i % 26;
           return Prelude["++"](Data_List_1.semigroupList)(newTypVar1(i1))(newTypVar(i2));
       };
-      throw new Error("Failed pattern match at TypeChecker line 781, column 16 - line 787, column 1: " + [ $201.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 782, column 16 - line 788, column 1: " + [ $201.constructor.name ]);
   };
   var newTypVar = function (i) {
       var $203 = Data_List_1["!!"](letters)(i);
@@ -25443,7 +25473,7 @@ var PS = {};
           var i2 = i % 26;
           return Prelude["++"](Data_List_1.semigroupList)(newTypVar1(i1))(newTypVar(i2));
       };
-      throw new Error("Failed pattern match at TypeChecker line 774, column 15 - line 780, column 1: " + [ $203.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 775, column 15 - line 781, column 1: " + [ $203.constructor.name ]);
   };
   var isTypeError = function (t) {
       if (t instanceof AST["TypeError"]) {
@@ -25493,7 +25523,7 @@ var PS = {};
                           });
                       });
                   };
-                  throw new Error("Failed pattern match at TypeChecker line 723, column 7 - line 731, column 4: " + [ $212.constructor.name ]);
+                  throw new Error("Failed pattern match at TypeChecker line 724, column 7 - line 732, column 4: " + [ $212.constructor.name ]);
               });
           };
           if (v instanceof AST.TypArr) {
@@ -25523,7 +25553,7 @@ var PS = {};
               return Prelude["return"](Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity))(new AST.TTuple(ts1));
           });
       };
-      throw new Error("Failed pattern match at TypeChecker line 739, column 1 - line 740, column 1: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 740, column 1 - line 741, column 1: " + [ v.constructor.name ]);
   };
   var helpBindingToABC = function (bin) {
       var go = function (v) {
@@ -25555,7 +25585,7 @@ var PS = {};
                   });
               });
           };
-          throw new Error("Failed pattern match at TypeChecker line 745, column 5 - line 746, column 5: " + [ v.constructor.name ]);
+          throw new Error("Failed pattern match at TypeChecker line 746, column 5 - line 747, column 5: " + [ v.constructor.name ]);
       };
       return go(bin);
   };
@@ -25663,7 +25693,7 @@ var PS = {};
                   });
               });
           };
-          throw new Error("Failed pattern match at TypeChecker line 660, column 5 - line 661, column 5: " + [ v.constructor.name ]);
+          throw new Error("Failed pattern match at TypeChecker line 661, column 5 - line 662, column 5: " + [ v.constructor.name ]);
       };
       return go(tt);
   };
@@ -25685,7 +25715,7 @@ var PS = {};
               if (v instanceof AST.TypArr && (v.value0 instanceof AST.AD && (v.value0.value0 instanceof AST.TTuple && (v.value1 instanceof AST.AD && v.value1.value0 instanceof AST.TTuple)))) {
                   return new Data_Tuple_1.Tuple(v.value0.value0.value0, v.value1.value0.value0);
               };
-              throw new Error("Failed pattern match at TypeChecker line 806, column 28 - line 806, column 90: " + [ v.constructor.name ]);
+              throw new Error("Failed pattern match at TypeChecker line 807, column 28 - line 807, column 90: " + [ v.constructor.name ]);
           })(typeToABC(new AST.TypArr(new AST.AD(new AST.TTuple(t1)), new AST.AD(new AST.TTuple(t2)))));
       };
   };
@@ -25695,7 +25725,7 @@ var PS = {};
               if (v instanceof AST.TypArr) {
                   return new Data_Tuple_1.Tuple(v.value0, v.value1);
               };
-              throw new Error("Failed pattern match at TypeChecker line 805, column 24 - line 805, column 58: " + [ v.constructor.name ]);
+              throw new Error("Failed pattern match at TypeChecker line 806, column 24 - line 806, column 58: " + [ v.constructor.name ]);
           })(typeToABC(new AST.TypArr(t1, t2)));
       };
   };
@@ -25727,7 +25757,7 @@ var PS = {};
       if (v instanceof AST.UnknownError) {
           return "UnknownError: " + v.value0;
       };
-      throw new Error("Failed pattern match at TypeChecker line 788, column 1 - line 792, column 1: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 789, column 1 - line 793, column 1: " + [ v.constructor.name ]);
   };
   var prettyPrintType = function (v) {
       if (v instanceof AST.TypVar) {
@@ -25748,7 +25778,7 @@ var PS = {};
       if (v instanceof AST["TypeError"]) {
           return prettyPrintTypeError(v.value0);
       };
-      throw new Error("Failed pattern match at TypeChecker line 575, column 1 - line 576, column 1: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 576, column 1 - line 577, column 1: " + [ v.constructor.name ]);
   };
   var prettyPrintAD = function (v) {
       if (v instanceof AST.TList) {
@@ -25764,7 +25794,7 @@ var PS = {};
       if (v instanceof AST.TTuple && v.value0 instanceof Data_List_1.Nil) {
           return "()";
       };
-      throw new Error("Failed pattern match at TypeChecker line 584, column 1 - line 585, column 1: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 585, column 1 - line 586, column 1: " + [ v.constructor.name ]);
   };
   var fresh = Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(Control_Monad_State_Class.get(Control_Monad_Except_Trans.monadStateExceptT(Control_Monad_State_Trans.monadStateStateT(Data_Identity.monadIdentity))))(function (v) {
       return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(Control_Monad_State_Class.put(Control_Monad_Except_Trans.monadStateExceptT(Control_Monad_State_Trans.monadStateStateT(Data_Identity.monadIdentity)))(new Unique({
@@ -25773,76 +25803,6 @@ var PS = {};
           return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(AST.TypVar.create(AST.TVar.create("t_" + Prelude.show(Prelude.showInt)(v.value0.count))));
       });
   });
-  var inferOp = function (op) {
-      var f = function (typ) {
-          return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(new Data_Tuple_1.Tuple(nullSubst, typ));
-      };
-      var int3 = f(new AST.TypArr(new AST.TypCon("Int"), new AST.TypArr(new AST.TypCon("Int"), new AST.TypCon("Int"))));
-      var aBool = function (a) {
-          return f(new AST.TypArr(a, new AST.TypArr(a, new AST.TypCon("Bool"))));
-      };
-      return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(fresh)(function (v) {
-          return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(fresh)(function (v1) {
-              return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(fresh)(function (v2) {
-                  if (op instanceof AST.Composition) {
-                      return f(new AST.TypArr(new AST.TypArr(v1, v2), new AST.TypArr(new AST.TypArr(v, v1), new AST.TypArr(v, v2))));
-                  };
-                  if (op instanceof AST.Power) {
-                      return int3;
-                  };
-                  if (op instanceof AST.Mul) {
-                      return int3;
-                  };
-                  if (op instanceof AST.Div) {
-                      return int3;
-                  };
-                  if (op instanceof AST.Mod) {
-                      return int3;
-                  };
-                  if (op instanceof AST.Add) {
-                      return int3;
-                  };
-                  if (op instanceof AST.Sub) {
-                      return int3;
-                  };
-                  if (op instanceof AST.Colon) {
-                      return f(new AST.TypArr(v, new AST.TypArr(AST.AD.create(new AST.TList(v)), AST.AD.create(new AST.TList(v)))));
-                  };
-                  if (op instanceof AST.Append) {
-                      return f(new AST.TypArr(AST.AD.create(new AST.TList(v)), new AST.TypArr(AST.AD.create(new AST.TList(v)), AST.AD.create(new AST.TList(v)))));
-                  };
-                  if (op instanceof AST.Equ) {
-                      return aBool(v);
-                  };
-                  if (op instanceof AST.Neq) {
-                      return aBool(v);
-                  };
-                  if (op instanceof AST.Lt) {
-                      return aBool(v);
-                  };
-                  if (op instanceof AST.Leq) {
-                      return aBool(v);
-                  };
-                  if (op instanceof AST.Gt) {
-                      return aBool(v);
-                  };
-                  if (op instanceof AST.Geq) {
-                      return aBool(v);
-                  };
-                  if (op instanceof AST.And) {
-                      return f(new AST.TypArr(new AST.TypCon("Bool"), new AST.TypArr(new AST.TypCon("Bool"), new AST.TypCon("Bool"))));
-                  };
-                  if (op instanceof AST.Or) {
-                      return f(new AST.TypArr(new AST.TypCon("Bool"), new AST.TypArr(new AST.TypCon("Bool"), new AST.TypCon("Bool"))));
-                  };
-                  if (op instanceof AST.Dollar) {
-                      return f(new AST.TypArr(new AST.TypArr(v, v1), new AST.TypArr(v, v1)));
-                  };
-                  throw new Error("Failed pattern match at TypeChecker line 381, column 3 - line 401, column 2: " + [ op.constructor.name ]);
-              });
-          });
-      });
-  };
   var extractType = function (v) {
       if (v instanceof AST.TAtom) {
           return v.value0;
@@ -25911,8 +25871,8 @@ var PS = {};
               tco: while (true) {
                   if (v instanceof Data_List_1.Cons && v1 instanceof Data_List_1.Cons) {
                       var tup1 = eqType(map)(v.value0)(v1.value0);
-                      var $403 = Data_Tuple_1.fst(tup1);
-                      if ($403) {
+                      var $399 = Data_Tuple_1.fst(tup1);
+                      if ($399) {
                           var __tco_map = Data_Tuple_1.snd(tup1);
                           var __tco_v = v.value1;
                           var __tco_v1 = v1.value1;
@@ -25921,10 +25881,10 @@ var PS = {};
                           v1 = __tco_v1;
                           continue tco;
                       };
-                      if (!$403) {
+                      if (!$399) {
                           return new Data_Tuple_1.Tuple(false, Data_Tuple_1.snd(tup1));
                       };
-                      throw new Error("Failed pattern match at TypeChecker line 647, column 71 - line 650, column 1: " + [ $403.constructor.name ]);
+                      throw new Error("Failed pattern match at TypeChecker line 648, column 71 - line 651, column 1: " + [ $399.constructor.name ]);
                   };
                   if (v instanceof Data_List_1.Nil && v1 instanceof Data_List_1.Nil) {
                       return new Data_Tuple_1.Tuple(true, map);
@@ -25938,14 +25898,14 @@ var PS = {};
       return function (v) {
           return function (v1) {
               if (v instanceof AST.TypVar && v1 instanceof AST.TypVar) {
-                  var $411 = Data_Map_1.lookup(AST.ordTVar)(v.value0)(map);
-                  if ($411 instanceof Data_Maybe.Just) {
-                      return new Data_Tuple_1.Tuple(Prelude["=="](AST.eqTVar)($411.value0)(v1.value0), map);
+                  var $407 = Data_Map_1.lookup(AST.ordTVar)(v.value0)(map);
+                  if ($407 instanceof Data_Maybe.Just) {
+                      return new Data_Tuple_1.Tuple(Prelude["=="](AST.eqTVar)($407.value0)(v1.value0), map);
                   };
-                  if ($411 instanceof Data_Maybe.Nothing) {
+                  if ($407 instanceof Data_Maybe.Nothing) {
                       return new Data_Tuple_1.Tuple(true, Data_Map_1.insert(AST.ordTVar)(v.value0)(v1.value0)(map));
                   };
-                  throw new Error("Failed pattern match at TypeChecker line 634, column 36 - line 637, column 1: " + [ $411.constructor.name ]);
+                  throw new Error("Failed pattern match at TypeChecker line 635, column 36 - line 638, column 1: " + [ $407.constructor.name ]);
               };
               if (v instanceof AST.TypCon && v1 instanceof AST.TypCon) {
                   return new Data_Tuple_1.Tuple(v.value0 === v1.value0, map);
@@ -25972,14 +25932,14 @@ var PS = {};
           var nth = function (n) {
               return function (es) {
                   return function (p) {
-                      var $435 = Data_List_1["!!"](es)(n);
-                      if ($435 instanceof Data_Maybe.Nothing) {
+                      var $431 = Data_List_1["!!"](es)(n);
+                      if ($431 instanceof Data_Maybe.Nothing) {
                           return true;
                       };
-                      if ($435 instanceof Data_Maybe.Just) {
-                          return checkForError(p)($435.value0);
+                      if ($431 instanceof Data_Maybe.Just) {
+                          return checkForError(p)($431.value0);
                       };
-                      throw new Error("Failed pattern match at TypeChecker line 834, column 18 - line 838, column 1: " + [ $435.constructor.name ]);
+                      throw new Error("Failed pattern match at TypeChecker line 835, column 18 - line 839, column 1: " + [ $431.constructor.name ]);
                   };
               };
           };
@@ -26037,7 +25997,7 @@ var PS = {};
               };
               return true;
           };
-          throw new Error("Failed pattern match at TypeChecker line 810, column 23 - line 833, column 3: " + [ p$prime.constructor.name ]);
+          throw new Error("Failed pattern match at TypeChecker line 811, column 23 - line 834, column 3: " + [ p$prime.constructor.name ]);
       };
   };
   var buildGroups = function (v) {
@@ -26056,9 +26016,9 @@ var PS = {};
           if (binList instanceof Data_Maybe.Nothing) {
               return Data_Map_1.insert(Prelude.ordString)(v.value0.value0)(new Data_List_1.Cons(v.value0, Data_List_1.Nil.value))(defMap);
           };
-          throw new Error("Failed pattern match at TypeChecker line 526, column 3 - line 529, column 3: " + [ binList.constructor.name ]);
+          throw new Error("Failed pattern match at TypeChecker line 527, column 3 - line 530, column 3: " + [ binList.constructor.name ]);
       };
-      throw new Error("Failed pattern match at TypeChecker line 521, column 1 - line 522, column 1: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 522, column 1 - line 523, column 1: " + [ v.constructor.name ]);
   };
   var apply = function (dict) {
       return dict.apply;
@@ -26163,16 +26123,16 @@ var PS = {};
               };
               return Prelude.show(AST.showAtom)(v1);
           };
-          var $534 = Data_Map_1.lookup(AST.ordAtom)(x)(v.value0);
-          if ($534 instanceof Data_Maybe.Nothing) {
+          var $530 = Data_Map_1.lookup(AST.ordAtom)(x)(v.value0);
+          if ($530 instanceof Data_Maybe.Nothing) {
               return Control_Monad_Error_Class.throwError(Control_Monad_Except_Trans.monadErrorExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(new AST.UnboundVariable(f(x)));
           };
-          if ($534 instanceof Data_Maybe.Just) {
-              return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(instantiate($534.value0))(function (v1) {
+          if ($530 instanceof Data_Maybe.Just) {
+              return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(instantiate($530.value0))(function (v1) {
                   return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(new Data_Tuple_1.Tuple(nullSubst, v1));
               });
           };
-          throw new Error("Failed pattern match at TypeChecker line 223, column 3 - line 227, column 3: " + [ $534.constructor.name ]);
+          throw new Error("Failed pattern match at TypeChecker line 223, column 3 - line 227, column 3: " + [ $530.constructor.name ]);
       };
   };
   var subScheme = new Substitutable(function (s) {
@@ -26239,14 +26199,14 @@ var PS = {};
       return sc;
   };
   var runInfer = function (m) {
-      var $579 = Control_Monad_State_1.evalState(Control_Monad_Except_Trans.runExceptT(m))(initUnique);
-      if ($579 instanceof Data_Either.Left) {
-          return new Data_Either.Left($579.value0);
+      var $575 = Control_Monad_State_1.evalState(Control_Monad_Except_Trans.runExceptT(m))(initUnique);
+      if ($575 instanceof Data_Either.Left) {
+          return new Data_Either.Left($575.value0);
       };
-      if ($579 instanceof Data_Either.Right) {
-          return Data_Either.Right.create(closeOver($579.value0));
+      if ($575 instanceof Data_Either.Right) {
+          return Data_Either.Right.create(closeOver($575.value0));
       };
-      throw new Error("Failed pattern match at TypeChecker line 200, column 14 - line 204, column 1: " + [ $579.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 200, column 14 - line 204, column 1: " + [ $575.constructor.name ]);
   };
   var subTypeTree = new Substitutable(function (s) {
       return function (v) {
@@ -26391,7 +26351,7 @@ var PS = {};
       if (v instanceof Data_List_1.Nil) {
           return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(Data_List_1.Nil.value);
       };
-      throw new Error("Failed pattern match at TypeChecker line 445, column 1 - line 449, column 1: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 446, column 1 - line 450, column 1: " + [ v.constructor.name ]);
   };
   var extractConsLit = function (v) {
       return function (v1) {
@@ -26405,7 +26365,7 @@ var PS = {};
                               });
                           });
                       };
-                      throw new Error("Failed pattern match at TypeChecker line 420, column 49 - line 427, column 1: " + [ v3.constructor.name ]);
+                      throw new Error("Failed pattern match at TypeChecker line 421, column 49 - line 428, column 1: " + [ v3.constructor.name ]);
                   });
               });
           };
@@ -26428,7 +26388,7 @@ var PS = {};
                               });
                           });
                       };
-                      throw new Error("Failed pattern match at TypeChecker line 434, column 47 - line 441, column 1: " + [ v3.constructor.name ]);
+                      throw new Error("Failed pattern match at TypeChecker line 435, column 47 - line 442, column 1: " + [ v3.constructor.name ]);
                   });
               });
           };
@@ -26474,7 +26434,7 @@ var PS = {};
                       if (v3.value1 instanceof AST.TListLit) {
                           return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(new Data_Tuple_1.Tuple(v3.value0, new AST.TListLit(v3.value1.value0, AST.AD.create(new AST.TList(v3.value1.value1)))));
                       };
-                      throw new Error("Failed pattern match at TypeChecker line 468, column 30 - line 474, column 3: " + [ v3.constructor.name ]);
+                      throw new Error("Failed pattern match at TypeChecker line 469, column 30 - line 475, column 3: " + [ v3.constructor.name ]);
                   });
               });
           });
@@ -26485,22 +26445,22 @@ var PS = {};
               return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(new Data_Tuple_1.Tuple(Data_List_1.concat(Data_Tuple_1.fst(tup)), new AST.TNTupleLit(Data_Tuple_1.snd(tup), AST.AD.create(AST.TTuple.create(Prelude.map(Data_List_1.functorList)(extractBindingType)(Data_Tuple_1.snd(tup)))))));
           });
       };
-      throw new Error("Failed pattern match at TypeChecker line 457, column 1 - line 460, column 1: " + [ v.constructor.name ]);
+      throw new Error("Failed pattern match at TypeChecker line 458, column 1 - line 461, column 1: " + [ v.constructor.name ]);
   };
   var getTypEnv = function (b) {
       return function (env) {
-          var $765 = Control_Monad_State_1.evalState(Control_Monad_Except_Trans.runExceptT(extractBinding(b)))(initUnique);
-          if ($765 instanceof Data_Either.Left) {
+          var $761 = Control_Monad_State_1.evalState(Control_Monad_Except_Trans.runExceptT(extractBinding(b)))(initUnique);
+          if ($761 instanceof Data_Either.Left) {
               return Data_Maybe.Nothing.value;
           };
-          if ($765 instanceof Data_Either.Right) {
+          if ($761 instanceof Data_Either.Right) {
               return Data_Maybe.Just.create(Data_Foldable.foldr(Data_List_1.foldableList)(function (a) {
                   return function (b1) {
                       return extend(b1)(a);
                   };
-              })(env)($765.value0.value0));
+              })(env)($761.value0.value0));
           };
-          throw new Error("Failed pattern match at TypeChecker line 491, column 19 - line 495, column 1: " + [ $765.constructor.name ]);
+          throw new Error("Failed pattern match at TypeChecker line 492, column 19 - line 496, column 1: " + [ $761.constructor.name ]);
       };
   };
   var getTypEnvFromList = function (bs) {
@@ -26511,6 +26471,89 @@ var PS = {};
                       return unionTypeEnv(a)(b);
                   };
               })(env)(v));
+          });
+      };
+  };
+  var inferType = function (env) {
+      return function (exp) {
+          return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(infer(env)(exp))(function (v) {
+              var t$prime = extractType(v.value1);
+              return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(new Data_Tuple_1.Tuple(v.value0, t$prime));
+          });
+      };
+  };
+  var inferOp = function (env) {
+      return function (op) {
+          var f = function (typ) {
+              return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(new Data_Tuple_1.Tuple(nullSubst, typ));
+          };
+          var int3 = f(new AST.TypArr(new AST.TypCon("Int"), new AST.TypArr(new AST.TypCon("Int"), new AST.TypCon("Int"))));
+          var aBool = function (a) {
+              return f(new AST.TypArr(a, new AST.TypArr(a, new AST.TypCon("Bool"))));
+          };
+          return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(fresh)(function (v) {
+              return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(fresh)(function (v1) {
+                  return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(fresh)(function (v2) {
+                      if (op instanceof AST.Composition) {
+                          return f(new AST.TypArr(new AST.TypArr(v1, v2), new AST.TypArr(new AST.TypArr(v, v1), new AST.TypArr(v, v2))));
+                      };
+                      if (op instanceof AST.Power) {
+                          return int3;
+                      };
+                      if (op instanceof AST.Mul) {
+                          return int3;
+                      };
+                      if (op instanceof AST.Div) {
+                          return int3;
+                      };
+                      if (op instanceof AST.Mod) {
+                          return int3;
+                      };
+                      if (op instanceof AST.Add) {
+                          return int3;
+                      };
+                      if (op instanceof AST.Sub) {
+                          return int3;
+                      };
+                      if (op instanceof AST.Colon) {
+                          return f(new AST.TypArr(v, new AST.TypArr(AST.AD.create(new AST.TList(v)), AST.AD.create(new AST.TList(v)))));
+                      };
+                      if (op instanceof AST.Append) {
+                          return f(new AST.TypArr(AST.AD.create(new AST.TList(v)), new AST.TypArr(AST.AD.create(new AST.TList(v)), AST.AD.create(new AST.TList(v)))));
+                      };
+                      if (op instanceof AST.Equ) {
+                          return aBool(v);
+                      };
+                      if (op instanceof AST.Neq) {
+                          return aBool(v);
+                      };
+                      if (op instanceof AST.Lt) {
+                          return aBool(v);
+                      };
+                      if (op instanceof AST.Leq) {
+                          return aBool(v);
+                      };
+                      if (op instanceof AST.Gt) {
+                          return aBool(v);
+                      };
+                      if (op instanceof AST.Geq) {
+                          return aBool(v);
+                      };
+                      if (op instanceof AST.And) {
+                          return f(new AST.TypArr(new AST.TypCon("Bool"), new AST.TypArr(new AST.TypCon("Bool"), new AST.TypCon("Bool"))));
+                      };
+                      if (op instanceof AST.Or) {
+                          return f(new AST.TypArr(new AST.TypCon("Bool"), new AST.TypArr(new AST.TypCon("Bool"), new AST.TypCon("Bool"))));
+                      };
+                      if (op instanceof AST.Dollar) {
+                          return f(new AST.TypArr(new AST.TypArr(v, v1), new AST.TypArr(v, v1)));
+                      };
+                      if (op instanceof AST.InfixFunc) {
+                          return inferType(env)(new AST.Atom(new AST.Name(op.value0)));
+                      };
+                      throw new Error("Failed pattern match at TypeChecker line 381, column 3 - line 402, column 2: " + [ op.constructor.name ]);
+                  });
+              });
           });
       };
   };
@@ -26619,13 +26662,13 @@ var PS = {};
               });
           };
           if (ex instanceof AST.PrefixOp) {
-              return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(inferOp(ex.value0))(function (v) {
+              return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(inferOp(env)(ex.value0))(function (v) {
                   return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(Data_Tuple_1.Tuple.create(v.value0)(new AST.TPrefixOp(v.value1)));
               });
           };
           if (ex instanceof AST.SectL) {
               return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(fresh)(function (v) {
-                  return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(inferOp(ex.value1))(function (v1) {
+                  return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(inferOp(env)(ex.value1))(function (v1) {
                       return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(infer(apply(subTypeEnv)(v1.value0)(env))(ex.value0))(function (v2) {
                           return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(unify(apply(subType)(v2.value0)(v1.value1))(new AST.TypArr(extractType(v2.value1), v)))(function (v3) {
                               return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(new Data_Tuple_1.Tuple(compose(compose(v3)(v2.value0))(v1.value0), apply(subTypeTree)(v3)(new AST.TSectL(v2.value1, v1.value1, v))));
@@ -26635,7 +26678,7 @@ var PS = {};
               });
           };
           if (ex instanceof AST.SectR) {
-              return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(inferOp(ex.value0))(function (v) {
+              return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(inferOp(env)(ex.value0))(function (v) {
                   if (v.value1 instanceof AST.TypArr && v.value1.value1 instanceof AST.TypArr) {
                       return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(infer(env)(ex.value1))(function (v1) {
                           return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(unify(apply(subType)(v1.value0)(v.value1.value1.value0))(extractType(v1.value1)))(function (v2) {
@@ -26659,7 +26702,7 @@ var PS = {};
           };
           if (ex instanceof AST.Unary) {
               return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(fresh)(function (v) {
-                  return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(inferOp(ex.value0))(function (v1) {
+                  return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(inferOp(env)(ex.value0))(function (v1) {
                       return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(infer(apply(subTypeEnv)(v1.value0)(env))(ex.value1))(function (v2) {
                           return Prelude.bind(Control_Monad_Except_Trans.bindExceptT(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity)))(unify(apply(subType)(v2.value0)(v1.value1))(new AST.TypArr(extractType(v2.value1), v)))(function (v3) {
                               return Prelude["return"](Control_Monad_Except_Trans.applicativeExceptT(Control_Monad_State_Trans.applicativeStateT(Data_Identity.monadIdentity)))(new Data_Tuple_1.Tuple(compose(compose(v3)(v2.value0))(v1.value0), apply(subTypeTree)(v3)(new AST.TUnary(v1.value1, v2.value1, v))));
@@ -26716,27 +26759,27 @@ var PS = {};
   };
   var typeTreeProgramnEnv = function (env) {
       return function (expr) {
-          var $962 = Control_Monad_State_1.evalState(Control_Monad_Except_Trans.runExceptT(infer(env)(expr)))(initUnique);
-          if ($962 instanceof Data_Either.Left) {
-              return new Data_Either.Left($962.value0);
+          var $963 = Control_Monad_State_1.evalState(Control_Monad_Except_Trans.runExceptT(infer(env)(expr)))(initUnique);
+          if ($963 instanceof Data_Either.Left) {
+              return new Data_Either.Left($963.value0);
           };
-          if ($962 instanceof Data_Either.Right) {
-              return Data_Either.Right.create(closeOver$prime($962.value0));
+          if ($963 instanceof Data_Either.Right) {
+              return Data_Either.Right.create(closeOver$prime($963.value0));
           };
-          throw new Error("Failed pattern match at TypeChecker line 565, column 32 - line 570, column 1: " + [ $962.constructor.name ]);
+          throw new Error("Failed pattern match at TypeChecker line 566, column 32 - line 571, column 1: " + [ $963.constructor.name ]);
       };
   };
   var buildPartiallyTypedTree = function (env) {
       return function (e) {
           var typeOP = function (op) {
-              var $965 = typeTreeProgramnEnv(env)(new AST.PrefixOp(op));
-              if ($965 instanceof Data_Either.Left) {
-                  return new AST["TypeError"]($965.value0);
+              var $966 = typeTreeProgramnEnv(env)(new AST.PrefixOp(op));
+              if ($966 instanceof Data_Either.Left) {
+                  return new AST["TypeError"]($966.value0);
               };
-              if ($965 instanceof Data_Either.Right && $965.value0 instanceof AST.TPrefixOp) {
-                  return $965.value0.value0;
+              if ($966 instanceof Data_Either.Right && $966.value0 instanceof AST.TPrefixOp) {
+                  return $966.value0.value0;
               };
-              throw new Error("Failed pattern match at TypeChecker line 624, column 15 - line 629, column 1: " + [ $965.constructor.name ]);
+              throw new Error("Failed pattern match at TypeChecker line 625, column 15 - line 630, column 1: " + [ $966.constructor.name ]);
           };
           var g = function (v) {
               if (v instanceof AST.Lit) {
@@ -26751,7 +26794,7 @@ var PS = {};
               if (v instanceof AST.NTupleLit) {
                   return new AST.TNTupleLit(Prelude.map(Data_List_1.functorList)(g)(v.value0), emptyType);
               };
-              throw new Error("Failed pattern match at TypeChecker line 595, column 1 - line 629, column 1: " + [ v.constructor.name ]);
+              throw new Error("Failed pattern match at TypeChecker line 596, column 1 - line 630, column 1: " + [ v.constructor.name ]);
           };
           var f = function (err) {
               return function (v) {
@@ -26783,27 +26826,27 @@ var PS = {};
                       var f1 = function (env$prime) {
                           return new AST.TLetExpr(g(v.value0), buildPartiallyTypedTree(env$prime)(v.value1), buildPartiallyTypedTree(env$prime)(v.value2), new AST["TypeError"](err));
                       };
-                      var $991 = getTypEnv(v.value0)(env);
-                      if ($991 instanceof Data_Maybe.Nothing) {
+                      var $992 = getTypEnv(v.value0)(env);
+                      if ($992 instanceof Data_Maybe.Nothing) {
                           return f1(env);
                       };
-                      if ($991 instanceof Data_Maybe.Just) {
-                          return f1($991.value0);
+                      if ($992 instanceof Data_Maybe.Just) {
+                          return f1($992.value0);
                       };
-                      throw new Error("Failed pattern match at TypeChecker line 608, column 25 - line 611, column 3: " + [ $991.constructor.name ]);
+                      throw new Error("Failed pattern match at TypeChecker line 609, column 25 - line 612, column 3: " + [ $992.constructor.name ]);
                   };
                   if (v instanceof AST.Lambda) {
                       var f1 = function (env$prime) {
                           return new AST.TLambda(Prelude.map(Data_List_1.functorList)(g)(v.value0), buildPartiallyTypedTree(env$prime)(v.value1), new AST["TypeError"](err));
                       };
-                      var $996 = getTypEnvFromList(v.value0)(env);
-                      if ($996 instanceof Data_Maybe.Nothing) {
+                      var $997 = getTypEnvFromList(v.value0)(env);
+                      if ($997 instanceof Data_Maybe.Nothing) {
                           return f1(env);
                       };
-                      if ($996 instanceof Data_Maybe.Just) {
-                          return f1($996.value0);
+                      if ($997 instanceof Data_Maybe.Just) {
+                          return f1($997.value0);
                       };
-                      throw new Error("Failed pattern match at TypeChecker line 612, column 21 - line 615, column 3: " + [ $996.constructor.name ]);
+                      throw new Error("Failed pattern match at TypeChecker line 613, column 21 - line 616, column 3: " + [ $997.constructor.name ]);
                   };
                   if (v instanceof AST.App) {
                       return new AST.TApp(buildPartiallyTypedTree(env)(v.value0), Prelude.map(Data_List_1.functorList)(buildPartiallyTypedTree(env))(v.value1), new AST["TypeError"](err));
@@ -26811,17 +26854,17 @@ var PS = {};
                   if (v instanceof AST.Unary) {
                       return new AST.TUnary(typeOP(v.value0), buildPartiallyTypedTree(env)(v.value1), new AST["TypeError"](err));
                   };
-                  throw new Error("Failed pattern match at TypeChecker line 595, column 1 - line 629, column 1: " + [ err.constructor.name, v.constructor.name ]);
+                  throw new Error("Failed pattern match at TypeChecker line 596, column 1 - line 630, column 1: " + [ err.constructor.name, v.constructor.name ]);
               };
           };
-          var $1004 = typeTreeProgramnEnv(env)(e);
-          if ($1004 instanceof Data_Either.Right) {
-              return $1004.value0;
+          var $1005 = typeTreeProgramnEnv(env)(e);
+          if ($1005 instanceof Data_Either.Right) {
+              return $1005.value0;
           };
-          if ($1004 instanceof Data_Either.Left) {
-              return f($1004.value0)(e);
+          if ($1005 instanceof Data_Either.Left) {
+              return f($1005.value0)(e);
           };
-          throw new Error("Failed pattern match at TypeChecker line 595, column 33 - line 598, column 3: " + [ $1004.constructor.name ]);
+          throw new Error("Failed pattern match at TypeChecker line 596, column 33 - line 599, column 3: " + [ $1005.constructor.name ]);
       };
   };
   var inferDef = function (env) {
@@ -26858,7 +26901,7 @@ var PS = {};
                   });
               });
           };
-          throw new Error("Failed pattern match at TypeChecker line 504, column 1 - line 505, column 1: " + [ v.constructor.name, v1.constructor.name ]);
+          throw new Error("Failed pattern match at TypeChecker line 505, column 1 - line 506, column 1: " + [ v.constructor.name, v1.constructor.name ]);
       };
   };
   var buildTypeEnvFromGroups = function (__copy_env) {
@@ -26877,9 +26920,9 @@ var PS = {};
                           return Data_Either.Left.create(new AST.UnboundVariable(v1.value0));
                       };
                       if (mayDefs instanceof Data_Maybe.Just) {
-                          var $1037 = runInfer(inferGroup(env)(mayDefs.value0));
-                          if ($1037 instanceof Data_Either.Right) {
-                              var __tco_env = extend(env)(new Data_Tuple_1.Tuple(new AST.Name(v1.value0), $1037.value0));
+                          var $1038 = runInfer(inferGroup(env)(mayDefs.value0));
+                          if ($1038 instanceof Data_Either.Right) {
+                              var __tco_env = extend(env)(new Data_Tuple_1.Tuple(new AST.Name(v1.value0), $1038.value0));
                               var __tco_v = Data_Map_1["delete"](Prelude.ordString)(v1.value0)(v);
                               var __tco_v1 = v1.value1;
                               env = __tco_env;
@@ -26887,23 +26930,23 @@ var PS = {};
                               v1 = __tco_v1;
                               continue tco;
                           };
-                          if ($1037 instanceof Data_Either.Left && $1037.value0 instanceof AST.UnboundVariable) {
+                          if ($1038 instanceof Data_Either.Left && $1038.value0 instanceof AST.UnboundVariable) {
                               var __tco_env = env;
                               var __tco_v = v;
-                              var __tco_v1 = new Data_List_1.Cons($1037.value0.value0, Data_List_1["delete"](Prelude.eqString)($1037.value0.value0)(v1));
+                              var __tco_v1 = new Data_List_1.Cons($1038.value0.value0, Data_List_1["delete"](Prelude.eqString)($1038.value0.value0)(v1));
                               env = __tco_env;
                               v = __tco_v;
                               v1 = __tco_v1;
                               continue tco;
                           };
-                          if ($1037 instanceof Data_Either.Left) {
-                              return new Data_Either.Left($1037.value0);
+                          if ($1038 instanceof Data_Either.Left) {
+                              return new Data_Either.Left($1038.value0);
                           };
-                          throw new Error("Failed pattern match at TypeChecker line 539, column 18 - line 545, column 3: " + [ $1037.constructor.name ]);
+                          throw new Error("Failed pattern match at TypeChecker line 540, column 18 - line 546, column 3: " + [ $1038.constructor.name ]);
                       };
-                      throw new Error("Failed pattern match at TypeChecker line 537, column 3 - line 545, column 3: " + [ mayDefs.constructor.name ]);
+                      throw new Error("Failed pattern match at TypeChecker line 538, column 3 - line 546, column 3: " + [ mayDefs.constructor.name ]);
                   };
-                  throw new Error("Failed pattern match at TypeChecker line 535, column 1 - line 536, column 1: " + [ env.constructor.name, v.constructor.name, v1.constructor.name ]);
+                  throw new Error("Failed pattern match at TypeChecker line 536, column 1 - line 537, column 1: " + [ env.constructor.name, v.constructor.name, v1.constructor.name ]);
               };
           };
       };
@@ -26956,6 +26999,7 @@ var PS = {};
   exports["inferDef"] = inferDef;
   exports["inferOp"] = inferOp;
   exports["infer"] = infer;
+  exports["inferType"] = inferType;
   exports["extractBindingType"] = extractBindingType;
   exports["extractType"] = extractType;
   exports["lookupEnv"] = lookupEnv;
@@ -29084,7 +29128,7 @@ var PS = {};
                   return Prelude.bind(Text_Parsing_Parser.bindParserT(Data_Identity.monadIdentity))(Text_Parsing_Parser_String["char"](Data_Identity.monadIdentity)("`"))(function () {
                       return Prelude["return"](Text_Parsing_Parser.applicativeParserT(Data_Identity.monadIdentity))(function (e1) {
                           return function (e2) {
-                              return AST.App.create(new AST.Atom(new AST.Name(v)))(Data_List.toList(Data_Foldable.foldableArray)([ e1, e2 ]));
+                              return new AST.Binary(new AST.InfixFunc(v), e1, e2);
                           };
                       });
                   });
