@@ -259,9 +259,12 @@ inferType env exp = do
 infer :: TypeEnv -> Expr -> Infer (Tuple Subst TypeTree)
 infer env ex = case ex of
 
-  (Atom x@(Name _)) -> do
-    Tuple s t <- lookupEnv env x
-    return (Tuple s $ TAtom t)
+  (Atom x@(Name n)) -> case n of
+    "mod" -> return $ Tuple nullSubst (TAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
+    "div" -> return $ Tuple nullSubst (TAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
+    _     -> do
+      Tuple s t <- lookupEnv env x
+      return (Tuple s $ TAtom t)
   (Atom (Bool _)) -> return (Tuple nullSubst $ TAtom (TypCon "Bool"))
   (Atom (Char _)) -> return (Tuple nullSubst $ TAtom (TypCon "Char"))
   (Atom (AInt _)) -> return (Tuple nullSubst $ TAtom (TypCon "Int"))
@@ -383,8 +386,6 @@ inferOp env op = do
       f ((b `TypArr` c) `TypArr` ((a `TypArr` b) `TypArr` (a `TypArr` c)))
     Power -> int3
     Mul ->  int3
-    Div -> int3
-    Mod -> int3
     Add -> int3
     Sub -> int3
     Colon -> f (a `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a)))
