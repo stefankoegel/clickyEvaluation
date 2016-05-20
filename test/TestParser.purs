@@ -51,8 +51,8 @@ runTests = do
   test "composition" expression "f . g" (Binary Composition (aname "f") (aname "g"))
   test "power" expression "2 ^ 10" (Binary Power (aint 2) (aint 10))
   test "mul" expression "2 * 2" (Binary Mul (aint 2) (aint 2))
-  test "div" expression "13 `div` 3" (Binary Div (aint 13) (aint 3))
-  test "mod" expression "13 `mod` 3" (Binary Mod (aint 13) (aint 3))
+  test "div" expression "13 `div` 3" (Binary (InfixFunc "div") (aint 13) (aint 3))
+  test "mod" expression "13 `mod` 3" (Binary (InfixFunc "mod") (aint 13) (aint 3))
   test "add1" expression "1 + 1"  (Binary Add (aint 1) (aint 1))
   test "add2" expression "2+2" (Binary Add (aint 2) (aint 2))
   test "sub" expression "5 - 3" (Binary Sub (aint 5) (aint 3))
@@ -87,7 +87,7 @@ runTests = do
                                     (Binary Mul (aint 3) (aint 4)))
   test "whitespaces" expression 
     "1   \t   -    \t   ( f   )    \t\t\t\t                                                                \t\t\t\t             `div`     _ignore"
-    (Binary Sub (aint 1) (Binary Div (aname "f") (aname "_ignore")))
+    (Binary Sub (aint 1) (Binary (InfixFunc "div") (aname "f") (aname "_ignore")))
   test "brackets" expression "(  1  +  2  )  *  3" (Binary Mul (Binary Add (aint 1) (aint 2)) (aint 3))
   test "brackets2" expression "( (  1  +  2  - 3  )  *  4 * 5 * 6)"
     (Binary Mul 
@@ -237,7 +237,7 @@ runTests = do
   test "prefixOp3" expression "((^) 2 10)" (App (PrefixOp Power) (toList [aint 2, aint 10]))
 
   test "sectL1" expression "(1+)" (SectL (aint 1) Add)
-  test "sectL2" expression "( n `mod` )" (SectL (aname "n") Mod)
+  test "sectL2" expression "( n `mod` )" (SectL (aname "n") (InfixFunc "mod"))
   test "sectL3" expression "([1] ++)" (SectL (List $ toList [aint 1]) Append)
   test "sectL4" expression "(   ( 2 +  2 )  <= )" (SectL (Binary Add (aint 2) (aint 2)) Leq)
 
@@ -474,7 +474,7 @@ parsedPrelude = toList [
   (Def "id" (Cons (Lit (Name "x")) (Nil)) (Atom (Name "x"))),
   (Def "const" (Cons (Lit (Name "x")) (Cons (Lit (Name "_")) (Nil))) (Atom (Name "x"))),
   (Def "flip" (Cons (Lit (Name "f")) (Cons (Lit (Name "x")) (Cons (Lit (Name "y")) (Nil)))) (App (Atom (Name "f")) (Cons (Atom (Name "y")) (Cons (Atom (Name "x")) (Nil))))),
-  (Def "even" (Cons (Lit (Name "n")) (Nil)) (Binary Equ (Binary Mod (Atom (Name "n")) (Atom (AInt 2))) (Atom (AInt 0)))),
-  (Def "odd" (Cons (Lit (Name "n")) (Nil)) (Binary Equ (Binary Mod (Atom (Name "n")) (Atom (AInt 2))) (Atom (AInt 1)))),
+  (Def "even" (Cons (Lit (Name "n")) (Nil)) (Binary Equ (Binary (InfixFunc "mod") (Atom (Name "n")) (Atom (AInt 2))) (Atom (AInt 0)))),
+  (Def "odd" (Cons (Lit (Name "n")) (Nil)) (Binary Equ (Binary (InfixFunc "mod") (Atom (Name "n")) (Atom (AInt 2))) (Atom (AInt 1)))),
   (Def "fix" (Cons (Lit (Name "f")) (Nil)) (App (Atom (Name "f")) (Cons (App (Atom (Name "fix")) (Cons (Atom (Name "f")) (Nil))) (Nil))))
   ]
