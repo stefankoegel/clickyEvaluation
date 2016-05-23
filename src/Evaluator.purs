@@ -209,8 +209,6 @@ binary :: Env -> Op -> Expr -> Expr -> Evaluator Expr
 binary env op = case op of
   Power  -> aint Power (\i j -> product $ replicate j i)
   Mul    -> aint Mul (*)
-  Div    -> aint Div div
-  Mod    -> aint Mod mod
   Add    -> aint Add (+)
   Sub    -> aint Sub (-)
   Colon  -> \e es -> case es of
@@ -240,8 +238,6 @@ binary env op = case op of
   InfixFunc name -> \e1 e2 -> apply env name (e1 : e2 : Nil)
   where
     aint :: Op -> (Int -> Int -> Int) -> Expr -> Expr -> Evaluator Expr
-    aint Div f (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
-    aint Mod f (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
     aint _   f (Atom (AInt i)) (Atom (AInt j)) = return $ Atom $ AInt $ f i j
     aint op  _ e1              e2              = throwError $ BinaryOpError op e1 e2
 
@@ -257,9 +253,24 @@ unary env Sub (Atom (AInt i)) = return $ Atom $ AInt (-i)
 unary env op e = throwError $ UnaryOpError op e
 
 apply :: Env -> String -> (List Expr) -> Evaluator Expr
+apply env "div" (Cons e1 (Cons e2 _)) = division e1 e2 
+apply env "mod" (Cons e1 (Cons e2 _)) = modulo e1 e2
 apply env name args = case Map.lookup name env of
   Nothing    -> throwError $ UnknownFunction name
   Just cases -> tryAll env cases args name Nil
+
+--builtin ipo
+division :: Expr -> Expr -> Evaluator Expr 
+division (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
+division (Atom (AInt i)) (Atom (AInt j)) = return $ Atom $ AInt $ div i j
+division e1 e2 = throwError $ BinaryOpError (InfixFunc "div") e1 e2
+
+--builtin mod
+modulo :: Expr -> Expr -> Evaluator Expr  
+modulo (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
+modulo (Atom (AInt i)) (Atom (AInt j)) = return $ Atom $ AInt $ mod i j
+modulo e1 e2 = throwError $ BinaryOpError (InfixFunc "mod") e1 e2
+
 
 tryAll :: Env -> (List (Tuple (List Binding) Expr)) -> (List Expr) -> String -> (List MatchingError) -> Evaluator Expr
 tryAll _   Nil                        _    name errs = throwError $ NoMatchingFunction name errs

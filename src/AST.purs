@@ -9,7 +9,7 @@ import Data.List (List)
 -- | (`Colon` is `Cons` but clashes with `Data.List.Cons`)
 data Op = Composition
         | Power
-        | Mul | Div | Mod
+        | Mul
         | Add | Sub
         | Colon | Append
         | Equ | Neq | Lt | Leq | Gt | Geq
@@ -159,8 +159,6 @@ instance showOp :: Show Op where
     Composition -> "Composition"
     Power  -> "Power"
     Mul    -> "Mul"
-    Div    -> "Div"
-    Mod    -> "Mod"
     Add    -> "Add"
     Sub    -> "Sub"
     Colon  -> "Colon"
@@ -181,8 +179,6 @@ pPrintOp op = case op of
   Composition -> "."
   Power  -> "^"
   Mul    -> "*"
-  Div    -> "`div`"
-  Mod    -> "`mod`"
   Add    -> "+"
   Sub    -> "-"
   Colon  -> ":"

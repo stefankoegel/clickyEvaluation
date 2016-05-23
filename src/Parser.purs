@@ -106,10 +106,7 @@ infixOperators :: Array (Array (Tuple3 (Parser String String) Op Assoc))
 infixOperators =
   [ [ (tuple3 (string ".") Composition AssocRight) ]
   , [ (tuple3 (string "^") Power AssocRight) ]
-  , [ (tuple3 (string "*") Mul AssocLeft)
-    , (tuple3 (string "`div`") Div AssocLeft)
-    , (tuple3 (string "`mod`") Mod AssocLeft)
-    ]
+  , [ (tuple3 (string "*") Mul AssocLeft) ]
   , [ (tuple3 (PC.try $ string "+" <* notFollowedBy (char '+')) Add AssocLeft)
     , (tuple3 (string "-") Sub AssocLeft)
     ]
@@ -132,7 +129,7 @@ infixOperators =
 operatorTable :: OperatorTable Identity String Expr
 operatorTable = infixTable2 
   where
-    infixTable2 = maybe [] id (modifyAt 3 (flip snoc infixOperator) infixTable1)
+    infixTable2 = maybe [] id (modifyAt 2 (flip snoc infixOperator) infixTable1)
     infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
 
     infixTable :: OperatorTable Identity String Expr
@@ -157,7 +154,13 @@ operatorTable = infixTable2
           return $ \e1 e2 -> Binary (InfixFunc n) e1 e2
 
 opParser :: Parser String Op
-opParser = PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> return op)) <$> x) $ concat $ (\x -> toList <$> x) $ toList infixOperators
+opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> return op)) <$> x) $ concat $ (\x -> toList <$> x) $ toList infixOperators) <|> infixFunc
+  where 
+    infixFunc = do 
+      char '`'
+      n <- name
+      char '`'
+      return $ InfixFunc n
 
 -- | Parse an expression between brackets
 brackets :: forall a. Parser String a -> Parser String a
