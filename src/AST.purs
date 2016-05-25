@@ -272,7 +272,7 @@ instance showTypeTree :: Show TypeTree where
   show (TSectR t1 tt t) = "(TSectR " ++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
   show (TPrefixOp t) = "(TPrefixOp " ++ show t ++ ")"
   show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show tt3 ++ " " ++ show t ++ ")"
-  show (TArithmSeq s b e t) = "(TArithmSeq " ++ show s ++ " " ++ maybe "" show b ++ " " ++ maybe "" show e ++ show t ++ ")"
+  show (TArithmSeq s b e t) = "(TArithmSeq " ++ show s ++ " " ++ show b ++ " " ++ show e ++ ".." ++ show t ++ ")"
   show (TLetExpr b tt1 tt2 t) = "(TLetExpr " ++ show b ++ " " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show t ++ ")"
   show (TLambda lb tt t ) = "(TLambda " ++ show lb ++ " " ++ show tt ++ " " ++ show t ++ ")"
   show (TApp tt1 tl t) = "(TApp " ++ show tt1 ++ " (" ++ show tl ++ ") " ++ show t ++ ")"

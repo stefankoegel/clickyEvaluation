@@ -324,9 +324,13 @@ infer env ex = case ex of
     Tuple s (TApp tt (Cons tcond (Cons ttr (Cons tfl Nil))) ift) <- infer env' (App (Atom  name) (toList [cond, tr, fl]))
     return (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
 
-  ArithmSeq e _ _ -> do
-    (Tuple s t) <- infer env e
-    return $ Tuple s $ TListTree (Cons t Nil) (AD $ TList (extractType t))
+
+  --ArithmSeq begin jstep jend -> infer env $ List (begin `Cons` ((fromMaybe begin jstep) `Cons` ((fromMaybe begin jend) `Cons` Nil)))
+  
+  -- sloppy
+  ArithmSeq begin _ _ -> do
+    Tuple s1 t1 <- infer env begin
+    return $ Tuple s1 $ apply s1 $ TArithmSeq t1 (Just t1) (Just t1) (AD (TList (extractType t1)))
 
   PrefixOp op -> do
     Tuple s t <- inferOp env op

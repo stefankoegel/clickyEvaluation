@@ -91,7 +91,7 @@ mapWithPath p f = go p
     Binary op e1 e2 -> Binary op e1 <$> go p e2
     SectR op e      -> SectR op     <$> go p e
     IfExpr ce te ee -> IfExpr <$> pure ce <*> go p te <*> pure ee
-    ArithmSeq s (Just b) e -> ArithmSeq <$> pure s <*> (Just <$> (go p b)) <*> pure e
+    ArithmSeq s b e -> ArithmSeq <$> pure s <*> (mapM' (go p) b) <*> pure e
     _               -> throwError $ PathError (Snd p) e
   go (Thrd p) e = case e of
     IfExpr ce te ee -> IfExpr <$> pure ce <*> pure te <*> go p ee
@@ -197,7 +197,7 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
       (IfExpr c t e)     ->
         IfExpr (evalToBinding env c bind) t e
       (ArithmSeq c t e)     ->
-        ArithmSeq (evalToBinding env c bind) t e
+        ArithmSeq (evalToBinding env c bind) ((\x -> evalToBinding env x bind) <$> t) ((\x -> evalToBinding env x bind) <$> e)
       (App f args)       -> do
         App (evalToBinding env f bind) args
       _                  ->
@@ -215,18 +215,18 @@ wrapLambda binds args body =
 evalArithmSeq :: Expr -> Evaluator Expr
 evalArithmSeq as = case as of
   ArithmSeq (Atom (AInt start)) Nothing Nothing -> 
-    return $ List $ Cons (aint start) $ Cons (ArithmSeq (aint (start + 1)) Nothing Nothing) Nil 
+    return $ Binary Colon (aint start) (ArithmSeq (aint (start + 1)) Nothing Nothing)
 
   ArithmSeq (Atom (AInt start)) (Just (Atom (AInt step))) Nothing -> 
-    return $ List $ Cons (aint start) $ Cons (ArithmSeq (aint step) (jint (step + step - start)) Nothing) Nil
+    return $ Binary Colon (aint start) (ArithmSeq (aint step) (jint (step + step - start)) Nothing)
 
   ArithmSeq (Atom (AInt start)) Nothing (Just (Atom (AInt end))) -> case start > end of
     true  -> return $ List Nil
-    false -> return $ List $ Cons (aint start) $ Cons (ArithmSeq (aint (start + 1)) Nothing (jint end)) Nil
+    false -> return $ Binary Colon (aint start) (ArithmSeq (aint (start + 1)) Nothing (jint end))
 
   ArithmSeq (Atom (AInt start)) (Just (Atom (AInt step))) (Just (Atom (AInt end))) -> case start > end of
     true  -> return $ List Nil
-    false -> return $ List $ Cons (aint start) $ Cons (ArithmSeq (aint step) (jint (step + step - start)) (jint end)) Nil
+    false -> return $ Binary Colon (aint start) (ArithmSeq (aint step) (jint (step + step - start)) (jint end))
 
   _ -> throwError $ CannotEvaluate as
   where 
