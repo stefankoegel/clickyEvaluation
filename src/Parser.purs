@@ -104,7 +104,7 @@ notFollowedBy p = PC.try $ (PC.try p *> fail "Negated parser succeeded") <|> ret
 -- | Table for operator parsers and their AST representation. Sorted by precedence.
 infixOperators :: Array (Array (Tuple3 (Parser String String) Op Assoc))
 infixOperators =
-  [ [ (tuple3 (string ".") Composition AssocRight) ]
+  [ [ (tuple3 (PC.try $ string "." <* notFollowedBy (char '.')) Composition AssocRight) ]
   , [ (tuple3 (string "^") Power AssocRight) ]
   , [ (tuple3 (string "*") Mul AssocLeft) ]
   , [ (tuple3 (PC.try $ string "+" <* notFollowedBy (char '+')) Add AssocLeft)
@@ -176,6 +176,7 @@ base expr =
       PC.try (tuplesOrBrackets expr)
   <|> PC.try (lambda expr)
   <|> section expr
+  <|> PC.try (arithmeticSequence expr)
   <|> list expr
   <|> charList
   <|> (Atom <$> atom)
@@ -253,6 +254,21 @@ list expr = do
   eatSpaces
   char ']'
   return $ List exprs
+
+-- | Parser for Arithmetic Sequences
+arithmeticSequence :: Parser String Expr -> Parser String Expr
+arithmeticSequence expr = do
+  char '['
+  eatSpaces
+  start <- expr
+  eatSpaces
+  step <- PC.optionMaybe $ (char ',') *> eatSpaces *> expr
+  eatSpaces
+  string ".."
+  end <- PC.optionMaybe $ spaced expr
+  eatSpaces   
+  char ']'    
+  return $ ArithmSeq start step end
 
 -- | Parser for strings ("example")
 charList :: Parser String Expr

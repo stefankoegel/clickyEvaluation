@@ -97,6 +97,12 @@ exprToJQuery' output = go id output
       jt <- go (p <<< Snd) {expr:thenExpr, typ:tt2, idTree: i2}
       je <- go (p <<< Thrd) {expr:elseExpr, typ:tt3, idTree: i3}
       ifexpr jc jt je t i
+    --TODO: all cases
+    {expr:(ArithmSeq start (Just step) (Just end)), typ:(TArithmSeq tstart (Just tstep) (Just tend) t), idTree:(IArithmSeq istart (Just istep) (Just iend) i)} -> do
+      jStart <- go (p <<< Fst) {expr:start, typ:tstart, idTree:istart} 
+      jStep  <- go (p <<< Snd) {expr:step, typ:tstep, idTree:istep}
+      jEnd   <- go (p <<< Thrd) {expr:end, typ:tend, idTree:iend}
+      arithmeticSequence jStart jStep jEnd t i     
     {expr:Lambda binds body, typ:TLambda lb tt t, idTree: (ILambda bis i i')} -> do
       jBinds <- for (zip bis (zip binds lb)) binding
       jBody <- go (p <<< Fst) {expr:body, typ:tt, idTree: i}
@@ -231,6 +237,29 @@ ifexpr cond thenExpr elseExpr t i = do
   J.append elseExpr dIf
   J.append dIf jtypExp
   return jtypExp
+
+--TODO: fix it
+arithmeticSequence :: forall eff. J.JQuery -> J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+arithmeticSequence start step end t i = do
+  jtypExp <- makeDiv "" (singleton "arithmeticSequence  typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+
+  das <- makeDiv "" (singleton "arithmeticSequence  expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  open <- makeDiv "[" (singleton "brace")
+  J.append open das
+  J.append start das
+  com <- makeDiv "," (singleton "comma")
+  J.append com das
+  J.append step das
+  --TODO: ".." is not of class "comma"
+  dotdot <- makeDiv ".." (singleton "comma")
+  J.append dotdot das
+  J.append end das
+  close <- makeDiv "]" (singleton "brace")
+  J.append close das
+  J.append das jtypExp
+  return jtypExp  
 
 interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> List a -> m Unit
 interleaveM_ f sep = go
@@ -379,6 +408,10 @@ buildExpandDiv t  = do
 idExpr:: Expr -> IndexTree
 idExpr e = fst $ runState (indexExpr e) {count:0}
 
+mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
+mapM' f Nothing  = return Nothing
+mapM' f (Just x) = Just <$> (f x)
+
 indexExpr:: Expr -> State {count:: Int} IndexTree
 indexExpr (Atom _) = do
                   i <- fresh
@@ -421,6 +454,12 @@ indexExpr (IfExpr e1 e2 e3) = do
                   i3 <- indexExpr e3
                   i <- fresh
                   return $ IIfExpr i1 i2 i3 i
+indexExpr (ArithmSeq e1 e2 e3) = do
+                  i1 <- indexExpr e1
+                  i2 <- mapM' indexExpr e2
+                  i3 <- mapM' indexExpr e3
+                  i <- fresh
+                  return $ IArithmSeq i1 i2 i3 i                  
 indexExpr (LetExpr b e1 e2) = do
                   ib <- indexBinding b
                   i1 <- indexExpr e1
@@ -474,6 +513,7 @@ extractIndex (ISectL _ _ i)  =  i
 extractIndex (ISectR _ _ i)  =  i
 extractIndex (IPrefixOp i)  =  i
 extractIndex (IIfExpr _ _ _ i)  =  i
+extractIndex (IArithmSeq _ _ _ i) = i
 extractIndex (ILetExpr _ _ _ i)  =  i
 extractIndex (ILambda _ _ i)  =  i
 extractIndex (IApp _ _ i)  =  i

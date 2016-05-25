@@ -1,6 +1,6 @@
 module Evaluator where
 
-import Prelude (class Show, class Semigroup, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
+import Prelude (class Show, class Semigroup, class Monad, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
 import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
 import Data.StrMap (StrMap)
 import Data.StrMap as Map
@@ -82,7 +82,8 @@ mapWithPath p f = go p
     Binary op e1 e2 -> Binary op <$> go p e1 <*> pure e2
     Unary op e      -> Unary op  <$> go p e
     SectL e op      -> SectL     <$> go p e <*> pure op
-    IfExpr ce te ee -> IfExpr <$> go p ce <*> pure te <*> pure ee
+    IfExpr ce te ee -> IfExpr    <$> go p ce <*> pure te <*> pure ee
+    ArithmSeq s b e -> ArithmSeq <$> go p s <*> pure b <*> pure e
     Lambda bs body  -> Lambda bs <$> go p body
     App e es        -> App       <$> go p e <*> pure es
     _               -> throwError $ PathError (Fst p) e
@@ -90,9 +91,11 @@ mapWithPath p f = go p
     Binary op e1 e2 -> Binary op e1 <$> go p e2
     SectR op e      -> SectR op     <$> go p e
     IfExpr ce te ee -> IfExpr <$> pure ce <*> go p te <*> pure ee
+    ArithmSeq s (Just b) e -> ArithmSeq <$> pure s <*> (Just <$> (go p b)) <*> pure e
     _               -> throwError $ PathError (Snd p) e
   go (Thrd p) e = case e of
     IfExpr ce te ee -> IfExpr <$> pure ce <*> pure te <*> go p ee
+    ArithmSeq s b (Just e) -> ArithmSeq <$> pure s <*> pure b <*> (Just <$> (go p e))
     _               -> throwError $ PathError (Thrd p) e
   go (Nth n p) e = case e of
     List es  -> List  <$> mapIndex n (go p) es
@@ -140,6 +143,7 @@ eval1 env expr = case expr of
   (Atom (Name name))                 -> apply env name Nil
   (IfExpr (Atom (Bool true)) te _)   -> return te
   (IfExpr (Atom (Bool false)) _ ee)  -> return ee
+  (ArithmSeq start step end)         -> evalArithmSeq $ ArithmSeq start step end  
 --  (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) (Cons e Nil)) -> return $ App f (singleton $ App g (Cons e Nil))
   (App (Lambda binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
@@ -192,6 +196,8 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
         NTuple ((\e -> evalToBinding env e bind) <$> es)
       (IfExpr c t e)     ->
         IfExpr (evalToBinding env c bind) t e
+      (ArithmSeq c t e)     ->
+        ArithmSeq (evalToBinding env c bind) t e
       (App f args)       -> do
         App (evalToBinding env f bind) args
       _                  ->
@@ -204,6 +210,28 @@ wrapLambda binds args body =
     GT -> return $ Lambda (drop (length args) binds) body
     LT -> return $ App body (drop (length binds) args)
 
+-- | evaluates an arithmetic sequence once iff it consists of int
+-- | TODO: support all Atoms
+evalArithmSeq :: Expr -> Evaluator Expr
+evalArithmSeq as = case as of
+  ArithmSeq (Atom (AInt start)) Nothing Nothing -> 
+    return $ List $ Cons (aint start) $ Cons (ArithmSeq (aint (start + 1)) Nothing Nothing) Nil 
+
+  ArithmSeq (Atom (AInt start)) (Just (Atom (AInt step))) Nothing -> 
+    return $ List $ Cons (aint start) $ Cons (ArithmSeq (aint step) (jint (step + step - start)) Nothing) Nil
+
+  ArithmSeq (Atom (AInt start)) Nothing (Just (Atom (AInt end))) -> case start > end of
+    true  -> return $ List Nil
+    false -> return $ List $ Cons (aint start) $ Cons (ArithmSeq (aint (start + 1)) Nothing (jint end)) Nil
+
+  ArithmSeq (Atom (AInt start)) (Just (Atom (AInt step))) (Just (Atom (AInt end))) -> case start > end of
+    true  -> return $ List Nil
+    false -> return $ List $ Cons (aint start) $ Cons (ArithmSeq (aint step) (jint (step + step - start)) (jint end)) Nil
+
+  _ -> throwError $ CannotEvaluate as
+  where 
+    aint = Atom <<< AInt
+    jint = Just <<< aint
 
 binary :: Env -> Op -> Expr -> Expr -> Evaluator Expr
 binary env op = case op of
@@ -318,6 +346,11 @@ match' (NTupleLit bs)    (NTuple es)         = case length bs == length es of
                                                  false -> throwError $ MatchingError (NTupleLit bs) (NTuple es)
 match' (NTupleLit bs)    e                   = throwError $ checkStrictness (NTupleLit bs) e
 
+
+mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
+mapM' f Nothing  = pure Nothing
+mapM' f (Just x) = Just <$> (f x)
+
 replace' :: StrMap Expr -> Expr -> Evaluator Expr
 replace' subs = go
   where
@@ -332,6 +365,7 @@ replace' subs = go
     (SectL e op)         -> SectL <$> go e <*> pure op
     (SectR op e)         -> SectR <$> pure op <*> go e
     (IfExpr ce te ee)    -> IfExpr <$> go ce <*> go te <*> go ee
+    (ArithmSeq ce te ee) -> ArithmSeq <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
     (Lambda binds body)  -> (avoidCapture subs binds) *> (Lambda <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
     (App func exprs)     -> App <$> go func <*> traverse go exprs
     e                    -> return e

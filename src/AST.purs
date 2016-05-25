@@ -2,6 +2,7 @@ module AST where
 
 import Prelude (class Show, class Eq,class Ord, show, (++), (==), (&&),eq, compare,Ordering(..))
 import Data.List (List)
+import Data.Maybe
 
 -- | Operators
 -- |
@@ -44,10 +45,11 @@ data Expr = Atom Atom
           | SectR Op Expr
           | PrefixOp Op
           | IfExpr Expr Expr Expr
+          | ArithmSeq Expr (Maybe Expr) (Maybe Expr)
           | LetExpr Binding Expr Expr
           | Lambda (List Binding) Expr
           | App Expr (List Expr)
-
+          
 
 -- last type para is type of expr at this level
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
@@ -61,6 +63,7 @@ data TypeTree
           | TSectR Type TypeTree                    Type
           | TPrefixOp                               Type
           | TIfExpr TypeTree TypeTree TypeTree      Type
+          | TArithmSeq TypeTree (Maybe TypeTree) (Maybe TypeTree) Type
           | TLetExpr TypeBinding TypeTree TypeTree  Type
           | TLambda (List TypeBinding) TypeTree     Type
           | TApp TypeTree (List TypeTree)           Type
@@ -76,6 +79,7 @@ data IndexTree
           | ISectR Int IndexTree                      Int
           | IPrefixOp                              Int
           | IIfExpr IndexTree IndexTree IndexTree  Int
+          | IArithmSeq IndexTree (Maybe IndexTree) (Maybe IndexTree) Int
           | ILetExpr IBinding IndexTree IndexTree  Int
           | ILambda (List IBinding) IndexTree      Int
           | IApp IndexTree (List IndexTree)        Int
@@ -212,6 +216,7 @@ instance showExpr :: Show Expr where
     SectR op expr   -> "SectR " ++ show op ++ " (" ++ show expr ++ ")"
     PrefixOp op     -> "PrefixOp " ++ show op
     IfExpr ce te ee  -> "IfExpr (" ++ show ce ++ ") (" ++ show te ++ ") (" ++ show ee ++ ")"
+    ArithmSeq s by e -> "ArithmSeq (" ++ show s ++ ")" ++ show by ++ ".." ++ show e ++ ")"
     LetExpr b l e   -> "LetExpr (" ++ show b ++ ") (" ++ show l ++ ") (" ++ show e ++ ")"
     Lambda binds body -> "Lambda (" ++ show binds ++ ") (" ++ show body ++ ")"
     App func args   -> "App (" ++ show func ++ ") (" ++ show args ++ ")"
@@ -267,6 +272,7 @@ instance showTypeTree :: Show TypeTree where
   show (TSectR t1 tt t) = "(TSectR " ++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
   show (TPrefixOp t) = "(TPrefixOp " ++ show t ++ ")"
   show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show tt3 ++ " " ++ show t ++ ")"
+  show (TArithmSeq s b e t) = "(TArithmSeq " ++ show s ++ " " ++ maybe "" show b ++ " " ++ maybe "" show e ++ show t ++ ")"
   show (TLetExpr b tt1 tt2 t) = "(TLetExpr " ++ show b ++ " " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show t ++ ")"
   show (TLambda lb tt t ) = "(TLambda " ++ show lb ++ " " ++ show tt ++ " " ++ show t ++ ")"
   show (TApp tt1 tl t) = "(TApp " ++ show tt1 ++ " (" ++ show tl ++ ") " ++ show t ++ ")"
