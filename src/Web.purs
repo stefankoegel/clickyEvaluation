@@ -11,11 +11,13 @@ import Data.Traversable (for)
 import Data.String (joinWith)
 import Data.List (List(Nil, Cons), singleton, fromList, toList, length, zip, (..), zipWithA)
 import Data.Foreign (unsafeFromForeign, isUndefined)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe.Unsafe (fromJust)
 import Data.Tuple (Tuple(..), fst)
 
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
+import Control.Monad (when)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import Control.Monad.State (State, put, get, runState)
@@ -98,26 +100,23 @@ exprToJQuery' output = go id output
       je <- go (p <<< Thrd) {expr:elseExpr, typ:tt3, idTree: i3}
       ifexpr jc jt je t i
 
-    {expr:(ArithmSeq start (Just step) (Just end)), typ:(TArithmSeq tstart (Just tstep) (Just tend) t), idTree:(IArithmSeq istart (Just istep) (Just iend) i)} -> do
+    {expr:(ArithmSeq start step end), typ:(TArithmSeq tstart tstep tend t), idTree:(IArithmSeq istart istep iend i)} -> do
       jStart <- go (p <<< Fst)  {expr:start, typ:tstart, idTree:istart} 
-      jStep  <- go (p <<< Snd)  {expr:step, typ:tstep, idTree:istep}
-      jEnd   <- go (p <<< Thrd) {expr:end, typ:tend, idTree:iend}
-      arithmeticSequence jStart jStep jEnd t i     
-    {expr:(ArithmSeq start (Just step) Nothing), typ:(TArithmSeq tstart (Just tstep) Nothing t), idTree:(IArithmSeq istart (Just istep) Nothing i)} -> do
-      jStart <- go (p <<< Fst)  {expr:start, typ:tstart, idTree:istart} 
-      jStep  <- go (p <<< Snd)  {expr:step, typ:tstep, idTree:istep}
-      jEnd   <- makeDiv "foobar3" (singleton "comma")
-      arithmeticSequence jStart jStep jEnd t i      
-    {expr:(ArithmSeq start Nothing (Just end)), typ:(TArithmSeq tstart Nothing (Just tend) t), idTree:(IArithmSeq istart Nothing (Just iend) i)} -> do
-      jStart <- go (p <<< Fst)  {expr:start, typ:tstart, idTree:istart} 
-      jStep  <- makeDiv "foobar2" (singleton "comma")
-      jEnd   <- go (p <<< Thrd) {expr:end, typ:tend, idTree:iend}
-      arithmeticSequence jStart jStep jEnd t i  
-    {expr:(ArithmSeq start Nothing Nothing), typ:(TArithmSeq tstart Nothing Nothing t), idTree:(IArithmSeq istart Nothing Nothing i)} -> do
-      jStart <- go (p <<< Fst)  {expr:start, typ:tstart, idTree:istart} 
-      jStep  <- makeDiv "foobar2" (singleton "comma")
-      jEnd   <- makeDiv "foobar3" (singleton "comma")
-      arithmeticSequence jStart jStep jEnd t i    
+      case (isJust step) && (isJust tstep) && (isJust istep) of
+        true  -> case (isJust end) && (isJust tend) && (isJust iend) of
+          true  -> do
+            jStep <- go (p <<< Snd) {expr:(fromJust step), typ:(fromJust tstep), idTree:(fromJust istep)}
+            jEnd  <- go (p <<< Thrd) {expr:(fromJust end), typ:(fromJust tend), idTree:(fromJust iend)}
+            arithmeticSequence jStart (Just jStep) (Just jEnd) t i 
+          false -> do
+            jStep <- go (p <<< Snd) {expr:(fromJust step), typ:(fromJust tstep), idTree:(fromJust istep)}
+            arithmeticSequence jStart (Just jStep) Nothing t i   
+        false -> case (isJust end) && (isJust tend) && (isJust iend) of
+          true  -> do
+            jEnd  <- go (p <<< Thrd) {expr:(fromJust end), typ:(fromJust tend), idTree:(fromJust iend)}
+            arithmeticSequence jStart Nothing (Just jEnd) t i 
+          false -> do
+            arithmeticSequence jStart Nothing Nothing t i
 
     {expr:Lambda binds body, typ:TLambda lb tt t, idTree: (ILambda bis i i')} -> do
       jBinds <- for (zip bis (zip binds lb)) binding
@@ -254,23 +253,31 @@ ifexpr cond thenExpr elseExpr t i = do
   J.append dIf jtypExp
   return jtypExp
 
---TODO: fix it
-arithmeticSequence :: forall eff. J.JQuery -> J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
-arithmeticSequence start step end t i = do
+arithmeticSequence :: forall eff. J.JQuery -> Maybe J.JQuery -> Maybe J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+arithmeticSequence start mstep mend t i = do
   jtypExp <- makeDiv "" (singleton "list typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
   das <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
   makeDiv "[" (singleton "brace") >>= flip J.append das
   J.append start das
-  makeDiv "," (singleton "comma") >>= flip J.append das
-  J.append step das
-  --TODO: ".." is not of class "comma"
-  makeDiv ".." (singleton "comma") >>= flip J.append das
-  J.append end das
+  maybeStep das mstep
+  --TODO: ".." create singleton "dotdot"
+  makeDiv ".." (singleton "comma") >>= flip J.append das      
+  maybeEnd das mend
   makeDiv "]" (singleton "brace") >>= flip J.append das
   J.append das jtypExp
   return jtypExp  
+  where
+    maybeStep :: forall eff. J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+    maybeStep jquery Nothing = return jquery
+    maybeStep jquery (Just step) = do
+      makeDiv "," (singleton "comma") >>= flip J.append jquery 
+      J.append step jquery
+
+    maybeEnd :: forall eff. J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+    maybeEnd jquery Nothing = return jquery
+    maybeEnd jquery (Just end) = J.append end jquery
 
 interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> List a -> m Unit
 interleaveM_ f sep = go
