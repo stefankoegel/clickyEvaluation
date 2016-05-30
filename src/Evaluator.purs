@@ -214,24 +214,44 @@ wrapLambda binds args body =
 -- | TODO: support all Atoms
 evalArithmSeq :: Expr -> Evaluator Expr
 evalArithmSeq as = case as of
-  ArithmSeq (Atom (AInt start)) Nothing Nothing -> 
-    return $ Binary Colon (aint start) (ArithmSeq (aint (start + 1)) Nothing Nothing)
-
-  ArithmSeq (Atom (AInt start)) (Just (Atom (AInt step))) Nothing -> 
-    return $ Binary Colon (aint start) (ArithmSeq (aint step) (jint (step + step - start)) Nothing)
-
-  ArithmSeq (Atom (AInt start)) Nothing (Just (Atom (AInt end))) -> case start > end of
-    true  -> return $ List Nil
-    false -> return $ Binary Colon (aint start) (ArithmSeq (aint (start + 1)) Nothing (jint end))
-
-  ArithmSeq (Atom (AInt start)) (Just (Atom (AInt step))) (Just (Atom (AInt end))) -> case start > end of
-    true  -> return $ List Nil
-    false -> return $ Binary Colon (aint start) (ArithmSeq (aint step) (jint (step + step - start)) (jint end))
-
-  _ -> throwError $ CannotEvaluate as
+  ArithmSeq (Atom (AInt _)) _ _ -> evalArithmSeqInt as
+  ArithmSeq (Atom (Bool _)) _ _ -> evalArithmSeqBool as
+  ArithmSeq (Atom (Char _)) _ _ -> evalArithmSeqChar as
+  _                             -> throwError $ CannotEvaluate as
   where 
+    evalArithmSeqInt :: Expr -> Evaluator Expr
+    evalArithmSeqInt as = case as of
+      ArithmSeq (Atom (AInt start)) Nothing Nothing -> 
+        return $ Binary Colon (aint start) (ArithmSeq (aint (start + 1)) Nothing Nothing)
+
+      ArithmSeq (Atom (AInt start)) (Just (Atom (AInt step))) Nothing -> 
+        return $ Binary Colon (aint start) (ArithmSeq (aint step) (jint (step + step - start)) Nothing)
+
+      ArithmSeq a@(Atom (AInt start)) Nothing (Just (Atom (AInt end))) -> case start == end of
+        true  -> return $ List (singleton a)
+        false -> case start > end of
+          true  -> return $ List Nil
+          false -> return $ Binary Colon (aint start) (ArithmSeq (aint (start + 1)) Nothing (jint end))
+
+      ArithmSeq a@(Atom (AInt start)) (Just (Atom (AInt step))) (Just (Atom (AInt end))) -> case start == end of
+        true  -> return $ List (singleton a)
+        false -> case start > end of
+          true  -> return $ List Nil
+          false -> return $ Binary Colon (aint start) (ArithmSeq (aint step) (jint (step + step - start)) (jint end))
+
+      _ -> throwError $ CannotEvaluate as
+
+    --TODO  
+    evalArithmSeqBool :: Expr -> Evaluator Expr 
+    evalArithmSeqBool as = return as
+
+    --TODO
+    evalArithmSeqChar :: Expr -> Evaluator Expr
+    evalArithmSeqChar as = return as
+
     aint = Atom <<< AInt
     jint = Just <<< aint
+
 
 binary :: Env -> Op -> Expr -> Expr -> Evaluator Expr
 binary env op = case op of

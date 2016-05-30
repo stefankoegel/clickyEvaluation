@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Monad, class Eq, class Show, (&&), (==), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod, flip)
+import Prelude (class Monad, class Eq, class Show, (&&), (==), (/=), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod, flip)
 
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
 import Control.Monad.State (State, evalState, put, get)
@@ -11,7 +11,7 @@ import Data.Map as Map
 import Data.Tuple (Tuple(Tuple), snd, fst)
 import Data.Set as Set
 import Data.Foldable (foldl, foldr)
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe, isJust)
 
 import Data.Tuple (Tuple(..),fst,snd)
 import Data.Map (Map(..), insert, lookup, empty)
@@ -20,7 +20,7 @@ import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zi
 import Data.String (joinWith, toCharArray)
 
 import Control.Apply ((*>))
-import Control.Bind ((=<<), (>=>))
+import Control.Bind ((=<<), (>=>), ifM)
 import Control.Monad.State
 
 import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..))
@@ -332,8 +332,20 @@ infer env ex = case ex of
     let t3 = snd <$> tup3
     let s2 = maybe nullSubst fst tup2
     let s3 = maybe nullSubst fst tup3
-    let s  = s1 `compose` s2 `compose` s3                 
-    return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList (extractType t1)))
+    let s  = s1 `compose` s2 `compose` s3
+    let tt = extractType t1   
+    ifM (return ((isJust t2) && ((extractType <$> t2) /= (Just tt)))) 
+      (throwError (UnknownError "Type mismatch")) 
+      (ifM (return ((isJust t3) && ((extractType <$> t3) /= (Just tt)))) 
+        (throwError (UnknownError "Type mismatch"))
+        (ifM (return (((isJust t2) && (isJust t3)) && ((extractType <$> t2) /= (extractType <$> t3))))
+          (throwError (UnknownError "Type mismatch"))
+          (case tt of
+            TypCon "Int"  -> return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
+            TypCon "Bool" -> return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
+            TypCon "Char" -> return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
+            _             -> throwError $ NoInstanceOfEnum tt)))
+
 
   PrefixOp op -> do
     Tuple s t <- inferOp env op

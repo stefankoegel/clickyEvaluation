@@ -117,6 +117,7 @@ data TypeError
   | UnboundVariable String
   | UnificationMismatch (List Type) (List Type)
   | UnknownError String
+  | NoInstanceOfEnum Type
 
 
 derive instance eqExpr :: Eq Expr
@@ -259,6 +260,7 @@ instance showTypeError :: Show TypeError where
   show (UnboundVariable a) = "(UnboundVariable " ++ show a ++ ")"
   show (UnificationMismatch a b) = "(UnificationMismatch " ++ show a ++ " " ++ show b ++ ")"
   show (UnknownError a) = "(UnknownError " ++ show a ++ ")"
+  show (NoInstanceOfEnum t) = "(" ++ show t ++ "is no instance of Enum)"
 
 derive instance eqTypeError :: Eq TypeError
 
