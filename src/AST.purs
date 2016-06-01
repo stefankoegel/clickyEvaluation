@@ -1,8 +1,12 @@
 module AST where
 
-import Prelude (class Show, class Eq,class Ord, show, (++), (==), (&&),eq, compare,Ordering(..))
-import Data.List (List)
+import Prelude (class Show, class Eq, class Ord, class Bounded, top, bottom, show, (+), (-), (>), (++), ($), (<$>), (<<<), (==), (&&),eq, compare,Ordering(..))
+import Data.List (List(Nil, Cons), (:), singleton, toList)
 import Data.Maybe
+import Data.Enum
+import Control.Bind (join)
+import Control.Apply (lift2)
+import Data.String (fromChar, toChar)
 
 -- | Operators
 -- |

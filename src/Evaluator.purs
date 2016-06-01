@@ -1,17 +1,19 @@
 module Evaluator where
 
-import Prelude (class Show, class Semigroup, class Monad, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
+import Prelude (class Show, top, bottom, class Semigroup, class Monad, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
 import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
 import Data.StrMap (StrMap)
 import Data.StrMap as Map
-import Data.Tuple (Tuple(Tuple))
-import Data.Maybe (Maybe(..))
+import Data.Tuple (Tuple(Tuple), fst, snd)
+import Data.Maybe (Maybe(Nothing, Just), fromMaybe)
 import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
 import Data.Identity (Identity, runIdentity)
 import Data.Either (Either(..), either)
 import Data.Monoid (class Monoid)
-
+import Data.String (fromChar, toChar)
+import Data.Enum (class Enum, fromEnum, toEnum, succ)
+import Control.Bind (join)
 import Control.Apply ((*>))
 import Control.Alt ((<|>))
 import Control.Monad.State.Trans (StateT, modify, execStateT)
@@ -210,48 +212,106 @@ wrapLambda binds args body =
     GT -> return $ Lambda (drop (length args) binds) body
     LT -> return $ App body (drop (length binds) args)
 
--- | evaluates an arithmetic sequence once iff it consists of int
--- | TODO: support all Atoms
+------------------------------------------------------------------------------------------
+-- Arithmetic Sequences
+------------------------------------------------------------------------------------------
+
+atomNext :: Atom -> Tuple (Maybe Atom) (Maybe Atom)
+atomNext (AInt i) = atomNextTo (AInt i) (AInt top)
+atomNext (Bool b) = atomNextTo (Bool b) (Bool top)
+atomNext (Char x) = atomNextTo (Char x) (Char (fromChar top))
+atomNext _ = Tuple Nothing Nothing 
+
+--allways rising sequence
+atomNextTo :: Atom -> Atom -> Tuple (Maybe Atom) (Maybe Atom)
+atomNextTo (AInt x) (AInt y) = if x == y then Tuple (Just (AInt y)) Nothing else
+  if x < y then Tuple (Just (AInt x)) (Just (AInt (x + 1))) else Tuple Nothing Nothing 
+atomNextTo (Bool x) (Bool y) = if x == y then Tuple (Just (Bool y)) Nothing else
+  if x < y then Tuple (Just (Bool x)) (Bool <$> (succ x)) else Tuple Nothing Nothing
+atomNextTo (Char x) (Char y) = case toChar x of
+  Just a -> case toChar y of
+    Just b  -> if a == b then Tuple (Just (Char y)) Nothing else 
+                 if a < b then Tuple (Just (Char x)) ((Char <<< fromChar) <$> (succ a))
+                          else Tuple Nothing Nothing                         
+    Nothing -> Tuple Nothing Nothing
+  Nothing -> Tuple Nothing Nothing
+atomNextTo _ _ = Tuple Nothing Nothing
+
+intNextStepTo :: Int -> Int -> Int -> Tuple (Maybe Int) (Maybe Int)
+intNextStepTo x y z = case x == z of 
+  true  -> Tuple (Just z) Nothing
+  false -> case x <= y of
+    true  -> if x > z then Tuple Nothing Nothing else Tuple (Just x) (Just (y + y - x))
+    false -> if x < z then Tuple Nothing Nothing else Tuple (Just x) (Just (y + y - x))
+
+eNextStepTo :: forall e. (Enum e) => e -> e -> e -> Tuple (Maybe e) (Maybe e)
+eNextStepTo x y z = Tuple (join (toEnum <$> (fst tup))) (join (toEnum <$> (snd tup)))
+  where tup = intNextStepTo (fromEnum x) (fromEnum y) (fromEnum z)
+
+atomNextStepTo :: Atom -> Atom -> Atom -> Tuple (Maybe Atom) (Maybe Atom)
+atomNextStepTo (AInt x) (AInt y) (AInt z) = let tup = intNextStepTo x y z in
+  Tuple (AInt <$> (fst tup)) (AInt <$> (snd tup))       
+atomNextStepTo (Bool x) (Bool y) (Bool z) = let tup = eNextStepTo x y z in
+  Tuple (Bool <$> (fst) tup) (Bool <$> (snd tup))
+atomNextStepTo (Char x) (Char y) (Char z) = case toChar x of 
+  Nothing -> Tuple Nothing Nothing
+  Just a  -> case toChar y of
+    Nothing -> Tuple Nothing Nothing
+    Just b  -> case toChar z of
+      Nothing -> Tuple Nothing Nothing
+      Just c  -> let tup = eNextStepTo a b c in
+        Tuple ((Char <<< fromChar) <$> (fst tup)) ((Char <<< fromChar) <$> (snd tup))
+atomNextStepTo _ _ _ = Tuple Nothing Nothing        
+
+atomNextStep :: Atom -> Atom -> Tuple (Maybe Atom) (Maybe Atom)
+atomNextStep (AInt x) (AInt y) = case x < y of
+  true  -> atomNextStepTo (AInt x) (AInt y) (AInt top)
+  false -> atomNextStepTo (AInt x) (AInt y) (AInt bottom)
+atomNextStep (Bool x) (Bool y) = case x < y of
+  true  -> atomNextStepTo (Bool x) (Bool y) (Bool top)
+  false -> atomNextStepTo (Bool x) (Bool y) (Bool bottom)
+atomNextStep (Char x) (Char y) = case toChar x of 
+  Just a  -> case toChar y of
+    Just b  -> if a < b then atomNextStepTo (Char x) (Char y) (Char (fromChar top))
+                        else atomNextStepTo (Char x) (Char y) (Char (fromChar bottom))
+    Nothing -> Tuple Nothing Nothing
+  Nothing -> Tuple Nothing Nothing 
+atomNextStep _ _ = Tuple Nothing Nothing
+
 evalArithmSeq :: Expr -> Evaluator Expr
 evalArithmSeq as = case as of
-  ArithmSeq (Atom (AInt _)) _ _ -> evalArithmSeqInt as
-  ArithmSeq (Atom (Bool _)) _ _ -> evalArithmSeqBool as
-  ArithmSeq (Atom (Char _)) _ _ -> evalArithmSeqChar as
+  ArithmSeq (Atom (AInt _)) _ _ -> evalArithmSeq' as
+  ArithmSeq (Atom (Bool _)) _ _ -> evalArithmSeq' as
+  ArithmSeq (Atom (Char _)) _ _ -> evalArithmSeq' as
   _                             -> throwError $ CannotEvaluate as
   where 
-    evalArithmSeqInt :: Expr -> Evaluator Expr
-    evalArithmSeqInt as = case as of
-      ArithmSeq (Atom (AInt start)) Nothing Nothing -> 
-        return $ Binary Colon (aint start) (ArithmSeq (aint (start + 1)) Nothing Nothing)
+    evalArithmSeq' :: Expr -> Evaluator Expr
+    evalArithmSeq' as = case as of
+      ArithmSeq (Atom x) Nothing Nothing -> case atomNext x of
+        Tuple Nothing _         -> return $ List Nil 
+        Tuple (Just a) Nothing  -> return $ List (singleton (Atom a)) 
+        Tuple (Just a) (Just b) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom b) Nothing Nothing)
+        
+      ArithmSeq (Atom x) (Just (Atom y)) Nothing -> case atomNextStep x y of
+        Tuple Nothing _                -> return $ List Nil
+        Tuple (Just a) Nothing         -> return $ List (singleton (Atom a))
+        Tuple (Just a) (Just nextStep) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom y) (Just (Atom nextStep)) Nothing)
 
-      ArithmSeq (Atom (AInt start)) (Just (Atom (AInt step))) Nothing -> 
-        return $ Binary Colon (aint start) (ArithmSeq (aint step) (jint (step + step - start)) Nothing)
-
-      ArithmSeq a@(Atom (AInt start)) Nothing (Just (Atom (AInt end))) -> case start == end of
-        true  -> return $ List (singleton a)
-        false -> case start > end of
-          true  -> return $ List Nil
-          false -> return $ Binary Colon (aint start) (ArithmSeq (aint (start + 1)) Nothing (jint end))
-
-      ArithmSeq a@(Atom (AInt start)) (Just (Atom (AInt step))) (Just (Atom (AInt end))) -> case start == end of
-        true  -> return $ List (singleton a)
-        false -> case start > end of
-          true  -> return $ List Nil
-          false -> return $ Binary Colon (aint start) (ArithmSeq (aint step) (jint (step + step - start)) (jint end))
+      ArithmSeq (Atom x) Nothing end@(Just (Atom z)) -> case atomNextTo x z of
+        Tuple Nothing _         -> return $ List Nil 
+        Tuple (Just a) Nothing  -> return $ List (singleton (Atom a)) 
+        Tuple (Just a) (Just b) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom b) Nothing end)
+        
+      ArithmSeq (Atom x) (Just (Atom y)) end@(Just (Atom z)) -> case atomNextStepTo x y z of
+        Tuple Nothing _                -> return $ List Nil
+        Tuple (Just a) Nothing         -> return $ List (singleton (Atom a))
+        Tuple (Just a) (Just nextStep) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom y) (Just (Atom nextStep)) end)
 
       _ -> throwError $ CannotEvaluate as
 
-    --TODO  
-    evalArithmSeqBool :: Expr -> Evaluator Expr 
-    evalArithmSeqBool as = return as
-
-    --TODO
-    evalArithmSeqChar :: Expr -> Evaluator Expr
-    evalArithmSeqChar as = return as
-
-    aint = Atom <<< AInt
-    jint = Just <<< aint
-
+------------------------------------------------------------------------------------------
+-- Arithmetic Sequences End
+------------------------------------------------------------------------------------------
 
 binary :: Env -> Op -> Expr -> Expr -> Evaluator Expr
 binary env op = case op of
