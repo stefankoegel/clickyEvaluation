@@ -245,7 +245,9 @@ intNextStepTo x y z = case x == z of
     false -> if x < z then Tuple Nothing Nothing else Tuple (Just x) (Just (y + y - x))
 
 eNextStepTo :: forall e. (Enum e) => e -> e -> e -> Tuple (Maybe e) (Maybe e)
-eNextStepTo x y z = Tuple (join (toEnum <$> (fst tup))) (join (toEnum <$> (snd tup)))
+eNextStepTo x y z = case (fromEnum x) <= (fromEnum y) of
+  true  -> Tuple (join (toEnum <$> (fst tup))) ((\q -> fromMaybe top (toEnum q)) <$> (snd tup))
+  false -> Tuple (join (toEnum <$> (fst tup))) ((\q -> fromMaybe bottom (toEnum q)) <$> (snd tup))
   where tup = intNextStepTo (fromEnum x) (fromEnum y) (fromEnum z)
 
 atomNextStepTo :: Atom -> Atom -> Atom -> Tuple (Maybe Atom) (Maybe Atom)
@@ -300,7 +302,7 @@ evalArithmSeq as = case as of
       ArithmSeq (Atom x) Nothing end@(Just (Atom z)) -> case atomNextTo x z of
         Tuple Nothing _         -> return $ List Nil 
         Tuple (Just a) Nothing  -> return $ List (singleton (Atom a)) 
-        Tuple (Just a) (Just b) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom b) Nothing end)
+        Tuple (Just a) (Just b) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom b) Nothing Nothing)
         
       ArithmSeq (Atom x) (Just (Atom y)) end@(Just (Atom z)) -> case atomNextStepTo x y z of
         Tuple Nothing _                -> return $ List Nil
