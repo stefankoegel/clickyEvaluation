@@ -1,10 +1,10 @@
 module Evaluator where
 
-import Prelude (class Show, top, bottom, class Semigroup, class Monad, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
+import Prelude (class Show, top, class Semigroup, class Functor, class Monad, Unit, Ordering(..), (++), ($), (||), (&&), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
 import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
 import Data.StrMap (StrMap)
 import Data.StrMap as Map
-import Data.Tuple (Tuple(Tuple), fst, snd)
+import Data.Tuple (Tuple(Tuple))
 import Data.Maybe (Maybe(Nothing, Just), fromMaybe)
 import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
@@ -12,7 +12,7 @@ import Data.Identity (Identity, runIdentity)
 import Data.Either (Either(..), either)
 import Data.Monoid (class Monoid)
 import Data.String (fromChar, toChar)
-import Data.Enum (class Enum, fromEnum, toEnum, succ)
+import Data.Enum (fromEnum, toEnum)
 import Control.Bind (join)
 import Control.Apply ((*>))
 import Control.Alt ((<|>))
@@ -145,7 +145,7 @@ eval1 env expr = case expr of
   (Atom (Name name))                 -> apply env name Nil
   (IfExpr (Atom (Bool true)) te _)   -> return te
   (IfExpr (Atom (Bool false)) _ ee)  -> return ee
-  (ArithmSeq start step end)         -> evalArithmSeq $ ArithmSeq start step end  
+  (ArithmSeq start step end)         -> evalArithmSeq start step end  
 --  (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) (Cons e Nil)) -> return $ App f (singleton $ App g (Cons e Nil))
   (App (Lambda binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
@@ -216,103 +216,75 @@ wrapLambda binds args body =
 -- Arithmetic Sequences
 ------------------------------------------------------------------------------------------
 
-atomNext :: Atom -> Tuple (Maybe Atom) (Maybe Atom)
-atomNext (AInt i) = atomNextTo (AInt i) (AInt top)
-atomNext (Bool b) = atomNextTo (Bool b) (Bool top)
-atomNext (Char x) = atomNextTo (Char x) (Char (fromChar top))
-atomNext _ = Tuple Nothing Nothing 
+{-
+packs the evaluation result for arithmetic sequences (AS)
+example: 
+Trip (Just x) (Just y) (Just z) will be displayed as x : [y, z ..] 
+if no end of (AS) was given or x : [y, z .. end] if end was given
+-}
+data Trip a = Trip a a a
 
---allways rising sequence
-atomNextTo :: Atom -> Atom -> Tuple (Maybe Atom) (Maybe Atom)
-atomNextTo (AInt x) (AInt y) = if x == y then Tuple (Just (AInt y)) Nothing else
-  if x < y then Tuple (Just (AInt x)) (Just (AInt (x + 1))) else Tuple Nothing Nothing 
-atomNextTo (Bool x) (Bool y) = if x == y then Tuple (Just (Bool y)) Nothing else
-  if x < y then Tuple (Just (Bool x)) (Bool <$> (succ x)) else Tuple Nothing Nothing
-atomNextTo (Char x) (Char y) = case toChar x of
-  Just a -> case toChar y of
-    Just b  -> if a == b then Tuple (Just (Char y)) Nothing else 
-                 if a < b then Tuple (Just (Char x)) ((Char <<< fromChar) <$> (succ a))
-                          else Tuple Nothing Nothing                         
-    Nothing -> Tuple Nothing Nothing
-  Nothing -> Tuple Nothing Nothing
-atomNextTo _ _ = Tuple Nothing Nothing
+instance functorTrip :: Functor Trip where
+  map f (Trip x y z) = Trip (f x) (f y) (f z)
 
-intNextStepTo :: Int -> Int -> Int -> Tuple (Maybe Int) (Maybe Int)
-intNextStepTo x y z = case x == z of 
-  true  -> Tuple (Just z) Nothing
-  false -> case x <= y of
-    true  -> if x > z then Tuple Nothing Nothing else Tuple (Just x) (Just (y + y - x))
-    false -> if x < z then Tuple Nothing Nothing else Tuple (Just x) (Just (y + y - x))
+intFromStepTo :: Int -> Maybe Int -> Maybe Int -> Trip (Maybe Int)
+intFromStepTo start Nothing Nothing     = Trip (Just start) (Just (start + 1)) Nothing
+intFromStepTo start (Just step) Nothing = Trip (Just start) (Just step) (Just (step + step - start))
+intFromStepTo start Nothing (Just end)  = case start > end of
+  true  -> Trip Nothing Nothing Nothing 
+  false -> case start == end of
+    true  -> Trip (Just end) Nothing Nothing
+    false -> Trip (Just start) (Just (start + 1)) Nothing
+intFromStepTo start (Just step) (Just end) = case (start <= step && start > end) || (start > step && start < end) of
+  true  -> Trip Nothing Nothing Nothing
+  false -> case start == end of
+    true  -> Trip (Just end) Nothing Nothing
+    false -> Trip (Just (start)) (Just (step)) (Just (step + step - start))
 
-eNextStepTo :: forall e. (Enum e) => e -> e -> e -> Tuple (Maybe e) (Maybe e)
-eNextStepTo x y z = case (fromEnum x) <= (fromEnum y) of
-  true  -> Tuple (join (toEnum <$> (fst tup))) ((\q -> fromMaybe top (toEnum q)) <$> (snd tup))
-  false -> Tuple (join (toEnum <$> (fst tup))) ((\q -> fromMaybe bottom (toEnum q)) <$> (snd tup))
-  where tup = intNextStepTo (fromEnum x) (fromEnum y) (fromEnum z)
-
-atomNextStepTo :: Atom -> Atom -> Atom -> Tuple (Maybe Atom) (Maybe Atom)
-atomNextStepTo (AInt x) (AInt y) (AInt z) = let tup = intNextStepTo x y z in
-  Tuple (AInt <$> (fst tup)) (AInt <$> (snd tup))       
-atomNextStepTo (Bool x) (Bool y) (Bool z) = let tup = eNextStepTo x y z in
-  Tuple (Bool <$> (fst) tup) (Bool <$> (snd tup))
-atomNextStepTo (Char x) (Char y) (Char z) = case toChar x of 
-  Nothing -> Tuple Nothing Nothing
-  Just a  -> case toChar y of
-    Nothing -> Tuple Nothing Nothing
-    Just b  -> case toChar z of
-      Nothing -> Tuple Nothing Nothing
-      Just c  -> let tup = eNextStepTo a b c in
-        Tuple ((Char <<< fromChar) <$> (fst tup)) ((Char <<< fromChar) <$> (snd tup))
-atomNextStepTo _ _ _ = Tuple Nothing Nothing        
-
-atomNextStep :: Atom -> Atom -> Tuple (Maybe Atom) (Maybe Atom)
-atomNextStep (AInt x) (AInt y) = case x < y of
-  true  -> atomNextStepTo (AInt x) (AInt y) (AInt top)
-  false -> atomNextStepTo (AInt x) (AInt y) (AInt bottom)
-atomNextStep (Bool x) (Bool y) = case x < y of
-  true  -> atomNextStepTo (Bool x) (Bool y) (Bool top)
-  false -> atomNextStepTo (Bool x) (Bool y) (Bool bottom)
-atomNextStep (Char x) (Char y) = case toChar x of 
-  Just a  -> case toChar y of
-    Just b  -> if a < b then atomNextStepTo (Char x) (Char y) (Char (fromChar top))
-                        else atomNextStepTo (Char x) (Char y) (Char (fromChar bottom))
-    Nothing -> Tuple Nothing Nothing
-  Nothing -> Tuple Nothing Nothing 
-atomNextStep _ _ = Tuple Nothing Nothing
-
-evalArithmSeq :: Expr -> Evaluator Expr
-evalArithmSeq as = case as of
-  ArithmSeq (Atom (AInt _)) _ _ -> evalArithmSeq' as
-  ArithmSeq (Atom (Bool _)) _ _ -> evalArithmSeq' as
-  ArithmSeq (Atom (Char _)) _ _ -> evalArithmSeq' as
-  _                             -> throwError $ CannotEvaluate as
+--detect whether top or bottom for Boolean was reached
+intToBool :: Trip (Maybe Int) -> Trip (Maybe Boolean) 
+intToBool trip = case temp of
+  Trip (Just x) (Just y) z -> if x == y then Trip (Just x) Nothing Nothing else temp
+  _ -> temp
   where 
-    evalArithmSeq' :: Expr -> Evaluator Expr
-    evalArithmSeq' as = case as of
-      ArithmSeq (Atom x) Nothing Nothing -> case atomNext x of
-        Tuple Nothing _         -> return $ List Nil 
-        Tuple (Just a) Nothing  -> return $ List (singleton (Atom a)) 
-        Tuple (Just a) (Just b) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom b) Nothing Nothing)
-        
-      ArithmSeq (Atom x) (Just (Atom y)) Nothing -> case atomNextStep x y of
-        Tuple Nothing _                -> return $ List Nil
-        Tuple (Just a) Nothing         -> return $ List (singleton (Atom a))
-        Tuple (Just a) (Just nextStep) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom y) (Just (Atom nextStep)) Nothing)
+    temp :: Trip (Maybe Boolean)
+    temp = (\x -> intToBool' <$> x) <$> trip
 
-      ArithmSeq (Atom x) Nothing end@(Just (Atom z)) -> case atomNextTo x z of
-        Tuple Nothing _         -> return $ List Nil 
-        Tuple (Just a) Nothing  -> return $ List (singleton (Atom a)) 
-        Tuple (Just a) (Just b) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom b) Nothing Nothing)
-        
-      ArithmSeq (Atom x) (Just (Atom y)) end@(Just (Atom z)) -> case atomNextStepTo x y z of
-        Tuple Nothing _                -> return $ List Nil
-        Tuple (Just a) Nothing         -> return $ List (singleton (Atom a))
-        Tuple (Just a) (Just nextStep) -> return $ Binary Colon (Atom a) (ArithmSeq (Atom y) (Just (Atom nextStep)) end)
+    intToBool' :: Int -> Boolean
+    intToBool' i = if i <= 0 then false else true
 
-      _ -> throwError $ CannotEvaluate as
+exprFromStepTo :: Expr -> Maybe Expr -> Maybe Expr -> Trip (Maybe Expr)
+exprFromStepTo start step end = case start of 
+  Atom (AInt i) -> (\x -> (Atom <<< AInt) <$> x) <$> intTrip
+  Atom (Bool b) -> (\x -> (Atom <<< Bool) <$> x) <$> (intToBool intTrip)
+  Atom (Char c) -> (\x -> (Atom <<< Char <<< fromChar) <$> x) <$> (\x -> join (toEnum <$> x)) <$> intTrip
+  _             -> Trip Nothing Nothing Nothing
+    where 
+      intTrip = intFromStepTo (unsafeExprToInt start) (unsafeExprToInt <$> step) (unsafeExprToInt <$> end)
 
-------------------------------------------------------------------------------------------
--- Arithmetic Sequences End
+unsafeExprToInt :: Expr -> Int
+unsafeExprToInt (Atom (AInt i))   = i
+unsafeExprToInt (Atom (Bool b))   = fromEnum b
+unsafeExprToInt (Atom (Char str)) = fromEnum $ fromMaybe 'E' (toChar str)
+unsafeExprToInt _ = top
+
+evalArithmSeq :: Expr -> Maybe Expr -> Maybe Expr -> Evaluator Expr
+evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, step, end]) of
+  false -> throwError $ CannotEvaluate $ ArithmSeq start step end
+  true  -> evalArithmSeq'
+  where
+    isValid :: Maybe Expr -> Boolean
+    isValid Nothing = true
+    isValid (Just (Atom (Name _))) = false
+    isValid (Just (Atom _)) = true
+    isValid _ = false
+
+    evalArithmSeq' :: Evaluator Expr
+    evalArithmSeq' = case (exprFromStepTo start step end) of
+      Trip (Just a) (Just b) nextStep -> return $ Binary Colon a (ArithmSeq b nextStep end)
+      Trip (Just a) Nothing _         -> return $ List (singleton a)
+      Trip Nothing _ _                -> return $ List Nil
+
 ------------------------------------------------------------------------------------------
 
 binary :: Env -> Op -> Expr -> Expr -> Evaluator Expr
