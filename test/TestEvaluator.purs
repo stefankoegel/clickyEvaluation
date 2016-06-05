@@ -157,3 +157,19 @@ runTests = do
   evalEnvTest "infix_functions_1" prelude "3 `take` (2 `drop` [1, 2, 3, 4, 5, 6, 7])" "[3, 4, 5]"
   evalEnvTest "infix_functions_2" prelude "(\\x -> x `mod` 2 == 0) `filter` [1, 2, 3, 4, 5, 6]" "[2, 4, 6]"
   evalEnvTest "infix_functions_3" prelude "(*2) `map` [1, 2, 3]" "[2, 4, 6]"
+
+  evalEnvTest "arithmetic_sequences_1" prelude "sum [1, 3 .. 100]" "2500"
+  --call-stack-size-error
+  --evalEnvTest "arithmetic_sequences_2" prelude "sum [1 .. 50]" "1250"
+  evalEnvTest "arithmetic_sequences_3" prelude "length [ 7 * 7, 8 * 8 .. 42 * 42]" "115"
+  --call-stack-size-error
+  --evalEnvTest "arithmetic_sequences_4" prelude "sum [ head (drop 50 [7..70]) .. length [1..100]]" "3454"
+  evalEnvTest "arithmetic_sequences_5" prelude "sum $ take 100 [500 ..]" "54950"
+  evalEnvTest "arithmetic_sequences_6" prelude "[1, -1 .. 0]" "[1]"
+  evalEnvTest "arithmetic_sequences_7" prelude "sum [10, 9 .. -10]" "0"
+  evalEnvTest "arithmetic_sequences_8" prelude "[True .. False]" "[]"
+  evalEnvTest "arithmetic_sequences_9" prelude "[True, False ..]" "[True, False]"
+  --/= (neq) does not evaluate for lists!
+  --evalEnvTest "arithmetic_sequences_10" prelude "[False, False ..] /= [False]" "True"
+  evalEnvTest "arithmetic_sequences_11" prelude "[False, True ..]" "[False, True]"
+  evalEnvTest "arithmetic_sequences_12" prelude "[True, False ..]" "[True, False]"
