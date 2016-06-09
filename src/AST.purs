@@ -1,7 +1,8 @@
 module AST where
 
-import Prelude (class Show, class Eq,class Ord, show, (++), (==), (&&),eq, compare,Ordering(..))
+import Prelude (class Show, class Eq,class Ord, show, (++), (==), (&&),eq, compare,Ordering(..), Unit)
 import Data.List (List)
+import Data.Tuple (Tuple)
 
 -- | Operators
 -- |
@@ -48,6 +49,25 @@ data Expr = Atom Atom
           | Lambda (List Binding) Expr
           | App Expr (List Expr)
 
+data Tree a b m =
+    Atom a m
+  | List (List (Tree a b m)) m
+  | NTuple (List (Tree a b m)) m
+  | Binary Op (Tree a b m) (Tree a b m) m
+  | Unary Op (Tree a b m) m
+  | SectL (Tree a b m) Op m
+  | SectR Op (Tree a b m) m
+  | PrefixOp Op m
+  | IfExpr (Tree a b m) (Tree a b m) (Tree a b m) m
+  | LetExpr b (Tree a b m) (Tree a b m) m
+  | Lambda (List b) (Tree a b m) m
+  | App (Tree a b m) (List (Tree a b m)) m
+
+type Expr2 = Tree Atom Binding Unit
+type TypeTree2 = Tree Unit TypeBinding Type
+type IndexTree2 = Tree Unit IBinding Int
+
+type FullTree = Tree Atom (Tuple Binding (Tuple TypeBinding IBinding)) (Tuple Type Int)
 
 -- last type para is type of expr at this level
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
