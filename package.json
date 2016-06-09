@@ -6,7 +6,7 @@
   },
   "dependencies": {
     "purescript": "0.8.5",
-    "pulp": "*",
+    "pulp": "8.2.1",
     "bower": "*"
   },
   "scripts": {
