@@ -173,3 +173,8 @@ runTests = do
   --evalEnvTest "arithmetic_sequences_10" prelude "[False, False ..] /= [False]" "True"
   evalEnvTest "arithmetic_sequences_11" prelude "[False, True ..]" "[False, True]"
   evalEnvTest "arithmetic_sequences_12" prelude "[True, False ..]" "[True, False]"
+
+  evalEnvTest "arithmetic_sequences_13" prelude "[1 .. 10]" "[1,2,3,4,5,6,7,8,9,10]"
+  evalEnvTest "arithmetic_sequences_14" prelude "[5, 9 .. 20]" "[5, 9, 13, 17]"
+  evalEnvTest "arithmetic_sequences_15" prelude "take 5 [3, -1 ..]" "[3, -1, -5, -9, -13]"
+  evalEnvTest "arithmetic_sequences_16" prelude "take 11 [-5 ..]" "[-5, -4, -3, -2, -1, 0, 1, 2 ,3, 4, 5]"
