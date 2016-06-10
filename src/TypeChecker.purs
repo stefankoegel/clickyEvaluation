@@ -12,6 +12,7 @@ import Data.Tuple (Tuple(Tuple), snd, fst)
 import Data.Set as Set
 import Data.Foldable (foldl, foldr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe, isJust)
+import Data.Maybe.Unsafe (fromJust)
 
 import Data.Tuple (Tuple(..),fst,snd)
 import Data.Map (Map(..), insert, lookup, empty)
@@ -19,7 +20,7 @@ import Data.List.WordsLines (fromCharList)
 import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA,concat,zip, (!!))
 import Data.String (joinWith, toCharArray)
 
-import Control.Apply ((*>))
+import Control.Apply ((*>), lift2)
 import Control.Bind ((=<<), (>=>), ifM)
 import Control.Monad.State
 
@@ -334,18 +335,18 @@ infer env ex = case ex of
     let s3 = maybe nullSubst fst tup3
     let s  = s1 `compose` s2 `compose` s3
     let tt = extractType t1   
-    ifM (return ((isJust t2) && ((extractType <$> t2) /= (Just tt)))) 
-      (throwError (UnknownError "Type mismatch")) 
-      (ifM (return ((isJust t3) && ((extractType <$> t3) /= (Just tt)))) 
-        (throwError (UnknownError "Type mismatch"))
-        (ifM (return (((isJust t2) && (isJust t3)) && ((extractType <$> t2) /= (extractType <$> t3))))
-          (throwError (UnknownError "Type mismatch"))
+    let typeMissMatch t1 t2 = fromMaybe (UnknownError "congrats you found a bug TypeChecker.infer (ArithmSeq begin jstep jend)") (lift2 UnificationFail t1 t2)
+    ifM (return (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t2))))
+      (throwError (typeMissMatch (Just tt) (extractType <$> t2)))
+      (ifM (return (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t3))))
+        (throwError (typeMissMatch (Just tt) (extractType <$> t3)))
+        (ifM (return (fromMaybe false (lift2 (/=) (extractType <$> t2) (extractType <$> t3))))
+          (throwError (typeMissMatch (extractType <$> t2) (extractType <$> t3)))
           (case tt of
             TypCon "Int"  -> return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
             TypCon "Bool" -> return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
             TypCon "Char" -> return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
             _             -> throwError $ NoInstanceOfEnum tt)))
-
 
   PrefixOp op -> do
     Tuple s t <- inferOp env op
