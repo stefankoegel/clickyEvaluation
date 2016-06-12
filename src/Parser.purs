@@ -1,6 +1,6 @@
 module Parser where
 
-import Prelude (Unit, bind, return, ($), (<$>), (<<<), unit, (++), void, id, flip, negate, liftM1)
+import Prelude
 import Data.String as String
 import Data.List (List(Cons), many, toList, concat, elemIndex, fromList)
 import Data.Maybe (Maybe(..), maybe)
@@ -20,7 +20,7 @@ import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
 import Text.Parsing.Parser.Token
 import Text.Parsing.Parser.Language (haskellDef)
 
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
+import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..))
 
 
 tokenParser :: TokenParser
@@ -133,7 +133,7 @@ operatorTable = infixTable2
     infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
 
     infixTable :: OperatorTable Identity String Expr
-    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$> x) <$> infixOperators
+    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary unit op)) assoc)) <$> x) <$> infixOperators
 
     unaryMinus :: Operator Identity String Expr
     unaryMinus = Prefix $ spaced minusParse
@@ -141,8 +141,8 @@ operatorTable = infixTable2
         minusParse = do
           string "-"
           return $ \e -> case e of
-            Atom (AInt ai) -> (Atom (AInt (-ai)))
-            _              -> Unary Sub e
+            Atom _ (AInt ai) -> (Atom unit (AInt (-ai)))
+            _                -> Unary unit Sub e
 
     infixOperator :: Operator Identity String Expr
     infixOperator = Infix (spaced infixParse) AssocLeft
@@ -151,7 +151,7 @@ operatorTable = infixTable2
           char '`'
           n <- name
           char '`'
-          return $ \e1 e2 -> Binary (InfixFunc n) e1 e2
+          return $ \e1 e2 -> Binary unit (InfixFunc n) e1 e2
 
 opParser :: Parser String Op
 opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> return op)) <$> x) $ concat $ (\x -> toList <$> x) $ toList infixOperators) <|> infixFunc
@@ -178,7 +178,7 @@ base expr =
   <|> section expr
   <|> list expr
   <|> charList
-  <|> (Atom <$> atom)
+  <|> (Atom unit <$> atom)
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
 syntax :: Parser String Expr -> Parser String Expr
@@ -194,7 +194,7 @@ applicationOrSingleExpression expr = do
   mArgs <- PC.optionMaybe (PC.try $ eatSpaces *> ((PC.try (base expr)) `PC.sepEndBy1` eatSpaces))
   case mArgs of
     Nothing   -> return e
-    Just args -> return $ App e args
+    Just args -> return $ App unit e args
 
 -- | Parse an if_then_else construct
 ifThenElse :: Parser String Expr -> Parser String Expr
@@ -205,7 +205,7 @@ ifThenElse expr = do
   thenExpr <- spaced expr
   string "else"
   elseExpr <- spaced expr
-  return $ IfExpr testExpr thenExpr elseExpr
+  return $ IfExpr unit testExpr thenExpr elseExpr
 
 -- | Parser for tuples or bracketed expressions.
 tuplesOrBrackets :: Parser String Expr -> Parser String Expr
@@ -220,7 +220,7 @@ tuplesOrBrackets expr = do
   char ')'
   case mes of
     Nothing -> return e
-    Just es -> return $ NTuple (Cons e es)
+    Just es -> return $ NTuple unit (Cons e es)
 
 -- | Parser for operator sections
 section :: Parser String Expr -> Parser String Expr
@@ -237,11 +237,11 @@ section expr = do
   case me1 of
     Nothing ->
       case me2 of
-        Nothing -> return $ PrefixOp op
-        Just e2 -> return $ SectR op e2
+        Nothing -> return $ PrefixOp unit op
+        Just e2 -> return $ SectR unit op e2
     Just e1 ->
       case me2 of
-        Nothing -> return $ SectL e1 op
+        Nothing -> return $ SectL unit e1 op
         Just _ -> fail "Cannot have a section with two expressions!"
 
 -- | Parser for lists
@@ -252,7 +252,7 @@ list expr = do
   exprs <- expr `PC.sepBy` (PC.try $ eatSpaces *> char ',' *> eatSpaces)
   eatSpaces
   char ']'
-  return $ List exprs
+  return $ List unit exprs
 
 -- | Parser for strings ("example")
 charList :: Parser String Expr
@@ -260,7 +260,7 @@ charList = do
   char '"'
   strs <- many character'
   char '"'
-  return (List ((Atom <<< Char <<< String.fromChar) <$> strs))
+  return (List unit ((Atom unit <<< Char <<< String.fromChar) <$> strs))
 
 -- | Parse a lambda expression
 lambda :: Parser String Expr -> Parser String Expr
@@ -269,7 +269,7 @@ lambda expr = do
   binds <- (binding `PC.sepEndBy1` eatSpaces)
   string "->" *> eatSpaces
   body <- expr
-  return $ Lambda binds body
+  return $ Lambda unit binds body
 
 -- | Parser for let expression
 letExpr :: Parser String Expr -> Parser String Expr
@@ -280,7 +280,7 @@ letExpr expr = do
   lexp <- expr
   eatSpaces *> string "in" *> eatSpaces
   body <- expr
-  return $ LetExpr bnd lexp body
+  return $ LetExpr unit bnd lexp body
 
 -- | Parse an arbitrary expression
 expression :: Parser String Expr

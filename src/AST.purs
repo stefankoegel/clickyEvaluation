@@ -1,8 +1,14 @@
-module AST where
+module AST 
+  ( Tree(..)
+  , Atom(..)
+  , Op(..)
+  , Binding(..)
+  , Definition(..)
+  , Expr
+  , Path(..)) where
 
-import Prelude (class Show, class Eq,class Ord, show, (++), (==), (&&),eq, compare,Ordering(..), Unit)
+import Prelude
 import Data.List (List)
-import Data.Tuple (Tuple)
 
 -- | Operators
 -- |
@@ -34,73 +40,31 @@ derive instance eqAtom :: Eq Atom
 derive instance ordAtom :: Ord Atom
 
 -- | Expressions
--- |
--- | The basic expressions the `Parser` and `Evaluator` recognize.
-data Expr = Atom Atom
-          | List (List Expr)
-          | NTuple (List Expr)
-          | Binary Op Expr Expr
-          | Unary Op Expr
-          | SectL Expr Op
-          | SectR Op Expr
-          | PrefixOp Op
-          | IfExpr Expr Expr Expr
-          | LetExpr Binding Expr Expr
-          | Lambda (List Binding) Expr
-          | App Expr (List Expr)
 
-data Tree a b m =
-    Atom a m
-  | List (List (Tree a b m)) m
-  | NTuple (List (Tree a b m)) m
-  | Binary Op (Tree a b m) (Tree a b m) m
-  | Unary Op (Tree a b m) m
-  | SectL (Tree a b m) Op m
-  | SectR Op (Tree a b m) m
-  | PrefixOp Op m
-  | IfExpr (Tree a b m) (Tree a b m) (Tree a b m) m
-  | LetExpr b (Tree a b m) (Tree a b m) m
-  | Lambda (List b) (Tree a b m) m
-  | App (Tree a b m) (List (Tree a b m)) m
+data Tree a b c = 
+    Atom c a
+  | List c (List Expr)
+  | NTuple c (List Expr)
+  | Binary c Op Expr Expr
+  | Unary c Op Expr
+  | SectL c Expr Op
+  | SectR c Op Expr
+  | PrefixOp c Op
+  | IfExpr c Expr Expr Expr
+  | LetExpr c Binding Expr Expr
+  | Lambda c (List b) Expr
+  | App c Expr (List Expr)
 
-type Expr2 = Tree Atom Binding Unit
-type TypeTree2 = Tree Unit TypeBinding Type
-type IndexTree2 = Tree Unit IBinding Int
+derive instance eqTree :: (Eq a, Eq b, Eq c) => Eq (Tree a b c)
 
-type FullTree = Tree Atom (Tuple Binding (Tuple TypeBinding IBinding)) (Tuple Type Int)
+type Expr = Tree Atom Binding Unit
+
 
 -- last type para is type of expr at this level
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
-data TypeTree
-          = TAtom                                   Type
-          | TListTree (List TypeTree)               Type
-          | TNTuple (List TypeTree)                 Type
-          | TBinary Type TypeTree TypeTree          Type
-          | TUnary Type TypeTree                    Type
-          | TSectL TypeTree Type                    Type
-          | TSectR Type TypeTree                    Type
-          | TPrefixOp                               Type
-          | TIfExpr TypeTree TypeTree TypeTree      Type
-          | TLetExpr TypeBinding TypeTree TypeTree  Type
-          | TLambda (List TypeBinding) TypeTree     Type
-          | TApp TypeTree (List TypeTree)           Type
+type TypeTree = Tree Unit TypeBinding Type
 
-
-data IndexTree
-          = IAtom                                  Int
-          | IListTree (List IndexTree)             Int
-          | INTuple (List IndexTree)               Int
-          | IBinary Int  IndexTree IndexTree           Int
-          | IUnary Int IndexTree                      Int
-          | ISectL IndexTree Int                      Int
-          | ISectR Int IndexTree                      Int
-          | IPrefixOp                              Int
-          | IIfExpr IndexTree IndexTree IndexTree  Int
-          | ILetExpr IBinding IndexTree IndexTree  Int
-          | ILambda (List IBinding) IndexTree      Int
-          | IApp IndexTree (List IndexTree)        Int
-
-
+type IndexTree = Tree Unit IBinding Int
 
 data TypeBinding  = TLit                              Type
                   | TConsLit TypeBinding TypeBinding  Type
@@ -135,8 +99,6 @@ data TypeError
   | UnknownError String
 
 
-derive instance eqExpr :: Eq Expr
-
 -- | Bindings
 -- |
 -- | Binding forms for pattern matching on lists and tuples
@@ -151,6 +113,8 @@ derive instance eqBinding :: Eq Binding
 -- |
 -- | Definitions for functions and constants
 data Definition = Def String (List Binding) Expr
+
+derive instance eqDefintion :: Eq Definition
 
 type Output = {
     expr :: Expr,
@@ -171,8 +135,6 @@ instance showPath :: Show Path where
     Snd   p -> "(Snd " ++ show p ++")"
     Thrd   p -> "(Thrd " ++ show p ++")"
     End     -> "End"
-
-derive instance eqDefinition :: Eq Definition
 
 instance showOp :: Show Op where
   show op = case op of
@@ -221,20 +183,20 @@ instance showAtom :: Show Atom where
     Char string -> "Char " ++ show string
     Name string -> "Name " ++ show string
 
-instance showExpr :: Show Expr where
+instance showExpr :: (Show a, Show b, Show c) => Show (Tree a b c) where
   show expr = case expr of
-    Atom atom       -> "Atom (" ++ show atom ++ ")"
-    List ls         -> "List (" ++ show ls ++ ")"
-    NTuple ls       -> "NTuple (" ++ show ls ++ ")"
-    Binary op e1 e2 -> "Binary " ++ show op ++ " (" ++ show e1 ++ ") (" ++ show e2 ++ ")"
-    Unary op e      -> "Unary " ++ show op ++ " (" ++ show e ++ ")"
-    SectL expr op   -> "SectL (" ++ show expr ++ ") " ++ show op
-    SectR op expr   -> "SectR " ++ show op ++ " (" ++ show expr ++ ")"
-    PrefixOp op     -> "PrefixOp " ++ show op
-    IfExpr ce te ee  -> "IfExpr (" ++ show ce ++ ") (" ++ show te ++ ") (" ++ show ee ++ ")"
-    LetExpr b l e   -> "LetExpr (" ++ show b ++ ") (" ++ show l ++ ") (" ++ show e ++ ")"
-    Lambda binds body -> "Lambda (" ++ show binds ++ ") (" ++ show body ++ ")"
-    App func args   -> "App (" ++ show func ++ ") (" ++ show args ++ ")"
+    Atom c atom         -> "(Atom " ++ show c ++ " "++ show atom ++ ")"
+    List c ls           -> "(List " ++ show c ++ " "++ show ls ++  ")"
+    NTuple c ls         -> "(NTuple " ++ show c ++ " "++ show ls ++  ")"
+    Binary c op e1 e2   -> "(Binary " ++ show c ++ " "++ show op ++ " " ++ show e1 ++ " " ++ show e2 ++  ")"
+    Unary c op e        -> "(Unary " ++ show c ++ " "++ show op ++ " " ++ show e ++  ")"
+    SectL c expr op     -> "(SectL " ++ show c ++ " "++ show expr ++ " " ++ show op ++  ")"
+    SectR c op expr     -> "(SectR " ++ show c ++ " "++ show op ++ " " ++ show expr ++  ")"
+    PrefixOp c op       -> "(PrefixOp " ++ show c ++ " " ++ show op ++ ")"
+    IfExpr c ce te ee   -> "(IfExpr " ++ show c ++ " "++ show ce ++ " " ++ show te ++ " " ++ show ee ++  ")"
+    LetExpr c b l e     -> "(LetExpr " ++ show c ++ " "++ show b ++ " " ++ show l ++ " " ++ show e ++  ")"
+    Lambda c binds body -> "(Lambda " ++ show c ++ " "++ show binds ++ " " ++ show body ++  ")"
+    App c func args     -> "(App " ++ show c ++ " "++ show func ++ " " ++ show args ++  ")"
 
 instance showBinding :: Show Binding where
   show binding = case binding of
@@ -276,21 +238,6 @@ instance showTypeError :: Show TypeError where
   show (UnknownError a) = "(UnknownError " ++ show a ++ ")"
 
 derive instance eqTypeError :: Eq TypeError
-
-instance showTypeTree :: Show TypeTree where
-  show (TAtom t) = "(TAtom " ++ show t ++ ")"
-  show (TListTree lt t) = "(TListTree (" ++ show lt ++ ") " ++ show t ++ ")"
-  show (TNTuple lt t) = "(TNTuple ("++ show lt ++ ") " ++ show t ++ ")"
-  show (TBinary t1 tt1 tt2 t) = "(TBinary " ++ show t1 ++ " " ++ show tt1 ++  " " ++ show tt2 ++ " " ++ show t ++ ")"
-  show (TUnary t1 tt t) = "(TUnary "++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
-  show (TSectL tt t1 t) = "(TSectL "++ show tt ++ " "++ show t1 ++ " " ++ show t ++ ")"
-  show (TSectR t1 tt t) = "(TSectR " ++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
-  show (TPrefixOp t) = "(TPrefixOp " ++ show t ++ ")"
-  show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show tt3 ++ " " ++ show t ++ ")"
-  show (TLetExpr b tt1 tt2 t) = "(TLetExpr " ++ show b ++ " " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show t ++ ")"
-  show (TLambda lb tt t ) = "(TLambda " ++ show lb ++ " " ++ show tt ++ " " ++ show t ++ ")"
-  show (TApp tt1 tl t) = "(TApp " ++ show tt1 ++ " (" ++ show tl ++ ") " ++ show t ++ ")"
-
 
 instance showTypeBinding:: Show TypeBinding where
   show (TLit t) = "(TLit "++ show t ++")"
