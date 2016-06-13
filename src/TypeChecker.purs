@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Monad, class Eq, class Show, (&&), (==), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod, flip)
+import Prelude (class Monad, class Eq, class Show, (&&), (==), (/=), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod, flip)
 
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
 import Control.Monad.State (State, evalState, put, get)
@@ -11,7 +11,8 @@ import Data.Map as Map
 import Data.Tuple (Tuple(Tuple), snd, fst)
 import Data.Set as Set
 import Data.Foldable (foldl, foldr)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe, isJust)
+import Data.Maybe.Unsafe (fromJust)
 
 import Data.Tuple (Tuple(..),fst,snd)
 import Data.Map (Map(..), insert, lookup, empty)
@@ -19,8 +20,8 @@ import Data.List.WordsLines (fromCharList)
 import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA,concat,zip, (!!))
 import Data.String (joinWith, toCharArray)
 
-import Control.Apply ((*>))
-import Control.Bind ((=<<), (>=>))
+import Control.Apply ((*>), lift2)
+import Control.Bind ((=<<), (>=>), ifM)
 import Control.Monad.State
 
 import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..))
@@ -101,6 +102,7 @@ instance subTypeTree :: Substitutable TypeTree where
   apply s (TSectR op tt t) = TSectR (apply s op) (apply s tt) (apply s t)
   apply s (TPrefixOp t) = TPrefixOp $ apply s t
   apply s (TIfExpr tt1 tt2 tt3 t) = TIfExpr (apply s tt1) (apply s tt2) (apply s tt3) (apply s t)
+  apply s (TArithmSeq st by end t) = TArithmSeq (apply s st) ((apply s) <$> by) ((apply s) <$> end) (apply s t) 
   apply s (TLetExpr b tt1 tt2 t) = TLetExpr (apply s b) (apply s tt1) (apply s tt2) (apply s t)
   apply s (TLambda lb tt t) = TLambda (apply s lb) (apply s tt) (apply s t)
   apply s (TApp tt1 l t) = TApp (apply s tt1) (apply s l) (apply s t)
@@ -114,6 +116,7 @@ instance subTypeTree :: Substitutable TypeTree where
   ftv (TSectR _ _ t)  = ftv t
   ftv (TPrefixOp t)  = ftv t
   ftv (TIfExpr _ _ _ t)  = ftv t
+  ftv (TArithmSeq _ _ _ t) = ftv t
   ftv (TLetExpr _ _ _ t)  = ftv t
   ftv (TLambda _ _ t)  = ftv t
   ftv (TApp _ _ t)  = ftv t
@@ -217,6 +220,10 @@ mapM f as = foldr k (return Nil) as
                 xs <- r
                 return (x:xs)
 
+mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
+mapM' f Nothing  = pure Nothing
+mapM' f (Just x) = Just <$> (f x)
+
 
 lookupEnv :: TypeEnv -> Atom -> Infer (Tuple Subst Type)
 lookupEnv (TypeEnv env) x = do
@@ -239,6 +246,7 @@ extractType (TSectL _ _ t)  =  t
 extractType (TSectR _ _ t)  =  t
 extractType (TPrefixOp t)  =  t
 extractType (TIfExpr _ _ _ t)  =  t
+extractType (TArithmSeq _ _ _ t) = t
 extractType (TLetExpr _ _ _ t)  =  t
 extractType (TLambda _ _ t)  =  t
 extractType (TApp tt1 _ t)  =  t
@@ -316,6 +324,29 @@ infer env ex = case ex of
     let env' = env `extend` (Tuple name (Forall (Cons t' Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
     Tuple s (TApp tt (Cons tcond (Cons ttr (Cons tfl Nil))) ift) <- infer env' (App (Atom  name) (toList [cond, tr, fl]))
     return (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
+
+  ArithmSeq begin jstep jend -> do
+    Tuple s1 t1 <- infer env begin
+    tup2 <- mapM' (infer env) jstep
+    tup3 <- mapM' (infer env) jend
+    let t2 = snd <$> tup2
+    let t3 = snd <$> tup3
+    let s2 = maybe nullSubst fst tup2
+    let s3 = maybe nullSubst fst tup3
+    let s  = s1 `compose` s2 `compose` s3
+    let tt = extractType t1   
+    let typeMissMatch t1 t2 = fromMaybe (UnknownError "congrats you found a bug TypeChecker.infer (ArithmSeq begin jstep jend)") (lift2 UnificationFail t1 t2)
+    ifM (return (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t2))))
+      (throwError (typeMissMatch (Just tt) (extractType <$> t2)))
+      (ifM (return (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t3))))
+        (throwError (typeMissMatch (Just tt) (extractType <$> t3)))
+        (ifM (return (fromMaybe false (lift2 (/=) (extractType <$> t2) (extractType <$> t3))))
+          (throwError (typeMissMatch (extractType <$> t2) (extractType <$> t3)))
+          (case tt of
+            TypCon "Int"  -> return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
+            TypCon "Bool" -> return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
+            TypCon "Char" -> return $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
+            _             -> throwError $ NoInstanceOfEnum tt)))
 
   PrefixOp op -> do
     Tuple s t <- inferOp env op
@@ -606,6 +637,7 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
   f err (SectR op e) = TSectR (typeOP op) (buildPartiallyTypedTree env e) (TypeError err)
   f err (PrefixOp _) = TPrefixOp (TypeError err)
   f err (IfExpr e1 e2 e3) = TIfExpr (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (buildPartiallyTypedTree env e3) (TypeError err)
+  f err (ArithmSeq e1 e2 e3) = TArithmSeq (buildPartiallyTypedTree env e1) ((buildPartiallyTypedTree env) <$> e2) ((buildPartiallyTypedTree env) <$> e3) (TypeError err)
   f err (LetExpr b1 e1 e2) =let f env' =  TLetExpr (g b1) (buildPartiallyTypedTree env' e1) (buildPartiallyTypedTree env' e2) (TypeError err) in
                         case getTypEnv b1 env of
                           Nothing -> f env
@@ -696,6 +728,12 @@ helptxToABC tt = go tt
       tt3' <- helptxToABC tt3
       t' <- helpTypeToABC t
       return $ TIfExpr tt1' tt2' tt3' t'
+    go (TArithmSeq tt1 tt2 tt3 t) = do
+      tt1' <- helptxToABC tt1
+      tt2' <- mapM' helptxToABC tt2
+      tt3' <- mapM' helptxToABC tt3
+      t'   <- helpTypeToABC t
+      return $ TArithmSeq tt1' tt2' tt3' t'        
     go (TLetExpr tb tt1 tt2 t) = do
       tb' <- helpBindingToABC tb
       tt1' <- helptxToABC tt1
@@ -816,6 +854,7 @@ checkForError p' tt = case p' of
       TUnary op e      _-> checkForError p e
       TSectL e op      _-> checkForError p e
       TIfExpr ce te ee _-> checkForError p ce
+      TArithmSeq ce te ee _ -> checkForError p ce
       TLambda bs body  _-> checkForError p body
       TApp e es        _-> checkForError p e
       _               -> true
@@ -823,9 +862,11 @@ checkForError p' tt = case p' of
       TBinary op e1 e2 _-> checkForError p e2
       TSectR op e      _-> checkForError p e
       TIfExpr ce te ee _-> checkForError p te
+      TArithmSeq ce (Just te) ee _-> checkForError p te
       _               -> true
   (Thrd p) -> case tt of
       TIfExpr ce te ee _-> checkForError p ee
+      TArithmSeq ce te (Just ee) _-> checkForError p ee
       _ -> true
   (Nth n p) -> case tt of
       TListTree es  _-> nth n es p

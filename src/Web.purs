@@ -11,11 +11,13 @@ import Data.Traversable (for)
 import Data.String (joinWith)
 import Data.List (List(Nil, Cons), singleton, fromList, toList, length, zip, (..), zipWithA)
 import Data.Foreign (unsafeFromForeign, isUndefined)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isJust)
+import Data.Maybe.Unsafe (fromJust)
 import Data.Tuple (Tuple(..), fst)
 
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
+import Control.Monad (when)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import Control.Monad.State (State, put, get, runState)
@@ -97,6 +99,25 @@ exprToJQuery' output = go id output
       jt <- go (p <<< Snd) {expr:thenExpr, typ:tt2, idTree: i2}
       je <- go (p <<< Thrd) {expr:elseExpr, typ:tt3, idTree: i3}
       ifexpr jc jt je t i
+
+    {expr:(ArithmSeq start step end), typ:(TArithmSeq tstart tstep tend t), idTree:(IArithmSeq istart istep iend i)} -> do
+      jStart <- go (p <<< Fst)  {expr:start, typ:tstart, idTree:istart} 
+      case (isJust step) && (isJust tstep) && (isJust istep) of
+        true  -> case (isJust end) && (isJust tend) && (isJust iend) of
+          true  -> do
+            jStep <- go (p <<< Snd) {expr:(fromJust step), typ:(fromJust tstep), idTree:(fromJust istep)}
+            jEnd  <- go (p <<< Thrd) {expr:(fromJust end), typ:(fromJust tend), idTree:(fromJust iend)}
+            arithmeticSequence jStart (Just jStep) (Just jEnd) t i 
+          false -> do
+            jStep <- go (p <<< Snd) {expr:(fromJust step), typ:(fromJust tstep), idTree:(fromJust istep)}
+            arithmeticSequence jStart (Just jStep) Nothing t i   
+        false -> case (isJust end) && (isJust tend) && (isJust iend) of
+          true  -> do
+            jEnd  <- go (p <<< Thrd) {expr:(fromJust end), typ:(fromJust tend), idTree:(fromJust iend)}
+            arithmeticSequence jStart Nothing (Just jEnd) t i 
+          false -> do
+            arithmeticSequence jStart Nothing Nothing t i
+
     {expr:Lambda binds body, typ:TLambda lb tt t, idTree: (ILambda bis i i')} -> do
       jBinds <- for (zip bis (zip binds lb)) binding
       jBody <- go (p <<< Fst) {expr:body, typ:tt, idTree: i}
@@ -231,6 +252,32 @@ ifexpr cond thenExpr elseExpr t i = do
   J.append elseExpr dIf
   J.append dIf jtypExp
   return jtypExp
+
+arithmeticSequence :: forall eff. J.JQuery -> Maybe J.JQuery -> Maybe J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+arithmeticSequence start mstep mend t i = do
+  jtypExp <- makeDiv "" (singleton "list typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  das <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  makeDiv "[" (singleton "brace") >>= flip J.append das
+  J.append start das
+  maybeStep das mstep
+  --TODO: ".." create singleton "dotdot"
+  makeDiv ".." (singleton "comma") >>= flip J.append das      
+  maybeEnd das mend
+  makeDiv "]" (singleton "brace") >>= flip J.append das
+  J.append das jtypExp
+  return jtypExp  
+  where
+    maybeStep :: forall eff. J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+    maybeStep jquery Nothing = return jquery
+    maybeStep jquery (Just step) = do
+      makeDiv "," (singleton "comma") >>= flip J.append jquery 
+      J.append step jquery
+
+    maybeEnd :: forall eff. J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+    maybeEnd jquery Nothing = return jquery
+    maybeEnd jquery (Just end) = J.append end jquery
 
 interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> List a -> m Unit
 interleaveM_ f sep = go
@@ -379,6 +426,10 @@ buildExpandDiv t  = do
 idExpr:: Expr -> IndexTree
 idExpr e = fst $ runState (indexExpr e) {count:0}
 
+mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
+mapM' f Nothing  = return Nothing
+mapM' f (Just x) = Just <$> (f x)
+
 indexExpr:: Expr -> State {count:: Int} IndexTree
 indexExpr (Atom _) = do
                   i <- fresh
@@ -421,6 +472,12 @@ indexExpr (IfExpr e1 e2 e3) = do
                   i3 <- indexExpr e3
                   i <- fresh
                   return $ IIfExpr i1 i2 i3 i
+indexExpr (ArithmSeq e1 e2 e3) = do
+                  i1 <- indexExpr e1
+                  i2 <- mapM' indexExpr e2
+                  i3 <- mapM' indexExpr e3
+                  i <- fresh
+                  return $ IArithmSeq i1 i2 i3 i                  
 indexExpr (LetExpr b e1 e2) = do
                   ib <- indexBinding b
                   i1 <- indexExpr e1
@@ -474,6 +531,7 @@ extractIndex (ISectL _ _ i)  =  i
 extractIndex (ISectR _ _ i)  =  i
 extractIndex (IPrefixOp i)  =  i
 extractIndex (IIfExpr _ _ _ i)  =  i
+extractIndex (IArithmSeq _ _ _ i) = i
 extractIndex (ILetExpr _ _ _ i)  =  i
 extractIndex (ILambda _ _ i)  =  i
 extractIndex (IApp _ _ i)  =  i

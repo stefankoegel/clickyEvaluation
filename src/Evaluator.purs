@@ -1,17 +1,19 @@
 module Evaluator where
 
-import Prelude (class Show, class Semigroup, Unit, Ordering(..), (++), ($), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
+import Prelude (class Show, top, class Semigroup, class Functor, class Monad, Unit, Ordering(..), (++), ($), (||), (&&), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
 import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
 import Data.StrMap (StrMap)
 import Data.StrMap as Map
 import Data.Tuple (Tuple(Tuple))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(Nothing, Just), fromMaybe)
 import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
 import Data.Identity (Identity, runIdentity)
 import Data.Either (Either(..), either)
 import Data.Monoid (class Monoid)
-
+import Data.String (fromChar, toChar)
+import Data.Enum (fromEnum, toEnum)
+import Control.Bind (join)
 import Control.Apply ((*>))
 import Control.Alt ((<|>))
 import Control.Monad.State.Trans (StateT, modify, execStateT)
@@ -82,7 +84,8 @@ mapWithPath p f = go p
     Binary op e1 e2 -> Binary op <$> go p e1 <*> pure e2
     Unary op e      -> Unary op  <$> go p e
     SectL e op      -> SectL     <$> go p e <*> pure op
-    IfExpr ce te ee -> IfExpr <$> go p ce <*> pure te <*> pure ee
+    IfExpr ce te ee -> IfExpr    <$> go p ce <*> pure te <*> pure ee
+    ArithmSeq s b e -> ArithmSeq <$> go p s <*> pure b <*> pure e
     Lambda bs body  -> Lambda bs <$> go p body
     App e es        -> App       <$> go p e <*> pure es
     _               -> throwError $ PathError (Fst p) e
@@ -90,9 +93,11 @@ mapWithPath p f = go p
     Binary op e1 e2 -> Binary op e1 <$> go p e2
     SectR op e      -> SectR op     <$> go p e
     IfExpr ce te ee -> IfExpr <$> pure ce <*> go p te <*> pure ee
+    ArithmSeq s b e -> ArithmSeq <$> pure s <*> (mapM' (go p) b) <*> pure e
     _               -> throwError $ PathError (Snd p) e
   go (Thrd p) e = case e of
     IfExpr ce te ee -> IfExpr <$> pure ce <*> pure te <*> go p ee
+    ArithmSeq s b (Just e) -> ArithmSeq <$> pure s <*> pure b <*> (Just <$> (go p e))
     _               -> throwError $ PathError (Thrd p) e
   go (Nth n p) e = case e of
     List es  -> List  <$> mapIndex n (go p) es
@@ -140,6 +145,7 @@ eval1 env expr = case expr of
   (Atom (Name name))                 -> apply env name Nil
   (IfExpr (Atom (Bool true)) te _)   -> return te
   (IfExpr (Atom (Bool false)) _ ee)  -> return ee
+  (ArithmSeq start step end)         -> evalArithmSeq start step end  
 --  (List (e:es))                      -> return $ Binary Cons e (List es)
   (App (Binary Composition f g) (Cons e Nil)) -> return $ App f (singleton $ App g (Cons e Nil))
   (App (Lambda binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
@@ -192,6 +198,8 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
         NTuple ((\e -> evalToBinding env e bind) <$> es)
       (IfExpr c t e)     ->
         IfExpr (evalToBinding env c bind) t e
+      (ArithmSeq c t e)     ->
+        ArithmSeq (evalToBinding env c bind) ((\x -> evalToBinding env x bind) <$> t) ((\x -> evalToBinding env x bind) <$> e)
       (App f args)       -> do
         App (evalToBinding env f bind) args
       _                  ->
@@ -204,6 +212,80 @@ wrapLambda binds args body =
     GT -> return $ Lambda (drop (length args) binds) body
     LT -> return $ App body (drop (length binds) args)
 
+------------------------------------------------------------------------------------------
+-- Arithmetic Sequences
+------------------------------------------------------------------------------------------
+
+{-
+packs the evaluation result for arithmetic sequences (AS)
+example: 
+Trip (Just x) (Just y) (Just z) will be displayed as x : [y, z ..] 
+if no end of (AS) was given or x : [y, z .. end] if end was given
+-}
+data Trip a = Trip a a a
+
+instance functorTrip :: Functor Trip where
+  map f (Trip x y z) = Trip (f x) (f y) (f z)
+
+intFromStepTo :: Int -> Maybe Int -> Maybe Int -> Trip (Maybe Int)
+intFromStepTo start Nothing Nothing     = Trip (Just start) (Just (start + 1)) Nothing
+intFromStepTo start (Just step) Nothing = Trip (Just start) (Just step) (Just (step + step - start))
+intFromStepTo start Nothing (Just end)  = case start > end of
+  true  -> Trip Nothing Nothing Nothing 
+  false -> case start == end of
+    true  -> Trip (Just end) Nothing Nothing
+    false -> Trip (Just start) (Just (start + 1)) Nothing
+intFromStepTo start (Just step) (Just end) = case (start <= step && start > end) || (start > step && start < end) of
+  true  -> Trip Nothing Nothing Nothing
+  false -> case start == end of
+    true  -> Trip (Just end) Nothing Nothing
+    false -> Trip (Just (start)) (Just (step)) (Just (step + step - start))
+
+--detect whether top or bottom for Boolean was reached
+intToBool :: Trip (Maybe Int) -> Trip (Maybe Boolean) 
+intToBool trip = case temp of
+  Trip (Just x) (Just y) z -> if x == y then Trip (Just x) Nothing Nothing else temp
+  _ -> temp
+  where 
+    temp :: Trip (Maybe Boolean)
+    temp = (\x -> intToBool' <$> x) <$> trip
+
+    intToBool' :: Int -> Boolean
+    intToBool' i = if i <= 0 then false else true
+
+exprFromStepTo :: Expr -> Maybe Expr -> Maybe Expr -> Trip (Maybe Expr)
+exprFromStepTo start step end = case start of 
+  Atom (AInt i) -> (\x -> (Atom <<< AInt) <$> x) <$> intTrip
+  Atom (Bool b) -> (\x -> (Atom <<< Bool) <$> x) <$> (intToBool intTrip)
+  Atom (Char c) -> (\x -> (Atom <<< Char <<< fromChar) <$> x) <$> (\x -> join (toEnum <$> x)) <$> intTrip
+  _             -> Trip Nothing Nothing Nothing
+    where 
+      intTrip = intFromStepTo (unsafeExprToInt start) (unsafeExprToInt <$> step) (unsafeExprToInt <$> end)
+
+unsafeExprToInt :: Expr -> Int
+unsafeExprToInt (Atom (AInt i))   = i
+unsafeExprToInt (Atom (Bool b))   = fromEnum b
+unsafeExprToInt (Atom (Char str)) = fromEnum $ fromMaybe 'E' (toChar str)
+unsafeExprToInt _ = top
+
+evalArithmSeq :: Expr -> Maybe Expr -> Maybe Expr -> Evaluator Expr
+evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, step, end]) of
+  false -> throwError $ CannotEvaluate $ ArithmSeq start step end
+  true  -> evalArithmSeq'
+  where
+    isValid :: Maybe Expr -> Boolean
+    isValid Nothing = true
+    isValid (Just (Atom (Name _))) = false
+    isValid (Just (Atom _)) = true
+    isValid _ = false
+
+    evalArithmSeq' :: Evaluator Expr
+    evalArithmSeq' = case (exprFromStepTo start step end) of
+      Trip (Just a) (Just b) nextStep -> return $ Binary Colon a (ArithmSeq b nextStep end)
+      Trip (Just a) Nothing _         -> return $ List (singleton a)
+      Trip Nothing _ _                -> return $ List Nil
+
+------------------------------------------------------------------------------------------
 
 binary :: Env -> Op -> Expr -> Expr -> Evaluator Expr
 binary env op = case op of
@@ -318,6 +400,11 @@ match' (NTupleLit bs)    (NTuple es)         = case length bs == length es of
                                                  false -> throwError $ MatchingError (NTupleLit bs) (NTuple es)
 match' (NTupleLit bs)    e                   = throwError $ checkStrictness (NTupleLit bs) e
 
+
+mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
+mapM' f Nothing  = pure Nothing
+mapM' f (Just x) = Just <$> (f x)
+
 replace' :: StrMap Expr -> Expr -> Evaluator Expr
 replace' subs = go
   where
@@ -332,6 +419,7 @@ replace' subs = go
     (SectL e op)         -> SectL <$> go e <*> pure op
     (SectR op e)         -> SectR <$> pure op <*> go e
     (IfExpr ce te ee)    -> IfExpr <$> go ce <*> go te <*> go ee
+    (ArithmSeq ce te ee) -> ArithmSeq <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
     (Lambda binds body)  -> (avoidCapture subs binds) *> (Lambda <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
     (App func exprs)     -> App <$> go func <*> traverse go exprs
     e                    -> return e

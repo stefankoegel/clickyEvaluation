@@ -27,5 +27,8 @@
     "purescript-node-process": "0.4.x",
     "purescript-words-lines": "~0.0.2",
     "purescript-sets": "0.5.x"
+  },
+  "resolutions": {
+    "purescript-prelude": "^0.1.0"
   }
 }
