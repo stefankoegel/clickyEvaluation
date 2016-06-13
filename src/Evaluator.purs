@@ -1,4 +1,9 @@
-module Evaluator where
+module Evaluator
+  ( evalPath1
+  , evalPathAll
+  , EvalError(..)
+  , MatchingError(..)
+  ) where
 
 import Prelude hiding (apply)
 import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)

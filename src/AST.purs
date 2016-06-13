@@ -2,6 +2,7 @@ module AST
   ( Tree(..)
   , Atom(..)
   , Op(..)
+  , pPrintOp
   , Binding(..)
   , Definition(..)
   , Expr

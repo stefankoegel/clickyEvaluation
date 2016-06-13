@@ -1,4 +1,7 @@
-module Parser where
+module Parser
+  ( parseExpr
+  , parseDefs
+  ) where
 
 import Prelude
 import Data.String as String
@@ -17,7 +20,7 @@ import Text.Parsing.Parser (ParseError, Parser, runParser, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
 import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
-import Text.Parsing.Parser.Token
+import Text.Parsing.Parser.Token (TokenParser, unGenLanguageDef, upper, digit, makeTokenParser)
 import Text.Parsing.Parser.Language (haskellDef)
 
 import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..))
