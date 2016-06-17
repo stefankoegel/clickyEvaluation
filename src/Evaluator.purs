@@ -19,7 +19,7 @@ import Control.Alt ((<|>))
 import Control.Monad.State.Trans (StateT, modify, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..),Path(..))
+import AST (Atom(..), Binding(..), TypeBinding(..), TypeTree(..), Definition(Def), Expr(..), Qual(..), ExprQual, TypeQual, IndexQual, Op(..),Path(..))
 
 data EvalError =
     PathError Path Expr
@@ -88,6 +88,7 @@ mapWithPath p f = go p
     ArithmSeq s b e -> ArithmSeq <$> go p s <*> pure b <*> pure e
     Lambda bs body  -> Lambda bs <$> go p body
     App e es        -> App       <$> go p e <*> pure es
+    ListComp e qs   -> ListComp  <$> go p e <*> pure qs
     _               -> throwError $ PathError (Fst p) e
   go (Snd p) e = case e of
     Binary op e1 e2 -> Binary op e1 <$> go p e2
@@ -103,7 +104,24 @@ mapWithPath p f = go p
     List es  -> List  <$> mapIndex n (go p) es
     NTuple es -> NTuple <$> mapIndex n (go p) es
     App e es -> App e <$> mapIndex n (go p) es
+    ListComp e qs -> ListComp e <$> mapIndexQual n (go p) qs
     _        -> throwError $ PathError (Nth n p) e
+
+  evalQual :: (Expr -> Evaluator Expr) -> Qual Binding Expr -> Evaluator (Qual Binding Expr)
+  evalQual f q = case q of
+    Gen bin expr -> Gen bin <$> f expr 
+    Let bin expr -> Let bin <$> f expr
+    Guard expr   -> Guard <$> f expr
+
+  mapIndexQual :: Int -> (Expr -> Evaluator Expr) -> (List (Qual Binding Expr)) -> Evaluator (List (Qual Binding Expr))
+  mapIndexQual i f qs = do
+    case qs !! i of
+      Nothing -> throwError $ IndexError i (length qs)
+      Just q  -> do
+        q' <- evalQual f q
+        case updateAt i q' qs of
+          Nothing  -> throwError $ IndexError i (length qs)
+          Just qs' -> return qs'    
 
 mapIndex :: forall a. Int -> (a -> Evaluator a) -> (List a) -> Evaluator (List a)
 mapIndex i f as = do
@@ -154,6 +172,7 @@ eval1 env expr = case expr of
   (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))         -> binary env op e1 e2 <|> (return $ Binary op e1 e2)
   (App (Atom (Name name)) args)      -> apply env name args
   (App (App func es) es')            -> return $ App func (es ++ es')
+  (ListComp e qs)                    -> evalListComp e qs
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> Expr -> Expr
@@ -202,8 +221,18 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
         ArithmSeq (evalToBinding env c bind) ((\x -> evalToBinding env x bind) <$> t) ((\x -> evalToBinding env x bind) <$> e)
       (App f args)       -> do
         App (evalToBinding env f bind) args
+      --TODO: check
+      --(ListComp e qs)    -> do
+      --  ListComp (evalToBinding env e bind) ((\x -> evalToBindingQual env x bind) <$> qs)
       _                  ->
         expr
+
+    --TODO: make correct
+    evalToBindingQual :: Env -> Qual Binding Expr -> Binding -> Qual Binding Expr
+    evalToBindingQual env qual binding = case qual of
+      Let bin expr -> Let bin (evalToBinding env expr bind)      
+      Gen bin expr -> Gen bin (evalToBinding env expr bind)
+      Guard expr   -> Guard (evalToBinding env expr bind)
 
 wrapLambda :: (List Binding) -> (List Expr) -> Expr -> Evaluator Expr
 wrapLambda binds args body =
@@ -286,6 +315,14 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
       Trip Nothing _ _                -> return $ List Nil
 
 ------------------------------------------------------------------------------------------
+-- List Comprehensions
+------------------------------------------------------------------------------------------
+
+--TODO
+evalListComp :: Expr -> List ExprQual -> Evaluator Expr
+evalListComp expr quals = return $ ListComp expr quals
+
+------------------------------------------------------------------------------------------
 
 binary :: Env -> Op -> Expr -> Expr -> Evaluator Expr
 binary env op = case op of
@@ -341,13 +378,13 @@ apply env name args = case Map.lookup name env of
   Nothing    -> throwError $ UnknownFunction name
   Just cases -> tryAll env cases args name Nil
 
---builtin ipo
+-- built-in div
 division :: Expr -> Expr -> Evaluator Expr 
 division (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
 division (Atom (AInt i)) (Atom (AInt j)) = return $ Atom $ AInt $ div i j
 division e1 e2 = throwError $ BinaryOpError (InfixFunc "div") e1 e2
 
---builtin mod
+-- built-in mod
 modulo :: Expr -> Expr -> Evaluator Expr  
 modulo (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
 modulo (Atom (AInt i)) (Atom (AInt j)) = return $ Atom $ AInt $ mod i j
@@ -422,6 +459,7 @@ replace' subs = go
     (ArithmSeq ce te ee) -> ArithmSeq <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
     (Lambda binds body)  -> (avoidCapture subs binds) *> (Lambda <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
     (App func exprs)     -> App <$> go func <*> traverse go exprs
+    --TODO: Add ListComp
     e                    -> return e
 
 avoidCapture :: StrMap Expr -> (List Binding) -> Evaluator Unit
