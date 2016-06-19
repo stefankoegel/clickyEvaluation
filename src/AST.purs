@@ -64,14 +64,7 @@ data QualTree b e t =
   | TLet b e t
   | TGuard e t 
 
-type ExprQual  = Qual Binding Expr
-type TypeQual  = QualTree TypeBinding TypeTree Type
-type IndexQual = QualTree IBinding IndexTree Int
-
-extractQualTreeValue :: forall a b c. QualTree a b c -> c
-extractQualTreeValue (TGen _ _ c) = c
-extractQualTreeValue (TLet _ _ c) = c
-extractQualTreeValue (TGuard _ c) = c
+type ExprQual = Qual Binding Expr
 
 -- last type para is type of expr at this level
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
@@ -91,6 +84,8 @@ data TypeTree
           | TApp TypeTree (List TypeTree)           Type
           | TListComp TypeTree (List TypeQual) Type
 
+type TypeQual  = QualTree TypeBinding TypeTree Type
+
 data IndexTree
           = IAtom                                  Int
           | IListTree (List IndexTree)             Int
@@ -107,11 +102,12 @@ data IndexTree
           | IApp IndexTree (List IndexTree)        Int
           | IListComp IndexTree (List IndexQual) Int
 
+type IndexQual = QualTree IBinding IndexTree Int
+
 data TypeBinding  = TLit                              Type
                   | TConsLit TypeBinding TypeBinding  Type
                   | TListLit (List TypeBinding)       Type
                   | TNTupleLit (List TypeBinding)     Type
-
 
 data IBinding  = ILit                       Int
               | IConsLit IBinding IBinding  Int
@@ -144,7 +140,7 @@ derive instance eqExpr :: Eq Expr
 
 derive instance eqQual :: (Eq b, Eq e) => Eq (Qual b e)
 
-derive instance quQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c) 
+derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c) 
 
 -- | Bindings
 -- |

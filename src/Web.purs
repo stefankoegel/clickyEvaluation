@@ -17,14 +17,14 @@ import Data.Tuple (Tuple(..), fst)
 
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
-import Control.Monad (when)
+--import Control.Monad (when)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import Control.Monad.State (State, put, get, runState)
 import DOM (DOM)
 
 
-import AST (Atom(..), Binding(..), Expr(..), Qual(..), QualTree(..), ExprQual, TypeQual, IndexQual, extractQualTreeValue, Op(), pPrintOp,Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..), extractIndex, extractType)
+import AST (Atom(..), Binding(..), Expr(..), Qual(..), ExprQual, TypeQual, IndexQual, QualTree(..), Op(), pPrintOp, Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..), extractType)
 import TypeChecker (prettyPrintType, mapM)
 import JSHelpers (showTooltip, children)
 
@@ -120,7 +120,8 @@ exprToJQuery' output = go id output
 
     {expr:(ListComp expr quals), typ:(TListComp texpr tquals t), idTree:(IListComp iexpr iquals i)} -> do
       jExpr  <- go (p <<< Fst) {expr:expr, typ:texpr, idTree:iexpr} 
-      jQuals <- zipWithA (\i (Tuple i' (Tuple e t)) -> qual (p <<< Nth i) e t i') (0 .. (length quals - 1)) (zip iquals (zip quals tquals))
+      jQuals <- zipWithA (\i (Tuple i' (Tuple e t)) -> qualifier (p <<< Nth i) e t i') 
+        (0 .. (length quals - 1)) (zip iquals (zip quals tquals))
       listComp jExpr jQuals t i
 
     {expr:Lambda binds body, typ:TLambda lb tt t, idTree: (ILambda bis i i')} -> do
@@ -137,21 +138,22 @@ exprToJQuery' output = go id output
       unary jop jexpr t i
     {} -> makeDiv "You found a Bug" Nil
 
-  --TODO: make correct
-  qual p (Gen b e) (TGen tb te t) (TGen ib ie i) = do
-      result <- binding $ Tuple ib (Tuple b tb)
+  --TODO: improve visual
+  qualifier :: (Path -> Path) -> ExprQual -> TypeQual -> IndexQual -> Eff (dom :: DOM | eff) J.JQuery
+  qualifier p (Gen b e) (TGen tb te t) (TGen ib ie i) = do
+      result <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
+      binding (Tuple ib (Tuple b tb)) >>= flip J.append result
       makeDiv "<-" Nil >>= flip J.append result
       go p {expr:e, typ:te, idTree:ie} >>= flip J.append result
       return result      
-  qual p (Let b e) (TLet tb te t) (TLet ib ie i) = do
-      result <- makeDiv "let" Nil
+  qualifier p (Let b e) (TLet tb te t) (TLet ib ie i) = do
+      result <- makeDiv "let" Nil >>= addTypetoDiv t >>= addIdtoDiv i
       binding (Tuple ib (Tuple b tb)) >>= flip J.append result
       makeDiv "=" Nil >>= flip J.append result
       go p {expr:e, typ:te, idTree:ie} >>= flip J.append result 
       return result 
-  qual p (Guard e) (TGuard te t) (TGuard ie i) = go p {expr:e, typ:te, idTree:ie}
-  qual _ _ _ _ = makeDiv "You found a Bug in Web.exprToJquery'.qual" Nil
-
+  qualifier p (Guard e) (TGuard te t) (TGuard ie i) = go p {expr:e, typ:te, idTree:ie}
+  qualifier _ _ _ _ = makeDiv "You found a Bug in Web.exprToJquery'.qualifier" Nil
 
 atom :: forall eff. Atom -> Type -> Int ->  Eff (dom :: DOM | eff) J.JQuery
 atom (AInt n) t  i   = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv t >>= addIdtoDiv i
@@ -288,13 +290,13 @@ arithmeticSequence start mstep mend t i = do
   J.append das jtypExp
   return jtypExp  
   where
-    maybeStep :: forall eff. J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+    maybeStep :: J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
     maybeStep jquery Nothing = return jquery
     maybeStep jquery (Just step) = do
       makeDiv "," (singleton "comma") >>= flip J.append jquery 
       J.append step jquery
 
-    maybeEnd :: forall eff. J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+    maybeEnd :: J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
     maybeEnd jquery Nothing = return jquery
     maybeEnd jquery (Just end) = J.append end jquery
 

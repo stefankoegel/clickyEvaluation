@@ -409,6 +409,8 @@ infer env ex = case ex of
 
   NTuple Nil -> throwError $ UnknownError "congrats you found a bug in TypeChecker.infer (NTuple Nil)"
 
+  x -> throwError $ UnknownError $ "Error in TypeChecker.infer: unknown case: " ++ show x 
+
 inferQual :: TypeEnv -> ExprQual -> Infer (Tuple Subst (Tuple TypeQual TypeEnv))
 inferQual env (Let bin e1) = do
   (Tuple s1 t1)    <- infer env e1
@@ -417,7 +419,6 @@ inferQual env (Let bin e1) = do
   let env' = apply s2 (foldr (\a b -> extend b a) env list)
   let sC = s1 `compose` s2
   return $ Tuple sC $ Tuple (apply sC (TLet typ t1 (extractType t1))) env'
-
 inferQual env (Gen bin e1) = do 
   (Tuple s1 t1) <- infer env e1 
   case extractType t1 of 
@@ -428,7 +429,6 @@ inferQual env (Gen bin e1) = do
       let sC = s1 `compose` s2
       return $ Tuple sC $ Tuple (apply sC (TGen typ t1 t)) env'
     _ -> throwError $ UnknownError "generator inside a list comprehension must be a List"
-
 inferQual env (Guard expr) = do
   Tuple s t <- infer env expr
   return $ Tuple s $ Tuple (apply s (TGuard t (extractType t))) env

@@ -6,7 +6,6 @@ import Data.List (List(Cons), many, toList, concat, elemIndex, fromList)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
 import Data.Array (modifyAt, snoc)
-import Data.Either
 
 import Control.Alt ((<|>))
 import Control.Apply ((<*), (*>))
@@ -18,7 +17,7 @@ import Text.Parsing.Parser (ParseError, Parser, runParser, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
 import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
-import Text.Parsing.Parser.Token
+import Text.Parsing.Parser.Token (TokenParser, unGenLanguageDef, upper, digit, makeTokenParser)
 import Text.Parsing.Parser.Language (haskellDef)
 
 import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Qual(..), ExprQual, Op(..))
@@ -311,14 +310,6 @@ charList = do
   strs <- many character'
   char '"'
   return (List ((Atom <<< Char <<< String.fromChar) <$> strs))
-
--- | parses things that are eventually lists (list comprehensions, strings, arithmSequences, lists)
-listLike :: Parser String Expr -> Parser String Expr
-listLike expr =
-      PC.try (listComp expr)
-  <|> PC.try (arithmeticSequence expr)
-  <|> list expr
-  <|> charList
 
 -- | Parse a lambda expression
 lambda :: Parser String Expr -> Parser String Expr
