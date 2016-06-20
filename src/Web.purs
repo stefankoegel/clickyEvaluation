@@ -62,18 +62,17 @@ node content classes children =
     }
     (toList children)
 
--- TODO
--- zipList :: forall a b. ((a -> List a) -> a -> b) -> (a -> List a) -> List a -> List b
--- zipList zipp hole Nil = Nil
--- zipList zipp hole (Cons x xs) = Cons (zipp (\x -> Cons x xs) x) (zipList zipp (Cons x <<< hole) xs)
+zipList :: forall a b. ((Expr -> Expr) -> Expr -> Div) -> (List Expr -> Expr) -> List Expr -> List Div
+zipList zipp hole Nil = Nil
+zipList zipp hole (Cons x xs) = Cons (zipp (\x -> hole $ Cons x xs) x) (zipList zipp (hole <<< Cons x) xs)
 
 exprToDiv:: Expr -> Div
 exprToDiv expr = go id expr
   where
     go :: (Expr -> Expr) -> Expr -> Div
     go hole expr@(Atom _ a)            = atom a
-    go hole expr@(List _ ls)           = list (go hole <$> ls) expr hole
-    go hole expr@(NTuple _ ls)         = ntuple (go hole <$> ls) expr hole
+    go hole expr@(List _ ls)           = list (zipList go (hole <<< List unit) ls) expr hole
+    go hole expr@(NTuple _ ls)         = ntuple (zipList go (hole <<< NTuple unit) ls) expr hole
     go hole expr@(Binary _ op e1 e2)   = binary op
                                            (go (\e1 -> hole $ Binary unit op e1 e2) e1)
                                            (go (\e2 -> hole $ Binary unit op e1 e2) e2)
