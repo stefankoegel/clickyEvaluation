@@ -1,8 +1,13 @@
 module Evaluator
   ( evalPath1
   , evalPathAll
+  , eval
+  , eval1
+  , runEvalM
+  , defsToEnv
   , EvalError(..)
   , MatchingError(..)
+  , Env(..)
   ) where
 
 import Prelude hiding (apply)

@@ -1,13 +1,14 @@
 module Main where
 
-import AST (Expr)
+import AST (Expr, Atom(Name), Tree(Atom))
 import Parser as Parser
-import Evaluator (evalPath1, evalPathAll)
+import Evaluator as Eval
 import Web as Web
 
 import Prelude
 import DOM (DOM)
-import Data.Either (Either)
+import Data.Either (Either(Left, Right))
+import Data.StrMap (empty)
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
@@ -18,11 +19,37 @@ import Text.Parsing.Parser (ParseError)
 main :: forall eff. Eff (console :: CONSOLE | eff) Unit
 main = log "hello"
 
-parseExpr :: String -> Either ParseError Expr
-parseExpr = Parser.parseExpr
+start :: forall eff. String -> String -> Eff (dom :: DOM | eff) Unit
+start input selector = do
+  container <- J.select selector
+  let expr = parseExpr input
+  showExprIn expr container
 
-exprToJQuery :: forall eff. Expr -> Eff (dom :: DOM | eff) J.JQuery
-exprToJQuery = Web.exprToDiv >>> Web.divToJQuery
+parseExpr :: String -> Expr
+parseExpr input = case Parser.parseExpr input of
+  Left _     -> (Atom unit (Name "foo"))
+  Right expr -> expr
+
+eval1 :: Eval.Env -> Expr -> Expr
+eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
+  Left _      -> expr
+  Right expr' -> expr'
+
+callback :: J.JQuery -> Web.Callback
+callback container expr hole event jq = do
+  J.stopImmediatePropagation event
+  showExprIn (hole (eval1 empty expr)) container
+  return unit
+
+exprToJQuery :: forall eff. Web.Callback -> Expr -> Eff (dom :: DOM | eff) J.JQuery
+exprToJQuery callback = Web.exprToDiv >>> Web.divToJQuery callback
+
+showExprIn :: forall eff. Expr -> J.JQuery -> Eff (dom :: DOM | eff) Unit
+showExprIn expr container = do
+  content <- exprToJQuery (callback container) expr
+  J.clear container
+  J.append content container
+  return unit
 
 -- import Prelude (class Applicative, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
 -- import Data.Foreign (unsafeFromForeign)

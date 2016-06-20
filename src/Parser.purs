@@ -1,6 +1,14 @@
 module Parser
   ( parseExpr
   , parseDefs
+  , expression
+  , atom
+  , definition
+  , definitions
+  , binding
+  , variable
+  , bool
+  , int
   ) where
 
 import Prelude

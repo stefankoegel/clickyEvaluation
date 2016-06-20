@@ -2,17 +2,19 @@ module Web
   ( exprToDiv
   , divToJQuery
   , getPath
-  , Prsenter
+  , RoseTree
+  , Callback
   ) where
 
 import Prelude
 import Data.Foldable (all)
 import Data.Traversable (for, traverse)
+import Data.Foldable (Foldable)
 import Data.String (joinWith)
-import Data.List (List(Nil, Cons), singleton, fromList, toList, length, zip, (..), zipWithA)
+import Data.List (List(Nil, Cons), singleton, fromList, toList, length, zip, (..), zipWithA, snoc)
 import Data.Foreign (unsafeFromForeign, isUndefined)
 import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple(..), fst)
+import Data.Tuple (Tuple(..))
 
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
@@ -23,7 +25,6 @@ import DOM (DOM)
 
 
 import AST (Expr, Tree(..), Binding(..), Expr(..), Atom(..), Op(..), pPrintOp, Path(..))
-import JSHelpers (showTooltip, children)
 
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
@@ -35,73 +36,153 @@ getPath j = do
     then return Nothing
     else return $ Just $ unsafeFromForeign fpath
 
-data Prsenter a b = Node a b (List (Prsenter a b))
+data RoseTree a = Node a (List (RoseTree a))
 
-type Div = Prsenter String (List String)
+type Div = RoseTree { content :: String, classes :: (List String), zipper :: Maybe (Tuple Expr (Expr -> Expr)) }
+
+type DivHole = Expr -> (Expr -> Expr) -> Div
+
+
+node' :: forall a f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> Expr -> (Expr -> Expr) -> Div
+node' content classes children expr hole =
+  Node
+    { content: content
+    , classes: (toList classes)
+    , zipper: (Just (Tuple expr hole))
+    }
+    (toList children)
+
+
+node :: forall a f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> Div
+node content classes children =
+  Node
+    { content: content
+    , classes: (toList classes)
+    , zipper: Nothing
+    }
+    (toList children)
+
+-- TODO
+-- zipList :: forall a b. ((a -> List a) -> a -> b) -> (a -> List a) -> List a -> List b
+-- zipList zipp hole Nil = Nil
+-- zipList zipp hole (Cons x xs) = Cons (zipp (\x -> Cons x xs) x) (zipList zipp (Cons x <<< hole) xs)
 
 exprToDiv:: Expr -> Div
-exprToDiv expr = go expr
+exprToDiv expr = go id expr
   where
-    go (Atom _ a) = atom a 
-    go (List _ ls) = list (go <$> ls)
-    go (NTuple _ ls) = ntuple (go <$> ls)
-    go (Binary _ op e1 e2) = binary op (go e1) (go e2)
-    go (Unary _ op e) = unary op (go e)
-    go (SectL _ e op) = sectl (go e) op
-    go (SectR _ op e) = sectr op (go e)
-    go (PrefixOp _ op) = prefixOp op
-    go (IfExpr _ ce te ee) = ifexpr (go ce) (go te) (go ee)
-    go (LetExpr _ b v e) = letexpr (binding b) (go v) (go e)
-    go (Lambda _ binds body) = lambda (binding <$> binds) (go body)
-    go (App _ func args) = app (go func) (go <$> args)
+    go :: (Expr -> Expr) -> Expr -> Div
+    go hole expr@(Atom _ a)            = atom a
+    go hole expr@(List _ ls)           = list (go hole <$> ls) expr hole
+    go hole expr@(NTuple _ ls)         = ntuple (go hole <$> ls) expr hole
+    go hole expr@(Binary _ op e1 e2)   = binary op
+                                           (go (\e1 -> hole $ Binary unit op e1 e2) e1)
+                                           (go (\e2 -> hole $ Binary unit op e1 e2) e2)
+                                           expr hole
+    go hole (Unary _ op e)        = unary op (go hole e)
+    go hole (SectL _ e op)        = sectl (go hole e) op
+    go hole (SectR _ op e)        = sectr op (go hole e)
+    go hole (PrefixOp _ op)       = prefixOp op
+    go hole (IfExpr _ ce te ee)   = ifexpr (go hole ce) (go hole te) (go hole ee)
+    go hole (LetExpr _ b v e)     = letexpr (binding b) (go hole v) (go hole e)
+    go hole (Lambda _ binds body) = lambda (binding <$> binds) (go hole body)
+    go hole (App _ func args)     = app (go hole func) (go hole <$> args)
 
 atom :: Atom -> Div
-atom (AInt n) = Node (show n) (toList ["atom", "num"]) Nil
-atom (Bool b) = Node (if b then "True" else "False") (toList ["atom", "bool"]) Nil
-atom (Char c) = Node ("'" ++ c ++ "'") (toList ["atom", "char"]) Nil
+atom (AInt n) = node (show n) ["atom", "num"] [] 
+atom (Bool b) = node (if b then "True" else "False") ["atom", "bool"] [] 
+atom (Char c) = node ("'" ++ c ++ "'") ["atom", "char"] [] 
+atom (Name n) = node n ["atom", "name"] [] 
 
-list :: List Div -> Div
-list _ = Node "" (toList []) Nil
+-- tuple :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+-- tuple js t i = do
+--   jtypExp <- makeDiv "" (singleton "tuple  typExpContainer")
+--   jExpand <- buildExpandDiv t
+--   J.append jExpand jtypExp
+--   dtuple <- makeDiv "" (singleton "tuple  expr") >>= addTypetoDiv t >>= addIdtoDiv i
+--   open <- makeDiv "(" (singleton "brace")
+--   J.append open dtuple
+--   interleaveM_ (flip J.append dtuple) (makeDiv "," (singleton "comma") >>= flip J.append dtuple) js
+--   close <- makeDiv ")" (singleton "brace")
+--   J.append close dtuple
+--   J.append dtuple jtypExp
+--   return jtypExp
 
-ntuple :: List Div -> Div
-ntuple _ = Node "" (toList []) Nil
+-- list :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+-- list js t   i  = do
+--   jtypExp <- makeDiv "" (singleton "list typExpContainer")
+--   jExpand <- buildExpandDiv t
+--   J.append jExpand jtypExp
+--   dls <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
+--   open <- makeDiv "[" (singleton "brace")
+--   J.append open dls
+--   interleaveM_ (flip J.append dls) (makeDiv "," (singleton "comma") >>= flip J.append dls) js
+--   close <- makeDiv "]" (singleton "brace")
+--   J.append close dls
+--   J.append dls jtypExp
+--   return jtypExp
 
-binary :: Op -> Div -> Div -> Div
-binary op d1 d2 = Node "" (toList ["binary"]) (toList [d1, opDiv, d2])
+interleave :: forall a. a -> List a -> List a
+interleave _ Nil          = Nil
+interleave _ (Cons x Nil) = Cons x Nil
+interleave a (Cons x xs)  = Cons x $ Cons a $ interleave a xs
+
+list :: List Div -> DivHole
+list ls = node' "" ["list"] (snoc (Cons open (interleave comma ls)) close)
   where
-    opDiv = Node (pPrintOp op) (toList ["op"]) Nil
+    open = node "[" ["brace"] []
+    close = node "]" ["brace"] []
+    comma = node "," ["comma"] []
+
+ntuple :: List Div -> DivHole
+ntuple ls = node' "" ["tuple"] (snoc (Cons open (interleave comma ls)) close)
+  where
+    open = node "(" ["brace"] []
+    close = node ")" ["brace"] []
+    comma = node "," ["comma"] []
+
+binary :: Op -> Div -> Div -> DivHole
+binary op d1 d2 = node' "" ["binary"] [d1, opDiv, d2]
+  where
+    opDiv = node (pPrintOp op) ["op"] [] 
 
 unary :: Op -> Div -> Div
-unary _ _ = Node "" (toList []) Nil
+unary _ _ = node "" [] [] 
 
 sectl :: Div -> Op -> Div
-sectl _ _ = Node "" (toList []) Nil
+sectl _ _ = node "" [] [] 
 
 sectr :: Op -> Div -> Div
-sectr _ _ = Node "" (toList []) Nil
+sectr _ _ = node "" [] [] 
 
 prefixOp :: Op -> Div
-prefixOp _ = Node "" (toList []) Nil
+prefixOp _ = node "" [] [] 
 
 ifexpr :: Div -> Div -> Div -> Div
-ifexpr _ _ _ = Node "" (toList []) Nil
+ifexpr _ _ _ = node "" [] [] 
 
 letexpr :: Div -> Div -> Div -> Div
-letexpr _ _ _ = Node "" (toList []) Nil
+letexpr _ _ _ = node "" [] [] 
 
 lambda :: List Div -> Div -> Div
-lambda _ _ = Node "" (toList []) Nil
+lambda _ _ = node "" [] [] 
 
 app :: Div -> List Div -> Div
-app _ _ = Node "" (toList []) Nil
+app _ _ = node "" [] [] 
 
 binding :: Binding -> Div
-binding _ = Node "" (toList []) Nil
+binding _ = node "" [] [] 
 
-divToJQuery :: forall eff. Div -> Eff (dom :: DOM | eff) J.JQuery
-divToJQuery (Node content classes children) = do
+type Callback = forall eff. Expr -> (Expr -> Expr) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM | eff) Unit)
+
+divToJQuery :: forall eff. Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
+divToJQuery callback (Node { content: content, classes: classes, zipper: zipper } children) = do
   div <- makeDiv content classes
-  for children (divToJQuery >=> flip J.append div)
+  for children (divToJQuery callback >=> flip J.append div)
+  case zipper of
+    Nothing                -> return unit
+    Just (Tuple expr hole) -> do
+      J.on "click" (callback expr hole) div
+      return unit
   return div
 
 makeDiv :: forall eff. String -> List String -> Eff (dom :: DOM | eff) J.JQuery
@@ -115,7 +196,7 @@ makeDiv text classes = do
 -- binding b = case b of
 --   Tuple (ILit i) (Tuple (Lit a) (TLit t))       -> atom a t i
 --   cl@(Tuple (IConsLit i1 i2 i) (Tuple (ConsLit b bs) (TConsLit tb tbs t))) -> do
---     jCons <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
+--     jCons <- makeDiv ""  [] >>= addTypetoDiv t >>= addIdtoDiv i
 --     makeDiv "(" (singleton "brace") >>= flip J.append jCons
 --     consBinding cl jCons
 --     makeDiv ")" (singleton "brace") >>= flip J.append jCons
@@ -205,40 +286,7 @@ makeDiv text classes = do
 --   J.append dIf jtypExp
 --   return jtypExp
 
--- interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> List a -> m Unit
--- interleaveM_ f sep = go
---   where
---   go Nil     = return unit
---   go (Cons x Nil)    = void $ f x
---   go (Cons x xs) = f x *> sep *> go xs
 
--- tuple :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
--- tuple js t i = do
---   jtypExp <- makeDiv "" (singleton "tuple  typExpContainer")
---   jExpand <- buildExpandDiv t
---   J.append jExpand jtypExp
---   dtuple <- makeDiv "" (singleton "tuple  expr") >>= addTypetoDiv t >>= addIdtoDiv i
---   open <- makeDiv "(" (singleton "brace")
---   J.append open dtuple
---   interleaveM_ (flip J.append dtuple) (makeDiv "," (singleton "comma") >>= flip J.append dtuple) js
---   close <- makeDiv ")" (singleton "brace")
---   J.append close dtuple
---   J.append dtuple jtypExp
---   return jtypExp
-
--- list :: forall eff. List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
--- list js t   i  = do
---   jtypExp <- makeDiv "" (singleton "list typExpContainer")
---   jExpand <- buildExpandDiv t
---   J.append jExpand jtypExp
---   dls <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
---   open <- makeDiv "[" (singleton "brace")
---   J.append open dls
---   interleaveM_ (flip J.append dls) (makeDiv "," (singleton "comma") >>= flip J.append dls) js
---   close <- makeDiv "]" (singleton "brace")
---   J.append close dls
---   J.append dls jtypExp
---   return jtypExp
 
 -- isString :: List Expr -> Boolean
 -- isString es = length es > 0 && all isChar es
