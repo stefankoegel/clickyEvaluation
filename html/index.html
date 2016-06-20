@@ -9,12 +9,16 @@
   </head>
   <body>
 
-    <div id="output-container" class="output">
-      
-    </div>
+    <div id="output-container" class="output output1"></div>
+    <div id="output-container" class="output output2"></div>
+    <div id="output-container" class="output output3"></div>
+    <div id="output-container" class="output output4"></div>
 
 <script type="text/javascript">
-  PS.Main.start("((3 + 4) : (7 * 9) : []) ++ [9]")("#output-container")();
+  PS.Main.start("((3 + 4) : (7 * 9) : []) ++ [9]")(".output1")();
+  PS.Main.start("(\\(x:[(y, z)]) -> x)")(".output2")();
+  PS.Main.start("(\\x y -> 1 + 2 + 3 + 4 + 5 + x * y + x *  12) (7 * 7) (8 + 8)")(".output3")();
+  PS.Main.start("(\\(x:xs) [y] (a, b) -> x * 2 + y * 3 + a * 5 + b * 7) [1, 2, 3] [4] (5, 6)")(".output4")();
 </script>
 
   </body>

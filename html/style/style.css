@@ -69,11 +69,11 @@ h3 {
   padding: 10px;
 }
 
-.list, .lambda, .section, .name, .top, .tuple, .unary{
+.list, .lambda, .section, .name, .top, .tuple, .unary, .binary, .app {
   font-family: monospace;
   font-size: 15px;
   border: none;
-  background: #aaa;
+  background: #ceefff;
   padding: 4px;
   margin: 5px;
   border-radius: 4px;
@@ -168,7 +168,6 @@ div.historyBox {
 }
 
 .binary, .app, .if {
-  background: #bbb;
   padding: 10px;
   border-radius: 5px;
   box-shadow: 2px 2px 5px 0 #333;
