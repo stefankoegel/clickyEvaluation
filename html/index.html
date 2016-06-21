@@ -15,14 +15,22 @@
     <div id="output-container" class="output output4"></div>
     <div id="output-container" class="output output5"></div>
     <div id="output-container" class="output output6"></div>
+    <div id="output-container" class="output output7"></div>
+    <div id="output-container" class="output output8"></div>
+    <div id="output-container" class="output output9"></div>
+    <div id="output-container" class="output output10"></div>
 
 <script type="text/javascript">
-  PS.Main.start("((3 + 4) : (7 * 9) : []) ++ [9]")(".output1")();
-  PS.Main.start("(\\(x:[(y, z)]) -> x)")(".output2")();
-  PS.Main.start("(\\x y -> 1 + 2 + 3 + 4 + 5 + x * y + x *  12) (7 * 7) (8 + 8)")(".output3")();
-  PS.Main.start("(\\(x:xs) [y] (a, b) -> x * 2 + y * 3 + a * 5 + b * 7) [1, 2, 3] [4] (5, 6)")(".output4")();
-  PS.Main.start("((60 + 6) `div`) . (*2) $ (+) 1 2")(".output5")();
-  PS.Main.start("if 5 < 10 then 1 + 2 + 3 * 4 else 1 `div` 0")(".output6")();
+  PS.Main.makeCE("((3 + 4) : (7 * 9) : []) ++ [9]")(".output1")();
+  PS.Main.makeCE("(\\(x:[(y, z)]) -> x)")(".output2")();
+  PS.Main.makeCE("(\\x y -> 1 + 2 + 3 + 4 + 5 + x * y + x *  12) (7 * 7) (8 + 8)")(".output3")();
+  PS.Main.makeCE("(\\(x:xs) [y] (a, b) -> x * 2 + y * 3 + a * 5 + b * 7) [1, 2, 3] [4] (5, 6)")(".output4")();
+  PS.Main.makeCE("((60 + 6) `div`) . (*2) $ (+) 1 2")(".output5")();
+  PS.Main.makeCE("if 5 < 10 then 1 + 2 + 3 * 4 else 1 `div` 0")(".output6")();
+  PS.Main.makeCE("sum (map (^2) [1, 2, 3, 4])")(".output7")();
+  PS.Main.makeCE("foldl (*) 1 [2, 3, 4, 5, 6, 7]")(".output8")();
+  PS.Main.makeCEwithDefs("fib 4")("fib 0 = 0\nfib 1 = 1\nfib n = fib (n - 1) + fib (n - 2)")(".output9")();
+  PS.Main.makeCEwithDefs("fib 10")("fib n = fibAcc 0 1 n\nfibAcc a b 0 = a\nfibAcc a b n = fibAcc b (a + b) (n - 1)")(".output10")();
 </script>
 
   </body>

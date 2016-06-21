@@ -4,6 +4,7 @@ import AST (Expr, Atom(Name), Tree(Atom))
 import Parser as Parser
 import Evaluator as Eval
 import Web as Web
+import JSHelpers (ctrlKeyPressed, getType)
 
 import Prelude
 import DOM (DOM)
@@ -17,11 +18,20 @@ import Control.Monad.Eff.JQuery as J
 main :: forall eff. Eff (console :: CONSOLE | eff) Unit
 main = log "hello"
 
-start :: forall eff. String -> String -> Eff (dom :: DOM | eff) Unit
-start input selector = do
+makeCE :: forall eff. String -> String -> Eff (dom :: DOM | eff) Unit
+makeCE input selector = do
   container <- J.select selector
   let expr = parseExpr input
-  showExprIn expr container
+  let env = preludeEnv
+  showExprIn expr env container
+  return unit
+
+makeCEwithDefs :: forall eff. String -> String -> String -> Eff (dom :: DOM | eff) Unit
+makeCEwithDefs input defs selector = do
+  container <- J.select selector
+  let expr = parseExpr input
+  let env = stringToEnv defs
+  showExprIn expr env container
 
 parseExpr :: String -> Expr
 parseExpr input = case Parser.parseExpr input of
@@ -33,21 +43,135 @@ eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
   Left _      -> expr
   Right expr' -> expr'
 
-showInCallback :: J.JQuery -> Web.Callback
-showInCallback container expr hole event jq = do
+makeCallback :: Eval.Env -> J.JQuery -> Web.Callback
+makeCallback env container expr hole event jq = do
   J.stopImmediatePropagation event
-  showExprIn (hole (eval1 empty expr)) container
+  case getType event of
+    "click"     -> if ctrlKeyPressed event 
+                   then showExprIn (hole (Eval.eval env expr)) env container
+                   else showExprIn (hole (eval1 env expr)) env container
+    "mouseover" -> if eval1 env expr /= expr then void $ J.addClass "highlight" jq else return unit
+    "mouseout"  -> void $ J.removeClass "highlight" jq
+    _           -> return unit
   return unit
 
 exprToJQuery :: forall eff. Web.Callback -> Expr -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery callback = Web.exprToDiv >>> Web.divToJQuery callback
 
-showExprIn :: forall eff. Expr -> J.JQuery -> Eff (dom :: DOM | eff) Unit
-showExprIn expr container = do
-  content <- exprToJQuery (showInCallback container) expr
+showExprIn :: forall eff. Expr -> Eval.Env -> J.JQuery -> Eff (dom :: DOM | eff) Unit
+showExprIn expr env container = do
+  content <- exprToJQuery (makeCallback env container) expr
   J.clear container
   J.append content container
   return unit
+
+stringToEnv :: String -> Eval.Env
+stringToEnv str = case Parser.parseDefs str of
+  Left _     -> empty
+  Right defs -> Eval.defsToEnv defs
+
+preludeEnv :: Eval.Env
+preludeEnv = stringToEnv prelude
+
+prelude :: String
+prelude =
+  "and (True:xs)  = and xs\n" ++
+  "and (False:xs) = False\n" ++
+  "and []         = True\n" ++
+  "\n" ++
+  "or (False:xs) = or xs\n" ++
+  "or (True:xs)  = True\n" ++
+  "or []         = False\n" ++
+  "\n" ++
+  "all p = and . map p\n" ++
+  "any p = or . map p\n" ++
+  "\n" ++
+  "head (x:xs) = x\n" ++
+  "tail (x:xs) = xs\n" ++
+  "\n" ++
+  "take 0 xs     = []\n" ++
+  "take n (x:xs) = x : take (n - 1) xs\n" ++
+  "\n" ++
+  "drop 0 xs     = xs\n" ++
+  "drop n (x:xs) = drop (n - 1) xs\n" ++
+  "\n" ++
+  "elem e []     = False\n" ++
+  "elem e (x:xs) = if e == x then True else elem e xs\n" ++
+  "\n" ++
+  "max a b = if a >= b then a else b\n" ++
+  "min a b = if b >= a then a else b\n" ++
+  "\n" ++
+  "maximum (x:xs) = foldr max x xs\n" ++
+  "minimum (x:xs) = foldr min x xs\n" ++
+  "\n" ++
+  "length []     = 0\n" ++
+  "length (x:xs) = 1 + length xs\n" ++
+  "\n" ++
+  "zip (x:xs) (y:ys) = (x, y) : zip xs ys\n" ++
+  "zip []      _     = []\n" ++
+  "zip _       []    = []\n" ++
+  "\n" ++
+  "zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys\n" ++
+  "zipWith _ []     _      = []\n" ++
+  "zipWith _ _      []     = []\n" ++
+  "\n" ++
+  "unzip []          = ([], [])\n" ++
+  "unzip ((a, b):xs) = (\\(as, bs) -> (a:as, b:bs)) $ unzip xs\n" ++
+  "\n" ++
+  "fst (x,_) = x\n" ++
+  "snd (_,x) = x\n" ++
+  "\n" ++
+  "curry f a b = f (a, b)\n" ++
+  "uncurry f (a, b) = f a b\n" ++
+  "\n" ++
+  "repeat x = x : repeat x\n" ++
+  "\n" ++
+  "replicate 0 _ = []\n" ++
+  "replicate n x = x : replicate (n - 1) x\n" ++
+  "\n" ++
+  "enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []\n" ++
+  "\n" ++
+  "sum (x:xs) = x + sum xs\n" ++
+  "sum [] = 0\n" ++
+  "\n" ++
+  "product (x:xs) = x * product xs\n" ++
+  "product [] = 1\n" ++
+  "\n" ++
+  "reverse []     = []\n" ++
+  "reverse (x:xs) = reverse xs ++ [x]\n" ++
+  "\n" ++
+  "concat = foldr (++) []\n" ++
+  "\n" ++
+  "map f []     = []\n" ++
+  "map f (x:xs) = f x : map f xs\n" ++
+  "\n" ++
+  "not True  = False\n" ++
+  "not False = True\n" ++
+  "\n" ++
+  "filter p (x:xs) = if p x then x : filter p xs else filter p xs\n" ++
+  "filter p []     = []\n" ++
+  "\n" ++
+  "foldr f ini []     = ini\n" ++
+  "foldr f ini (x:xs) = f x (foldr f ini xs)\n" ++
+  "\n" ++
+  "foldl f acc []     = acc\n" ++
+  "foldl f acc (x:xs) = foldl f (f acc x) xs\n" ++
+  "\n" ++
+  "scanl f b []     = [b]\n" ++
+  "scanl f b (x:xs) = b : scanl f (f b x) xs\n" ++
+  "\n" ++
+  "iterate f x = x : iterate f (f x)\n" ++
+  "\n" ++
+  "id x = x\n" ++
+  "\n" ++
+  "const x _ = x\n" ++
+  "\n" ++
+  "flip f x y = f y x\n" ++
+  "\n" ++
+  "even n = (n `mod` 2) == 0\n" ++
+  "odd n = (n `mod` 2) == 1\n" ++
+  "\n" ++
+  "fix f = f (fix f)\n"
 
 -- import Prelude (class Applicative, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
 -- import Data.Foreign (unsafeFromForeign)

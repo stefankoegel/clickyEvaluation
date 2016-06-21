@@ -80,6 +80,10 @@ h3 {
   box-shadow: 1.5px 1.5px 5px 0 #333;
 }
 
+.highlight {
+  background: #fff;
+}
+
 .func {
   background: inherit;
   box-shadow: none;

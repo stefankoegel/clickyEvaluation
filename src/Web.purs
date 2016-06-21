@@ -161,6 +161,8 @@ divToJQuery callback (Node { content: content, classes: classes, zipper: zipper 
     Nothing                -> return unit
     Just (Tuple expr hole) -> do
       J.on "click" (callback expr hole) div
+      J.on "mouseover" (callback expr hole) div
+      J.on "mouseout" (callback expr hole) div
       return unit
   return div
 

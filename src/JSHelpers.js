@@ -20,6 +20,10 @@ exports.ctrlKeyPressed = function(event) {
      return (!!(event.ctrlKey || event.metaKey))
 };
 
+exports.getType = function(event) {
+  return event.type;
+}
+
 exports.showTooltip = function(div) {
   return function(outer){
     return function(e){
