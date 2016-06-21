@@ -8,8 +8,11 @@ import JSHelpers (ctrlKeyPressed, getType)
 
 import Prelude
 import DOM (DOM)
-import Data.Either (Either(Left, Right))
+import Data.Either (Either(..))
+import Data.Maybe (Maybe(..))
 import Data.StrMap (empty)
+import Data.Array (cons)
+import Data.Traversable (for)
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
@@ -23,7 +26,7 @@ makeCE input selector = do
   container <- J.select selector
   let expr = parseExpr input
   let env = preludeEnv
-  showExprIn expr env container
+  showExprIn expr env [] container Nothing
   return unit
 
 makeCEwithDefs :: forall eff. String -> String -> String -> Eff (dom :: DOM | eff) Unit
@@ -31,7 +34,15 @@ makeCEwithDefs input defs selector = do
   container <- J.select selector
   let expr = parseExpr input
   let env = stringToEnv defs
-  showExprIn expr env container
+  showExprIn expr env [] container Nothing
+
+makeCEwithHistory :: forall eff. String -> String -> String -> Eff (dom :: DOM | eff) Unit
+makeCEwithHistory input selector histSelector = do
+  container <- J.select selector
+  histContainer <- J.select histSelector
+  let expr = parseExpr input
+  let env = preludeEnv
+  showExprIn expr env [] container (Just histContainer)
 
 parseExpr :: String -> Expr
 parseExpr input = case Parser.parseExpr input of
@@ -43,12 +54,14 @@ eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
   Left _      -> expr
   Right expr' -> expr'
 
-makeCallback :: Eval.Env -> J.JQuery -> Web.Callback
-makeCallback env container expr hole event jq = do
+makeCallback :: Eval.Env -> Array Expr -> J.JQuery -> Maybe J.JQuery-> Web.Callback
+makeCallback env history container histContainer expr hole event jq = do
   J.stopImmediatePropagation event
   let evalFunc = if ctrlKeyPressed event then Eval.eval else eval1
   case getType event of
-    "click"     -> showExprIn (hole (evalFunc env expr)) env container
+    "click"     -> if evalFunc env expr /= expr
+                   then showExprIn (hole (evalFunc env expr)) env (cons (hole expr) history) container histContainer
+                   else return unit
     "mouseover" -> if evalFunc env expr /= expr
                    then void $ J.addClass "highlight" jq
                    else return unit
@@ -59,11 +72,22 @@ makeCallback env container expr hole event jq = do
 exprToJQuery :: forall eff. Web.Callback -> Expr -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery callback = Web.exprToDiv >>> Web.divToJQuery callback
 
-showExprIn :: forall eff. Expr -> Eval.Env -> J.JQuery -> Eff (dom :: DOM | eff) Unit
-showExprIn expr env container = do
-  content <- exprToJQuery (makeCallback env container) expr
+showExprIn :: forall eff. Expr -> Eval.Env -> Array Expr -> J.JQuery -> Maybe J.JQuery-> Eff (dom :: DOM | eff) Unit
+showExprIn expr env history container histContainer = do
+  content <- exprToJQuery (makeCallback env history container histContainer) expr
   J.clear container
   J.append content container
+  case histContainer of
+    Nothing -> return unit
+    Just histContainer -> do
+      J.clear histContainer
+      for history $ \expr -> do
+        histExpr <- exprToJQuery (\_ _ _ _ -> return unit) expr
+        histDiv <- J.create "<div></div>"
+        J.addClass "history-element" histDiv
+        J.append histExpr histDiv
+        J.append histDiv histContainer
+      return unit
   return unit
 
 stringToEnv :: String -> Eval.Env
