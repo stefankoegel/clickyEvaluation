@@ -14,8 +14,6 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.Eff.JQuery as J
 
-import Text.Parsing.Parser (ParseError)
-
 main :: forall eff. Eff (console :: CONSOLE | eff) Unit
 main = log "hello"
 
@@ -35,8 +33,8 @@ eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
   Left _      -> expr
   Right expr' -> expr'
 
-callback :: J.JQuery -> Web.Callback
-callback container expr hole event jq = do
+showInCallback :: J.JQuery -> Web.Callback
+showInCallback container expr hole event jq = do
   J.stopImmediatePropagation event
   showExprIn (hole (eval1 empty expr)) container
   return unit
@@ -46,7 +44,7 @@ exprToJQuery callback = Web.exprToDiv >>> Web.divToJQuery callback
 
 showExprIn :: forall eff. Expr -> J.JQuery -> Eff (dom :: DOM | eff) Unit
 showExprIn expr container = do
-  content <- exprToJQuery (callback container) expr
+  content <- exprToJQuery (showInCallback container) expr
   J.clear container
   J.append content container
   return unit
