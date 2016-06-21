@@ -91,8 +91,8 @@ listify :: String -> String -> String -> List Div -> List Div
 listify b s e ls = (Cons begin (snoc (interleave sep ls) end))
   where
     begin = node b ["brace"] []
-    sep = node s ["brace"] []
-    end = node e ["comma"] []
+    sep = node s ["separator", "comma"] []
+    end = node e ["brace"] []
 
 list :: List Div -> DivHole
 list ls = nodeHole "" ["list"] $ listify "[" "," "]" ls
@@ -138,8 +138,8 @@ lambda :: List Div -> Div -> DivHole
 lambda params body = nodeHole "" ["lambda"] (Cons open (Cons bslash (params ++ (Cons arrow (Cons body (Cons close Nil))))))
   where
     open = node "(" ["brace"] []
-    bslash = node "\\" ["backslash"] []
-    arrow = node "->" ["arrow"] []
+    bslash = node "\\" ["backslash", "separator"] []
+    arrow = node "->" ["arrow", "separator"] []
     close = node ")" ["brace"] []
 
 app :: Div -> List Div -> DivHole

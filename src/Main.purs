@@ -46,11 +46,12 @@ eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
 makeCallback :: Eval.Env -> J.JQuery -> Web.Callback
 makeCallback env container expr hole event jq = do
   J.stopImmediatePropagation event
+  let evalFunc = if ctrlKeyPressed event then Eval.eval else eval1
   case getType event of
-    "click"     -> if ctrlKeyPressed event 
-                   then showExprIn (hole (Eval.eval env expr)) env container
-                   else showExprIn (hole (eval1 env expr)) env container
-    "mouseover" -> if eval1 env expr /= expr then void $ J.addClass "highlight" jq else return unit
+    "click"     -> showExprIn (hole (evalFunc env expr)) env container
+    "mouseover" -> if evalFunc env expr /= expr
+                   then void $ J.addClass "highlight" jq
+                   else return unit
     "mouseout"  -> void $ J.removeClass "highlight" jq
     _           -> return unit
   return unit
