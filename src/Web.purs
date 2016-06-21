@@ -77,10 +77,10 @@ exprToDiv expr = go id expr
         argsDivs = zipList go (hole <<< App unit func) args
 
 atom :: Atom -> Div
-atom (AInt n) = node (show n) ["atom", "num"] [] 
-atom (Bool b) = node (if b then "True" else "False") ["atom", "bool"] [] 
-atom (Char c) = node ("'" ++ c ++ "'") ["atom", "char"] [] 
-atom (Name n) = node n ["atom", "name"] [] 
+atom (AInt n) = node (show n) ["atom", "num"] []
+atom (Bool b) = node (if b then "True" else "False") ["atom", "bool"] []
+atom (Char c) = node ("'" ++ c ++ "'") ["atom", "char"] []
+atom (Name n) = node n ["atom", "name"] []
 
 interleave :: forall a. a -> List a -> List a
 interleave _ Nil          = Nil

@@ -44,6 +44,14 @@ makeCEwithHistory input selector histSelector = do
   let env = preludeEnv
   showExprIn expr env [] container (Just histContainer)
 
+makeCEwithDefsAndHistory :: forall eff. String -> String -> String -> String -> Eff (dom :: DOM | eff) Unit
+makeCEwithDefsAndHistory  input defs selector histSelector = do
+  container <- J.select selector
+  histContainer <- J.select histSelector
+  let expr = parseExpr input
+  let env = stringToEnv defs
+  showExprIn expr env [] container (Just histContainer)
+
 parseExpr :: String -> Expr
 parseExpr input = case Parser.parseExpr input of
   Left _     -> (Atom unit (Name "foo"))
