@@ -300,7 +300,6 @@ infer env ex = case ex of
 
   App _ Nil -> throwError $ UnknownError "congrats you found a bug TypeChecker.infer (App Nil)"
 
-  --TODO: make correct
   ListComp expr quals -> do
     Tuple sq (Tuple tq env') <- inferQuals env quals
     --let env' = apply sq env
@@ -428,10 +427,12 @@ inferQual env (Gen bin e1) = do
       let env' = apply s2 (foldr (\a b -> extend b a) env list)      
       let sC = s1 `compose` s2
       return $ Tuple sC $ Tuple (apply sC (TGen typ t1 t)) env'
-    _ -> throwError $ UnknownError "generator inside a list comprehension must be a List"
+    _ -> fresh >>= (\t -> throwError $ UnificationFail (extractType t1) (AD (TList t)))
 inferQual env (Guard expr) = do
   Tuple s t <- infer env expr
-  return $ Tuple s $ Tuple (apply s (TGuard t (extractType t))) env
+  case extractType t of
+    TypCon "Bool" -> return $ Tuple s $ Tuple (apply s (TGuard t (extractType t))) env
+    _             -> throwError $ UnificationFail (extractType t) (TypCon "Bool")
 
 inferQuals :: TypeEnv -> List ExprQual -> Infer (Tuple Subst (Tuple (List TypeQual) TypeEnv))
 inferQuals env Nil = return $ Tuple nullSubst $ Tuple Nil emptyTyenv
@@ -697,16 +698,13 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
     Left err -> TypeError err
     Right (TPrefixOp typ) -> typ
 
-   --TODO: make correct
   buildPartiallyTypedTreeQual :: TypeError -> TypeEnv -> ExprQual -> TypeQual
   buildPartiallyTypedTreeQual err env qual = case qual of
-      Let bin expr -> case getTypEnvFromList (singleton bin) env of
-                        Just env' -> TLet (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
-                        Nothing   -> TLet (g bin) (buildPartiallyTypedTree env expr) (TypeError err)  
-      Gen bin expr -> case getTypEnvFromList (singleton bin) env of
-                        Just env' -> TGen (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
-                        Nothing   -> TGen (g bin) (buildPartiallyTypedTree env expr) (TypeError err) 
-      Guard expr -> TGuard (buildPartiallyTypedTree env expr) (TypeError err) 
+    Let bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in 
+      TLet (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
+    Gen bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
+      TGen (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
+    Guard expr   -> TGuard (buildPartiallyTypedTree env expr) (TypeError err) 
 
 eqScheme :: Scheme -> Scheme -> Boolean
 eqScheme (Forall l1 t1) (Forall l2 t2)
@@ -909,7 +907,7 @@ prettyPrintTypeError (UnificationMismatch ts1 ts2) = let ts1ts2 = twoTypeListsTo
   where
     toStr ts = "[" ++ (foldr (\t s -> t ++ "," ++ s) "]" (map (\a -> prettyPrintType (typeToABC a)) ts))
 prettyPrintTypeError (UnknownError str) = "UnknownError: " ++ str
-
+prettyPrintTypeError defaultCase = show defaultCase
 
 twoTypesToABC t1 t2 = (\(TypArr t1' t2') -> Tuple t1' t2') (typeToABC (TypArr t1 t2))
 twoTypeListsToABC t1 t2 = (\(TypArr (AD (TTuple t1')) (AD (TTuple t2'))) -> Tuple t1' t2') (typeToABC (TypArr (AD (TTuple t1)) (AD (TTuple t2)) ))

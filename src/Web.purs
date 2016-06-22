@@ -138,7 +138,7 @@ exprToJQuery' output = go id output
       unary jop jexpr t i
     {} -> makeDiv "You found a Bug" Nil
 
-  --TODO: improve visual
+  --TODO: fix paths
   qualifier :: (Path -> Path) -> ExprQual -> TypeQual -> IndexQual -> Eff (dom :: DOM | eff) J.JQuery
   qualifier p (Gen b e) (TGen tb te t) (TGen ib ie i) = do
       result <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i

@@ -291,7 +291,7 @@ instance showTypeError :: Show TypeError where
   show (InfiniteType a b ) = "(InfiniteType " ++ show a ++ " " ++ show b ++ ")"
   show (UnboundVariable a) = "(UnboundVariable " ++ show a ++ ")"
   show (UnificationMismatch a b) = "(UnificationMismatch " ++ show a ++ " " ++ show b ++ ")"
-  show (UnknownError a) = "(UnknownError " ++ show a ++ ")"
+  show (UnknownError s) = "(UnknownError " ++ s ++ ")"
   show (NoInstanceOfEnum t) = "(" ++ show t ++ "is no instance of Enum)"
 
 derive instance eqTypeError :: Eq TypeError
