@@ -280,7 +280,7 @@ listComp expr = do
   eatSpaces
   PC.try $ char '|' <* notFollowedBy (char '|')
   eatSpaces
-  quals <- (qual expr) `PC.sepBy` (PC.try $ eatSpaces *> char ',' *> eatSpaces)
+  quals <- (qual expr) `PC.sepBy1` (PC.try $ eatSpaces *> char ',' *> eatSpaces)
   eatSpaces
   char ']'
   return $ ListComp start quals
