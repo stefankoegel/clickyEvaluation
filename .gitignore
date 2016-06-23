@@ -1,7 +1,7 @@
 /.*
 !/.gitignore
 !/.travis.yml
-/html/Main.js
+/html/libs/Main.js
 /node_modules/
 /bower_components/
 /output

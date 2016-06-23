@@ -184,15 +184,23 @@ div.clickable {
 }
 
 .num, .bool {
-  color: #e4e;
+  color: #F5871F;
 }
 
 .name {
-  color: #f62;
+  color: #4271AE;
 }
 
 div.op, div.brace, div.comma {
   margin: 0px;
+}
+
+div.op {
+  color: #3E999F;
+}
+
+div.keyword {
+  color: #8959A8;
 }
 
 #info {
