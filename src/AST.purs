@@ -6,7 +6,7 @@ module AST
   , Binding(..)
   , Definition(..)
   , Expr
-  , Path(..)) where
+  ) where
 
 import Prelude
 import Data.List (List)
@@ -122,20 +122,6 @@ type Output = {
     typ :: TypeTree,
     idTree :: IndexTree
   }
-
-data Path = Nth Int Path
-          | Fst Path
-          | Snd Path
-          | Thrd Path
-          | End
-
-instance showPath :: Show Path where
-  show p = case p of
-    Nth i p -> "(Nth " ++ show i ++ " " ++ show p ++")"
-    Fst   p -> "(Fst " ++ show p ++")"
-    Snd   p -> "(Snd " ++ show p ++")"
-    Thrd   p -> "(Thrd " ++ show p ++")"
-    End     -> "End"
 
 instance showOp :: Show Op where
   show op = case op of

@@ -1,7 +1,5 @@
 module Evaluator
-  ( evalPath1
-  , evalPathAll
-  , eval
+  ( eval
   , eval1
   , runEvalM
   , defsToEnv
@@ -11,7 +9,7 @@ module Evaluator
   ) where
 
 import Prelude hiding (apply)
-import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
+import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, concat)
 import Data.StrMap (StrMap)
 import Data.StrMap as Map
 import Data.Tuple (Tuple(Tuple))
@@ -27,11 +25,10 @@ import Control.Alt ((<|>))
 import Control.Monad.State.Trans (StateT, modify, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
-import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..),Path(..))
+import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..))
 
 data EvalError =
-    PathError Path Expr
-  | IndexError Int Int
+    IndexError Int Int
   | DivByZero
   | EvalError Expr
   | BinaryOpError Op Expr Expr
@@ -50,7 +47,6 @@ instance monoidEvalError :: Monoid EvalError where
   mempty = NoError
 
 instance showEvalError :: Show EvalError where
-  show (PathError p e)            = "PathError " ++ show p ++ " " ++ show e
   show (IndexError i l)           = "IndexError " ++ show i ++ " " ++ show l
   show DivByZero                  = "DivByZero"
   show (EvalError e)              = "EvalError " ++ show e
@@ -82,49 +78,6 @@ type Matcher = ExceptT MatchingError Identity
 
 runMatcherM :: forall a. Matcher a -> Either MatchingError a
 runMatcherM = runIdentity <<< runExceptT
-
-
-mapWithPath :: Path -> (Expr -> Evaluator Expr) -> Expr -> Evaluator Expr
-mapWithPath p f = go p
-  where
-  go End e     = f e
-  go (Fst p) e = case e of
-    Binary _ op e1 e2 -> Binary unit op <$> go p e1 <*> pure e2
-    Unary _ op e      -> Unary unit op  <$> go p e
-    SectL _ e op      -> SectL unit     <$> go p e <*> pure op
-    IfExpr _ ce te ee -> IfExpr unit <$> go p ce <*> pure te <*> pure ee
-    Lambda _ bs body  -> Lambda unit bs <$> go p body
-    App _ e es        -> App unit       <$> go p e <*> pure es
-    _                 -> throwError $ PathError (Fst p) e
-  go (Snd p) e = case e of
-    Binary _ op e1 e2 -> Binary unit op e1 <$> go p e2
-    SectR _ op e      -> SectR unit op     <$> go p e
-    IfExpr _ ce te ee -> IfExpr unit <$> pure ce <*> go p te <*> pure ee
-    _                 -> throwError $ PathError (Snd p) e
-  go (Thrd p) e = case e of
-    IfExpr _ ce te ee -> IfExpr unit <$> pure ce <*> pure te <*> go p ee
-    _                 -> throwError $ PathError (Thrd p) e
-  go (Nth n p) e = case e of
-    List _ es   -> List unit <$> mapIndex n (go p) es
-    NTuple _ es -> NTuple unit <$> mapIndex n (go p) es
-    App _ e es  -> App unit e <$> mapIndex n (go p) es
-    _           -> throwError $ PathError (Nth n p) e
-
-mapIndex :: forall a. Int -> (a -> Evaluator a) -> (List a) -> Evaluator (List a)
-mapIndex i f as = do
-  case as !! i of
-    Nothing -> throwError $ IndexError i (length as)
-    Just a  -> do
-      a' <- f a
-      case updateAt i a' as of
-        Nothing  -> throwError $ IndexError i (length as)
-        Just as' -> return as'
-
-evalPath1 :: Env -> Path -> Expr -> Either EvalError Expr
-evalPath1 env path expr = runEvalM $ mapWithPath path (eval1 env) expr
-
-evalPathAll :: Env -> Path -> Expr -> Either EvalError Expr
-evalPathAll env path expr = runEvalM $ mapWithPath path (return <<< eval env) expr
 
 type Env = StrMap (List (Tuple (List Binding) Expr))
 
