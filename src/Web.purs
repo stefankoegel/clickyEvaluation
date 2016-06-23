@@ -71,6 +71,13 @@ exprToDiv expr = go id expr
                                            expr hole
     go hole (LetExpr _ b v e)     = letexpr (binding b) (go hole v) (go hole e) -- TODO
     go hole expr@(Lambda _ binds body) = lambda (binding <$> binds) (go (hole <<< Lambda unit binds) body) expr hole
+
+    go hole expr@(App _ (SectL _ e1 op) (Cons e2 Nil))
+                                       = go hole (Binary unit op e1 e2) -- Rewrite section application to binary
+    go hole expr@(App _ (SectR _ op e2) (Cons e1 Nil))
+                                       = go hole (Binary unit op e1 e2) -- Rewrite section application to binary
+    go hole expr@(App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))
+                                       = go hole (Binary unit op e1 e2) -- Rewrite prefix op application to binary
     go hole expr@(App _ func args)     = app (go funcHole func) argsDivs expr hole
       where
         funcHole func = hole $ App unit func args
