@@ -171,7 +171,7 @@ eval1 env expr = case expr of
   (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))         -> binary env op e1 e2 <|> (return $ Binary op e1 e2)
   (App (Atom (Name name)) args)      -> apply env name args
   (App (App func es) es')            -> return $ App func (es ++ es')
-  (ListComp e qs)                    -> evalListComp e qs
+  (ListComp e qs)                    -> evalListComp env e qs
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> Expr -> Expr
@@ -317,9 +317,34 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
 -- List Comprehensions
 ------------------------------------------------------------------------------------------
 
---TODO
-evalListComp :: Expr -> List ExprQual -> Evaluator Expr
-evalListComp expr quals = return $ ListComp expr quals
+--TODO: let
+evalListComp :: Env -> Expr -> List ExprQual -> Evaluator Expr
+evalListComp _ expr Nil           = return $ List $ singleton expr
+evalListComp env expr (Cons q qs) = case q of
+  Guard (Atom (Bool false)) -> return $ List Nil
+  Guard (Atom (Bool true))  -> return $ ListComp expr qs
+  Gen _ (List Nil)          -> return $ List Nil
+  Gen b (List (Cons e Nil)) -> return $ ListComp expr (Cons (Let b e) qs)
+  Gen b (List (Cons e es))  -> do
+    listcomp1 <- return $ ListComp expr (Cons (Let b e) qs)
+    listcomp2 <- return $ ListComp expr (Cons (Gen b (List es)) qs)
+    return $ Binary Append listcomp1 listcomp2
+  --TODO: fix overlapping bindings
+  Let b e -> case runMatcherM $ matchls' env (singleton b) (singleton e) of 
+    Right r -> do
+      qs' <- traverse (replaceInQual r) qs
+      expr' <- replace' r expr
+      case qs' of 
+        Nil -> return $ List $ singleton expr'
+        _   -> return $ ListComp expr' qs'
+    Left  l -> throwError $ UnknownFunction "something went wrong in binding of let guard"
+  _ -> throwError $ CannotEvaluate (ListComp expr (Cons q qs))
+  where
+    replaceInQual :: StrMap Expr -> ExprQual -> Evaluator ExprQual
+    replaceInQual str qual = case qual of
+      Gen b e -> replace' str e >>= \x -> return $ Gen b x
+      Let b e -> replace' str e >>= \x -> return $ Let b x
+      Guard e -> replace' str e >>= \x -> return $ Guard x
 
 ------------------------------------------------------------------------------------------
 
