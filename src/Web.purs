@@ -11,6 +11,8 @@ import Data.Foldable (class Foldable)
 import Data.List (List(..), snoc, toList)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
+import Data.String as Str
+import Data.Array as Arr
 
 import Control.Bind ((>=>))
 import Control.Monad.Eff (Eff)
@@ -54,7 +56,9 @@ exprToDiv expr = go id expr
   where
     go :: (Expr -> Expr) -> Expr -> Div
     go hole      (Atom _ a)            = atom a
-    go hole expr@(List _ ls)           = list (zipList go (hole <<< List unit) ls) expr hole
+    go hole expr@(List _ ls)           = case toString ls of
+                                           Nothing  -> list (zipList go (hole <<< List unit) ls) expr hole
+                                           Just str -> node ("\"" ++ str ++ "\"") ["list", "string"] []
     go hole expr@(NTuple _ ls)         = ntuple (zipList go (hole <<< NTuple unit) ls) expr hole
     go hole expr@(Binary _ op e1 e2)   = binary op
                                            (go (\e1 -> hole $ Binary unit op e1 e2) e1)
@@ -173,6 +177,17 @@ divToJQuery callback (Node { content: content, classes: classes, zipper: zipper 
       J.on "mouseout" (callback expr hole) div
       return unit
   return div
+
+toString :: List Expr -> Maybe String
+toString ls = Str.fromCharArray <$> go [] ls
+  where
+    go :: Array Char -> List Expr -> Maybe (Array Char)
+    go acc (Cons (Atom _ (Char c)) rs) = case Str.toChar c of
+                                           Just char -> go (Arr.snoc acc char) rs
+                                           Nothing   -> Nothing
+    go []  Nil                         = Nothing
+    go acc Nil                         = Just acc
+    go _   _                           = Nothing
 
 makeDiv :: forall eff. String -> List String -> Eff (dom :: DOM | eff) J.JQuery
 makeDiv text classes = do
