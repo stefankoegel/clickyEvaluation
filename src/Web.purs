@@ -90,12 +90,13 @@ interleave a (Cons x xs)  = Cons x $ Cons a $ interleave a xs
 listify :: String -> String -> String -> List Div -> List Div
 listify b s e ls = (Cons begin (snoc (interleave sep ls) end))
   where
-    begin = node b ["brace"] []
+    begin = node b ["brace", "left"] []
     sep = node s ["separator", "comma"] []
-    end = node e ["brace"] []
+    end = node e ["brace", "right"] []
 
 list :: List Div -> DivHole
-list ls = nodeHole "" ["list"] $ listify "[" "," "]" ls
+list Nil = nodeHole "[]" ["list empty"] []
+list ls  = nodeHole "" ["list"] $ listify "[" "," "]" ls
 
 ntuple :: List Div -> DivHole
 ntuple ls = nodeHole "" ["tuple"] $ listify "(" "," ")" ls
@@ -107,10 +108,10 @@ binary :: Op -> Div -> Div -> DivHole
 binary op d1 d2 = nodeHole "" ["binary"] [d1, opToDiv op, d2]
 
 openBrace :: Div
-openBrace = node "(" ["brace"] []
+openBrace = node "(" ["brace", "left"] []
 
 closeBrace :: Div
-closeBrace = node ")" ["brace"] []
+closeBrace = node ")" ["brace", "right"] []
 
 unary :: Op -> Div -> DivHole
 unary op div = nodeHole "" ["unary"] [openBrace, opToDiv op, div, closeBrace]
@@ -137,10 +138,10 @@ letexpr _ _ _ = node "" [] []
 lambda :: List Div -> Div -> DivHole
 lambda params body = nodeHole "" ["lambda"] (Cons open (Cons bslash (params ++ (Cons arrow (Cons body (Cons close Nil))))))
   where
-    open = node "(" ["brace"] []
+    open = node "(" ["brace", "left"] []
     bslash = node "\\" ["backslash", "separator"] []
     arrow = node "->" ["arrow", "separator"] []
-    close = node ")" ["brace"] []
+    close = node ")" ["brace", "right"] []
 
 app :: Div -> List Div -> DivHole
 app func args = nodeHole "" ["app"] (Cons func args)
