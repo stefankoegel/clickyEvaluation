@@ -178,3 +178,15 @@ runTests = do
   evalEnvTest "arithmetic_sequences_14" prelude "[5, 9 .. 20]" "[5, 9, 13, 17]"
   evalEnvTest "arithmetic_sequences_15" prelude "take 5 [3, -1 ..]" "[3, -1, -5, -9, -13]"
   evalEnvTest "arithmetic_sequences_16" prelude "take 11 [-5 ..]" "[-5, -4, -3, -2, -1, 0, 1, 2 ,3, 4, 5]"
+
+
+  evalEnvTest "list_comprehension_1" prelude "[ x | x <- [1 .. 10], even x]" "[2, 4, 6, 8, 10]"
+  evalEnvTest "list_comprehension_2" prelude "[ (x, y) | x <- [1 .. 3], y <- [1 .. 3], x + y == 4]" "[(1,3), (2,2), (3,1)]"
+  evalEnvTest "list_comprehension_3" prelude "(\\x -> [ x | let x = 1]) 2"    "[1]"
+  evalEnvTest "list_comprehension_4" prelude "[ x | let x = 1, True, let x = 'a']" "['a']"
+  evalEnvTest "list_comprehension_5" prelude "[ y | y <- [1 .. 10], y < y]"  "[]"
+  evalEnvTest "list_comprehension_6" prelude "[ [ y | y <- reverse x] | x <- [[1 .. 10]]]" "[[10, 9, 8, 7, 6, 5, 4, 3, 2, 1]]"
+  evalEnvTest "list_comprehension_7" prelude "[ x | x <- [1 .. 5], y <- [x .. 5]]" "[1,1,1,1,1, 2,2,2,2, 3,3,3, 4,4, 5]"
+  evalEnvTest "list_comprehension_8" prelude "[x | x <- \"wer misst zu viele gabeln\", elem x \"itzgw\"]" "\"witzig\""
+  evalEnvTest "list_comprehension_9" prelude "[(x, z) | x <- [1 .. 5], z <- [y | y <- [1 .. 5], mod x y == 0] ]" "[(1,1), (2,1), (2,2), (3,1), (3,3), (4,1), (4,2), (4,4), (5,1), (5,5)]"
+  evalEnvTest "list_comprehension_10" prelude "[z | let y = [True, True, False], z <- y, z]" "[True, True]"
