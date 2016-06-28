@@ -3,12 +3,13 @@ module Test.Parser where
 import Prelude (class Eq, class Show, Unit, (++), ($), bind, show, unit, return, (==), (<<<), negate)
 import Data.Either (Either(..))
 import Data.List (List(..), toList, singleton)
+import Data.Maybe (Maybe(..))
 
 import Text.Parsing.Parser  (Parser, ParseError(ParseError), runParser)
 
 import Control.Monad.Writer (Writer, tell)
 
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..), Qual(..), ExprQual)
 import Parser (expression, atom, definitions, definition, binding, variable, bool, int)
 
 tell' :: forall a. a -> Writer (List a) Unit
@@ -310,6 +311,12 @@ runTests = do
 
   test "string1" expression "\"asdf\"" (List $ toList [Atom (Char "a"), Atom (Char "s"), Atom (Char "d"), Atom (Char "f")])
   test "string2" expression "\"\\\\\\n\\\"\\\'\"" (List $ toList [Atom (Char "\\"), Atom (Char "\n"), Atom (Char "\""), Atom (Char "'")])
+
+  test "listComp1" expression "[ x | x <- [1,2,3] ]" $ ListComp (Atom (Name "x")) (toList [Gen (Lit (Name "x")) (List (toList [Atom (AInt 1), Atom (AInt 2), Atom (AInt 3)]))])
+  test "listComp2" expression "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp (Binary Add (Atom (Name "b")) (Atom (Name ("c")))) $ toList [Let (Lit (Name "b")) (Atom (AInt 3)),
+    Gen (Lit (Name "c")) (ArithmSeq (Atom (AInt 1)) Nothing Nothing)]
+  test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp (Binary Mul (Atom (Name "a")) (Atom (Name "b"))) $ toList [Let (Lit (Name "a")) (Atom (AInt 5)),
+    Let (Lit (Name "b")) (Binary Add (Atom (Name "a")) (Atom (AInt 1)))]
 
 prelude :: String
 prelude =

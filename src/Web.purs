@@ -17,15 +17,15 @@ import Data.Tuple (Tuple(..), fst)
 
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
-import Control.Monad (when)
+--import Control.Monad (when)
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import Control.Monad.State (State, put, get, runState)
 import DOM (DOM)
 
 
-import AST (Atom(..), Binding(..), Expr(..), Op(), pPrintOp,Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..))
-import TypeChecker (prettyPrintType,extractType,mapM)
+import AST (Atom(..), Binding(..), Expr(..), Qual(..), ExprQual, TypeQual, IndexQual, QualTree(..), Op(), pPrintOp, Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..), extractType)
+import TypeChecker (prettyPrintType, mapM)
 import JSHelpers (showTooltip, children)
 
 pathPropName :: String
@@ -118,6 +118,12 @@ exprToJQuery' output = go id output
           false -> do
             arithmeticSequence jStart Nothing Nothing t i
 
+    {expr:(ListComp expr quals), typ:(TListComp texpr tquals t), idTree:(IListComp iexpr iquals i)} -> do
+      jExpr  <- go (p <<< Fst) {expr:expr, typ:texpr, idTree:iexpr} 
+      jQuals <- zipWithA (\i (Tuple i' (Tuple e t)) -> qualifier (p <<< Nth i) e t i') 
+        (0 .. (length quals - 1)) (zip iquals (zip quals tquals))
+      listComp jExpr jQuals t i
+
     {expr:Lambda binds body, typ:TLambda lb tt t, idTree: (ILambda bis i i')} -> do
       jBinds <- for (zip bis (zip binds lb)) binding
       jBody <- go (p <<< Fst) {expr:body, typ:tt, idTree: i}
@@ -132,7 +138,22 @@ exprToJQuery' output = go id output
       unary jop jexpr t i
     {} -> makeDiv "You found a Bug" Nil
 
-
+  --TODO: fix paths
+  qualifier :: (Path -> Path) -> ExprQual -> TypeQual -> IndexQual -> Eff (dom :: DOM | eff) J.JQuery
+  qualifier p (Gen b e) (TGen tb te t) (TGen ib ie i) = do
+      result <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
+      binding (Tuple ib (Tuple b tb)) >>= flip J.append result
+      makeDiv "<-" Nil >>= flip J.append result
+      go p {expr:e, typ:te, idTree:ie} >>= flip J.append result
+      return result      
+  qualifier p (Let b e) (TLet tb te t) (TLet ib ie i) = do
+      result <- makeDiv "let" Nil >>= addTypetoDiv t >>= addIdtoDiv i
+      binding (Tuple ib (Tuple b tb)) >>= flip J.append result
+      makeDiv "=" Nil >>= flip J.append result
+      go p {expr:e, typ:te, idTree:ie} >>= flip J.append result 
+      return result 
+  qualifier p (Guard e) (TGuard te t) (TGuard ie i) = go p {expr:e, typ:te, idTree:ie}
+  qualifier _ _ _ _ = makeDiv "You found a Bug in Web.exprToJquery'.qualifier" Nil
 
 atom :: forall eff. Atom -> Type -> Int ->  Eff (dom :: DOM | eff) J.JQuery
 atom (AInt n) t  i   = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv t >>= addIdtoDiv i
@@ -269,15 +290,29 @@ arithmeticSequence start mstep mend t i = do
   J.append das jtypExp
   return jtypExp  
   where
-    maybeStep :: forall eff. J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+    maybeStep :: J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
     maybeStep jquery Nothing = return jquery
     maybeStep jquery (Just step) = do
       makeDiv "," (singleton "comma") >>= flip J.append jquery 
       J.append step jquery
 
-    maybeEnd :: forall eff. J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+    maybeEnd :: J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
     maybeEnd jquery Nothing = return jquery
     maybeEnd jquery (Just end) = J.append end jquery
+
+listComp :: forall eff. J.JQuery -> List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+listComp jExpr jQuals t i = do
+  jtypExp <- makeDiv "" (singleton "list typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  das <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  makeDiv "[" (singleton "brace") >>= flip J.append das
+  J.append jExpr das
+  makeDiv "|" (singleton "comma") >>= flip J.append das    
+  interleaveM_ (flip J.append das) (makeDiv "," (singleton "comma") >>= flip J.append das) jQuals
+  makeDiv "]" (singleton "brace") >>= flip J.append das
+  J.append das jtypExp
+  return jtypExp  
 
 interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> List a -> m Unit
 interleaveM_ f sep = go
@@ -494,7 +529,27 @@ indexExpr (App e es) = do
                 is <- mapM indexExpr es
                 i <- fresh
                 return $ IApp e1 is i
+indexExpr (ListComp e qs) = do
+                e1 <- indexExpr e
+                is <- mapM indexQual qs
+                i <- fresh
+                return $ IListComp e1 is i
 
+indexQual :: ExprQual -> State {count :: Int} IndexQual
+indexQual (Gen b e) = do
+  b' <- indexBinding b
+  e' <- indexExpr e
+  i  <- fresh
+  return $ TGen b' e' i
+indexQual (Let b e) = do
+  b' <- indexBinding b
+  e' <- indexExpr e
+  i  <- fresh
+  return $ TLet b' e' i
+indexQual (Guard e) = do
+  e' <- indexExpr e
+  i  <- fresh 
+  return $ TGuard e' i
 
 indexBinding:: Binding -> State {count :: Int} IBinding
 indexBinding (Lit _) = do
@@ -519,19 +574,3 @@ fresh = do
   {count = count} <- get
   put {count:count+1}
   return count
-
-
-extractIndex:: IndexTree -> Int
-extractIndex (IAtom i)  =  i
-extractIndex (IListTree _ i)  =  i
-extractIndex (INTuple _ i)  =  i
-extractIndex (IBinary _ _ _ i)  =  i
-extractIndex (IUnary _ _ i)  =  i
-extractIndex (ISectL _ _ i)  =  i
-extractIndex (ISectR _ _ i)  =  i
-extractIndex (IPrefixOp i)  =  i
-extractIndex (IIfExpr _ _ _ i)  =  i
-extractIndex (IArithmSeq _ _ _ i) = i
-extractIndex (ILetExpr _ _ _ i)  =  i
-extractIndex (ILambda _ _ i)  =  i
-extractIndex (IApp _ _ i)  =  i

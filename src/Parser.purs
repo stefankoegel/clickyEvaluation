@@ -17,10 +17,10 @@ import Text.Parsing.Parser (ParseError, Parser, runParser, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
 import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
-import Text.Parsing.Parser.Token
+import Text.Parsing.Parser.Token (TokenParser, unGenLanguageDef, upper, digit, makeTokenParser)
 import Text.Parsing.Parser.Language (haskellDef)
 
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..))
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Qual(..), ExprQual, Op(..))
 
 
 tokenParser :: TokenParser
@@ -176,6 +176,7 @@ base expr =
       PC.try (tuplesOrBrackets expr)
   <|> PC.try (lambda expr)
   <|> section expr
+  <|> PC.try (listComp expr)
   <|> PC.try (arithmeticSequence expr)
   <|> list expr
   <|> charList
@@ -269,6 +270,38 @@ arithmeticSequence expr = do
   eatSpaces   
   char ']'    
   return $ ArithmSeq start step end
+
+-- | Parser for List Comprehensions
+listComp :: Parser String Expr -> Parser String Expr
+listComp expr = do
+  char '['
+  eatSpaces
+  start <- expr
+  eatSpaces
+  PC.try $ char '|' <* notFollowedBy (char '|')
+  eatSpaces
+  quals <- (qual expr) `PC.sepBy1` (PC.try $ eatSpaces *> char ',' *> eatSpaces)
+  eatSpaces
+  char ']'
+  return $ ListComp start quals
+
+qual :: Parser String Expr -> Parser String ExprQual
+qual expr = (PC.try parseLet) <|> (PC.try parseGen) <|> parseGuard
+  where
+    parseLet = do 
+      string "let" *> eatSpaces 
+      b <- binding
+      eatSpaces *> char '=' *> eatSpaces
+      e <- expr
+      return $ Let b e        
+    parseGen = do
+      b <- binding
+      eatSpaces *> string "<-" *> eatSpaces
+      e <- expr
+      return $ Gen b e
+    parseGuard = do
+      e <- expr
+      return $ Guard e
 
 -- | Parser for strings ("example")
 charList :: Parser String Expr

@@ -4,6 +4,8 @@ import Prelude (class Show, class Eq, class Ord, class Bounded, top, bottom, sho
 import Data.List (List(Nil, Cons), (:), singleton, toList)
 import Data.Maybe
 import Data.Enum
+import Data.Either
+import Data.Tuple
 import Control.Bind (join)
 import Control.Apply (lift2)
 import Data.String (fromChar, toChar)
@@ -53,7 +55,16 @@ data Expr = Atom Atom
           | LetExpr Binding Expr Expr
           | Lambda (List Binding) Expr
           | App Expr (List Expr)
-          
+          | ListComp Expr (List (ExprQual))          
+
+data Qual b e = Gen b e | Let b e | Guard e
+
+data QualTree b e t = 
+    TGen b e t
+  | TLet b e t
+  | TGuard e t 
+
+type ExprQual = Qual Binding Expr
 
 -- last type para is type of expr at this level
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
@@ -71,7 +82,9 @@ data TypeTree
           | TLetExpr TypeBinding TypeTree TypeTree  Type
           | TLambda (List TypeBinding) TypeTree     Type
           | TApp TypeTree (List TypeTree)           Type
+          | TListComp TypeTree (List TypeQual) Type
 
+type TypeQual  = QualTree TypeBinding TypeTree Type
 
 data IndexTree
           = IAtom                                  Int
@@ -87,14 +100,14 @@ data IndexTree
           | ILetExpr IBinding IndexTree IndexTree  Int
           | ILambda (List IBinding) IndexTree      Int
           | IApp IndexTree (List IndexTree)        Int
+          | IListComp IndexTree (List IndexQual) Int
 
-
+type IndexQual = QualTree IBinding IndexTree Int
 
 data TypeBinding  = TLit                              Type
                   | TConsLit TypeBinding TypeBinding  Type
                   | TListLit (List TypeBinding)       Type
                   | TNTupleLit (List TypeBinding)     Type
-
 
 data IBinding  = ILit                       Int
               | IConsLit IBinding IBinding  Int
@@ -123,8 +136,11 @@ data TypeError
   | UnknownError String
   | NoInstanceOfEnum Type
 
-
 derive instance eqExpr :: Eq Expr
+
+derive instance eqQual :: (Eq b, Eq e) => Eq (Qual b e)
+
+derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c) 
 
 -- | Bindings
 -- |
@@ -210,6 +226,17 @@ instance showAtom :: Show Atom where
     Char string -> "Char " ++ show string
     Name string -> "Name " ++ show string
 
+instance showQual :: (Show b, Show e) => Show (Qual b e) where
+  show q = case q of
+    Gen b e -> "Gen (" ++ show b ++ " " ++ show e ++ ")"
+    Let b e -> "Let (" ++ show b ++ " " ++ show e ++ ")"
+    Guard e -> "Guard (" ++ show e ++ ")" 
+
+instance showQualTree :: (Show a, Show b, Show c) => Show (QualTree a b c) where
+  show (TGen a b c) = "TGen (" ++ show a ++ " " ++ show b ++ " " ++ show c ++ ")"
+  show (TLet a b c) = "TLet (" ++ show a ++ " " ++ show b ++ " " ++ show c ++ ")"
+  show (TGuard a c)  = "TGuard (" ++ show a ++ " " ++ show c ++ ")"
+
 instance showExpr :: Show Expr where
   show expr = case expr of
     Atom atom       -> "Atom (" ++ show atom ++ ")"
@@ -225,6 +252,7 @@ instance showExpr :: Show Expr where
     LetExpr b l e   -> "LetExpr (" ++ show b ++ ") (" ++ show l ++ ") (" ++ show e ++ ")"
     Lambda binds body -> "Lambda (" ++ show binds ++ ") (" ++ show body ++ ")"
     App func args   -> "App (" ++ show func ++ ") (" ++ show args ++ ")"
+    ListComp expr quals -> "ListComp (" ++ show expr ++ ")" ++ "(" ++ show quals ++ "))"
 
 instance showBinding :: Show Binding where
   show binding = case binding of
@@ -263,7 +291,7 @@ instance showTypeError :: Show TypeError where
   show (InfiniteType a b ) = "(InfiniteType " ++ show a ++ " " ++ show b ++ ")"
   show (UnboundVariable a) = "(UnboundVariable " ++ show a ++ ")"
   show (UnificationMismatch a b) = "(UnificationMismatch " ++ show a ++ " " ++ show b ++ ")"
-  show (UnknownError a) = "(UnknownError " ++ show a ++ ")"
+  show (UnknownError s) = "(UnknownError " ++ s ++ ")"
   show (NoInstanceOfEnum t) = "(" ++ show t ++ "is no instance of Enum)"
 
 derive instance eqTypeError :: Eq TypeError
@@ -282,10 +310,48 @@ instance showTypeTree :: Show TypeTree where
   show (TLetExpr b tt1 tt2 t) = "(TLetExpr " ++ show b ++ " " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show t ++ ")"
   show (TLambda lb tt t ) = "(TLambda " ++ show lb ++ " " ++ show tt ++ " " ++ show t ++ ")"
   show (TApp tt1 tl t) = "(TApp " ++ show tt1 ++ " (" ++ show tl ++ ") " ++ show t ++ ")"
-
+  show (TListComp e qs t) = "(TListComp " ++ show e ++ " (" ++ show qs ++ ") " ++ show t ++ ")"
 
 instance showTypeBinding:: Show TypeBinding where
   show (TLit t) = "(TLit "++ show t ++")"
   show (TConsLit b1 b2 t) = "(TConsLit "++ show b1 ++ " " ++ show b2 ++ " " ++ show t ++")"
   show (TListLit lb t) = "(TListLit " ++ show lb ++ " "++ show t ++")"
   show (TNTupleLit lb t) = "(TNTupleLit " ++ show lb ++ " "++ show t ++")"
+
+extractType:: TypeTree -> Type
+extractType (TAtom t)            = t
+extractType (TListTree _ t)      = t
+extractType (TNTuple _ t)        = t
+extractType (TBinary _ _ _ t)    = t
+extractType (TUnary _ _ t)       = t
+extractType (TSectL _ _ t)       = t
+extractType (TSectR _ _ t)       = t
+extractType (TPrefixOp t)        = t
+extractType (TIfExpr _ _ _ t)    = t
+extractType (TArithmSeq _ _ _ t) = t
+extractType (TLetExpr _ _ _ t)   = t
+extractType (TLambda _ _ t)      = t
+extractType (TApp _ _ t)         = t
+extractType (TListComp _ _ t)    = t
+
+extractIndex :: IndexTree -> Int
+extractIndex (IAtom i)            = i
+extractIndex (IListTree _ i)      = i
+extractIndex (INTuple _ i)        = i
+extractIndex (IBinary _ _ _ i)    = i
+extractIndex (IUnary _ _ i)       = i
+extractIndex (ISectL _ _ i)       = i
+extractIndex (ISectR _ _ i)       = i
+extractIndex (IPrefixOp i)        = i
+extractIndex (IIfExpr _ _ _ i)    = i
+extractIndex (IArithmSeq _ _ _ i) = i
+extractIndex (ILetExpr _ _ _ i)   = i
+extractIndex (ILambda _ _ i)      = i
+extractIndex (IApp _ _ i)         = i
+extractIndex (IListComp _ _ i)    = i
+
+extractBindingType:: TypeBinding -> Type
+extractBindingType (TLit t)         = t
+extractBindingType (TConsLit _ _ t) = t
+extractBindingType (TListLit _ t)   = t
+extractBindingType (TNTupleLit _ t) = t
