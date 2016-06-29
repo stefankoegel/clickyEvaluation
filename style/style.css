@@ -1,5 +1,5 @@
 body {
-  background: #999;
+  background: #ddd;
   overflow-x: hidden;
 }
 
@@ -26,7 +26,7 @@ h3 {
   font-family: monospace;
   font-size: 15px;
   border: none;
-  background: #ddd;
+  background: #fff;
   padding: 10px;
   margin: 5px;
   border-radius: 4px;
@@ -73,7 +73,7 @@ h3 {
   font-family: monospace;
   font-size: 15px;
   border: none;
-  background: #aaa;
+  background: #eee;
   padding: 4px;
   margin: 5px;
   border-radius: 4px;
@@ -168,7 +168,7 @@ div.historyBox {
 }
 
 .binary, .app, .if {
-  background: #bbb;
+  background: #eee;
   padding: 10px;
   border-radius: 5px;
   box-shadow: 2px 2px 5px 0 #333;
