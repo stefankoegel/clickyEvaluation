@@ -1,23 +1,19 @@
 module Test.TypeChecker where
 
-import AST
-import TypeChecker
-import Parser
+import AST (AD(TList, TTuple), Atom(AInt, Name, Char), Binding(Lit, ConsLit, ListLit, NTupleLit), Definition(Def), Expr(Atom, List, SectR, App, Binary, PrefixOp, Lambda, NTuple, LetExpr, SectL), Op(Power, Colon, Add, Append), TVar(TVar), Type(TypCon, TypVar, AD, TypArr), TypeError(InfiniteType, UnificationFail, UnknownError))
+import TypeChecker (Subst, Infer, TypeEnv, Scheme(Forall), inferGroup, inferType, inferDef, prettyPrintType, emptyTyenv, runInfer, typeProgramn, eqScheme)
+import Parser (expression, definition)
 
-import Prelude hiding (apply,compose)
-import Data.Either
-import Data.List
-import Data.Tuple
-import Data.Map as Map
-import Data.Maybe
-import Data.Foldable
+import Prelude (Unit, bind, ($), show, (==), (++))
+import Data.Either (Either(..))
+import Data.List (List(..), toList)
+import Data.Tuple (Tuple)
 
-import Text.Parsing.Parser
+import Text.Parsing.Parser (ParseError, runParser)
 
-import Control.Monad.Eff
-import Control.Monad.Eff.Console
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Console (CONSOLE, log)
 
-import Control.Monad.Except.Trans
 import Control.Monad.State
 
 testInfer:: forall a  eff. String -> a -> (TypeEnv -> a -> Infer (Tuple Subst Type))
