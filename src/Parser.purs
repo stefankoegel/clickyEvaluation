@@ -5,13 +5,14 @@ import Data.String as String
 import Data.Foldable (foldl)
 import Data.List (List(..), many, toList, concat, elemIndex, fromList)
 import Data.Maybe (Maybe(..), maybe)
+import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
 import Data.Array (modifyAt, snoc)
 
 import Control.Alt ((<|>))
 import Control.Apply ((<*), (*>), lift2)
 import Control.Lazy (fix)
-import Control.Monad.State (runState) 
+import Control.Monad.State (runState, evalState) 
 import Data.Tuple (fst)
 import Data.Either (Either(..))
 
@@ -345,16 +346,27 @@ lambda expr = do
   body <- expr
   return $ Lambda binds body
 
--- | Parser for let expression
+-- | Parse a let expression with optional curly brackets
 letExpr :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m Expr
 letExpr expr = do
   string "let" *> skipSpaces
-  bnd <- binding
-  skipSpaces *> char '=' *> skipSpaces
-  lexp <- expr
+  binds <- PC.between (char '{') (char '}') bindings <|> bindings
   skipSpaces *> string "in" *> skipSpaces
-  body <- expr
-  return $ LetExpr bnd lexp body
+  e <- expr
+  skipSpaces
+  return $ LetExpr binds e
+  where
+    bindings :: ParserT String m (List (Tuple Binding Expr))
+    bindings = (bindingItem expr) `PC.sepBy` (PC.try $ skipSpaces *> char ';' *> skipSpaces) 
+
+bindingItem :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m (Tuple Binding Expr)
+bindingItem expr = do
+  skipSpaces
+  b <- binding
+  skipSpaces *> char '=' *> skipSpaces
+  e <- expr
+  skipSpaces
+  return $ Tuple b e
 
 -- | Parse an arbitrary expression
 expression :: forall m. (Monad m) => ParserT String m Expr
@@ -435,24 +447,33 @@ parseDefs input = runParser input definitions
 -- Multiline Parsing
 ----------------------------------------------------------------------
 
+--skips whitespaces and linebreaks
 skipWhite :: forall m. (Monad m) => ParserT String m Unit 
 skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
+
+--lexeme parser (skips trailing whitespaces and linebreaks)
+ilexe :: forall a. IndentParser String a -> IndentParser String a
+ilexe p = do
+  a <- p
+  skipWhite
+  return a
 
 testIndent :: forall a. (Show a) => IndentParser String a -> String -> String
 testIndent p src = case fst $ flip runState initialPos $ runParserT (PState {input: src,position: initialPos}) p of
   Right r -> "parse success : " ++ show r 
   Left  l -> "parse fail    : " ++ show l
 
-data TestBlock = TestBlock Char (List Char)
+testLet = testIndent (letExprI expression) "let\n  x = 1\n  y = 2 in x + y"
 
-instance showTest :: Show TestBlock where
-  show (TestBlock c cs) = "TestBlock " ++ show c ++ " " ++ show cs  
+-- | Parser for let expression
+letExprI :: IndentParser String Expr -> IndentParser String Expr
+letExprI expr = PC.try (letExpr expr) <|> do 
+  do 
+    ilexe $ string "let"
+    binds <- block (ilexe (bindingItem expr))
+    ilexe $ string "in"
+    body <- ilexe expr
+    return $ LetExpr binds body
 
-chara :: forall m. (Monad m) => ParserT String m Char
-chara = do
-  c <- anyLetter
-  skipWhite
-  return c
-
-testBlockParser :: IndentParser String TestBlock
-testBlockParser = withBlock TestBlock chara chara
+parseExprI :: String -> Either ParseError Expr
+parseExprI src = fst $ flip runState initialPos $ runParserT (PState {input: src,position: initialPos}) expression

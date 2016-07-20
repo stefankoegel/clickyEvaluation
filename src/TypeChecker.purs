@@ -1,28 +1,23 @@
 module TypeChecker where
 
-import Prelude (class Monad, class Eq, class Show, (&&), (==), (/=), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod, flip)
+import Prelude (class Monad, class Show, (&&), (==), (/=), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod, flip)
 
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
-import Control.Monad.State (State, evalState, put, get)
+import Control.Monad.State (State, evalState, runState, put, get)
+import Control.Apply (lift2)
+import Control.Bind (ifM)
 
 import Data.Either (Either(Left, Right))
-import Data.List (List(..), length, delete, concat, unzip, foldM, toList, (:), zip)
+import Data.List (List(..), length, delete, concat, unzip, foldM, toList, (:), zip, singleton, toList, length, concat, (!!))
+import Data.List.WordsLines (fromCharList)
 import Data.Map as Map
+import Data.Map (Map, insert, lookup, empty)
 import Data.Tuple (Tuple(Tuple), snd, fst)
+import Data.Tuple.Nested (Tuple3, tuple3)
 import Data.Set as Set
 import Data.Foldable (foldl, foldr)
-import Data.Maybe (Maybe(..), fromMaybe, maybe, isJust)
-import Data.Maybe.Unsafe (fromJust)
-
-import Data.Tuple (Tuple(..),fst,snd)
-import Data.Map (Map(..), insert, lookup, empty)
-import Data.List.WordsLines (fromCharList)
-import Data.List (List(Nil, Cons), singleton, fromList, toList, length, (..), zipWithA,concat,zip, (!!))
-import Data.String (joinWith, toCharArray)
-
-import Control.Apply ((*>), lift2)
-import Control.Bind ((=<<), (>=>), ifM)
-import Control.Monad.State
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.String (toCharArray)
 
 import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Qual(..), ExprQual, QualTree(..), TypeQual, Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..), extractType, extractBindingType)
 
@@ -121,7 +116,7 @@ instance subTypeTree :: Substitutable TypeTree where
   apply s (TPrefixOp t) = TPrefixOp $ apply s t
   apply s (TIfExpr tt1 tt2 tt3 t) = TIfExpr (apply s tt1) (apply s tt2) (apply s tt3) (apply s t)
   apply s (TArithmSeq st by end t) = TArithmSeq (apply s st) ((apply s) <$> by) ((apply s) <$> end) (apply s t) 
-  apply s (TLetExpr b tt1 tt2 t) = TLetExpr (apply s b) (apply s tt1) (apply s tt2) (apply s t)
+  apply s (TLetExpr bin tt t) = TLetExpr ((\(Tuple x y) -> (Tuple (apply s x) (apply s y))) <$> bin) (apply s tt) (apply s t)
   apply s (TLambda lb tt t) = TLambda (apply s lb) (apply s tt) (apply s t)
   apply s (TApp tt1 l t) = TApp (apply s tt1) (apply s l) (apply s t)
   apply s (TListComp tt tts t) = TListComp (apply s tt) (apply s tts) (apply s t)
@@ -136,7 +131,7 @@ instance subTypeTree :: Substitutable TypeTree where
   ftv (TPrefixOp t)  = ftv t
   ftv (TIfExpr _ _ _ t)  = ftv t
   ftv (TArithmSeq _ _ _ t) = ftv t
-  ftv (TLetExpr _ _ _ t)  = ftv t
+  ftv (TLetExpr _ _ t)  = ftv t
   ftv (TLambda _ _ t)  = ftv t
   ftv (TApp _ _ t)  = ftv t
   ftv (TListComp _ _ t) = ftv t
@@ -206,6 +201,8 @@ occursCheck a t = a `Set.member` ftv t
 compose :: Subst -> Subst -> Subst
 compose s1 s2 = map (apply s1) s2 `Map.union` s1
 
+envUnion :: TypeEnv -> TypeEnv -> TypeEnv 
+envUnion (TypeEnv a) (TypeEnv b) = TypeEnv $ a `Map.union` b
 
 instantiate ::  Scheme -> Infer Type
 instantiate (Forall as t) = do
@@ -259,6 +256,13 @@ inferType env exp = do
   let t' = extractType t
   return $ Tuple s t'
 
+inferBinding :: TypeEnv -> Binding -> Expr -> Infer (Tuple3 Subst TypeBinding TypeTree)
+inferBinding env bin expr = do 
+  Tuple sExpr tExpr <- infer env expr
+  Tuple sBin tBin   <- extractBinding bin
+  s <- unify (extractBindingType tBin) (extractType tExpr)
+  return $ tuple3 s tBin tExpr
+
 infer :: TypeEnv -> Expr -> Infer (Tuple Subst TypeTree)
 infer env ex = case ex of
 
@@ -307,17 +311,21 @@ infer env ex = case ex of
     let s' = sq `compose` s
     return $ Tuple s' $ apply s' $ TListComp t tq (AD (TList (extractType t)))
 
-  LetExpr bin e1 e2 -> do
-    (Tuple s1 t1) <- infer env e1
-    (Tuple list typ) <- extractBinding bin
-    s2 <- unify (extractBindingType typ) (extractType t1)
-    let env' = apply (s1 `compose` s2) env
-        t'   = generalize env' (apply (s1 `compose` s2) (extractType t1))
-        env'' = apply s2 (foldr (\a b -> extend b a) env' list)
-    (Tuple s3 t2) <- infer env'' e2
-    let sC = (s1 `compose` s2 `compose` s3)
-    return (Tuple sC $ apply sC (TLetExpr typ t1 t2 (extractType t2)))
-
+  --TODO: Check soundness
+  LetExpr bindings expr -> case bindings of 
+    Nil -> do 
+      (Tuple s t) <- infer env expr
+      return $ Tuple s $ apply s (TLetExpr Nil t (extractType t))
+    Cons (Tuple bin e) rest -> do
+      (Tuple s1 t1)    <- infer env e
+      (Tuple list typ) <- extractBinding bin
+      s2 <- unify (extractBindingType typ) (extractType t1)
+      let env' = apply (s1 `compose` s2) env
+          t'   = generalize env' (apply (s1 `compose` s2) (extractType t1))
+          env'' = apply s2 (foldr (\a b -> extend b a) env' list)    
+      (Tuple s3 t2) <- infer env'' (LetExpr rest expr)
+      let sC = (s1 `compose` s2 `compose` s3)
+      return $ Tuple sC (apply sC t2)
 
   IfExpr cond tr fl -> do
     tv <- fresh
@@ -386,7 +394,6 @@ infer env ex = case ex of
     (Tuple s (TApp tt (Cons tt1 (Cons tt2 Nil)) t)) <- infer env (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))
     return $ Tuple s (TBinary (extractType tt) tt1 tt2 t)
 
-
   List (Cons e1 xs) -> do
     (Tuple s1 (TListTree ltt (AD (TList t1)))) <- infer env (List xs)
     (Tuple s2 t2) <- infer (apply s1 env) e1
@@ -440,9 +447,7 @@ inferQuals env (Cons x rest) = do
   Tuple s  (Tuple t  env1) <- inferQual env x
   Tuple sr (Tuple tr env2) <- inferQuals (apply s env1) rest
   let s' = s `compose` sr
-  return $ Tuple s' $ Tuple (t `Cons` tr) (foo env2 env1)
-  where 
-    foo (TypeEnv a) (TypeEnv b) = TypeEnv $ a `Map.union` b
+  return $ Tuple s' $ Tuple (t `Cons` tr) (envUnion env2 env1)
 
 inferOp :: TypeEnv -> Op -> Infer (Tuple Subst Type)
 inferOp env op = do
@@ -675,16 +680,17 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
   f err (PrefixOp _) = TPrefixOp (TypeError err)
   f err (IfExpr e1 e2 e3) = TIfExpr (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (buildPartiallyTypedTree env e3) (TypeError err)
   f err (ArithmSeq e1 e2 e3) = TArithmSeq (buildPartiallyTypedTree env e1) ((buildPartiallyTypedTree env) <$> e2) ((buildPartiallyTypedTree env) <$> e3) (TypeError err)
-  f err (LetExpr b1 e1 e2) =let f env' =  TLetExpr (g b1) (buildPartiallyTypedTree env' e1) (buildPartiallyTypedTree env' e2) (TypeError err) in
-                        case getTypEnv b1 env of
-                          Nothing -> f env
-                          Just env' -> f env'
+  f err (LetExpr bin expr) = let 
+    tup   = buildPartiallyTypedTreeBindings env bin
+    env'  = fst tup
+    binds = snd tup in TLetExpr binds (buildPartiallyTypedTree env' expr) (TypeError err)
+
   f err (Lambda bs e) = let f env' = TLambda (map g bs) (buildPartiallyTypedTree env' e) (TypeError err) in
                     case getTypEnvFromList bs env of
                           Nothing -> f env
                           Just env' -> f env'
   f err (App e es) = TApp (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTree env) es) (TypeError err)
-  --TODO: make correct
+
   f err (ListComp e es) = TListComp (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTreeQual err env) es) (TypeError err)
   f err (Unary op e) = TUnary (typeOP op) (buildPartiallyTypedTree env e) (TypeError err)
 
@@ -705,6 +711,16 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
     Gen bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
       TGen (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
     Guard expr   -> TGuard (buildPartiallyTypedTree env expr) (TypeError err) 
+
+  buildPartiallyTypedTreeBindings :: TypeEnv -> List (Tuple Binding Expr) -> Tuple TypeEnv (List (Tuple TypeBinding TypeTree))
+  buildPartiallyTypedTreeBindings env binds = case binds of 
+    Nil                   -> Tuple env Nil 
+    Cons (Tuple b e) rest -> let
+      t     = buildPartiallyTypedTree env e 
+      env'  = fromMaybe env (getTypEnv b env)
+      env'' = envUnion env env' in 
+        case buildPartiallyTypedTreeBindings env'' rest of 
+          Tuple envR rest -> Tuple envR $ (Tuple (g b) t) : rest
 
 eqScheme :: Scheme -> Scheme -> Boolean
 eqScheme (Forall l1 t1) (Forall l2 t2)
@@ -780,12 +796,11 @@ helptxToABC tt = go tt
       tt3' <- mapM' helptxToABC tt3
       t'   <- helpTypeToABC t
       return $ TArithmSeq tt1' tt2' tt3' t'        
-    go (TLetExpr tb tt1 tt2 t) = do
-      tb' <- helpBindingToABC tb
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      t' <- helpTypeToABC t
-      return $ TLetExpr tb' tt1' tt2' t'
+    go (TLetExpr bin tt t) = do
+      bin' <- mapM (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
+      tt'  <- helptxToABC tt
+      t'   <- helpTypeToABC t
+      return $ TLetExpr bin' tt' t'
     go (TLambda tbs tt t) = do
       tbs' <- mapM helpBindingToABC tbs
       tt' <- helptxToABC tt

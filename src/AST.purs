@@ -1,14 +1,9 @@
 module AST where
 
-import Prelude (class Show, class Eq, class Ord, class Bounded, top, bottom, show, (+), (-), (>), (++), ($), (<$>), (<<<), (==), (&&),eq, compare,Ordering(..))
-import Data.List (List(Nil, Cons), (:), singleton, toList)
-import Data.Maybe
-import Data.Enum
-import Data.Either
-import Data.Tuple
-import Control.Bind (join)
-import Control.Apply (lift2)
-import Data.String (fromChar, toChar)
+import Prelude (class Show, class Eq, class Ord, show, (++))
+import Data.List (List)
+import Data.Maybe (Maybe)
+import Data.Tuple (Tuple)
 
 -- | Operators
 -- |
@@ -52,7 +47,7 @@ data Expr = Atom Atom
           | PrefixOp Op
           | IfExpr Expr Expr Expr
           | ArithmSeq Expr (Maybe Expr) (Maybe Expr)
-          | LetExpr Binding Expr Expr
+          | LetExpr (List (Tuple Binding Expr)) Expr
           | Lambda (List Binding) Expr
           | App Expr (List Expr)
           | ListComp Expr (List (ExprQual))          
@@ -79,7 +74,7 @@ data TypeTree
           | TPrefixOp                               Type
           | TIfExpr TypeTree TypeTree TypeTree      Type
           | TArithmSeq TypeTree (Maybe TypeTree) (Maybe TypeTree) Type
-          | TLetExpr TypeBinding TypeTree TypeTree  Type
+          | TLetExpr (List (Tuple TypeBinding TypeTree)) TypeTree  Type
           | TLambda (List TypeBinding) TypeTree     Type
           | TApp TypeTree (List TypeTree)           Type
           | TListComp TypeTree (List TypeQual) Type
@@ -97,7 +92,7 @@ data IndexTree
           | IPrefixOp                              Int
           | IIfExpr IndexTree IndexTree IndexTree  Int
           | IArithmSeq IndexTree (Maybe IndexTree) (Maybe IndexTree) Int
-          | ILetExpr IBinding IndexTree IndexTree  Int
+          | ILetExpr (List (Tuple IBinding IndexTree)) IndexTree  Int
           | ILambda (List IBinding) IndexTree      Int
           | IApp IndexTree (List IndexTree)        Int
           | IListComp IndexTree (List IndexQual) Int
@@ -249,7 +244,7 @@ instance showExpr :: Show Expr where
     PrefixOp op     -> "PrefixOp " ++ show op
     IfExpr ce te ee  -> "IfExpr (" ++ show ce ++ ") (" ++ show te ++ ") (" ++ show ee ++ ")"
     ArithmSeq s by e -> "ArithmSeq (" ++ show s ++ ")" ++ show by ++ ".." ++ show e ++ ")"
-    LetExpr b l e   -> "LetExpr (" ++ show b ++ ") (" ++ show l ++ ") (" ++ show e ++ ")"
+    LetExpr b e   -> "LetExpr (" ++ show b ++ ") (" ++ show e ++ ")"
     Lambda binds body -> "Lambda (" ++ show binds ++ ") (" ++ show body ++ ")"
     App func args   -> "App (" ++ show func ++ ") (" ++ show args ++ ")"
     ListComp expr quals -> "ListComp (" ++ show expr ++ ")" ++ "(" ++ show quals ++ "))"
@@ -307,7 +302,7 @@ instance showTypeTree :: Show TypeTree where
   show (TPrefixOp t) = "(TPrefixOp " ++ show t ++ ")"
   show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show tt3 ++ " " ++ show t ++ ")"
   show (TArithmSeq s b e t) = "(TArithmSeq " ++ show s ++ " " ++ show b ++ " " ++ show e ++ ".." ++ show t ++ ")"
-  show (TLetExpr b tt1 tt2 t) = "(TLetExpr " ++ show b ++ " " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show t ++ ")"
+  show (TLetExpr bin tt t) = "(TLetExpr " ++ show bin ++ " " ++ show tt ++ " " ++ show t ++ ")"
   show (TLambda lb tt t ) = "(TLambda " ++ show lb ++ " " ++ show tt ++ " " ++ show t ++ ")"
   show (TApp tt1 tl t) = "(TApp " ++ show tt1 ++ " (" ++ show tl ++ ") " ++ show t ++ ")"
   show (TListComp e qs t) = "(TListComp " ++ show e ++ " (" ++ show qs ++ ") " ++ show t ++ ")"
@@ -329,7 +324,7 @@ extractType (TSectR _ _ t)       = t
 extractType (TPrefixOp t)        = t
 extractType (TIfExpr _ _ _ t)    = t
 extractType (TArithmSeq _ _ _ t) = t
-extractType (TLetExpr _ _ _ t)   = t
+extractType (TLetExpr _ _ t)     = t
 extractType (TLambda _ _ t)      = t
 extractType (TApp _ _ t)         = t
 extractType (TListComp _ _ t)    = t
@@ -345,7 +340,7 @@ extractIndex (ISectR _ _ i)       = i
 extractIndex (IPrefixOp i)        = i
 extractIndex (IIfExpr _ _ _ i)    = i
 extractIndex (IArithmSeq _ _ _ i) = i
-extractIndex (ILetExpr _ _ _ i)   = i
+extractIndex (ILetExpr _ _ i)     = i
 extractIndex (ILambda _ _ i)      = i
 extractIndex (IApp _ _ i)         = i
 extractIndex (IListComp _ _ i)    = i

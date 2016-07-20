@@ -13,7 +13,7 @@ import Data.List (List(Nil, Cons), singleton, fromList, toList, length, zip, (..
 import Data.Foreign (unsafeFromForeign, isUndefined)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Maybe.Unsafe (fromJust)
-import Data.Tuple (Tuple(..), fst)
+import Data.Tuple (Tuple(..), fst, snd)
 
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
@@ -513,12 +513,12 @@ indexExpr (ArithmSeq e1 e2 e3) = do
                   i3 <- mapM' indexExpr e3
                   i <- fresh
                   return $ IArithmSeq i1 i2 i3 i                  
-indexExpr (LetExpr b e1 e2) = do
-                  ib <- indexBinding b
-                  i1 <- indexExpr e1
-                  i2 <- indexExpr e2
-                  i <- fresh
-                  return $ ILetExpr ib i1 i2 i
+indexExpr (LetExpr bin e) = do
+                  ib <- mapM (indexBinding <<< fst) bin
+                  ie <- mapM (indexExpr <<< snd) bin
+                  i2 <- indexExpr e
+                  i  <- fresh
+                  return $ ILetExpr (zip ib ie) i2 i
 indexExpr (Lambda bs e) = do
                  ibs <- mapM indexBinding bs
                  i <- indexExpr e

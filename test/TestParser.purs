@@ -3,6 +3,7 @@ module Test.Parser where
 import Prelude (class Eq, class Show, Unit, (++), ($), bind, show, unit, return, (==), (<<<), negate)
 import Data.Either (Either(..))
 import Data.List (List(..), toList, singleton)
+import Data.Tuple (Tuple(..))
 import Data.Maybe (Maybe(..))
 
 import Text.Parsing.Parser  (Parser, ParseError(ParseError), runParser)
@@ -242,20 +243,10 @@ runTests = do
   test "sectL3" expression "([1] ++)" (SectL (List $ toList [aint 1]) Append)
   test "sectL4" expression "(   ( 2 +  2 )  <= )" (SectL (Binary Add (aint 2) (aint 2)) Leq)
 
-  test "let1" expression "let x = 1 in x + x" (LetExpr (Lit (Name "x")) (aint 1) (Binary Add (aname "x") (aname "x")))
-  test "let2" expression "letty + let x = 1 in x" (Binary Add (aname "letty") (LetExpr (Lit (Name "x")) (aint 1) (aname "x")))
-  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z"
-    (LetExpr
-      (Lit (Name "x"))
-      (LetExpr
-        (Lit (Name "y"))
-        (aint 1)
-        (aname "y"))
-      (LetExpr
-        (Lit (Name "z"))
-        (aint 2)
-        (Binary Add (aname "x") (aname "z"))))
-
+  test "let1" expression "let x = 1 in x + x" (LetExpr (Cons (Tuple (Lit (Name "x")) (aint 1)) Nil) (Binary Add (aname "x") (aname "x")))
+  test "let2" expression "letty + let x = 1 in x" (Binary Add (aname "letty") (LetExpr (Cons (Tuple (Lit (Name "x")) (aint 1)) Nil) (aname "x")))
+  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z" (LetExpr (Cons (Tuple (Lit (Name "x")) (LetExpr (Cons (Tuple (Lit (Name "y")) (Atom (AInt 1))) (Nil)) (Atom (Name "y")))) (Nil)) (LetExpr (Cons (Tuple (Lit (Name "z")) (Atom (AInt 2))) (Nil)) (Binary Add (Atom (Name "x")) (Atom (Name "z")))))
+  
   test "consLit1" binding "(x:xs)" (ConsLit (Lit (Name "x")) (Lit (Name "xs")))
   test "consLit2" binding "(x:(y:zs))" (ConsLit (Lit (Name "x")) (ConsLit (Lit (Name "y")) (Lit (Name "zs"))))
   test "consLit3" binding "(  x  :  (  666  :  zs  )   )" (ConsLit (Lit (Name "x")) (ConsLit (Lit (AInt 666)) (Lit (Name "zs"))))
