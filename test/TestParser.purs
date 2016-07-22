@@ -6,18 +6,19 @@ import Data.List (List(..), toList, singleton)
 import Data.Tuple (Tuple(..))
 import Data.Maybe (Maybe(..))
 
-import Text.Parsing.Parser  (Parser, ParseError(ParseError), runParser)
+import Text.Parsing.Parser (ParseError(ParseError))
 
 import Control.Monad.Writer (Writer, tell)
 
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..), Qual(..), ExprQual)
-import Parser (expression, atom, definitions, definition, binding, variable, bool, int)
+import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..), Qual(..))
+import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent)
+import IndentParser (IndentParser)
 
 tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton
 
-test :: forall a. (Show a, Eq a) => String -> Parser String a -> String -> a -> Writer (List String) Unit
-test name p input expected = case runParser input p of
+test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Writer (List String) Unit
+test name p input expected = case runParserIndent p input of
   Left  (ParseError { position = p, message = m }) -> tell' $ "Parse fail (" ++ name ++ "): " ++ show p ++ " " ++ m
   Right result           -> 
     if result == expected
@@ -25,13 +26,13 @@ test name p input expected = case runParser input p of
       else tell' $ "Parse fail (" ++ name ++ "): " ++ show result ++ " /= " ++ show expected
 
 aint :: Int -> Expr
-aint i = Atom $ AInt i
+aint = Atom <<< AInt
 
 abool :: Boolean -> Expr
 abool = Atom <<< Bool
 
 aname :: String -> Expr
-aname s = Atom $ Name s
+aname = Atom <<< Name
 
 runTests :: Writer (List String) Unit
 runTests = do
@@ -246,7 +247,11 @@ runTests = do
   test "let1" expression "let x = 1 in x + x" (LetExpr (Cons (Tuple (Lit (Name "x")) (aint 1)) Nil) (Binary Add (aname "x") (aname "x")))
   test "let2" expression "letty + let x = 1 in x" (Binary Add (aname "letty") (LetExpr (Cons (Tuple (Lit (Name "x")) (aint 1)) Nil) (aname "x")))
   test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z" (LetExpr (Cons (Tuple (Lit (Name "x")) (LetExpr (Cons (Tuple (Lit (Name "y")) (Atom (AInt 1))) (Nil)) (Atom (Name "y")))) (Nil)) (LetExpr (Cons (Tuple (Lit (Name "z")) (Atom (AInt 2))) (Nil)) (Binary Add (Atom (Name "x")) (Atom (Name "z")))))
-  
+  test "let4" expression "let { x = 1; y = 2; z = 3} in x + y + z"              (LetExpr (Cons (Tuple (Lit (Name "x")) (Atom (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom (AInt 3))) (Nil)))) (Binary Add (Binary Add (Atom (Name "x")) (Atom (Name "y"))) (Atom (Name "z"))))
+  test "let5" expression "let x = 1; y = 2; z = 3 in x + y + z"                 (LetExpr (Cons (Tuple (Lit (Name "x")) (Atom (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom (AInt 3))) (Nil)))) (Binary Add (Binary Add (Atom (Name "x")) (Atom (Name "y"))) (Atom (Name "z"))))
+  test "let6" expression "let x = 1\n    y = 2\n    z = 3 in x + y + z"         (LetExpr (Cons (Tuple (Lit (Name "x")) (Atom (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom (AInt 3))) (Nil)))) (Binary Add (Binary Add (Atom (Name "x")) (Atom (Name "y"))) (Atom (Name "z"))))
+  test "let7" expression "let {\n  x = 1 ;\n  y = 2 ;\n  z = 3\n} in x + y + z" (LetExpr (Cons (Tuple (Lit (Name "x")) (Atom (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom (AInt 3))) (Nil)))) (Binary Add (Binary Add (Atom (Name "x")) (Atom (Name "y"))) (Atom (Name "z"))))
+
   test "consLit1" binding "(x:xs)" (ConsLit (Lit (Name "x")) (Lit (Name "xs")))
   test "consLit2" binding "(x:(y:zs))" (ConsLit (Lit (Name "x")) (ConsLit (Lit (Name "y")) (Lit (Name "zs"))))
   test "consLit3" binding "(  x  :  (  666  :  zs  )   )" (ConsLit (Lit (Name "x")) (ConsLit (Lit (AInt 666)) (Lit (Name "zs"))))

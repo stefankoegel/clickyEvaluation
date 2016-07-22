@@ -2,14 +2,14 @@ module Test.TypeChecker where
 
 import AST (AD(TList, TTuple), Atom(AInt, Name, Char), Binding(Lit, ConsLit, ListLit, NTupleLit), Definition(Def), Expr(Atom, List, SectR, App, Binary, PrefixOp, Lambda, NTuple, LetExpr, SectL), Op(Power, Colon, Add, Append), TVar(TVar), Type(TypCon, TypVar, AD, TypArr), TypeError(InfiniteType, UnificationFail, UnknownError))
 import TypeChecker (Subst, Infer, TypeEnv, Scheme(Forall), inferGroup, inferType, inferDef, prettyPrintType, emptyTyenv, runInfer, typeProgramn, eqScheme)
-import Parser (expression, definition)
+import Parser (expression, definition, runParserIndent)
 
 import Prelude (Unit, bind, ($), show, (==), (++))
 import Data.Either (Either(..))
 import Data.List (List(..), toList)
 import Data.Tuple (Tuple(..))
 
-import Text.Parsing.Parser (ParseError, runParser)
+import Text.Parsing.Parser (ParseError)
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
@@ -19,7 +19,7 @@ import Control.Monad.State
 testInfer:: forall a  eff. String -> a -> (TypeEnv -> a -> Infer (Tuple Subst Type))
  -> Either TypeError Scheme -> Eff (console :: CONSOLE | eff ) Unit
 testInfer name input f expected
-  = test name  expected $ runInfer $ f emptyTyenv input
+  = test name expected $ runInfer $ f emptyTyenv input
 
 testProgramm:: forall eff. String -> List Definition -> Expr
  -> Either TypeError Scheme -> Eff (console :: CONSOLE | eff ) Unit
@@ -55,18 +55,18 @@ out::forall eff. String -> Eff (console :: CONSOLE | eff ) Unit
 out s = log s
 
 parseExp:: String -> Either ParseError Expr
-parseExp exp = runParser exp expression
+parseExp = runParserIndent expression
 
 parseDef:: String -> Either ParseError Definition
-parseDef def = runParser def definition
+parseDef = runParserIndent definition
 
 typeStr:: String -> Either TypeError Scheme
-typeStr expS = case runParser expS expression of
+typeStr expS = case runParserIndent expression expS of
   Right exp -> runInfer $ inferType emptyTyenv exp
   Left _ -> Left $ UnknownError "Parse Error"
 
 typeStrPre:: String -> Either TypeError Scheme
-typeStrPre expS = case runParser expS expression of
+typeStrPre expS = case runParserIndent expression expS of
   Right exp -> typeProgramn Test.Parser.parsedPrelude exp
   Left _ -> Left $ UnknownError "Parse Error"
 

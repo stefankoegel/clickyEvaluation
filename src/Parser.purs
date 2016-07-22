@@ -1,25 +1,24 @@
 module Parser where
 
-import Prelude (class Show, show, Unit, void, class Monad, bind, return, ($), (<$>), (<<<), (+), (*), (++), id, flip, negate)
+import Prelude (Unit, void, class Monad, bind, return, ($), (<$>), (<<<), (+), (*), (++), id, flip, negate)
 import Data.String as String
 import Data.Foldable (foldl)
 import Data.List (List(..), many, toList, concat, elemIndex, fromList)
 import Data.Maybe (Maybe(..), maybe)
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), fst)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
 import Data.Array (modifyAt, snoc)
+import Data.Either (Either)
 
 import Control.Alt ((<|>))
 import Control.Apply ((<*), (*>), lift2)
 import Control.Lazy (fix)
-import Control.Monad.State (runState, evalState) 
-import Data.Tuple (fst)
-import Data.Either (Either(..))
+import Control.Monad.State (runState) 
 
-import Text.Parsing.Parser (ParseError, ParserT, PState(..), runParser, runParserT, fail)
+import Text.Parsing.Parser (ParseError, ParserT, PState(..), runParserT, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
-import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf, anyChar)
+import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
 import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
 import Text.Parsing.Parser.Pos (initialPos)
@@ -35,12 +34,24 @@ import IndentParser
 many1 :: forall s m a. (Monad m) => ParserT s m a -> ParserT s m (List a)
 many1 p = lift2 Cons p (many p)
 
+--skips whitespaces
+skipSpaces :: forall m. (Monad m) => ParserT String m Unit
+skipSpaces = void $ many $ oneOf [' ', '\t']
+
+--skips whitespaces and linebreaks
+skipWhite :: forall m. (Monad m) => ParserT String m Unit 
+skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
+
+--lexeme parser (skips trailing whitespaces and linebreaks)
+ilexe :: forall a m. (Monad m) => ParserT String m a -> ParserT String m a
+ilexe p = do
+  a <- p
+  skipWhite
+  return a
+
 ---------------------------------------------------------
 -- Parsers for Primitives
 ---------------------------------------------------------
-
-skipSpaces :: forall m. (Monad m) => ParserT String m Unit
-skipSpaces = void $ many $ oneOf [' ', '\t']
 
 integer :: forall m. (Monad m) => ParserT String m Int
 integer = convert <$> many1 digit
@@ -197,7 +208,7 @@ spaced :: forall a m. (Monad m) => ParserT String m a -> ParserT String m a
 spaced p = PC.try $ PC.between skipSpaces skipSpaces p
 
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
-base :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m Expr
+base :: IndentParser String Expr -> IndentParser String Expr
 base expr =
       PC.try (tuplesOrBrackets expr)
   <|> PC.try (lambda expr)
@@ -209,14 +220,14 @@ base expr =
   <|> (Atom <$> atom)
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
-syntax :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m Expr
+syntax :: IndentParser String Expr -> IndentParser String Expr
 syntax expr = 
       PC.try (ifThenElse expr)
   <|> PC.try (letExpr expr) 
   <|> applicationOrSingleExpression expr
 
 -- | Parser for function application or single expressions
-applicationOrSingleExpression :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m Expr
+applicationOrSingleExpression :: IndentParser String Expr -> IndentParser String Expr
 applicationOrSingleExpression expr = do
   e <- (base expr)
   mArgs <- PC.optionMaybe (PC.try $ skipSpaces *> ((PC.try (base expr)) `PC.sepEndBy1` skipSpaces))
@@ -251,7 +262,7 @@ tuplesOrBrackets expr = do
     Just es -> return $ NTuple (Cons e es)
 
 -- | Parser for operator sections
-section :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m Expr
+section :: IndentParser String Expr -> IndentParser String Expr
 section expr = do
   char '('
   skipSpaces
@@ -346,36 +357,45 @@ lambda expr = do
   body <- expr
   return $ Lambda binds body
 
+-- | Parser for let expression
+letExpr :: IndentParser String Expr -> IndentParser String Expr
+letExpr expr = PC.try (letExpr' expr) <|> do 
+  ilexe $ string "let"
+  binds <- block (bindingItem expr)
+  ilexe $ string "in"
+  body  <- ilexe expr
+  return $ LetExpr binds body
+
 -- | Parse a let expression with optional curly brackets
-letExpr :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m Expr
-letExpr expr = do
-  string "let" *> skipSpaces
-  binds <- PC.between (char '{') (char '}') bindings <|> bindings
-  skipSpaces *> string "in" *> skipSpaces
-  e <- expr
-  skipSpaces
+letExpr' :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m Expr
+letExpr' expr = do
+  ilexe $ string "let"
+  binds <- PC.try (PC.between (ilexe (char '{')) (ilexe (char '}')) bindings) <|> bindings
+  ilexe $ string "in"
+  e <- ilexe expr
   return $ LetExpr binds e
   where
     bindings :: ParserT String m (List (Tuple Binding Expr))
-    bindings = (bindingItem expr) `PC.sepBy` (PC.try $ skipSpaces *> char ';' *> skipSpaces) 
+    bindings = (bindingItem expr) `PC.sepBy` (PC.try $ ilexe (char ';')) 
 
 bindingItem :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m (Tuple Binding Expr)
 bindingItem expr = do
-  skipSpaces
-  b <- binding
-  skipSpaces *> char '=' *> skipSpaces
-  e <- expr
-  skipSpaces
+  b <- ilexe binding
+  ilexe $ char '='
+  e <- ilexe expr
   return $ Tuple b e
 
 -- | Parse an arbitrary expression
-expression :: forall m. (Monad m) => ParserT String m Expr
+expression :: IndentParser String Expr
 expression = do
   whiteSpace
   fix $ \expr -> buildExprParser operatorTable (syntax expr)
 
+runParserIndent :: forall a. IndentParser String a -> String -> Either ParseError a
+runParserIndent p src = fst $ flip runState initialPos $ runParserT (PState {input: src,position: initialPos}) p
+
 parseExpr :: String -> Either ParseError Expr
-parseExpr input = runParser input expression
+parseExpr = runParserIndent expression
 
 ---------------------------------------------------------
 -- Parsers for Bindings
@@ -425,7 +445,7 @@ binding = fix $ \bnd ->
 -- Parsers for Definitions
 ---------------------------------------------------------
 
-definition :: forall m. (Monad m) => ParserT String m Definition
+definition :: IndentParser String Definition
 definition = do
   defName <- name
   skipSpaces
@@ -435,45 +455,10 @@ definition = do
   body <- expression
   return $ Def defName binds body
 
-definitions :: forall m. (Monad m) => ParserT String m (List Definition)
+definitions :: IndentParser String (List Definition)
 definitions = do
   whiteSpace
   definition `PC.sepEndBy` whiteSpace
 
 parseDefs :: String -> Either ParseError (List Definition)
-parseDefs input = runParser input definitions
-
-----------------------------------------------------------------------
--- Multiline Parsing
-----------------------------------------------------------------------
-
---skips whitespaces and linebreaks
-skipWhite :: forall m. (Monad m) => ParserT String m Unit 
-skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
-
---lexeme parser (skips trailing whitespaces and linebreaks)
-ilexe :: forall a. IndentParser String a -> IndentParser String a
-ilexe p = do
-  a <- p
-  skipWhite
-  return a
-
-testIndent :: forall a. (Show a) => IndentParser String a -> String -> String
-testIndent p src = case fst $ flip runState initialPos $ runParserT (PState {input: src,position: initialPos}) p of
-  Right r -> "parse success : " ++ show r 
-  Left  l -> "parse fail    : " ++ show l
-
-testLet = testIndent (letExprI expression) "let\n  x = 1\n  y = 2 in x + y"
-
--- | Parser for let expression
-letExprI :: IndentParser String Expr -> IndentParser String Expr
-letExprI expr = PC.try (letExpr expr) <|> do 
-  do 
-    ilexe $ string "let"
-    binds <- block (ilexe (bindingItem expr))
-    ilexe $ string "in"
-    body <- ilexe expr
-    return $ LetExpr binds body
-
-parseExprI :: String -> Either ParseError Expr
-parseExprI src = fst $ flip runState initialPos $ runParserT (PState {input: src,position: initialPos}) expression
+parseDefs = runParserIndent definitions
