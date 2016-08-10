@@ -1785,17 +1785,6 @@ var PS = {};
           };
       };
   };
-  var deleteAt = function (v) {
-      return function (v1) {
-          if (v === 0 && v1 instanceof Cons) {
-              return new Data_Maybe.Just(v1.value1);
-          };
-          if (v1 instanceof Cons) {
-              return Prelude["<$>"](Data_Maybe.functorMaybe)(Cons.create(v1.value0))(deleteAt(v - 1)(v1.value1));
-          };
-          return Data_Maybe.Nothing.value;
-      };
-  };
   var $$delete = function (dictEq) {
       return deleteBy(Prelude["=="](dictEq));
   };
@@ -1853,7 +1842,6 @@ var PS = {};
   exports["concat"] = concat;
   exports["reverse"] = reverse;
   exports["updateAt"] = updateAt;
-  exports["deleteAt"] = deleteAt;
   exports["findIndex"] = findIndex;
   exports["elemIndex"] = elemIndex;
   exports["index"] = index;
@@ -3450,24 +3438,6 @@ var PS = {};
   var showTVar = new Prelude.Show(function (v) {
       return "(TVar " + (Prelude.show(Prelude.showString)(v.value0) + ")");
   });
-  var showQualTree = function (dictShow) {
-      return function (dictShow1) {
-          return function (dictShow2) {
-              return new Prelude.Show(function (v) {
-                  if (v instanceof TGen) {
-                      return "TGen (" + (Prelude.show(dictShow)(v.value0) + (" " + (Prelude.show(dictShow1)(v.value1) + (" " + (Prelude.show(dictShow2)(v.value2) + ")")))));
-                  };
-                  if (v instanceof TLet) {
-                      return "TLet (" + (Prelude.show(dictShow)(v.value0) + (" " + (Prelude.show(dictShow1)(v.value1) + (" " + (Prelude.show(dictShow2)(v.value2) + ")")))));
-                  };
-                  if (v instanceof TGuard) {
-                      return "TGuard (" + (Prelude.show(dictShow1)(v.value0) + (" " + (Prelude.show(dictShow2)(v.value1) + ")")));
-                  };
-                  throw new Error("Failed pattern match at AST line 236, column 3 - line 237, column 3: " + [ v.constructor.name ]);
-              });
-          };
-      };
-  };
   var showQual = function (dictShow) {
       return function (dictShow1) {
           return new Prelude.Show(function (q) {
@@ -3483,25 +3453,7 @@ var PS = {};
               throw new Error("Failed pattern match at AST line 230, column 12 - line 235, column 1: " + [ q.constructor.name ]);
           });
       };
-  };
-  var showPath = new Prelude.Show(function (p) {
-      if (p instanceof Nth) {
-          return "(Nth " + (Prelude.show(Prelude.showInt)(p.value0) + (" " + (Prelude.show(showPath)(p.value1) + ")")));
-      };
-      if (p instanceof Fst) {
-          return "(Fst " + (Prelude.show(showPath)(p.value0) + ")");
-      };
-      if (p instanceof Snd) {
-          return "(Snd " + (Prelude.show(showPath)(p.value0) + ")");
-      };
-      if (p instanceof Thrd) {
-          return "(Thrd " + (Prelude.show(showPath)(p.value0) + ")");
-      };
-      if (p instanceof End) {
-          return "End";
-      };
-      throw new Error("Failed pattern match at AST line 173, column 12 - line 180, column 1: " + [ p.constructor.name ]);
-  });
+  }; 
   var showOp = new Prelude.Show(function (op) {
       if (op instanceof Composition) {
           return "Composition";
@@ -3678,66 +3630,6 @@ var PS = {};
           return "(TTuple (" + (Prelude.show(Data_List.showList(showType))(v.value0) + "))");
       };
       throw new Error("Failed pattern match at AST line 284, column 3 - line 285, column 3: " + [ v.constructor.name ]);
-  });
-  var showTypeBinding = new Prelude.Show(function (v) {
-      if (v instanceof TLit) {
-          return "(TLit " + (Prelude.show(showType)(v.value0) + ")");
-      };
-      if (v instanceof TConsLit) {
-          return "(TConsLit " + (Prelude.show(showTypeBinding)(v.value0) + (" " + (Prelude.show(showTypeBinding)(v.value1) + (" " + (Prelude.show(showType)(v.value2) + ")")))));
-      };
-      if (v instanceof TListLit) {
-          return "(TListLit " + (Prelude.show(Data_List.showList(showTypeBinding))(v.value0) + (" " + (Prelude.show(showType)(v.value1) + ")")));
-      };
-      if (v instanceof TNTupleLit) {
-          return "(TNTupleLit " + (Prelude.show(Data_List.showList(showTypeBinding))(v.value0) + (" " + (Prelude.show(showType)(v.value1) + ")")));
-      };
-      throw new Error("Failed pattern match at AST line 316, column 3 - line 317, column 3: " + [ v.constructor.name ]);
-  });
-  var showTypeTree = new Prelude.Show(function (v) {
-      if (v instanceof TAtom) {
-          return "(TAtom " + (Prelude.show(showType)(v.value0) + ")");
-      };
-      if (v instanceof TListTree) {
-          return "(TListTree (" + (Prelude.show(Data_List.showList(showTypeTree))(v.value0) + (") " + (Prelude.show(showType)(v.value1) + ")")));
-      };
-      if (v instanceof TNTuple) {
-          return "(TNTuple (" + (Prelude.show(Data_List.showList(showTypeTree))(v.value0) + (") " + (Prelude.show(showType)(v.value1) + ")")));
-      };
-      if (v instanceof TBinary) {
-          return "(TBinary " + (Prelude.show(showType)(v.value0) + (" " + (Prelude.show(showTypeTree)(v.value1) + (" " + (Prelude.show(showTypeTree)(v.value2) + (" " + (Prelude.show(showType)(v.value3) + ")")))))));
-      };
-      if (v instanceof TUnary) {
-          return "(TUnary " + (Prelude.show(showType)(v.value0) + (" " + (Prelude.show(showTypeTree)(v.value1) + (" " + (Prelude.show(showType)(v.value2) + ")")))));
-      };
-      if (v instanceof TSectL) {
-          return "(TSectL " + (Prelude.show(showTypeTree)(v.value0) + (" " + (Prelude.show(showType)(v.value1) + (" " + (Prelude.show(showType)(v.value2) + ")")))));
-      };
-      if (v instanceof TSectR) {
-          return "(TSectR " + (Prelude.show(showType)(v.value0) + (" " + (Prelude.show(showTypeTree)(v.value1) + (" " + (Prelude.show(showType)(v.value2) + ")")))));
-      };
-      if (v instanceof TPrefixOp) {
-          return "(TPrefixOp " + (Prelude.show(showType)(v.value0) + ")");
-      };
-      if (v instanceof TIfExpr) {
-          return "(TIfExpr " + (Prelude.show(showTypeTree)(v.value0) + (" " + (Prelude.show(showTypeTree)(v.value1) + (" " + (Prelude.show(showTypeTree)(v.value2) + (" " + (Prelude.show(showType)(v.value3) + ")")))))));
-      };
-      if (v instanceof TArithmSeq) {
-          return "(TArithmSeq " + (Prelude.show(showTypeTree)(v.value0) + (" " + (Prelude.show(Data_Maybe.showMaybe(showTypeTree))(v.value1) + (" " + (Prelude.show(Data_Maybe.showMaybe(showTypeTree))(v.value2) + (".." + (Prelude.show(showType)(v.value3) + ")")))))));
-      };
-      if (v instanceof TLetExpr) {
-          return "(TLetExpr " + (Prelude.show(showTypeBinding)(v.value0) + (" " + (Prelude.show(showTypeTree)(v.value1) + (" " + (Prelude.show(showTypeTree)(v.value2) + (" " + (Prelude.show(showType)(v.value3) + ")")))))));
-      };
-      if (v instanceof TLambda) {
-          return "(TLambda " + (Prelude.show(Data_List.showList(showTypeBinding))(v.value0) + (" " + (Prelude.show(showTypeTree)(v.value1) + (" " + (Prelude.show(showType)(v.value2) + ")")))));
-      };
-      if (v instanceof TApp) {
-          return "(TApp " + (Prelude.show(showTypeTree)(v.value0) + (" (" + (Prelude.show(Data_List.showList(showTypeTree))(v.value1) + (") " + (Prelude.show(showType)(v.value2) + ")")))));
-      };
-      if (v instanceof TListComp) {
-          return "(TListComp " + (Prelude.show(showTypeTree)(v.value0) + (" (" + (Prelude.show(Data_List.showList(showQualTree(showTypeBinding)(showTypeTree)(showType)))(v.value1) + (") " + (Prelude.show(showType)(v.value2) + ")")))));
-      };
-      throw new Error("Failed pattern match at AST line 300, column 3 - line 301, column 3: " + [ v.constructor.name ]);
   });
   var pPrintOp = function (op) {
       if (op instanceof Composition) {
@@ -4221,11 +4113,9 @@ var PS = {};
   exports["eqExpr"] = eqExpr;
   exports["eqQual"] = eqQual;
   exports["eqBinding"] = eqBinding;
-  exports["showPath"] = showPath;
   exports["showOp"] = showOp;
   exports["showAtom"] = showAtom;
   exports["showQual"] = showQual;
-  exports["showQualTree"] = showQualTree;
   exports["showExpr"] = showExpr;
   exports["showBinding"] = showBinding;
   exports["showType"] = showType;
@@ -4237,8 +4127,6 @@ var PS = {};
   exports["eqAD"] = eqAD;
   exports["showTypeError"] = showTypeError;
   exports["eqTypeError"] = eqTypeError;
-  exports["showTypeTree"] = showTypeTree;
-  exports["showTypeBinding"] = showTypeBinding;
 })(PS["AST"] = PS["AST"] || {});
 (function(exports) {
   /* global exports, ace */
@@ -26000,6 +25888,12 @@ var PS = {};
     $('#typecheckbox').bootstrapSwitch('state', true);
     return {};
   };
+
+  exports.isChecked = function(checkbox) {
+    return function() {
+      return $(checkbox).prop('checked');
+    };
+  };
 })(PS["JSHelpers"] = PS["JSHelpers"] || {});
 (function(exports) {
   // Generated by psc version 0.8.5.0
@@ -26009,6 +25903,7 @@ var PS = {};
   var Control_Monad_Eff_JQuery = PS["Control.Monad.Eff.JQuery"];
   var DOM = PS["DOM"];
   var Prelude = PS["Prelude"];
+  exports["isChecked"] = $foreign.isChecked;
   exports["showTypes"] = $foreign.showTypes;
   exports["ctrlKeyPressed"] = $foreign.ctrlKeyPressed;
   exports["warnOnRefresh"] = $foreign.warnOnRefresh;
@@ -30869,14 +30764,14 @@ var PS = {};
               return Prelude["void"](Control_Monad_Eff.functorEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Web.makeDiv("Division by zero!")(Data_List.singleton("evalError")))(Prelude.flip(JSHelpers.prepend)(jq)));
           };
           if (err instanceof Evaluator.NoMatchingFunction) {
-              var $47 = Data_Foldable.any(Data_List.foldableList)(Prelude.booleanAlgebraBoolean)(missesArguments)(err.value1);
-              if ($47) {
+              var $45 = Data_Foldable.any(Data_List.foldableList)(Prelude.booleanAlgebraBoolean)(missesArguments)(err.value1);
+              if ($45) {
                   return Prelude["return"](Control_Monad_Eff.applicativeEff)(Prelude.unit);
               };
-              if (!$47) {
+              if (!$45) {
                   return Prelude["void"](Control_Monad_Eff.functorEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Web.makeDiv("No matching function!")(Data_List.singleton("evalError")))(Prelude.flip(JSHelpers.prepend)(jq)));
               };
-              throw new Error("Failed pattern match at Main line 195, column 32 - line 198, column 3: " + [ $47.constructor.name ]);
+              throw new Error("Failed pattern match at Main line 202, column 32 - line 205, column 3: " + [ $45.constructor.name ]);
           };
           return Prelude["return"](Control_Monad_Eff.applicativeEff)(Prelude.unit);
       };
@@ -30892,23 +30787,23 @@ var PS = {};
                               return Prelude.unit;
                           };
                           if (v instanceof Data_Maybe.Just) {
-                              var $52 = Evaluator.evalPath1(env)(v.value0)(expr);
-                              if ($52 instanceof Data_Either.Left) {
-                                  return displayEvalError($52.value0)(jq1)();
+                              var $50 = Evaluator.evalPath1(env)(v.value0)(expr);
+                              if ($50 instanceof Data_Either.Left) {
+                                  return displayEvalError($50.value0)(jq1)();
                               };
-                              if ($52 instanceof Data_Either.Right) {
-                                  var $54 = TypeChecker.checkForError(v.value0)(typeTree);
-                                  if ($54) {
+                              if ($50 instanceof Data_Either.Right) {
+                                  var $52 = TypeChecker.checkForError(v.value0)(typeTree);
+                                  if ($52) {
                                       return Prelude.unit;
                                   };
-                                  if (!$54) {
+                                  if (!$52) {
                                       return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_Eff_JQuery.addClass("clickable")(jq1))();
                                   };
-                                  throw new Error("Failed pattern match at Main line 188, column 23 - line 192, column 1: " + [ $54.constructor.name ]);
+                                  throw new Error("Failed pattern match at Main line 195, column 23 - line 199, column 1: " + [ $52.constructor.name ]);
                               };
-                              throw new Error("Failed pattern match at Main line 186, column 9 - line 192, column 1: " + [ $52.constructor.name ]);
+                              throw new Error("Failed pattern match at Main line 193, column 9 - line 199, column 1: " + [ $50.constructor.name ]);
                           };
-                          throw new Error("Failed pattern match at Main line 183, column 5 - line 192, column 1: " + [ v.constructor.name ]);
+                          throw new Error("Failed pattern match at Main line 190, column 5 - line 199, column 1: " + [ v.constructor.name ]);
                       };
                   };
               };
@@ -30960,50 +30855,27 @@ var PS = {};
                   return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Web.exprToJQuery(out))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v1))))(function () {
                       return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.append(v1)(v)))(function () {
                           return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.get(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff)))(function (v2) {
-                              var deleteHandler = function (v3) {
+                              var restoreHandler = function (v3) {
                                   return function (v4) {
                                       var es$prime = (function () {
-                                          var $69 = {};
-                                          for (var $70 in v2) {
-                                              if (v2.hasOwnProperty($70)) {
-                                                  $69[$70] = v2[$70];
+                                          var $67 = {};
+                                          for (var $68 in v2) {
+                                              if (v2.hasOwnProperty($68)) {
+                                                  $67[$68] = v2[$68];
                                               };
                                           };
-                                          $69.history = Data_Maybe.maybe(v2.history)(Prelude.id(Prelude.categoryFn))(Data_List.deleteAt(i)(v2.history));
-                                          return $69;
+                                          $67.history = Data_List.drop(i + 1 | 0)(v2.history);
+                                          $67.out = Data_Maybe.maybe(v2.out)(Prelude.id(Prelude.categoryFn))(Data_List["!!"](v2.history)(i));
+                                          return $67;
                                       })();
                                       return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_State_Trans.runStateT(showEvaluationState)(es$prime));
                                   };
                               };
-                              return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.create("<button></button>"))(Control_Monad_Eff_JQuery.setText("Delete")))(Control_Monad_Eff_JQuery.addClass("delete")))(Control_Monad_Eff_JQuery.on("click")(deleteHandler))))(function (v3) {
+                              return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.create("<button></button>"))(Control_Monad_Eff_JQuery.setText("Restore")))(Control_Monad_Eff_JQuery.addClass("restore")))(Control_Monad_Eff_JQuery.on("click")(restoreHandler))))(function (v3) {
                                   return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.create("<td></td>")))(function (v4) {
                                       return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.append(v3)(v4)))(function () {
                                           return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.append(v4)(v)))(function () {
-                                              var restoreHandler = function (v5) {
-                                                  return function (v6) {
-                                                      var es$prime = (function () {
-                                                          var $75 = {};
-                                                          for (var $76 in v2) {
-                                                              if (v2.hasOwnProperty($76)) {
-                                                                  $75[$76] = v2[$76];
-                                                              };
-                                                          };
-                                                          $75.history = Data_List.drop(i + 1 | 0)(v2.history);
-                                                          $75.out = Data_Maybe.maybe(v2.out)(Prelude.id(Prelude.categoryFn))(Data_List["!!"](v2.history)(i));
-                                                          return $75;
-                                                      })();
-                                                      return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_State_Trans.runStateT(showEvaluationState)(es$prime));
-                                                  };
-                                              };
-                                              return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.create("<button></button>"))(Control_Monad_Eff_JQuery.setText("Restore")))(Control_Monad_Eff_JQuery.addClass("restore")))(Control_Monad_Eff_JQuery.on("click")(restoreHandler))))(function (v5) {
-                                                  return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.create("<td></td>")))(function (v6) {
-                                                      return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.append(v5)(v6)))(function () {
-                                                          return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.append(v6)(v)))(function () {
-                                                              return Prelude["return"](Control_Monad_State_Trans.applicativeStateT(Control_Monad_Eff.monadEff))(v);
-                                                          });
-                                                      });
-                                                  });
-                                              });
+                                              return Prelude["return"](Control_Monad_State_Trans.applicativeStateT(Control_Monad_Eff.monadEff))(v);
                                           });
                                       });
                                   });
@@ -31019,8 +30891,8 @@ var PS = {};
       return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.create("<table></table>"))(Control_Monad_Eff_JQuery.addClass("historyBox")))(Control_Monad_Eff_JQuery.addClass("vertical")))(Control_Monad_Eff_JQuery.addClass("frame"))))(function (v) {
           return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(forIndex(Control_Monad_State_Trans.applicativeStateT(Control_Monad_Eff.monadEff))(exprs)(function (expr) {
               return function (i) {
-                  return Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(showHistoryRow(expr)(i))(function ($133) {
-                      return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v)($133));
+                  return Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(showHistoryRow(expr)(i))(function ($128) {
+                      return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v)($128));
                   });
               };
           }))(function () {
@@ -31038,20 +30910,30 @@ var PS = {};
               return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(prepareContainer("typ")))(function (v2) {
                   return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(prepareContainer("svg")))(function (v3) {
                       return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.get(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff)))(function (v4) {
-                          return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_Console.print(AST.showExpr)(v4.out.expr)))(function () {
-                              return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_Console.print(AST.showTypeTree)(v4.out.typ)))(function () {
-                                  return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Web.exprToJQuery(v4.out))(wrapInDiv("output")))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v))))(function () {
-                                      return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(showHistoryList(v4.history))(function ($134) {
-                                          return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v1)($134));
-                                      }))(function () {
-                                          return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.find(".binary, .app, .func, .list, .if, .name")(v)))(makeClickable))(function () {
-                                              return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.find(".output div")(v)))(addMouseOverListener))(addClickListener(v4.out.typ)))(function () {
-                                                  return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.body)(Control_Monad_Eff_JQuery.on("mouseover")(function (v5) {
-                                                      return function (v6) {
-                                                          return removeMouseOver;
-                                                      };
-                                                  }))))(function () {
-                                                      return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude["return"](Control_Monad_Eff.applicativeEff)(Prelude.unit));
+                          return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Web.exprToJQuery(v4.out))(wrapInDiv("output")))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v))))(function () {
+                              return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.body)(Control_Monad_Eff_JQuery.find("#historycheckbox"))))(function (v5) {
+                                  return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(JSHelpers.isChecked(v5)))(function (v6) {
+                                      return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_Console.print(Prelude.showBoolean)(v6)))(function () {
+                                          return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))((function () {
+                                              if (v6) {
+                                                  return Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(showHistoryList(v4.history))(function ($129) {
+                                                      return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v1)($129));
+                                                  });
+                                              };
+                                              if (!v6) {
+                                                  return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.create("<p></p>"))(Control_Monad_Eff_JQuery.setText("hidden")))(Prelude.flip(Control_Monad_Eff_JQuery.append)(v1)));
+                                              };
+                                              throw new Error("Failed pattern match at Main line 104, column 3 - line 108, column 3: " + [ v6.constructor.name ]);
+                                          })())(function () {
+                                              return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.find(".binary, .app, .func, .list, .if, .name")(v)))(makeClickable))(function () {
+                                                  return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Prelude[">>="](Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_JQuery.find(".output div")(v)))(addMouseOverListener))(addClickListener(v4.out.typ)))(function () {
+                                                      return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.body)(Control_Monad_Eff_JQuery.on("mouseover")(function (v7) {
+                                                          return function (v8) {
+                                                              return removeMouseOver;
+                                                          };
+                                                      }))))(function () {
+                                                          return Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Prelude["return"](Control_Monad_Eff.applicativeEff)(Prelude.unit));
+                                                      });
                                                   });
                                               });
                                           });
@@ -31068,47 +30950,45 @@ var PS = {};
   var evalExpr = function ($$eval) {
       return function (path) {
           return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.get(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff)))(function (v) {
-              return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_Eff_Class.liftEff(Control_Monad_State_Trans.monadEffState(Control_Monad_Eff.monadEff)(Control_Monad_Eff_Class.monadEffEff))(Control_Monad_Eff_Console.print(AST.showPath)(path)))(function () {
-                  var $92 = $$eval(v.env)(path)(v.out.expr);
-                  if ($92 instanceof Data_Either.Left) {
-                      return Prelude["return"](Control_Monad_State_Trans.applicativeStateT(Control_Monad_Eff.monadEff))(Prelude.unit);
-                  };
-                  if ($92 instanceof Data_Either.Right) {
-                      var eitherTyp = TypeChecker.typeTreeProgramnEnv(v.typEnv)($92.value0);
-                      var typ$prime$prime = Data_Either.either(function (v1) {
-                          return TypeChecker.buildPartiallyTypedTree(v.typEnv)($92.value0);
-                      })(Prelude.id(Prelude.categoryFn))(eitherTyp);
-                      var typ$prime = TypeChecker.txToABC(typ$prime$prime);
+              var $87 = $$eval(v.env)(path)(v.out.expr);
+              if ($87 instanceof Data_Either.Left) {
+                  return Prelude["return"](Control_Monad_State_Trans.applicativeStateT(Control_Monad_Eff.monadEff))(Prelude.unit);
+              };
+              if ($87 instanceof Data_Either.Right) {
+                  var eitherTyp = TypeChecker.typeTreeProgramnEnv(v.typEnv)($87.value0);
+                  var typ$prime$prime = Data_Either.either(function (v1) {
+                      return TypeChecker.buildPartiallyTypedTree(v.typEnv)($87.value0);
+                  })(Prelude.id(Prelude.categoryFn))(eitherTyp);
+                  var typ$prime = TypeChecker.txToABC(typ$prime$prime);
+                  return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.modify(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff))(function (es) {
+                      var $90 = {};
+                      for (var $91 in es) {
+                          if (es.hasOwnProperty($91)) {
+                              $90[$91] = es[$91];
+                          };
+                      };
+                      $90.out = {
+                          expr: $87.value0, 
+                          typ: typ$prime, 
+                          idTree: Web.idExpr($87.value0)
+                      };
+                      return $90;
+                  }))(function () {
                       return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.modify(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff))(function (es) {
-                          var $95 = {};
-                          for (var $96 in es) {
-                              if (es.hasOwnProperty($96)) {
-                                  $95[$96] = es[$96];
+                          var $92 = {};
+                          for (var $93 in es) {
+                              if (es.hasOwnProperty($93)) {
+                                  $92[$93] = es[$93];
                               };
                           };
-                          $95.out = {
-                              expr: $92.value0, 
-                              typ: typ$prime, 
-                              idTree: Web.idExpr($92.value0)
-                          };
-                          return $95;
+                          $92.history = Data_List[":"](v.out)(es.history);
+                          return $92;
                       }))(function () {
-                          return Prelude.bind(Control_Monad_State_Trans.bindStateT(Control_Monad_Eff.monadEff))(Control_Monad_State_Class.modify(Control_Monad_State_Trans.monadStateStateT(Control_Monad_Eff.monadEff))(function (es) {
-                              var $97 = {};
-                              for (var $98 in es) {
-                                  if (es.hasOwnProperty($98)) {
-                                      $97[$98] = es[$98];
-                                  };
-                              };
-                              $97.history = Data_List[":"](v.out)(es.history);
-                              return $97;
-                          }))(function () {
-                              return showEvaluationState;
-                          });
+                          return showEvaluationState;
                       });
-                  };
-                  throw new Error("Failed pattern match at Main line 241, column 3 - line 251, column 1: " + [ $92.constructor.name ]);
-              });
+                  });
+              };
+              throw new Error("Failed pattern match at Main line 248, column 3 - line 258, column 1: " + [ $87.constructor.name ]);
           });
       };
   };
@@ -31125,23 +31005,23 @@ var PS = {};
                           };
                           if (v instanceof Data_Maybe.Just) {
                               Prelude.unit;
-                              var $105 = TypeChecker.checkForError(v.value0)(typeTree);
-                              if ($105) {
+                              var $100 = TypeChecker.checkForError(v.value0)(typeTree);
+                              if ($100) {
                                   return Prelude.unit;
                               };
-                              if (!$105) {
-                                  var $106 = JSHelpers.ctrlKeyPressed(jEvent);
-                                  if (!$106) {
+                              if (!$100) {
+                                  var $101 = JSHelpers.ctrlKeyPressed(jEvent);
+                                  if (!$101) {
                                       return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_State_Trans.runStateT(evalExpr(Evaluator.evalPath1)(v.value0))(evaluationState))();
                                   };
-                                  if ($106) {
+                                  if ($101) {
                                       return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_State_Trans.runStateT(evalExpr(Evaluator.evalPathAll)(v.value0))(evaluationState))();
                                   };
-                                  throw new Error("Failed pattern match at Main line 229, column 16 - line 233, column 1: " + [ $106.constructor.name ]);
+                                  throw new Error("Failed pattern match at Main line 236, column 16 - line 240, column 1: " + [ $101.constructor.name ]);
                               };
-                              throw new Error("Failed pattern match at Main line 227, column 9 - line 233, column 1: " + [ $105.constructor.name ]);
+                              throw new Error("Failed pattern match at Main line 234, column 9 - line 240, column 1: " + [ $100.constructor.name ]);
                           };
-                          throw new Error("Failed pattern match at Main line 223, column 5 - line 233, column 1: " + [ v.constructor.name ]);
+                          throw new Error("Failed pattern match at Main line 230, column 5 - line 240, column 1: " + [ v.constructor.name ]);
                       };
                   };
               };
@@ -31156,52 +31036,52 @@ var PS = {};
       var v = Ace.edit("definitions")(Ace.ace)();
       var v1 = Ace_Editor.getValue(v)();
       var v2 = Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.select("#input"))(getValue)();
-      var $112 = Parser.parseExpr(v2);
-      if ($112 instanceof Data_Either.Left) {
-          return showInfo("Expression")(Prelude.show(Text_Parsing_Parser.showParseError)($112.value0))();
+      var $107 = Parser.parseExpr(v2);
+      if ($107 instanceof Data_Either.Left) {
+          return showInfo("Expression")(Prelude.show(Text_Parsing_Parser.showParseError)($107.value0))();
       };
-      if ($112 instanceof Data_Either.Right) {
-          var $114 = Prelude["<$>"](Data_Either.functorEither)(Evaluator.defsToEnv)(Parser.parseDefs(v1));
-          if ($114 instanceof Data_Either.Left) {
-              showInfo("Definitions")(Prelude.show(Text_Parsing_Parser.showParseError)($114.value0))();
-              return markText($114.value0.value0.position.value0.line - 1)($114.value0.value0.position.value0.column)();
+      if ($107 instanceof Data_Either.Right) {
+          var $109 = Prelude["<$>"](Data_Either.functorEither)(Evaluator.defsToEnv)(Parser.parseDefs(v1));
+          if ($109 instanceof Data_Either.Left) {
+              showInfo("Definitions")(Prelude.show(Text_Parsing_Parser.showParseError)($109.value0))();
+              return markText($109.value0.value0.position.value0.line - 1)($109.value0.value0.position.value0.column)();
           };
-          if ($114 instanceof Data_Either.Right) {
-              var $121 = TypeChecker.buildTypeEnv(Evaluator.envToDefs($114.value0));
-              if ($121 instanceof Data_Either.Left) {
-                  return showInfo("Definitions")(TypeChecker.prettyPrintTypeError($121.value0))();
+          if ($109 instanceof Data_Either.Right) {
+              var $116 = TypeChecker.buildTypeEnv(Evaluator.envToDefs($109.value0));
+              if ($116 instanceof Data_Either.Left) {
+                  return showInfo("Definitions")(TypeChecker.prettyPrintTypeError($116.value0))();
               };
-              if ($121 instanceof Data_Either.Right) {
+              if ($116 instanceof Data_Either.Right) {
                   var showEvalState = function (typ$prime) {
                       var typ = TypeChecker.txToABC(typ$prime);
-                      var idTree = Web.idExpr($112.value0);
+                      var idTree = Web.idExpr($107.value0);
                       return Prelude["void"](Control_Monad_Eff.functorEff)(Control_Monad_State_Trans.runStateT(showEvaluationState)({
-                          env: $114.value0, 
+                          env: $109.value0, 
                           out: {
-                              expr: $112.value0, 
+                              expr: $107.value0, 
                               typ: typ, 
                               idTree: idTree
                           }, 
                           history: Data_List.Nil.value, 
-                          typEnv: $121.value0
+                          typEnv: $116.value0
                       }));
                   };
-                  var $123 = TypeChecker.typeTreeProgramnEnv($121.value0)($112.value0);
-                  if ($123 instanceof Data_Either.Left) {
+                  var $118 = TypeChecker.typeTreeProgramnEnv($116.value0)($107.value0);
+                  if ($118 instanceof Data_Either.Left) {
                       JSHelpers.showTypes();
-                      var typ$prime = TypeChecker.buildPartiallyTypedTree($121.value0)($112.value0);
+                      var typ$prime = TypeChecker.buildPartiallyTypedTree($116.value0)($107.value0);
                       return showEvalState(typ$prime)();
                   };
-                  if ($123 instanceof Data_Either.Right) {
-                      return showEvalState($123.value0)();
+                  if ($118 instanceof Data_Either.Right) {
+                      return showEvalState($118.value0)();
                   };
-                  throw new Error("Failed pattern match at Main line 64, column 13 - line 74, column 1: " + [ $123.constructor.name ]);
+                  throw new Error("Failed pattern match at Main line 64, column 13 - line 74, column 1: " + [ $118.constructor.name ]);
               };
-              throw new Error("Failed pattern match at Main line 58, column 22 - line 74, column 1: " + [ $121.constructor.name ]);
+              throw new Error("Failed pattern match at Main line 58, column 22 - line 74, column 1: " + [ $116.constructor.name ]);
           };
-          throw new Error("Failed pattern match at Main line 54, column 7 - line 74, column 1: " + [ $114.constructor.name ]);
+          throw new Error("Failed pattern match at Main line 54, column 7 - line 74, column 1: " + [ $109.constructor.name ]);
       };
-      throw new Error("Failed pattern match at Main line 51, column 3 - line 74, column 1: " + [ $112.constructor.name ]);
+      throw new Error("Failed pattern match at Main line 51, column 3 - line 74, column 1: " + [ $107.constructor.name ]);
   };
   var main = Control_Monad_Eff_JQuery.ready(function __do() {
       Prelude[">>="](Control_Monad_Eff.bindEff)(Prelude[">>="](Control_Monad_Eff.bindEff)(Control_Monad_Eff_JQuery.select("#input"))(Control_Monad_Eff_JQuery.on("change")(function (v) {
@@ -31210,14 +31090,14 @@ var PS = {};
           };
       })))(Control_Monad_Eff_JQuery.on("keyup")(function (e) {
           return function (v) {
-              var $132 = JSHelpers.isEnterKey(e);
-              if ($132) {
+              var $127 = JSHelpers.isEnterKey(e);
+              if ($127) {
                   return startEvaluation;
               };
-              if (!$132) {
+              if (!$127) {
                   return Prelude["return"](Control_Monad_Eff.applicativeEff)(Prelude.unit);
               };
-              throw new Error("Failed pattern match at Main line 35, column 32 - line 35, column 85: " + [ $132.constructor.name ]);
+              throw new Error("Failed pattern match at Main line 35, column 32 - line 35, column 85: " + [ $127.constructor.name ]);
           };
       }))();
       return startEvaluation();
