@@ -23,7 +23,8 @@
         editor.getSession().setMode("ace/mode/haskell");
         editor.getSession().setTabSize(8);
         editor.setShowPrintMargin(false);
-        // bootstrapSwitch setup
+
+        // bootstrapSwitch for types
         $.fn.bootstrapSwitch.defaults.size = 'mini';
         var checkbox = $("#typecheckbox")
         checkbox.bootstrapSwitch();
@@ -34,6 +35,17 @@
           }
           else{
             styleLink.attr({"href":"style/hideType.css"});
+          }
+        });
+
+        // bootstrapSwitch for history
+        var historycheckbox = $("#historycheckbox")
+        historycheckbox.bootstrapSwitch();
+        historycheckbox.on('switchChange.bootstrapSwitch', function (event, state) {
+          if(state) {
+            historycheckbox.prop('checked', true);
+          } else {
+            historycheckbox.prop('checked', false);
           }
         });
       });
@@ -47,7 +59,8 @@
     <div id="inputBar">
           <input type="text" id="input"  value="sum (map (^2) [1,2,3,4])">
       <div id="options">
-        <input type="checkbox" id="typecheckbox" checked="checked"/> Show types <br/>
+        <input type="checkbox" id="typecheckbox" checked="checked"/> Show types &nbsp;&nbsp;|&nbsp;&nbsp;
+        <input type="checkbox" id="historycheckbox" checked="checked"/> Show history <br/>
       </div>
     </div>
 

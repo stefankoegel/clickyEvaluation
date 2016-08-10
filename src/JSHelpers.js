@@ -83,3 +83,9 @@ exports.showTypes = function(){
   $('#typecheckbox').bootstrapSwitch('state', true);
   return {};
 };
+
+exports.isChecked = function(checkbox) {
+  return function() {
+    return $(checkbox).prop('checked');
+  };
+};

@@ -26,7 +26,7 @@ import Evaluator (evalPath1, evalPathAll, Env(), defsToEnv, envToDefs, EvalError
 import AST (Path, Expr, TypeTree, Output, TypeError)
 import TypeChecker (TypeEnv, txToABC, buildPartiallyTypedTree, typeTreeProgramnEnv, checkForError, prettyPrintTypeError, buildTypeEnv)
 import Parser (parseDefs, parseExpr)
-import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey, showTypes)
+import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey, showTypes, isChecked)
 
 main :: DOMEff J.JQuery
 main = J.ready $ do
@@ -92,11 +92,18 @@ showEvaluationState = do
   svgContainer <- liftEff $ prepareContainer "svg"
 
   { env = env, out = out, history = histExprs } <- get :: EvalM EvalState
-  liftEff $ print out.expr
-  liftEff $ print out.typ
+  -- liftEff $ print out.expr
+  -- liftEff $ print out.typ
 
   liftEff $ exprToJQuery out >>= wrapInDiv "output" >>= flip J.append output
-  showHistoryList histExprs >>= liftEff <<< flip J.append history
+
+  historyCheckbox <- liftEff $ J.body >>= J.find "#historycheckbox"
+  showHistory <- liftEff $ isChecked historyCheckbox
+
+  liftEff $ print showHistory
+  if showHistory
+    then showHistoryList histExprs >>= liftEff <<< flip J.append history
+    else liftEff $ J.create "<p></p>" >>= J.setText "hidden" >>=  flip J.append history
 
   liftEff (J.find ".binary, .app, .func, .list, .if, .name" output)
      >>= makeClickable
@@ -127,16 +134,16 @@ showHistoryRow out i = do
   liftEff $ exprToJQuery out >>= flip J.append tdExpr
   liftEff $ J.append tdExpr row
   es <- get :: EvalM EvalState
-  let deleteHandler = \_ _ -> do
-                        let es' = es { history = maybe es.history id (deleteAt i es.history) }
-                        void $ runStateT showEvaluationState es'
-  delete <- liftEff $ J.create "<button></button>"
-    >>= J.setText "Delete"
-    >>= J.addClass "delete"
-    >>= J.on "click" deleteHandler
-  tdDelete <- liftEff $ J.create "<td></td>"
-  liftEff $ J.append delete tdDelete
-  liftEff $ J.append tdDelete row
+  -- let deleteHandler = \_ _ -> do
+  --                       let es' = es { history = maybe es.history id (deleteAt i es.history) }
+  --                       void $ runStateT showEvaluationState es'
+  -- delete <- liftEff $ J.create "<button></button>"
+  --   >>= J.setText "Delete"
+  --   >>= J.addClass "delete"
+  --   >>= J.on "click" deleteHandler
+  -- tdDelete <- liftEff $ J.create "<td></td>"
+  -- liftEff $ J.append delete tdDelete
+  -- liftEff $ J.append tdDelete row
   let restoreHandler = \_ _ -> do
                          let es' = es { history = drop (i + 1) es.history, out = maybe es.out id (es.history !! i) }
                          void $ runStateT showEvaluationState es'
@@ -237,7 +244,7 @@ evalExpr :: (Env -> Path -> Expr -> Either EvalError Expr) -> Path -> EvalM Unit
 evalExpr eval path = do
   { env = env, out = out, typEnv = typEnv} <- get
   let expr = out.expr
-  liftEff $ print path
+  -- liftEff $ print path
   case eval env path expr of
     Left msg    -> return unit
     Right expr' -> do
