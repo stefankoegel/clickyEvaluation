@@ -100,7 +100,6 @@ showEvaluationState = do
   historyCheckbox <- liftEff $ J.body >>= J.find "#historycheckbox"
   showHistory <- liftEff $ isChecked historyCheckbox
 
-  liftEff $ print showHistory
   if showHistory
     then showHistoryList histExprs >>= liftEff <<< flip J.append history
     else liftEff $ J.create "<p></p>" >>= J.setText "hidden" >>=  flip J.append history
