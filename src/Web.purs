@@ -5,7 +5,7 @@ module Web
   , makeDiv
   ) where
 
-import Prelude (class Show, class Monad, Unit, return, (+), bind, ($), (++), show, (>>=), flip, (<<<), (<$>), (&&), (>), void, unit, id, (-))
+import Prelude (class Show, class Monad, Unit, return, (+), bind, ($), (++), (==), (/=), show, (>>=), flip, (<<<), (<$>), (&&), (>), void, unit, id, (-))
 import Data.Foldable (all)
 import Data.Traversable (for)
 import Data.String (joinWith)
@@ -136,9 +136,22 @@ exprToJQuery' output = go id output
       jop <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
       jexpr <- go (p <<< Fst) {expr: exp, typ: tt, idTree: is}
       unary jop jexpr t i
+
+    {expr: LetExpr binds exp, typ: TLetExpr tbinds texp t, idTree: ILetExpr ibinds iexp i} -> case checkLength binds tbinds ibinds of
+      false -> makeDiv "oops! LetExpr bindings length error!" Nil
+      true  -> do
+        let fstBoundle = zip (fst <$> ibinds) (zip (fst <$> binds) (fst <$> tbinds))
+            sndBoundle = zip (snd <$> ibinds) (zip (snd <$> binds) (snd <$> tbinds))
+
+        jbinds <- mapM binding fstBoundle
+        jexprs <- zipWithA (\x (Tuple i (Tuple b t)) -> go (p <<< Nth x) {expr: b, typ: t, idTree: i}) (1 .. (length sndBoundle)) sndBoundle
+        jletBinds <- zipWithA letBinding jbinds jexprs
+
+        jexpr <- go (p <<< Fst) {expr: exp, typ: texp, idTree: iexp}
+        letExpr jletBinds jexpr t i
+
     {} -> makeDiv "You found a Bug" Nil
 
-  --TODO: fix paths
   qualifier :: (Path -> Path) -> ExprQual -> TypeQual -> IndexQual -> Eff (dom :: DOM | eff) J.JQuery
   qualifier p (Gen b e) (TGen tb te t) (TGen ib ie i) = do
       result <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
@@ -154,6 +167,9 @@ exprToJQuery' output = go id output
       return result 
   qualifier p (Guard e) (TGuard te t) (TGuard ie i) = go p {expr:e, typ:te, idTree:ie}
   qualifier _ _ _ _ = makeDiv "You found a Bug in Web.exprToJquery'.qualifier" Nil
+
+checkLength :: forall a b c. List a -> List b -> List c -> Boolean
+checkLength a b c = length a /= 0 && length a == length b && length a == length c && length b == length c
 
 atom :: forall eff. Atom -> Type -> Int ->  Eff (dom :: DOM | eff) J.JQuery
 atom (AInt n) t  i   = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv t >>= addIdtoDiv i
@@ -243,7 +259,6 @@ unary jop jexpr t i = do
   J.append jUnary jtypExp
   return jtypExp
 
-
 section :: forall eff. J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 section j1 j2 t i = do
   jtypExp <- makeDiv "" (singleton "section typExpContainer")
@@ -283,8 +298,7 @@ arithmeticSequence start mstep mend t i = do
   makeDiv "[" (singleton "brace") >>= flip J.append das
   J.append start das
   maybeStep das mstep
-  --TODO: ".." create singleton "dotdot"
-  makeDiv ".." (singleton "comma") >>= flip J.append das      
+  makeDiv ".." (singleton "dot") >>= flip J.append das
   maybeEnd das mend
   makeDiv "]" (singleton "brace") >>= flip J.append das
   J.append das jtypExp
@@ -313,6 +327,29 @@ listComp jExpr jQuals t i = do
   makeDiv "]" (singleton "brace") >>= flip J.append das
   J.append das jtypExp
   return jtypExp  
+
+letExpr :: forall eff. List J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+letExpr jBinds jExpr t i = do
+  jtypExp <- makeDiv "" (singleton "let  typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  dlet <- makeDiv "" (singleton "let  expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  makeDiv "let" (singleton "keyword") >>= flip J.append dlet
+  interleaveM_ (flip J.append dlet) (makeDiv ";" (singleton "semicolon") >>= flip J.append dlet) jBinds
+  makeDiv "in" (singleton "keyword") >>= flip J.append dlet
+  J.append jExpr dlet
+  J.append dlet jtypExp
+  return jtypExp
+
+letBinding :: forall eff. J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+letBinding jBind jExpr = do
+  jtypExp <- makeDiv "" (singleton "letBinding  typExpContainer")
+  dlet <- makeDiv "" (singleton "letBinding  expr")
+  J.append jBind dlet
+  makeDiv "=" Nil >>= flip J.append dlet
+  J.append jExpr dlet
+  J.append dlet jtypExp
+  return jtypExp
 
 interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> List a -> m Unit
 interleaveM_ f sep = go

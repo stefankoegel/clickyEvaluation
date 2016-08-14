@@ -256,12 +256,27 @@ inferType env exp = do
   let t' = extractType t
   return $ Tuple s t'
 
-inferBinding :: TypeEnv -> Binding -> Expr -> Infer (Tuple3 Subst TypeBinding TypeTree)
-inferBinding env bin expr = do 
+data InferResult a = InferResult {subst :: Subst, envi :: TypeEnv, result :: a}
+
+inferBinding :: TypeEnv -> Binding -> Expr -> Infer (InferResult (Tuple TypeBinding TypeTree))
+inferBinding env bin expr = do
+  Tuple sBin  tBin  <- extractBinding bin
   Tuple sExpr tExpr <- infer env expr
-  Tuple sBin tBin   <- extractBinding bin
   s <- unify (extractBindingType tBin) (extractType tExpr)
-  return $ tuple3 s tBin tExpr
+  let env' = foldr (\a b -> extend b a) env sBin
+  return $ InferResult {subst: s, envi: env', result: (Tuple tBin tExpr)}
+
+inferBindings :: TypeEnv -> List (Tuple Binding Expr) -> Infer (InferResult (List (Tuple TypeBinding TypeTree)))
+inferBindings _ Nil = throwError $ UnknownError "congrats you found a bug TypeChecker.inferBindings"
+inferBindings env (Cons (Tuple bin expr) Nil) = do
+  InferResult {subst: s, envi: e, result: r} <- inferBinding env bin expr
+  return $ InferResult {subst: s, envi: e, result: (pure r)}
+inferBindings env (Cons (Tuple bin expr) rest) = do
+  InferResult {subst: s, envi: e, result: res}    <- inferBinding env bin expr
+  InferResult {subst: sr, envi: er, result: resr} <- inferBindings e rest
+  let sRes = s `compose` sr
+      eRes = apply sRes er
+  return $ InferResult {subst: sRes, envi: eRes, result: (Cons res resr)}
 
 infer :: TypeEnv -> Expr -> Infer (Tuple Subst TypeTree)
 infer env ex = case ex of
@@ -311,21 +326,11 @@ infer env ex = case ex of
     let s' = sq `compose` s
     return $ Tuple s' $ apply s' $ TListComp t tq (AD (TList (extractType t)))
 
-  --TODO: Check soundness
-  LetExpr bindings expr -> case bindings of 
-    Nil -> do 
-      (Tuple s t) <- infer env expr
-      return $ Tuple s $ apply s (TLetExpr Nil t (extractType t))
-    Cons (Tuple bin e) rest -> do
-      (Tuple s1 t1)    <- infer env e
-      (Tuple list typ) <- extractBinding bin
-      s2 <- unify (extractBindingType typ) (extractType t1)
-      let env' = apply (s1 `compose` s2) env
-          t'   = generalize env' (apply (s1 `compose` s2) (extractType t1))
-          env'' = apply s2 (foldr (\a b -> extend b a) env' list)    
-      (Tuple s3 t2) <- infer env'' (LetExpr rest expr)
-      let sC = (s1 `compose` s2 `compose` s3)
-      return $ Tuple sC (apply sC t2)
+  LetExpr bindings expr -> do
+    InferResult {subst: s, envi: env', result: r} <- inferBindings env bindings
+    Tuple es et <- infer env' expr
+    let s' = s `compose` es
+    return $ Tuple s' $ apply s' $ TLetExpr r et (extractType et)
 
   IfExpr cond tr fl -> do
     tv <- fresh
@@ -940,6 +945,7 @@ checkForError p' tt = case p' of
       TLambda bs body  _-> checkForError p body
       TApp e es        _-> checkForError p e
       TListComp e _    _-> checkForError p e
+      TLetExpr (Cons (Tuple _ e) _) _ _ -> checkForError p e
       _               -> true
   (Snd p) -> case tt of
       TBinary op e1 e2 _-> checkForError p e2

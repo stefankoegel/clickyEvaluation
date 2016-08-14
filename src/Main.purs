@@ -47,7 +47,6 @@ startEvaluation = do
   editor <- Ace.edit "definitions" Ace.ace
   definitions <- Editor.getValue editor
   input       <- J.select "#input"       >>= getValue
-
   case parseExpr input of
     Left err   -> showInfo "Expression" (show err)
     Right expr -> do
@@ -67,8 +66,6 @@ startEvaluation = do
                 let typ' = buildPartiallyTypedTree typEnv expr
                 showEvalState typ'
               Right typ' -> showEvalState typ'
-
-
 
 
 outIfErr::forall b. String -> Either TypeError b -> DOMEff Unit
