@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Monad, class Show, (&&), (==), (/=), (>>=), map, (++), ($), pure, (<*>), (<$>), return, bind, const, otherwise, show, (+), div, mod, flip)
+import Prelude (class Monad, class Show, class Eq, (&&), (==), (/=), (>>=), map, (++), ($), pure, (<*>), (<$>), (||), return, bind, const, otherwise, show, (+), div, mod, flip)
 
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
 import Control.Monad.State (State, evalState, runState, put, get)
@@ -8,14 +8,13 @@ import Control.Apply (lift2)
 import Control.Bind (ifM)
 
 import Data.Either (Either(Left, Right))
-import Data.List (List(..), length, delete, concat, unzip, foldM, toList, (:), zip, singleton, toList, length, concat, (!!))
+import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, toList, length, concat, (!!))
 import Data.List.WordsLines (fromCharList)
 import Data.Map as Map
 import Data.Map (Map, insert, lookup, empty)
 import Data.Tuple (Tuple(Tuple), snd, fst)
-import Data.Tuple.Nested (Tuple3, tuple3)
 import Data.Set as Set
-import Data.Foldable (foldl, foldr)
+import Data.Foldable (foldl, foldr, foldMap)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.String (toCharArray)
 
@@ -226,7 +225,22 @@ closeOver (Tuple sub ty) = sc --TODO add normalize back in
 emptyTyenv :: TypeEnv
 emptyTyenv = TypeEnv Map.empty
 
--- TODO find Purescript equivalent
+overlappingBindings :: List Binding -> List String
+overlappingBindings Nil = Nil
+overlappingBindings (Cons x Nil) = Nil
+overlappingBindings (Cons x xs) = (filter (\y -> elem y (concatMap boundNames xs)) (boundNames x)) ++ overlappingBindings xs
+  where
+    boundNames :: Binding -> (List String)
+    boundNames = go
+      where
+      go (Lit (Name name)) = singleton name
+      go (ConsLit b1 b2)   = go b1 ++ go b2
+      go (ListLit bs)      = foldMap go bs
+      go (NTupleLit bs)    = foldMap go bs
+      go _                 = Nil
+
+-- TODO find Purescript equivalents
+------------------------------------------------------------------------------------
 mapM :: forall a b m. (Monad m) => (a -> m b) -> List a -> m (List b)
 mapM f as = foldr k (return Nil) as
             where
@@ -239,6 +253,11 @@ mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
 mapM' f Nothing  = pure Nothing
 mapM' f (Just x) = Just <$> (f x)
 
+elem :: forall a. (Eq a) => a -> List a -> Boolean
+elem x Nil = false
+elem x (Cons y ys) = x == y || elem x ys
+
+------------------------------------------------------------------------------------
 
 lookupEnv :: TypeEnv -> Atom -> Infer (Tuple Subst Type)
 lookupEnv (TypeEnv env) x = do
@@ -259,12 +278,14 @@ inferType env exp = do
 data InferResult a = InferResult {subst :: Subst, envi :: TypeEnv, result :: a}
 
 inferBinding :: TypeEnv -> Binding -> Expr -> Infer (InferResult (Tuple TypeBinding TypeTree))
-inferBinding env bin expr = do
-  Tuple sBin  tBin  <- extractBinding bin
-  Tuple sExpr tExpr <- infer env expr
-  s <- unify (extractBindingType tBin) (extractType tExpr)
-  let env' = foldr (\a b -> extend b a) env sBin
-  return $ InferResult {subst: s, envi: env', result: (Tuple tBin tExpr)}
+inferBinding env bin e1 = do
+  (Tuple s1 t1) <- infer env e1
+  (Tuple list typ) <- extractBinding bin
+  s2 <- unify (extractBindingType typ) (extractType t1)
+  let env' = apply (s1 `compose` s2) env
+      t'   = generalize env' (apply (s1 `compose` s2) (extractType t1))
+      env'' = apply s2 (foldr (\a b -> extend b a) env' list)
+  return $ InferResult {subst: s2, envi: env'', result: (Tuple typ t1)}
 
 inferBindings :: TypeEnv -> List (Tuple Binding Expr) -> Infer (InferResult (List (Tuple TypeBinding TypeTree)))
 inferBindings _ Nil = throwError $ UnknownError "congrats you found a bug TypeChecker.inferBindings"
@@ -275,8 +296,7 @@ inferBindings env (Cons (Tuple bin expr) rest) = do
   InferResult {subst: s, envi: e, result: res}    <- inferBinding env bin expr
   InferResult {subst: sr, envi: er, result: resr} <- inferBindings e rest
   let sRes = s `compose` sr
-      eRes = apply sRes er
-  return $ InferResult {subst: sRes, envi: eRes, result: (Cons res resr)}
+  return $ InferResult {subst: sRes, envi: er, result: (Cons res resr)}
 
 infer :: TypeEnv -> Expr -> Infer (Tuple Subst TypeTree)
 infer env ex = case ex of
@@ -326,11 +346,13 @@ infer env ex = case ex of
     let s' = sq `compose` s
     return $ Tuple s' $ apply s' $ TListComp t tq (AD (TList (extractType t)))
 
-  LetExpr bindings expr -> do
-    InferResult {subst: s, envi: env', result: r} <- inferBindings env bindings
-    Tuple es et <- infer env' expr
-    let s' = s `compose` es
-    return $ Tuple s' $ apply s' $ TLetExpr r et (extractType et)
+  LetExpr bindings expr -> case overlappingBindings (fst <$> bindings) of
+    (Cons x _) -> throwError $ UnknownError $ "Conflicting definitions for \'" ++ x ++ "\'"
+    Nil        -> do
+      InferResult {subst: sb, envi: envb, result: resb} <- inferBindings env bindings
+      Tuple se te <- infer envb expr
+      let s = sb `compose` se
+      return $ Tuple s $ apply s $ TLetExpr resb te (extractType te)
 
   IfExpr cond tr fl -> do
     tv <- fresh

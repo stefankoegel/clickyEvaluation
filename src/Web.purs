@@ -184,7 +184,7 @@ atom (Name name) t i = do
  J.append jName jtypExp
  return jtypExp
 
-binding :: forall eff. Tuple IBinding (Tuple Binding  TypeBinding) -> Eff (dom :: DOM | eff) J.JQuery
+binding :: forall eff. Tuple IBinding (Tuple Binding TypeBinding) -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
   Tuple (ILit i) (Tuple (Lit a) (TLit t))       -> atom a t i
   cl@(Tuple (IConsLit i1 i2 i) (Tuple (ConsLit b bs) (TConsLit tb tbs t))) -> do
@@ -328,12 +328,15 @@ listComp jExpr jQuals t i = do
   J.append das jtypExp
   return jtypExp  
 
+--TODO: create css entry for "let typExpContainer" and "let expr"
 letExpr :: forall eff. List J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 letExpr jBinds jExpr t i = do
-  jtypExp <- makeDiv "" (singleton "let  typExpContainer")
+  jtypExp <- makeDiv "" (singleton "list typExpContainer")
+  --jtypExp <- makeDiv "" (singleton "let typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  dlet <- makeDiv "" (singleton "let  expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  dlet <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  --dlet <- makeDiv "" (singleton "let expr") >>= addTypetoDiv t >>= addIdtoDiv i
   makeDiv "let" (singleton "keyword") >>= flip J.append dlet
   interleaveM_ (flip J.append dlet) (makeDiv ";" (singleton "semicolon") >>= flip J.append dlet) jBinds
   makeDiv "in" (singleton "keyword") >>= flip J.append dlet
