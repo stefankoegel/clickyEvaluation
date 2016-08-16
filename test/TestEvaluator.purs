@@ -6,11 +6,9 @@ import Data.Tuple (Tuple(..))
 import Data.StrMap as M
 import Data.List (List, singleton)
 
-import Text.Parsing.Parser (runParser)
-
 import Control.Monad.Writer (Writer, tell)
 
-import Parser (definitions, expression)
+import Parser (definitions, expression, runParserIndent)
 import Evaluator (eval, eval1, runEvalM, defsToEnv)
 import Test.Parser (prelude)
 
@@ -18,7 +16,7 @@ tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton
 
 eval1test :: String -> String -> String -> Writer (List String) Unit
-eval1test name input expected = case (Tuple (runParser input expression) (runParser expected expression)) of
+eval1test name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
   (Tuple (Right inExp) (Right expExp)) ->
     case runEvalM (eval1 M.empty inExp) of
       (Right eval1Exp) -> 
@@ -29,7 +27,7 @@ eval1test name input expected = case (Tuple (runParser input expression) (runPar
   _ -> tell' $ "Parse fail (" ++ name ++ ")"
 
 eval1EnvTest :: String -> String -> String -> String -> Writer (List String) Unit
-eval1EnvTest name env input expected = case (Tuple (Tuple (runParser input expression) (runParser expected expression)) (runParser env definitions)) of
+eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
     case runEvalM (eval1 (defsToEnv defs) inExp) of
       (Right eval1Exp) -> 
@@ -40,7 +38,7 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParser input expre
   _ -> tell' $ "Parse fail (" ++ name ++ ")"
 
 evalEnvTest :: String -> String -> String -> String -> Writer (List String) Unit
-evalEnvTest name env input expected = case (Tuple (Tuple (runParser input expression) (runParser expected expression)) (runParser env definitions)) of
+evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
     let evalExp = eval (defsToEnv defs) inExp in
       if evalExp == expExp
@@ -179,7 +177,6 @@ runTests = do
   evalEnvTest "arithmetic_sequences_15" prelude "take 5 [3, -1 ..]" "[3, -1, -5, -9, -13]"
   evalEnvTest "arithmetic_sequences_16" prelude "take 11 [-5 ..]" "[-5, -4, -3, -2, -1, 0, 1, 2 ,3, 4, 5]"
 
-
   evalEnvTest "list_comprehension_1" prelude "[ x | x <- [1 .. 10], even x]" "[2, 4, 6, 8, 10]"
   evalEnvTest "list_comprehension_2" prelude "[ (x, y) | x <- [1 .. 3], y <- [1 .. 3], x + y == 4]" "[(1,3), (2,2), (3,1)]"
   evalEnvTest "list_comprehension_3" prelude "(\\x -> [ x | let x = 1]) 2"    "[1]"
@@ -190,3 +187,12 @@ runTests = do
   evalEnvTest "list_comprehension_8" prelude "[x | x <- \"wer misst zu viele gabeln\", elem x \"itzgw\"]" "\"witzig\""
   evalEnvTest "list_comprehension_9" prelude "[(x, z) | x <- [1 .. 5], z <- [y | y <- [1 .. 5], mod x y == 0] ]" "[(1,1), (2,1), (2,2), (3,1), (3,3), (4,1), (4,2), (4,4), (5,1), (5,5)]"
   evalEnvTest "list_comprehension_10" prelude "[z | let y = [True, True, False], z <- y, z]" "[True, True]"
+
+  --should fail, due to overlapping defs
+  --evalEnvTest "let_expression_1" prelude "let x = 1; x = 'c' in x" "'c'"
+  evalEnvTest "let_expression_2" prelude "let (x, y) = (\\g -> g, \"Hello\") in x y" "\"Hello\""
+  evalEnvTest "let_expression_3" prelude "let x = 1 ; y = x + 1; z = y + 1 in x + y + z" "6"
+  evalEnvTest "let_expression_4" prelude "let x = 1 in let y = 2 in x + y" "3"
+  --                                                                                                       should be: "True"
+  evalEnvTest "let_expression_5" prelude "(let x = [1,2,3] in x) == (let x = 1; y = 2; z = 3 in [x,y,z])" "[1,2,3] == [1,2,3]"
+  evalEnvTest "let_expression_6" prelude "let sum = \\x -> x ; y = sum [1,2,3] in y" "[1,2,3]"

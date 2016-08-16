@@ -5,7 +5,7 @@ module Web
   , makeDiv
   ) where
 
-import Prelude (class Show, class Monad, Unit, return, (+), bind, ($), (++), show, (>>=), flip, (<<<), (<$>), (&&), (>), void, unit, id, (-))
+import Prelude (class Show, class Monad, Unit, return, (+), bind, ($), (++), (==), (/=), show, (>>=), flip, (<<<), (<$>), (&&), (>), void, unit, id, (-))
 import Data.Foldable (all)
 import Data.Traversable (for)
 import Data.String (joinWith)
@@ -13,7 +13,7 @@ import Data.List (List(Nil, Cons), singleton, fromList, toList, length, zip, (..
 import Data.Foreign (unsafeFromForeign, isUndefined)
 import Data.Maybe (Maybe(..), isJust)
 import Data.Maybe.Unsafe (fromJust)
-import Data.Tuple (Tuple(..), fst)
+import Data.Tuple (Tuple(..), fst, snd)
 
 import Control.Apply ((*>))
 import Control.Bind ((=<<), (>=>))
@@ -136,9 +136,22 @@ exprToJQuery' output = go id output
       jop <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
       jexpr <- go (p <<< Fst) {expr: exp, typ: tt, idTree: is}
       unary jop jexpr t i
+
+    {expr: LetExpr binds exp, typ: TLetExpr tbinds texp t, idTree: ILetExpr ibinds iexp i} -> case checkLength binds tbinds ibinds of
+      false -> makeDiv "oops! LetExpr bindings length error!" Nil
+      true  -> do
+        let fstBoundle = zip (fst <$> ibinds) (zip (fst <$> binds) (fst <$> tbinds))
+            sndBoundle = zip (snd <$> ibinds) (zip (snd <$> binds) (snd <$> tbinds))
+
+        jbinds <- mapM binding fstBoundle
+        jexprs <- zipWithA (\x (Tuple i (Tuple b t)) -> go (p <<< Nth x) {expr: b, typ: t, idTree: i}) (1 .. (length sndBoundle)) sndBoundle
+        jletBinds <- zipWithA letBinding jbinds jexprs
+
+        jexpr <- go (p <<< Fst) {expr: exp, typ: texp, idTree: iexp}
+        letExpr jletBinds jexpr t i
+
     {} -> makeDiv "You found a Bug" Nil
 
-  --TODO: fix paths
   qualifier :: (Path -> Path) -> ExprQual -> TypeQual -> IndexQual -> Eff (dom :: DOM | eff) J.JQuery
   qualifier p (Gen b e) (TGen tb te t) (TGen ib ie i) = do
       result <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
@@ -155,6 +168,9 @@ exprToJQuery' output = go id output
   qualifier p (Guard e) (TGuard te t) (TGuard ie i) = go p {expr:e, typ:te, idTree:ie}
   qualifier _ _ _ _ = makeDiv "You found a Bug in Web.exprToJquery'.qualifier" Nil
 
+checkLength :: forall a b c. List a -> List b -> List c -> Boolean
+checkLength a b c = length a /= 0 && length a == length b && length a == length c && length b == length c
+
 atom :: forall eff. Atom -> Type -> Int ->  Eff (dom :: DOM | eff) J.JQuery
 atom (AInt n) t  i   = makeDiv (show n) (toList ["atom", "num"]) >>= addTypetoDiv t >>= addIdtoDiv i
 atom (Bool true) t i = makeDiv "True"  (toList ["atom", "bool"]) >>= addTypetoDiv t >>= addIdtoDiv i
@@ -168,7 +184,7 @@ atom (Name name) t i = do
  J.append jName jtypExp
  return jtypExp
 
-binding :: forall eff. Tuple IBinding (Tuple Binding  TypeBinding) -> Eff (dom :: DOM | eff) J.JQuery
+binding :: forall eff. Tuple IBinding (Tuple Binding TypeBinding) -> Eff (dom :: DOM | eff) J.JQuery
 binding b = case b of
   Tuple (ILit i) (Tuple (Lit a) (TLit t))       -> atom a t i
   cl@(Tuple (IConsLit i1 i2 i) (Tuple (ConsLit b bs) (TConsLit tb tbs t))) -> do
@@ -243,7 +259,6 @@ unary jop jexpr t i = do
   J.append jUnary jtypExp
   return jtypExp
 
-
 section :: forall eff. J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
 section j1 j2 t i = do
   jtypExp <- makeDiv "" (singleton "section typExpContainer")
@@ -283,8 +298,7 @@ arithmeticSequence start mstep mend t i = do
   makeDiv "[" (singleton "brace") >>= flip J.append das
   J.append start das
   maybeStep das mstep
-  --TODO: ".." create singleton "dotdot"
-  makeDiv ".." (singleton "comma") >>= flip J.append das      
+  makeDiv ".." (singleton "dot") >>= flip J.append das
   maybeEnd das mend
   makeDiv "]" (singleton "brace") >>= flip J.append das
   J.append das jtypExp
@@ -313,6 +327,32 @@ listComp jExpr jQuals t i = do
   makeDiv "]" (singleton "brace") >>= flip J.append das
   J.append das jtypExp
   return jtypExp  
+
+--TODO: create css entry for "let typExpContainer" and "let expr"
+letExpr :: forall eff. List J.JQuery -> J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
+letExpr jBinds jExpr t i = do
+  jtypExp <- makeDiv "" (singleton "list typExpContainer")
+  --jtypExp <- makeDiv "" (singleton "let typExpContainer")
+  jExpand <- buildExpandDiv t
+  J.append jExpand jtypExp
+  dlet <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  --dlet <- makeDiv "" (singleton "let expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  makeDiv "let" (singleton "keyword") >>= flip J.append dlet
+  interleaveM_ (flip J.append dlet) (makeDiv ";" (singleton "semicolon") >>= flip J.append dlet) jBinds
+  makeDiv "in" (singleton "keyword") >>= flip J.append dlet
+  J.append jExpr dlet
+  J.append dlet jtypExp
+  return jtypExp
+
+letBinding :: forall eff. J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
+letBinding jBind jExpr = do
+  jtypExp <- makeDiv "" (singleton "letBinding  typExpContainer")
+  dlet <- makeDiv "" (singleton "letBinding  expr")
+  J.append jBind dlet
+  makeDiv "=" Nil >>= flip J.append dlet
+  J.append jExpr dlet
+  J.append dlet jtypExp
+  return jtypExp
 
 interleaveM_ :: forall a b m. (Monad m) => (a -> m b) -> m b -> List a -> m Unit
 interleaveM_ f sep = go
@@ -513,12 +553,12 @@ indexExpr (ArithmSeq e1 e2 e3) = do
                   i3 <- mapM' indexExpr e3
                   i <- fresh
                   return $ IArithmSeq i1 i2 i3 i                  
-indexExpr (LetExpr b e1 e2) = do
-                  ib <- indexBinding b
-                  i1 <- indexExpr e1
-                  i2 <- indexExpr e2
-                  i <- fresh
-                  return $ ILetExpr ib i1 i2 i
+indexExpr (LetExpr bin e) = do
+                  ib <- mapM (indexBinding <<< fst) bin
+                  ie <- mapM (indexExpr <<< snd) bin
+                  i2 <- indexExpr e
+                  i  <- fresh
+                  return $ ILetExpr (zip ib ie) i2 i
 indexExpr (Lambda bs e) = do
                  ibs <- mapM indexBinding bs
                  i <- indexExpr e

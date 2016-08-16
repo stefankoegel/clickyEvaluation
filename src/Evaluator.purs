@@ -1,10 +1,10 @@
 module Evaluator where
 
-import Prelude (class Show, top, class Semigroup, class Functor, class Monad, Unit, Ordering(..), (++), ($), (||), (&&), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
+import Prelude (class Show, top, class Semigroup, class Functor, class Monad, Unit, Ordering(..), (++), ($), (||), (&&), unit, return, (<*>), (<$>), (>>>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
 import Data.List (List(Nil, Cons), null, singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
 import Data.StrMap (StrMap, delete)
 import Data.StrMap as Map
-import Data.Tuple (Tuple(Tuple))
+import Data.Tuple (Tuple(Tuple), uncurry)
 import Data.Maybe (Maybe(Nothing, Just), fromMaybe)
 import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
@@ -91,6 +91,12 @@ mapWithPath p f = go p
     Lambda bs body  -> Lambda bs <$> go p body
     App e es        -> App       <$> go p e <*> pure es
     ListComp e qs   -> ListComp  <$> go p e <*> pure qs
+    LetExpr (Cons (Tuple bin ex) bins) expr -> do
+      ex'   <- go p ex
+      bin'  <- return bin
+      bins' <- return bins
+      expr' <- return expr
+      return $ LetExpr (Cons (Tuple bin' ex') bins') expr'
     _               -> throwError $ PathError (Fst p) e
   go (Snd p) e = case e of
     Binary op e1 e2 -> Binary op e1 <$> go p e2
@@ -175,6 +181,7 @@ eval1 env expr = case expr of
   (App (Atom (Name name)) args)      -> apply env name args
   (App (App func es) es')            -> return $ App func (es ++ es')
   (ListComp e qs)                    -> evalListComp e qs
+  (LetExpr binds exp)                -> evalLetExpr binds exp
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> Expr -> Expr
@@ -320,7 +327,6 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
 -- List Comprehensions
 ------------------------------------------------------------------------------------------
 
---TODO: remove redundancies
 evalListComp :: Expr -> List ExprQual -> Evaluator Expr
 evalListComp expr Nil           = return $ List $ singleton expr
 evalListComp expr (Cons q qs) = case q of
@@ -346,6 +352,47 @@ evalListComp expr (Cons q qs) = case q of
           _   -> return $ ListComp expr' qs'
     Left l  -> throwError $ BindingError $ MatchingError b e
   _ -> throwError $ CannotEvaluate (ListComp expr (Cons q qs))
+
+-- replaces expressions in List-Comprehension-Qualifiers and considers overlapping bindings
+replaceQualifiers :: List ExprQual -> StateT (StrMap Expr) Evaluator (List ExprQual)
+replaceQualifiers = traverse replaceQual
+  where
+    replaceQual :: ExprQual -> StateT (StrMap Expr) Evaluator ExprQual
+    replaceQual qual = case qual of
+      Gen b e -> scope b e >>= \e' -> return $ Gen b e'
+      Let b e -> scope b e >>= \e' -> return $ Let b e'
+      Guard e -> do
+        sub <- get
+        e'  <- lift $ replace' sub e
+        return $ Guard e'
+
+scope :: Binding -> Expr -> StateT (StrMap Expr) Evaluator Expr
+scope b e = do
+  sub <- get
+  e'  <- lift $ replace' sub e
+  modify (removeOverlapping b)
+  return e'
+
+------------------------------------------------------------------------------------------
+-- Let Expressions
+------------------------------------------------------------------------------------------
+
+type Bindings = List (Tuple Binding Expr)
+
+evalLetExpr :: Bindings -> Expr -> Evaluator Expr
+evalLetExpr Nil e = return e
+evalLetExpr (Cons (Tuple b e) rest) expr = case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
+  Left l  -> throwError $ BindingError $ MatchingError b e
+  Right r -> do
+    case rest of
+      Nil -> replace' r expr
+      _   -> do
+        Tuple rest' r' <- runStateT (replaceBindings rest) r
+        expr' <- replace' r' expr
+        return $ LetExpr rest' expr'
+
+replaceBindings :: Bindings -> StateT (StrMap Expr) Evaluator Bindings
+replaceBindings = traverse $ \(Tuple bin expr) -> scope bin expr >>= \expr' -> return $ Tuple bin expr'
 
 ------------------------------------------------------------------------------------------
 
@@ -467,6 +514,13 @@ mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
 mapM' f Nothing  = pure Nothing
 mapM' f (Just x) = Just <$> (f x)
 
+mapM :: forall a b m. (Monad m) => (a -> m b) -> List a -> m (List b)
+mapM f Nil = pure Nil
+mapM f (Cons x xs) = do
+  y  <- f x
+  ys <- mapM f xs
+  return $ Cons y ys
+
 -- removes every entry in StrMap that is inside the binding
 removeOverlapping :: Binding -> StrMap Expr -> StrMap Expr
 removeOverlapping bind = removeOverlapping' (boundNames bind)
@@ -496,26 +550,11 @@ replace' subs = go
       Tuple quals' subs' <- runStateT (replaceQualifiers quals) subs
       expr'              <- replace' subs' expr
       return $ ListComp expr' quals'
+    (LetExpr binds expr)  -> do
+      Tuple binds' subs' <- runStateT (replaceBindings binds) subs
+      expr'              <- replace' subs' expr
+      return $ LetExpr binds' expr'
     e                     -> return e
-
--- replaces expressions in List-Comprehension-Qualifiers and considers overlapping bindings
-replaceQualifiers :: List ExprQual -> StateT (StrMap Expr) Evaluator (List ExprQual)
-replaceQualifiers = traverse replaceQual
-  where
-    replaceQual :: ExprQual -> StateT (StrMap Expr) Evaluator ExprQual
-    replaceQual qual = case qual of
-      Gen b e -> scope b e >>= \e' -> return $ Gen b e'
-      Let b e -> scope b e >>= \e' -> return $ Let b e'
-      Guard e -> do
-        sub <- get
-        e'  <- lift $ replace' sub e
-        return $ Guard e'
-    scope :: Binding -> Expr -> StateT (StrMap Expr) Evaluator Expr
-    scope b e = do
-      sub <- get
-      e'  <- lift $ replace' sub e
-      modify (removeOverlapping b)
-      return e'
 
 avoidCapture :: StrMap Expr -> (List Binding) -> Evaluator Unit
 avoidCapture subs binds = case intersect (concatMap freeVariables $ Map.values subs) (boundNames' binds) of

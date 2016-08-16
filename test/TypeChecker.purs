@@ -1,29 +1,25 @@
 module Test.TypeChecker where
 
-import AST
-import TypeChecker
-import Parser
+import AST (AD(TList, TTuple), Atom(AInt, Name, Char), Binding(Lit, ConsLit, ListLit, NTupleLit), Definition(Def), Expr(Atom, List, SectR, App, Binary, PrefixOp, Lambda, NTuple, LetExpr, SectL), Op(Power, Colon, Add, Append), TVar(TVar), Type(TypCon, TypVar, AD, TypArr), TypeError(InfiniteType, UnificationFail, UnknownError))
+import TypeChecker (Subst, Infer, TypeEnv, Scheme(Forall), inferGroup, inferType, inferDef, prettyPrintType, emptyTyenv, runInfer, typeProgramn, eqScheme)
+import Parser (expression, definition, runParserIndent)
 
-import Prelude hiding (apply,compose)
-import Data.Either
-import Data.List
-import Data.Tuple
-import Data.Map as Map
-import Data.Maybe
-import Data.Foldable
+import Prelude (Unit, bind, ($), show, (==), (++))
+import Data.Either (Either(..))
+import Data.List (List(..), toList)
+import Data.Tuple (Tuple(..))
 
-import Text.Parsing.Parser
+import Text.Parsing.Parser (ParseError)
 
-import Control.Monad.Eff
-import Control.Monad.Eff.Console
+import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Console (CONSOLE, log)
 
-import Control.Monad.Except.Trans
 import Control.Monad.State
 
 testInfer:: forall a  eff. String -> a -> (TypeEnv -> a -> Infer (Tuple Subst Type))
  -> Either TypeError Scheme -> Eff (console :: CONSOLE | eff ) Unit
 testInfer name input f expected
-  = test name  expected $ runInfer $ f emptyTyenv input
+  = test name expected $ runInfer $ f emptyTyenv input
 
 testProgramm:: forall eff. String -> List Definition -> Expr
  -> Either TypeError Scheme -> Eff (console :: CONSOLE | eff ) Unit
@@ -59,18 +55,18 @@ out::forall eff. String -> Eff (console :: CONSOLE | eff ) Unit
 out s = log s
 
 parseExp:: String -> Either ParseError Expr
-parseExp exp = runParser exp expression
+parseExp = runParserIndent expression
 
 parseDef:: String -> Either ParseError Definition
-parseDef def = runParser def definition
+parseDef = runParserIndent definition
 
 typeStr:: String -> Either TypeError Scheme
-typeStr expS = case runParser expS expression of
+typeStr expS = case runParserIndent expression expS of
   Right exp -> runInfer $ inferType emptyTyenv exp
   Left _ -> Left $ UnknownError "Parse Error"
 
 typeStrPre:: String -> Either TypeError Scheme
-typeStrPre expS = case runParser expS expression of
+typeStrPre expS = case runParserIndent expression expS of
   Right exp -> typeProgramn Test.Parser.parsedPrelude exp
   Left _ -> Left $ UnknownError "Parse Error"
 
@@ -132,8 +128,8 @@ runTests = do
     inferDef (Right (Forall (Cons ((TVar "t_11")) (Cons ((TVar "t_5")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_5")) (TypVar  (TVar "t_11"))) (TypArr (AD (TList (TypVar  (TVar "t_5")))) (AD (TList (TypVar  (TVar "t_11"))))))))
   testInfer "foldr" (Def "foldr" (toList [Lit $ Name "f", Lit $ Name "ini", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App (aname "f") (toList [aname "x",App (aname "foldr") (toList [aname "f", aname "ini" ,aname "xs"  ] )])))
     inferDef (Right (Forall (Cons ((TVar "t_5")) (Cons ((TVar "t_4")) (Cons ((TVar "t_7")) Nil))) (TypArr (TypArr (TypVar  (TVar "t_7")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_4")))) (TypArr (TypVar  (TVar "t_5")) (TypArr (AD (TList (TypVar  (TVar "t_7")))) (TypVar  (TVar "t_4")))))))
-  testInfer "let Expr"  (LetExpr (Lit $ Name "x") (aint 3) (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aname "x")))
-    inferType(Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_4")) (Nil))) (TypArr (TypVar  (TVar "t_2")) (TypArr (TypVar  (TVar "t_4")) (TypCon "Int")))))
+  testInfer "let Expr" (LetExpr (Cons (Tuple (Lit $ Name "x") (aint 3)) Nil) (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aname "x")))
+    inferType (Right (Forall (Cons ((TVar "t_2")) (Cons ((TVar "t_4")) (Nil))) (TypArr (TypVar  (TVar "t_2")) (TypArr (TypVar  (TVar "t_4")) (TypCon "Int")))))
   testInfer "ConsLit Binding 1" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "x"))
     inferDef (Right (Forall (Cons ((TVar "t_2")) (Nil)) (TypArr (AD (TList (TypVar  (TVar "t_2")))) (TypVar  (TVar "t_2")))))
   testInfer "ConsLit Binding 2" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xs"))
@@ -148,11 +144,10 @@ runTests = do
     inferDef (Right (Forall (Cons ((TVar "t_3")) (Cons ((TVar "t_4")) (Cons ((TVar "t_5")) (Nil)))) (TypArr (AD (TTuple (Cons ((TypArr (TypVar  (TVar "t_3")) (TypArr (TypVar  (TVar "t_4")) (TypVar  (TVar "t_5"))))) (Cons ((TypVar  (TVar "t_3"))) (Cons ((TypVar  (TVar "t_4"))) (Nil)))))) (TypVar  (TVar "t_5")))))
   testInfer "ListLit Binding" (Def "list" (toList [ListLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"])))
     inferDef (Left ((InfiniteType (TVar "t_3") (TypArr (TypVar  (TVar "t_3")) (TypVar  (TVar "t_6"))))))
-  testInfer "NTupleLit Binding LetExp"  (LetExpr (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")])) (App (aname "a") (toList [aname "b"])))
+  testInfer "NTupleLit Binding LetExp" (LetExpr (Cons (Tuple (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")]))) Nil) (App (aname "a") (toList [aname "b"])))
     inferType (Right (Forall (Nil) (TypCon "Char")))
   testInfer "Lambda App" (App (Lambda (Cons (Lit (Name "f")) (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (App (Atom (Name "f")) (Cons (Atom (Name "a")) (Cons (Atom (Name "b")) (Nil))))) (Cons (PrefixOp Add) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))
     inferType (Right (Forall (Nil) (TypCon "Int")))
-
   testInfer "zipWith - Group" (toList [Def "zipWith" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
       (App (PrefixOp Colon) (toList [App (aname "f") (toList [aname "x",aname "y"]), App (aname "zipWith") (toList [aname "f",aname"xs",aname "ys"])])),
       Def "zipWith" (toList [Lit $ Name "_",ListLit Nil,Lit $ Name "_"]) (List Nil),
@@ -166,7 +161,6 @@ runTests = do
   testInfer "scanl - Group" (toList [Def "scanl" (Cons (Lit (Name "f")) (Cons (Lit (Name "b")) (Cons (ListLit (Nil)) (Nil)))) (List (Cons (Atom (Name "b")) (Nil))),
                                      Def "scanl" (Cons (Lit (Name "f")) (Cons (Lit (Name "b")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (Binary Colon (Atom (Name "b")) (App (Atom (Name "scanl")) (Cons (Atom (Name "f")) (Cons (App (Atom (Name "f")) (Cons (Atom (Name "b")) (Cons (Atom (Name "x")) (Nil)))) (Cons (Atom (Name "xs")) (Nil))))))])
           inferGroup (Right (Forall (Cons ((TVar "t_39")) (Cons ((TVar "t_48")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_48")) (TypArr (TypVar  (TVar "t_39")) (TypVar  (TVar "t_48")))) (TypArr (TypVar  (TVar "t_48")) (TypArr (AD (TList (TypVar  (TVar "t_39")))) (AD (TList (TypVar  (TVar "t_48")))))))))
-
 
   testProgramm "Prelude with exp" Test.Parser.parsedPrelude
     ((App (Atom (Name "sum")) (Cons (App (Atom (Name "map")) (Cons (SectR Power (Atom (AInt 2))) (Cons (List (Cons (Atom (AInt 1)) (Cons (Atom (AInt 2)) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))) (Nil)))) (Nil))))

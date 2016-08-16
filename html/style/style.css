@@ -191,7 +191,7 @@ div.clickable {
   color: #4271AE;
 }
 
-div.op, div.brace, div.comma {
+div.op, div.brace, div.comma, div.semicolon, div.dot {
   margin: 0px;
 }
 
