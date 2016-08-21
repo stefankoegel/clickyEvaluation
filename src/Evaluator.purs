@@ -1,10 +1,10 @@
 module Evaluator where
 
-import Prelude (class Show, top, class Semigroup, class Functor, class Monad, Unit, Ordering(..), (++), ($), (||), (&&), unit, return, (<*>), (<$>), (>>>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
+import Prelude (class Show, top, bottom, class Semigroup, class Functor, class Monad, Unit, Ordering(..), (++), ($), (||), (&&), unit, return, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
 import Data.List (List(Nil, Cons), null, singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, updateAt, (!!),concat)
 import Data.StrMap (StrMap, delete)
 import Data.StrMap as Map
-import Data.Tuple (Tuple(Tuple), uncurry)
+import Data.Tuple (Tuple(Tuple))
 import Data.Maybe (Maybe(Nothing, Just), fromMaybe)
 import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
@@ -12,8 +12,8 @@ import Data.Identity (Identity, runIdentity)
 import Data.Either (Either(..), either)
 import Data.Monoid (class Monoid)
 import Data.String (fromChar, toChar)
-import Data.Enum (fromEnum, toEnum)
-import Control.Bind (join)
+import Data.Char (fromCharCode)
+import Data.Enum (fromEnum)
 import Control.Apply ((*>))
 import Control.Alt ((<|>))
 import Control.Monad.Trans (lift)
@@ -252,53 +252,80 @@ wrapLambda binds args body =
 -- Arithmetic Sequences
 ------------------------------------------------------------------------------------------
 
---TODO: use fledged-out purescript-enum to solve everything with "enumFromThenTo"
+--  packs the evaluation result for arithmetic sequences (AS)
 
-{-
-packs the evaluation result for arithmetic sequences (AS)
-example: 
-Trip (Just x) (Just y) (Just z) will be displayed as x : [y, z ..] 
-if no end of (AS) was given or x : [y, z .. end] if end was given
--}
-data Trip a = Trip a a a
+--  example:
+--  Quat (Just x) (Just y) (Just z) (Just a) will be displayed as x : [y, z .. a]
 
-instance functorTrip :: Functor Trip where
-  map f (Trip x y z) = Trip (f x) (f y) (f z)
+data Quat a = Quat a a a a
 
-intFromStepTo :: Int -> Maybe Int -> Maybe Int -> Trip (Maybe Int)
-intFromStepTo start Nothing Nothing     = Trip (Just start) (Just (start + 1)) Nothing
-intFromStepTo start (Just step) Nothing = Trip (Just start) (Just step) (Just (step + step - start))
-intFromStepTo start Nothing (Just end)  = case start > end of
-  true  -> Trip Nothing Nothing Nothing 
+instance functorQuat :: Functor Quat where
+  map f (Quat a b c d) = Quat (f a) (f b) (f c) (f d)
+
+intFromStepTo :: Int -> Maybe Int -> Maybe Int -> Quat (Maybe Int)
+intFromStepTo start Nothing Nothing     = Quat (Just start) (clampSucc start) Nothing Nothing
+
+intFromStepTo start (Just step) Nothing = case clampStep start step of
+  Just nstep -> Quat (Just start) (Just step) (Just nstep) Nothing
+  Nothing    -> Quat (Just start) (Just step) Nothing (Just step)
+
+intFromStepTo start Nothing (Just end) = case start > end of
+  true  -> Quat Nothing Nothing Nothing Nothing
   false -> case start == end of
-    true  -> Trip (Just end) Nothing Nothing
-    false -> Trip (Just start) (Just (start + 1)) Nothing
+    true  -> Quat (Just end) Nothing Nothing Nothing
+    false -> case clampSucc start of
+      Just nstart -> Quat (Just start) (Just nstart) Nothing (Just end)
+      Nothing     -> Quat (Just start) Nothing Nothing Nothing
+
 intFromStepTo start (Just step) (Just end) = case (start <= step && start > end) || (start > step && start < end) of
-  true  -> Trip Nothing Nothing Nothing
+  true  -> Quat Nothing Nothing Nothing Nothing
   false -> case start == end of
-    true  -> Trip (Just end) Nothing Nothing
-    false -> Trip (Just (start)) (Just (step)) (Just (step + step - start))
+    true  -> Quat (Just end) Nothing Nothing Nothing
+    false -> case clampStep start step of
+      Just nstep -> Quat (Just start) (Just step) (Just nstep) (Just end)
+      Nothing    -> Quat (Just start) (Just step) Nothing (Just step)
 
---detect whether top or bottom for Boolean was reached
-intToBool :: Trip (Maybe Int) -> Trip (Maybe Boolean) 
-intToBool trip = case temp of
-  Trip (Just x) (Just y) z -> if x == y then Trip (Just x) Nothing Nothing else temp
+clampSucc :: Int -> Maybe Int
+clampSucc i = if i < top then Just (i + 1) else Nothing
+
+clampStep :: Int -> Int -> Maybe Int
+clampStep istart istep = if istep >= istart
+  then if (top - istep)    >= (istep - istart) then Just (istep + (istep - istart)) else Nothing
+  else if (bottom - istep) <= (istep - istart) then Just (istep + (istep - istart)) else Nothing
+
+exprFromStepTo :: Expr -> Maybe Expr -> Maybe Expr -> Quat (Maybe Expr)
+exprFromStepTo start step end = case start of
+  Atom (AInt i) -> (\x -> (Atom <<< AInt) <$> x) <$> intQuat
+  Atom (Bool b) -> (\x -> (Atom <<< Bool) <$> x) <$> (intToABool intQuat)
+  Atom (Char c) -> (\x -> (Atom <<< Char <<< fromChar) <$> x) <$> (intToAChar intQuat)
+  _             -> Quat Nothing Nothing Nothing Nothing
+    where
+      intQuat = intFromStepTo (unsafeExprToInt start) (unsafeExprToInt <$> step) (unsafeExprToInt <$> end)
+
+--detects whether 'top' or 'bottom' for Boolean was reached
+intToABool :: Quat (Maybe Int) -> Quat (Maybe Boolean)
+intToABool quat = case temp of
+  Quat (Just x) (Just y) z a -> if x == y then Quat (Just x) Nothing Nothing Nothing else temp
   _ -> temp
   where 
-    temp :: Trip (Maybe Boolean)
-    temp = (\x -> intToBool' <$> x) <$> trip
+    temp :: Quat (Maybe Boolean)
+    temp = (\x -> intToBool' <$> x) <$> quat
 
     intToBool' :: Int -> Boolean
     intToBool' i = if i <= 0 then false else true
 
-exprFromStepTo :: Expr -> Maybe Expr -> Maybe Expr -> Trip (Maybe Expr)
-exprFromStepTo start step end = case start of 
-  Atom (AInt i) -> (\x -> (Atom <<< AInt) <$> x) <$> intTrip
-  Atom (Bool b) -> (\x -> (Atom <<< Bool) <$> x) <$> (intToBool intTrip)
-  Atom (Char c) -> (\x -> (Atom <<< Char <<< fromChar) <$> x) <$> (\x -> join (toEnum <$> x)) <$> intTrip
-  _             -> Trip Nothing Nothing Nothing
-    where 
-      intTrip = intFromStepTo (unsafeExprToInt start) (unsafeExprToInt <$> step) (unsafeExprToInt <$> end)
+--detects whether 'top' or 'bottom' for Char was reached
+intToAChar :: Quat (Maybe Int) -> Quat (Maybe Char)
+intToAChar quat = case temp of
+  Quat (Just x) (Just y) z a -> if x == y then Quat (Just x) Nothing Nothing Nothing else temp
+  _ -> temp
+  where
+    temp :: Quat (Maybe Char)
+    temp = (\x -> intToChar' <$> x) <$> quat
+
+    intToChar' :: Int -> Char
+    intToChar' i = if c >= (top :: Char) then top else if c <= (bottom :: Char) then bottom else c
+      where c = fromCharCode i
 
 unsafeExprToInt :: Expr -> Int
 unsafeExprToInt (Atom (AInt i))   = i
@@ -319,16 +346,16 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
 
     evalArithmSeq' :: Evaluator Expr
     evalArithmSeq' = case (exprFromStepTo start step end) of
-      Trip (Just a) (Just b) nextStep -> return $ Binary Colon a (ArithmSeq b nextStep end)
-      Trip (Just a) Nothing _         -> return $ List (singleton a)
-      Trip Nothing _ _                -> return $ List Nil
+      Quat Nothing _ _ _          -> return $ List Nil
+      Quat (Just a) Nothing _ _   -> return $ List (singleton a)
+      Quat (Just a) (Just na) b c -> return $ Binary Colon a (ArithmSeq na b c)
 
 ------------------------------------------------------------------------------------------
 -- List Comprehensions
 ------------------------------------------------------------------------------------------
 
 evalListComp :: Expr -> List ExprQual -> Evaluator Expr
-evalListComp expr Nil           = return $ List $ singleton expr
+evalListComp expr Nil         = return $ List $ singleton expr
 evalListComp expr (Cons q qs) = case q of
   Guard (Atom (Bool false)) -> return $ List Nil
   Guard (Atom (Bool true))  -> if null qs then return (List (singleton expr)) else return (ListComp expr qs)
