@@ -279,11 +279,14 @@ intFromStepTo start Nothing (Just end) = case start > end of
 
 intFromStepTo start (Just step) (Just end) = case (start <= step && start > end) || (start > step && start < end) of
   true  -> Quat Nothing Nothing Nothing Nothing
-  false -> case start == end of
-    true  -> Quat (Just end) Nothing Nothing Nothing
-    false -> case clampStep start step of
-      Just nstep -> Quat (Just start) (Just step) (Just nstep) (Just end)
+  false -> if start == end || (abs step) > (abs end)
+    then Quat (Just start) Nothing Nothing Nothing
+    else case clampStep start step of
       Nothing    -> Quat (Just start) (Just step) Nothing (Just step)
+      Just nstep -> Quat (Just start) (Just step) (Just nstep) (Just end)
+
+abs :: Int -> Int
+abs x = if x < 0 then -x else x
 
 clampSucc :: Int -> Maybe Int
 clampSucc i = if i < top then Just (i + 1) else Nothing
