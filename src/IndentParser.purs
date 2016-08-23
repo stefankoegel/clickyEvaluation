@@ -5,7 +5,7 @@ module IndentParser (
     -- * Blocks
     withBlock, withBlock', block,
     -- * Indentation Checking
-    indented, same, sameOrIndented, checkIndent, withPos,
+    indented, sameLine, sameOrIndented, checkIndent, withPos,
     -- * Paired characters
     -- indentBrackets, indentAngles, indentBraces, indentParens,
     -- * Line Fold Chaining
@@ -124,11 +124,11 @@ indented = do
 
 -- | Parses only when indented past the level of the reference or on the same line
 sameOrIndented :: forall s. IndentParser s Unit
-sameOrIndented = same <|> indented
+sameOrIndented = sameLine <|> indented
 
 -- | Parses only on the same line as the reference
-same :: forall s. IndentParser s Unit
-same = do
+sameLine :: forall s. IndentParser s Unit
+sameLine = do
     pos <- getPosition
     s   <- get'
     if biAp sourceLine (==) pos s then return unit else fail "over one line"
