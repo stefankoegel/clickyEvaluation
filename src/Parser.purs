@@ -49,6 +49,9 @@ ilexe p = do
   skipWhite
   return a
 
+indent :: forall a. IndentParser String a -> IndentParser String a
+indent p = sameOrIndented *> (ilexe p)
+
 ---------------------------------------------------------
 -- Parsers for Primitives
 ---------------------------------------------------------
@@ -236,14 +239,14 @@ applicationOrSingleExpression expr = do
     Just args -> return $ App e args
 
 -- | Parse an if_then_else construct
-ifThenElse :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m Expr
+ifThenElse :: IndentParser String Expr -> IndentParser String Expr
 ifThenElse expr = do
-  string "if" *> PC.lookAhead (oneOf [' ', '\t', '\n', '('])
-  testExpr <- spaced expr
-  string "then"
-  thenExpr <- spaced expr
-  string "else"
-  elseExpr <- spaced expr
+  ilexe $ string "if" *> PC.lookAhead (oneOf [' ', '\t', '\n', '('])
+  testExpr <- indent expr
+  indent $ string "then"
+  thenExpr <- indent expr
+  indent $ string "else"
+  elseExpr <- indent expr
   return $ IfExpr testExpr thenExpr elseExpr
 
 -- | Parser for tuples or bracketed expressions.
