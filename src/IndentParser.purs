@@ -5,7 +5,7 @@ module IndentParser (
     -- * Blocks
     withBlock, withBlock', block,
     -- * Indentation Checking
-    indented, sameLine, sameOrIndented, checkIndent, withPos,
+    indented, indented', sameLine, sameOrIndented, checkIndent, withPos,
     -- * Paired characters
     -- indentBrackets, indentAngles, indentBraces, indentParens,
     -- * Line Fold Chaining
@@ -121,6 +121,13 @@ indented = do
     if biAp sourceColumn (<=) pos s then fail "not indented" else do
         put' $ setSourceLine s (sourceLine pos)
         return unit
+
+-- | same as 'indented', but does not change the indent state
+indented' :: forall s. IndentParser s Unit
+indented' = do
+    pos <- getPosition
+    s <- get'
+    if biAp sourceColumn (<=) pos s then fail "not indented" else return unit
 
 -- | Parses only when indented past the level of the reference or on the same line
 sameOrIndented :: forall s. IndentParser s Unit

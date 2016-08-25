@@ -1,6 +1,6 @@
 module Parser where
 
-import Prelude (Unit, void, class Monad, bind, return, ($), (<$>), (<<<), (+), (*), (++), id, flip, negate)
+import Prelude (Unit, void, class Monad, bind, return, ($), (<$>), (<<<), (>>=), (+), (*), (++), id, flip, negate)
 import Data.String as String
 import Data.Foldable (foldl)
 import Data.List (List(..), many, toList, concat, elemIndex, fromList)
@@ -51,6 +51,9 @@ ilexe p = do
 
 indent :: forall a. IndentParser String a -> IndentParser String a
 indent p = sameOrIndented *> (ilexe p)
+
+indent' :: forall a. IndentParser String a -> IndentParser String a
+indent' p = ilexe $ sameOrIndented *> p
 
 ---------------------------------------------------------
 -- Parsers for Primitives
@@ -238,7 +241,7 @@ applicationOrSingleExpression expr = do
     Nothing   -> return e
     Just args -> return $ App e args
 
--- | Parse an if_then_else construct
+-- | Parse an if_then_else construct - layout sensitive
 ifThenElse :: IndentParser String Expr -> IndentParser String Expr
 ifThenElse expr = do
   ilexe $ string "if" *> PC.lookAhead (oneOf [' ', '\t', '\n', '('])
@@ -360,33 +363,36 @@ lambda expr = do
   body <- expr
   return $ Lambda binds body
 
--- | Parser for let expression
+-- Parser for let expressions - layout sensitive
 letExpr :: IndentParser String Expr -> IndentParser String Expr
-letExpr expr = PC.try (letExpr' expr) <|> do 
+letExpr expr = do
   ilexe $ string "let"
-  binds <- block (bindingItem expr)
+  --sameLine <|> indented'
+
+  binds <- bindingBlock expr
+  skipWhite
+  --sameLine <|> indented'
   ilexe $ string "in"
+
+  --sameLine <|> indented'
   body  <- ilexe expr
   return $ LetExpr binds body
-
--- | Parse a let expression with optional curly brackets
-letExpr' :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m Expr
-letExpr' expr = do
-  ilexe $ string "let"
-  binds <- PC.try (PC.between (ilexe (char '{')) (ilexe (char '}')) bindings) <|> bindings
-  ilexe $ string "in"
-  e <- ilexe expr
-  return $ LetExpr binds e
   where
-    bindings :: ParserT String m (List (Tuple Binding Expr))
-    bindings = (bindingItem expr) `PC.sepBy` (PC.try $ ilexe (char ';')) 
+    bindingItem :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m (Tuple Binding Expr)
+    bindingItem expr = do
+      b <- ilexe binding
+      ilexe $ char '='
+      e <- ilexe expr
+      return $ Tuple b e
 
-bindingItem :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m (Tuple Binding Expr)
-bindingItem expr = do
-  b <- ilexe binding
-  ilexe $ char '='
-  e <- ilexe expr
-  return $ Tuple b e
+    bindingBlock :: IndentParser String Expr -> IndentParser String (List (Tuple Binding Expr))
+    bindingBlock expr = curly <|> (PC.try layout) <|> (PC.try iblock)
+      where 
+        curly  = PC.between (ilexe $ char '{') (ilexe $ char '}') iblock 
+        iblock = (bindingItem expr) `PC.sepBy1` (ilexe $ char ';')  
+        layout = block (PC.try $ bindingItem expr >>= \x -> PC.notFollowedBy (ilexe $ char ';') *> return x)
+
+----------------------------------------------------------------------------------
 
 -- | Parse an arbitrary expression
 expression :: IndentParser String Expr
