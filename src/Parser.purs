@@ -245,11 +245,11 @@ applicationOrSingleExpression expr = do
 ifThenElse :: IndentParser String Expr -> IndentParser String Expr
 ifThenElse expr = do
   ilexe $ string "if" *> PC.lookAhead (oneOf [' ', '\t', '\n', '('])
-  testExpr <- indent expr
-  indent $ string "then"
-  thenExpr <- indent expr
-  indent $ string "else"
-  elseExpr <- indent expr
+  testExpr <- indent' expr
+  indent' $ string "then"
+  thenExpr <- indent' expr
+  indent' $ string "else"
+  elseExpr <- indent' expr
   return $ IfExpr testExpr thenExpr elseExpr
 
 -- | Parser for tuples or bracketed expressions.
@@ -384,9 +384,7 @@ letExpr expr = do
       where 
         curly  = PC.between (ilexe $ char '{') (ilexe $ char '}') iblock 
         iblock = (bindingItem expr) `PC.sepBy1` (ilexe $ char ';')  
-        layout = block (PC.try $ bindingItem expr >>= \x -> PC.notFollowedBy (ilexe $ char ';') *> return x)
-
-----------------------------------------------------------------------------------
+        layout = block1 (PC.try $ bindingItem expr >>= \x -> PC.notFollowedBy (ilexe $ char ';') *> return x)
 
 -- | Parse an arbitrary expression
 expression :: IndentParser String Expr
@@ -450,18 +448,14 @@ binding = fix $ \bnd ->
 
 definition :: IndentParser String Definition
 definition = do
-  defName <- name
-  skipSpaces
-  binds <- binding `PC.sepEndBy` skipSpaces
-  char '='
-  skipSpaces
-  body <- expression
+  defName <- ilexe name
+  binds   <- many $ indent' binding
+  indent' $ char '='
+  body    <- indent' expression
   return $ Def defName binds body
 
 definitions :: IndentParser String (List Definition)
-definitions = do
-  whiteSpace
-  definition `PC.sepEndBy` whiteSpace
+definitions = skipWhite *> block definition
 
 parseDefs :: String -> Either ParseError (List Definition)
-parseDefs = runParserIndent definitions
+parseDefs = runParserIndent $ definitions

@@ -3,7 +3,7 @@ module IndentParser (
     -- * Types
     IndentParser, runIndent,
     -- * Blocks
-    withBlock, withBlock', block,
+    withBlock, withBlock', block, block1,
     -- * Indentation Checking
     indented, indented', sameLine, sameOrIndented, checkIndent, withPos,
     -- * Paired characters
@@ -141,9 +141,15 @@ sameLine = do
     if biAp sourceLine (==) pos s then return unit else fail "over one line"
 
 -- | Parses a block of lines at the same indentation level
+block1 :: forall s a. IndentParser s a -> IndentParser s (List a)
+block1 p = withPos $ do
+    r <- many1 $ checkIndent *> p
+    return r
+
+-- | Parses a block of lines at the same indentation level , empty Blocks allowed
 block :: forall s a. IndentParser s a -> IndentParser s (List a)
 block p = withPos $ do
-    r <- many1 $ checkIndent *> p
+    r <- many $ checkIndent *> p
     return r
 
 -- | Parses using the current location for indentation reference
