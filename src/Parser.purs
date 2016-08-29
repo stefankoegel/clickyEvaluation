@@ -44,7 +44,7 @@ skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
 
 --lexeme parser (skips trailing whitespaces and linebreaks)
 ilexe :: forall a m. (Monad m) => ParserT String m a -> ParserT String m a
-ilexe p = p >>= \a -> skipWhite *> return a-
+ilexe p = p >>= \a -> skipWhite *> return a
 
 -- parses <p> if it is on the same line or indented, does NOT change indentation state
 indent :: forall a. IndentParser String a -> IndentParser String a
