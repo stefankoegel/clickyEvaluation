@@ -50,10 +50,10 @@ ilexe p = do
   return a
 
 indent :: forall a. IndentParser String a -> IndentParser String a
-indent p = sameOrIndented *> (ilexe p)
+indent p = (sameOrIndented PC.<?> "Missing indentation! Did you type a tab-character?") *> ilexe p
 
 indent' :: forall a. IndentParser String a -> IndentParser String a
-indent' p = ilexe $ sameOrIndented *> p
+indent' p = ((sameLine <|> indented') PC.<?> "Missing indentation! Did you type a tab-character?") *> ilexe p
 
 ---------------------------------------------------------
 -- Parsers for Primitives
@@ -367,22 +367,16 @@ lambda expr = do
 letExpr :: IndentParser String Expr -> IndentParser String Expr
 letExpr expr = do
   ilexe $ string "let"
-  --sameLine <|> indented'
-
-  binds <- bindingBlock expr
-  skipWhite
-  --sameLine <|> indented'
-  ilexe $ string "in"
-
-  --sameLine <|> indented'
-  body  <- ilexe expr
+  binds <- indent' $ bindingBlock expr
+  indent' $ string "in"
+  body  <- indent' $ withPos expr
   return $ LetExpr binds body
   where
-    bindingItem :: forall m. (Monad m) => ParserT String m Expr -> ParserT String m (Tuple Binding Expr)
+    bindingItem :: IndentParser String Expr -> IndentParser String (Tuple Binding Expr)
     bindingItem expr = do
       b <- ilexe binding
-      ilexe $ char '='
-      e <- ilexe expr
+      indent' $ char '='
+      e <- indent'$ withPos expr
       return $ Tuple b e
 
     bindingBlock :: IndentParser String Expr -> IndentParser String (List (Tuple Binding Expr))
