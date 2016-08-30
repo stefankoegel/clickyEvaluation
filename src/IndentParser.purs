@@ -3,9 +3,9 @@ module IndentParser (
     -- * Types
     IndentParser, runIndent,
     -- * Blocks
-    withBlock, withBlock', block,
+    withBlock, withBlock', block, block1,
     -- * Indentation Checking
-    indented, same, sameOrIndented, checkIndent, withPos,
+    indented, indented', sameLine, sameOrIndented, checkIndent, withPos,
     -- * Paired characters
     -- indentBrackets, indentAngles, indentBraces, indentParens,
     -- * Line Fold Chaining
@@ -122,21 +122,34 @@ indented = do
         put' $ setSourceLine s (sourceLine pos)
         return unit
 
+-- | same as 'indented', but does not change the indent state
+indented' :: forall s. IndentParser s Unit
+indented' = do
+    pos <- getPosition
+    s <- get'
+    if biAp sourceColumn (<=) pos s then fail "not indented" else return unit
+
 -- | Parses only when indented past the level of the reference or on the same line
 sameOrIndented :: forall s. IndentParser s Unit
-sameOrIndented = same <|> indented
+sameOrIndented = sameLine <|> indented
 
 -- | Parses only on the same line as the reference
-same :: forall s. IndentParser s Unit
-same = do
+sameLine :: forall s. IndentParser s Unit
+sameLine = do
     pos <- getPosition
     s   <- get'
     if biAp sourceLine (==) pos s then return unit else fail "over one line"
 
 -- | Parses a block of lines at the same indentation level
+block1 :: forall s a. IndentParser s a -> IndentParser s (List a)
+block1 p = withPos $ do
+    r <- many1 $ checkIndent *> p
+    return r
+
+-- | Parses a block of lines at the same indentation level , empty Blocks allowed
 block :: forall s a. IndentParser s a -> IndentParser s (List a)
 block p = withPos $ do
-    r <- many1 $ checkIndent *> p
+    r <- many $ checkIndent *> p
     return r
 
 -- | Parses using the current location for indentation reference
