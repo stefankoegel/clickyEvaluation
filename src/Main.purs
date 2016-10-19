@@ -88,7 +88,7 @@ showEvaluationState = do
   typContainer <- liftEff $ prepareContainer "typ"
   svgContainer <- liftEff $ prepareContainer "svg"
 
-  { env = env, out = out, history = histExprs } <- get :: EvalM EvalState
+  { env: env, out: out, history: histExprs } <- get :: EvalM EvalState
   -- liftEff $ print out.expr
   -- liftEff $ print out.typ
 
@@ -175,7 +175,7 @@ wrapInDiv name jq = do
 
 makeClickable :: J.JQuery -> EvalM Unit
 makeClickable jq = do
-  { env = env, out = out } <- get
+  { env: env, out: out } <- get
   let expr = out.expr
   let typeTree = out.typ
   liftEff $ jqMap (testEval env expr typeTree) jq
@@ -238,7 +238,7 @@ removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
 
 evalExpr :: (Env -> Path -> Expr -> Either EvalError Expr) -> Path -> EvalM Unit
 evalExpr eval path = do
-  { env = env, out = out, typEnv = typEnv} <- get
+  { env: env, out: out, typEnv: typEnv} <- get
   let expr = out.expr
   -- liftEff $ print path
   case eval env path expr of

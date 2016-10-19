@@ -868,13 +868,13 @@ helpTypeToABC:: Type  -> State {count :: Int, env:: (Map String String)} Type
 helpTypeToABC t = go t
   where
    go (TypVar (TVar var)) = do
-      {env = env :: Map String String} <- get
+      {env: (env :: Map String String)} <- get
       case lookup var env of
         Just var' -> return $ TypVar (TVar var')
         Nothing -> do
           var' <- freshLetter
           let env' = (insert var var' env)
-          {count=count:: Int} <- get
+          {count: (count :: Int)} <- get
           put {count:count, env:env'}
           return $ TypVar (TVar var')
    go (TypArr t1 t2) = do
@@ -908,7 +908,7 @@ helpBindingToABC bin = go bin
 
 freshLetter:: State {count:: Int, env:: Map String String} String
 freshLetter = do
-    {count = count, env = env :: Map String String} <- get
+    {count: count, env: env :: Map String String} <- get
     put {count:count+1, env:env}
     return $ fromCharList $ newTypVar count
 

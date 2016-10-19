@@ -611,6 +611,6 @@ indexBinding (NTupleLit bs) = do
 
 fresh ::State {count:: Int} Int
 fresh = do
-  {count = count} <- get
+  {count: count} <- get
   put {count:count+1}
   return count
