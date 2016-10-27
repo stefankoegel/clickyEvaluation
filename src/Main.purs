@@ -1,21 +1,22 @@
 module Main where
 
-import Prelude (class Applicative, Unit, (<$>), bind, show, ($), (>>=), void, unit, return, (++), id, (+), flip, (<<<), (-))
+import Prelude (class Applicative, Unit, (<$>), bind, show, ($), (>>=), (*>), void, unit, pure, id, (<>), (+), flip, (<<<), (-))
 import Data.Foreign (unsafeFromForeign)
 import Data.Foldable (any)
 import Data.Either (Either(Right, Left), either)
 import Data.Maybe (Maybe(Just, Nothing), maybe)
-import Data.List (List(Nil), (:), singleton, (!!), drop, deleteAt, length, (..), zipWithA)
+import Data.List (List(Nil), (:), singleton, (!!), drop, length, (..), zipWithA)
 
 import Control.Monad.Eff.JQuery as J
 import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Console (CONSOLE, print)
+import Control.Monad.Eff.Console (CONSOLE)
 import Control.Monad.State.Trans (StateT, modify, get, runStateT)
 import Control.Monad.Eff.Class (liftEff)
 
 import Text.Parsing.Parser (ParseError(ParseError))
 import Text.Parsing.Parser.Pos (Position(Position))
 import DOM (DOM)
+import Ace as Ace
 import Ace.Types (ACE())
 import Ace.Editor as Editor
 import Ace.EditSession as Session
@@ -28,11 +29,11 @@ import TypeChecker (TypeEnv, txToABC, buildPartiallyTypedTree, typeTreeProgramnE
 import Parser (parseDefs, parseExpr)
 import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey, showTypes, isChecked)
 
-main :: DOMEff J.JQuery
+main :: DOMEff Unit
 main = J.ready $ do
-  J.select "#input"
-    >>= J.on "change" (\_ _ -> startEvaluation)
-    >>= J.on "keyup"  (\e _ -> if isEnterKey e then startEvaluation else return unit)
+  selection <- J.select "#input"
+  J.on "change" (\_ _ -> startEvaluation) selection
+  J.on "keyup"  (\e _ -> if isEnterKey e then startEvaluation else pure unit) selection
   startEvaluation
 
 type DOMEff = Eff (dom :: DOM, console :: CONSOLE, ace :: ACE)
@@ -71,7 +72,7 @@ startEvaluation = do
 outIfErr::forall b. String -> Either TypeError b -> DOMEff Unit
 outIfErr origin either = case either of
   Left err -> showInfo origin (prettyPrintTypeError err)
-  Right _ -> return unit
+  Right _ -> pure unit
 
 markText :: Int -> Int -> DOMEff Unit
 markText line column = do
@@ -88,7 +89,7 @@ showEvaluationState = do
   typContainer <- liftEff $ prepareContainer "typ"
   svgContainer <- liftEff $ prepareContainer "svg"
 
-  { env = env, out = out, history = histExprs } <- get :: EvalM EvalState
+  { env: env, out: out, history: histExprs } <- get :: EvalM EvalState
   -- liftEff $ print out.expr
   -- liftEff $ print out.typ
 
@@ -98,8 +99,15 @@ showEvaluationState = do
   showHistory <- liftEff $ isChecked historyCheckbox
 
   if showHistory
-    then showHistoryList histExprs >>= liftEff <<< flip J.append history
-    else liftEff $ J.create "<p></p>" >>= J.setText "hidden" >>=  flip J.append history
+    then do
+      jq <- showHistoryList histExprs
+      liftEff $ J.append jq history
+      pure jq
+    else liftEff $ do
+      paragraph <- J.create "<p></p>"
+      J.setText "hidden" paragraph
+      J.append paragraph history
+      pure paragraph
 
   liftEff (J.find ".binary, .app, .func, .list, .if, .name" output)
      >>= makeClickable
@@ -108,27 +116,35 @@ showEvaluationState = do
     >>= addClickListener (out.typ)
   liftEff (J.body >>= J.on "mouseover" (\_ _ -> removeMouseOver))
 
-  liftEff $ return unit :: DOMEff Unit
+  liftEff $ pure unit :: DOMEff Unit
 
 forIndex :: forall m a b. (Applicative m) => (List a) -> (a -> Int -> m b) -> m (List b)
 forIndex as f = zipWithA f as (0 .. (length as - 1))
 
 showHistoryList :: (List Output) -> EvalM J.JQuery
 showHistoryList exprs = do
-  box <- liftEff $ J.create "<table></table>" >>= J.addClass "historyBox" >>= J.addClass "vertical" >>= J.addClass "frame"
+  box <- liftEff $ do
+    table <- J.create "<table></table>"
+    J.addClass "historyBox" table
+    J.addClass "vertical" table
+    J.addClass "frame" table
+    pure table
   forIndex exprs $ \expr i -> do
     showHistoryRow expr i >>= liftEff <<< flip J.append box
-  scroll <- liftEff $ J.create "<div></div>" >>= J.addClass "scroll"
+  scroll <- liftEff $ J.create "<div></div>" >>= \div -> J.addClass "scroll" div *> pure div
   liftEff $ J.append box scroll
-  return scroll
+  pure scroll
 
 
 showHistoryRow :: Output -> Int -> EvalM J.JQuery
 showHistoryRow out i = do
-  row <- liftEff $ J.create "<tr></tr>" >>= J.addClass "history"
+  row <- liftEff $ do
+    hist <- J.create "<tr></tr>"
+    J.addClass "history" hist
+    pure hist
   tdExpr <- liftEff $ J.create "<td></td>"
   liftEff $ exprToJQuery out >>= flip J.append tdExpr
-  liftEff $ J.append tdExpr row
+  liftEff $ (J.append tdExpr row *> pure row)
   es <- get :: EvalM EvalState
   -- let deleteHandler = \_ _ -> do
   --                       let es' = es { history = maybe es.history id (deleteAt i es.history) }
@@ -143,39 +159,48 @@ showHistoryRow out i = do
   let restoreHandler = \_ _ -> do
                          let es' = es { history = drop (i + 1) es.history, out = maybe es.out id (es.history !! i) }
                          void $ runStateT showEvaluationState es'
-  restore <- liftEff $ J.create "<button></button>"
-    >>= J.setText "Restore"
-    >>= J.addClass "restore"
-    >>= J.on "click" restoreHandler
+  restore <- liftEff $ do
+    button <- J.create "<button></button>"
+    J.setText "Restore" button
+    J.addClass "restore" button
+    J.on "click" restoreHandler button
+    pure button
   tdRestore <- liftEff $ J.create "<td></td>"
   liftEff $ J.append restore tdRestore
   liftEff $ J.append tdRestore row
-  return row
+  pure row
 
 showInfo :: String -> String -> DOMEff Unit
 showInfo origin msg = do
-  info <- J.create "<p></p>"
-    >>= J.addClass "info"
-    >>= J.setText ("Error in " ++ origin ++ " => " ++ msg)
+  info <- do
+    paragraph <- J.create "<p></p>"
+    J.addClass "info" paragraph
+    J.setText ("Error in " <> origin <> " => " <> msg) paragraph
+    pure paragraph
   clearInfo
   J.select "#info"
     >>= J.append info
-  return unit
+  pure unit
 
 clearInfo :: DOMEff Unit
 clearInfo = void $ J.select "#info" >>= J.clear
 
 prepareContainer :: String -> DOMEff J.JQuery
 prepareContainer name = do
-  J.select ("#" ++ name ++ "-container") >>= J.clear
+  selection <- J.select ("#" <> name <> "-container")
+  J.clear selection
+  pure selection
 
 wrapInDiv :: String -> J.JQuery -> DOMEff J.JQuery
 wrapInDiv name jq = do
-  J.create "<div></div>" >>= J.addClass name >>= J.append jq
+  div <- J.create "<div></div>"
+  J.addClass name div
+  J.append jq div
+  pure div
 
 makeClickable :: J.JQuery -> EvalM Unit
 makeClickable jq = do
-  { env = env, out = out } <- get
+  { env: env, out: out } :: EvalState <- get
   let expr = out.expr
   let typeTree = out.typ
   liftEff $ jqMap (testEval env expr typeTree) jq
@@ -184,51 +209,54 @@ makeClickable jq = do
   testEval env expr typeTree jq = do
     mpath <- getPath jq
     case mpath of
-      Nothing   -> return unit
+      Nothing   -> pure unit
       Just path ->
         case evalPath1 env path expr of
           Left err -> displayEvalError err jq
           Right _  -> if checkForError path typeTree
-            then return unit
+            then pure unit
             else void $ J.addClass "clickable" jq
 
 displayEvalError :: EvalError -> J.JQuery -> DOMEff Unit
 displayEvalError err jq = case err of
   DivByZero -> void $ makeDiv "Division by zero!" (singleton "evalError") >>= flip prepend jq
   NoMatchingFunction _ errs -> if (any missesArguments errs)
-    then return unit
+    then pure unit
     else void $ makeDiv "No matching function!" (singleton "evalError") >>= flip prepend jq
-  _         -> return unit
+  _         -> pure unit
   where
     missesArguments (TooFewArguments _ _) = true
     missesArguments (StrictnessError _ _) = true
     missesArguments _                     = false
 
 addMouseOverListener :: J.JQuery -> EvalM J.JQuery
-addMouseOverListener jq = liftEff $ J.on "mouseover" handler jq
+addMouseOverListener jq = liftEff $ do
+    J.on "mouseover" handler jq
+    pure jq
   where
   handler :: J.JQueryEvent -> J.JQuery -> DOMEff Unit
   handler jEvent jq = do
     J.stopPropagation jEvent
     removeMouseOver
     J.addClass "mouseOver" jq
-    return unit
+    pure unit
 
 addClickListener :: TypeTree ->  J.JQuery -> EvalM J.JQuery
 addClickListener typeTree jq = do
   evaluationState <- get
   liftEff $ J.on "click" (handler evaluationState) jq
+  pure jq
   where
   handler :: EvalState -> J.JQueryEvent -> J.JQuery -> DOMEff Unit
   handler evaluationState jEvent jq = do
     J.stopImmediatePropagation jEvent
     mpath <- getPath jq
     case mpath of
-      Nothing   -> return unit
+      Nothing   -> pure unit
       Just path -> do
-        return unit
+        pure unit
         if checkForError path typeTree
-          then return unit
+          then pure unit
           else case ctrlKeyPressed jEvent of
                 false -> void $ runStateT (evalExpr evalPath1 path) evaluationState
                 true  -> void $ runStateT (evalExpr evalPathAll path) evaluationState
@@ -238,11 +266,11 @@ removeMouseOver = void $ J.select ".mouseOver" >>= J.removeClass "mouseOver"
 
 evalExpr :: (Env -> Path -> Expr -> Either EvalError Expr) -> Path -> EvalM Unit
 evalExpr eval path = do
-  { env = env, out = out, typEnv = typEnv} <- get
+  { env: env, out: out, typEnv: typEnv} <- get
   let expr = out.expr
   -- liftEff $ print path
   case eval env path expr of
-    Left msg    -> return unit
+    Left msg    -> pure unit
     Right expr' -> do
         let eitherTyp = typeTreeProgramnEnv typEnv expr'
         let typ'' = either (\_ -> buildPartiallyTypedTree typEnv expr') id eitherTyp

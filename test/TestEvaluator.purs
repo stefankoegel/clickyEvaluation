@@ -1,6 +1,6 @@
 module Test.Evaluator where
 
-import Prelude (Unit, bind, (++), ($), show, unit, return, (==), (<<<), (+), negate, (*))
+import Prelude (Unit, bind, (<>), ($), show, unit, pure, (==), (<<<), (+), negate, (*))
 import Data.Either (Either(..))
 import Data.Tuple (Tuple(..))
 import Data.StrMap as M
@@ -21,10 +21,10 @@ eval1test name input expected = case (Tuple (runParserIndent expression input) (
     case runEvalM (eval1 M.empty inExp) of
       (Right eval1Exp) -> 
         if eval1Exp == expExp
-          then return unit -- log $ "Eval success (" ++ name ++ ")"
-          else tell' $ "Eval fail (" ++ name ++ "): " ++ show eval1Exp ++ " should be " ++ show expExp
-      (Left err) -> tell' $ "Eval fail (" ++ name ++ "): " ++ show err ++ ")"
-  _ -> tell' $ "Parse fail (" ++ name ++ ")"
+          then pure unit -- log $ "Eval success (" ++ name ++ ")"
+          else tell' $ "Eval fail (" <> name <> "): " <> show eval1Exp <> " should be " <> show expExp
+      (Left err) -> tell' $ "Eval fail (" <> name <> "): " <> show err <> ")"
+  _ -> tell' $ "Parse fail (" <> name <> ")"
 
 eval1EnvTest :: String -> String -> String -> String -> Writer (List String) Unit
 eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
@@ -32,19 +32,19 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expre
     case runEvalM (eval1 (defsToEnv defs) inExp) of
       (Right eval1Exp) -> 
         if eval1Exp == expExp
-          then return unit -- log $ "Eval success (" ++ name ++ ")"
-          else tell' $ "Eval fail (" ++ name ++ "): " ++ show eval1Exp ++ " should be " ++ show expExp
-      (Left err) -> tell' $ "Eval fail (" ++ name ++ "): " ++ show err ++ ")"
-  _ -> tell' $ "Parse fail (" ++ name ++ ")"
+          then pure unit -- log $ "Eval success (" <> name <> ")"
+          else tell' $ "Eval fail (" <> name <> "): " <> show eval1Exp <> " should be " <> show expExp
+      (Left err) -> tell' $ "Eval fail (" <> name <> "): " <> show err <> ")"
+  _ -> tell' $ "Parse fail (" <> name <> ")"
 
 evalEnvTest :: String -> String -> String -> String -> Writer (List String) Unit
 evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
     let evalExp = eval (defsToEnv defs) inExp in
       if evalExp == expExp
-        then return unit -- log $ "Eval success (" ++ name ++ ")"
-        else tell' $ "Eval fail (" ++ name ++ "): " ++ show evalExp ++ " should be " ++ show expExp
-  (Tuple (Tuple pi pe) pd) -> tell' $ "Parse fail (" ++ name ++ "): (input: " ++ show pi ++ ", expected: " ++ show pe ++ ", definitions: " ++ show pd ++ ")"
+        then pure unit -- log $ "Eval success (" ++ name ++ ")"
+        else tell' $ "Eval fail (" <> name <> "): " <> show evalExp <> " should be " <> show expExp
+  (Tuple (Tuple pi pe) pd) -> tell' $ "Parse fail (" <> name <> "): (input: " <> show pi <> ", expected: " <> show pe <> ", definitions: " <> show pd <> ")"
 
 runTests :: Writer (List String) Unit
 runTests = do
@@ -103,14 +103,14 @@ runTests = do
   evalEnvTest "prelude" prelude "sum (map (^2) [1,2,3,4])" "30"
 
   evalEnvTest "TAE2a"
-    ( prelude ++ "\n" ++
-      "pair (x:y:rs) = (x, y) : pair (y:rs)\n" ++
+    ( prelude <> "\n" <>
+      "pair (x:y:rs) = (x, y) : pair (y:rs)\n" <>
       "pair _        = []")
     "pair [1, 2, 3, 4]"
     "[(1, 2), (2, 3), (3, 4)]"
   evalEnvTest "TAE2b" prelude "foldr (\\a b -> a + b * 10) 0 [3, 2, 1]" "123"
   evalEnvTest "TAE2c"
-    (prelude ++ "\nsublist f t ls = drop f (take (t + f) ls)\n")
+    (prelude <> "\nsublist f t ls = drop f (take (t + f) ls)\n")
     "sublist 1 3 [0, 1, 2, 3, 4]"
     "[1, 2, 3]"
 
@@ -123,12 +123,12 @@ runTests = do
   evalEnvTest "TAE3g" prelude "foldl (\\(i, c) s -> (i + 1, c + length s)) (0, 0) [\"a\", \"bc\", \"defg\"]" "(3, 7)"
 
   evalEnvTest "TAT2a"
-    (prelude ++ "\nnth ls n = head (drop n ls)\n")
+    (prelude <> "\nnth ls n = head (drop n ls)\n")
     "nth [0, 1, 2, 3] 2"
     "2"
   evalEnvTest "TAT2b"
-    ( prelude ++ "\n" ++
-      "smallest (x:y:rs) = if x < y then smallest (x:rs) else smallest (y:rs)\n" ++
+    ( prelude <> "\n" <>
+      "smallest (x:y:rs) = if x < y then smallest (x:rs) else smallest (y:rs)\n" <>
       "smallest [x]      = x")
     "smallest [5, 3, 7]"
     "3"

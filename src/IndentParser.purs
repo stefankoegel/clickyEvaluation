@@ -13,12 +13,13 @@ module IndentParser (
     indentAp, (<+/>), indentNoAp, (<-/>), indentMany, (<*/>), indentOp, (<?/>), Optional(..)
 ) where
       
-import Prelude (class Monad, Unit, id, ap, const, ($), flip, unit, return, (==), bind, (<=))
+import Prelude (class Monad, Unit, id, ap, const, ($), flip, unit, (==), bind, (<=))
 import Data.List (List(..), many)
 import Data.Maybe (Maybe(..))
 
 import Control.Alt ((<|>))
 import Control.Apply ((*>), lift2)
+import Control.Applicative (pure)
 import Control.Monad.Trans (lift)
 import Control.Monad.State (State, evalState)
 import Control.Monad.State.Trans (get, put)
@@ -65,13 +66,13 @@ type IndentParser s a = ParserT s (State Position) a
 -- | @ getPosition @ returns current position
 --   should probably be added to Text.Parsing.Parser.Pos
 getPosition :: forall m s. (Monad m) => ParserT s m Position
-getPosition = ParserT $ \(PState { input: (i :: s), position: (pos :: Position)}) -> return {input: (i :: s), result: (Right (pos :: Position)) :: Either ParseError Position, consumed: false, position: (pos :: Position)}
+getPosition = ParserT $ \(PState { input: (i :: s), position: (pos :: Position)}) -> pure {input: (i :: s), result: (Right (pos :: Position)) :: Either ParseError Position, consumed: false, position: (pos :: Position)}
 
 -- | simple helper function to avoid typ-problems with MonadState instance
 get' :: forall s. IndentParser s Position
 get' = do 
   g <- lift get
-  return g 
+  pure g
 
 -- | simple helper function to avoid typ-problems with MonadState instance
 put' :: forall s. Position -> IndentParser s Unit
@@ -106,8 +107,8 @@ withBlock f a p = withPos $ do
     r1 <- a
     r  <- optionMaybe $ indented *> block p
     case r of 
-      Nothing -> return (f r1 Nil)
-      Just r2 -> return (f r1 r2)
+      Nothing -> pure (f r1 Nil)
+      Just r2 -> pure (f r1 r2)
 
 -- | Like 'withBlock', but throws away initial parse result
 withBlock' :: forall a b s. IndentParser s a -> IndentParser s b -> IndentParser s (List b)
@@ -120,14 +121,14 @@ indented = do
     s <- get'
     if biAp sourceColumn (<=) pos s then fail "not indented" else do
         put' $ setSourceLine s (sourceLine pos)
-        return unit
+        pure unit
 
 -- | same as 'indented', but does not change the indent state
 indented' :: forall s. IndentParser s Unit
 indented' = do
     pos <- getPosition
     s <- get'
-    if biAp sourceColumn (<=) pos s then fail "not indented" else return unit
+    if biAp sourceColumn (<=) pos s then fail "not indented" else pure unit
 
 -- | Parses only when indented past the level of the reference or on the same line
 sameOrIndented :: forall s. IndentParser s Unit
@@ -138,19 +139,19 @@ sameLine :: forall s. IndentParser s Unit
 sameLine = do
     pos <- getPosition
     s   <- get'
-    if biAp sourceLine (==) pos s then return unit else fail "over one line"
+    if biAp sourceLine (==) pos s then pure unit else fail "over one line"
 
 -- | Parses a block of lines at the same indentation level
 block1 :: forall s a. IndentParser s a -> IndentParser s (List a)
 block1 p = withPos $ do
     r <- many1 $ checkIndent *> p
-    return r
+    pure r
 
 -- | Parses a block of lines at the same indentation level , empty Blocks allowed
 block :: forall s a. IndentParser s a -> IndentParser s (List a)
 block p = withPos $ do
     r <- many $ checkIndent *> p
-    return r
+    pure r
 
 -- | Parses using the current location for indentation reference
 withPos :: forall s a. IndentParser s a -> IndentParser s a
@@ -158,14 +159,14 @@ withPos x = do
     a <- get'
     p <- getPosition
     r <- put' p *> x
-    put' a *> return r
+    put' a *> pure r
 
 -- | Ensures the current indentation level matches that of the reference
 checkIndent :: forall s. IndentParser s Unit
 checkIndent = do
     s <- get'
     p <- getPosition
-    if biAp sourceColumn (==) p s then return unit else fail "indentation doesn't match"
+    if biAp sourceColumn (==) p s then pure unit else fail "indentation doesn't match"
 
 -- | Run the result of an indentation sensitive parse
 runIndent :: forall a. State Position a -> a
@@ -200,16 +201,16 @@ infixl 12 indentOp as <?/>
 
 -- | parses with surrounding brackets
 indentBrackets :: forall a. IndentParser String a -> IndentParser String a
-indentBrackets p = withPos $ return id <-/> symbol "[" <+/> p <-/> symbol "]"
+indentBrackets p = withPos $ pure id <-/> symbol "[" <+/> p <-/> symbol "]"
 
 -- | parses with surrounding angle brackets
 indentAngles :: forall a. IndentParser String a -> IndentParser String a
-indentAngles p = withPos $ return id <-/> symbol "<" <+/> p <-/> symbol ">"
+indentAngles p = withPos $ pure id <-/> symbol "<" <+/> p <-/> symbol ">"
 
 -- | parses with surrounding braces
 indentBraces :: forall a. IndentParser String a -> IndentParser String a
-indentBraces p = withPos $ return id <-/> symbol "{" <+/> p <-/> symbol "}"
+indentBraces p = withPos $ pure id <-/> symbol "{" <+/> p <-/> symbol "}"
 
 -- | parses with surrounding parentheses 
 indentParens :: forall a. IndentParser String a -> IndentParser String a
-indentParens p = withPos $ return id <-/> symbol "(" <+/> p <-/> symbol ")"
+indentParens p = withPos $ pure id <-/> symbol "(" <+/> p <-/> symbol ")"

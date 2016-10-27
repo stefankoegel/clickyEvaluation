@@ -4,17 +4,20 @@ import AST (AD(TList, TTuple), Atom(AInt, Name, Char), Binding(Lit, ConsLit, Lis
 import TypeChecker (Subst, Infer, TypeEnv, Scheme(Forall), inferGroup, inferType, inferDef, prettyPrintType, emptyTyenv, runInfer, typeProgramn, eqScheme)
 import Parser (expression, definition, runParserIndent)
 
-import Prelude (Unit, bind, ($), show, (==), (++))
+import Prelude (Unit, bind, ($), show, (==), (<>))
 import Data.Either (Either(..))
-import Data.List (List(..), toList)
+import Data.List (List(..))
+import Data.Array (toUnfoldable) as Array
 import Data.Tuple (Tuple(..))
+import Test.Parser (parsedPrelude)
 
 import Text.Parsing.Parser (ParseError)
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 
-import Control.Monad.State
+toList :: forall a. Array a -> List a
+toList = Array.toUnfoldable
 
 testInfer:: forall a  eff. String -> a -> (TypeEnv -> a -> Infer (Tuple Subst Type))
  -> Either TypeError Scheme -> Eff (console :: CONSOLE | eff ) Unit
@@ -30,11 +33,11 @@ testProgramm name defs exp expected
 test:: forall eff. String -> Either TypeError Scheme -> Either TypeError Scheme
  -> Eff (console :: CONSOLE | eff ) Unit
 test name expected actuall = if eqTypErrScheme expected actuall
-  then log $ "Typing success ("  ++ name ++ ")"
-  else log $ "\n \n Typing fail (" ++ name ++ ") :  expected result: \n"
-    ++ show expected ++ "\n actuall result: \n" ++ show actuall ++ "\n \n"
-     ++ "Pretty Print expected: \n" ++ prettyPrint expected
-      ++ "\n Pretty Print actuall: \n" ++ prettyPrint actuall ++ "\n \n"
+  then log $ "Typing success ("  <> name <> ")"
+  else log $ "\n \n Typing fail (" <> name <> ") :  expected result: \n"
+    <> show expected <> "\n actuall result: \n" <> show actuall <> "\n \n"
+     <> "Pretty Print expected: \n" <> prettyPrint expected
+      <> "\n Pretty Print actuall: \n" <> prettyPrint actuall <> "\n \n"
 
 eqTypErrScheme:: Either TypeError Scheme -> Either TypeError Scheme -> Boolean
 eqTypErrScheme (Left a) (Left a') = (a == a')
@@ -67,7 +70,7 @@ typeStr expS = case runParserIndent expression expS of
 
 typeStrPre:: String -> Either TypeError Scheme
 typeStrPre expS = case runParserIndent expression expS of
-  Right exp -> typeProgramn Test.Parser.parsedPrelude exp
+  Right exp -> typeProgramn parsedPrelude exp
   Left _ -> Left $ UnknownError "Parse Error"
 
 typeExp:: Expr -> Either TypeError Scheme
@@ -87,6 +90,7 @@ printTypeStr::forall eff. String -> Eff (console :: CONSOLE | eff ) Unit
 printTypeStr s = out $ prettyPrint $ typeStr s
 
 -- default 1
+d1 :: Either TypeError Scheme
 d1 = Right (Forall Nil $ tvar "a")
 
 runTests :: forall eff. Eff (console :: CONSOLE | eff) Unit
@@ -162,6 +166,6 @@ runTests = do
                                      Def "scanl" (Cons (Lit (Name "f")) (Cons (Lit (Name "b")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (Binary Colon (Atom (Name "b")) (App (Atom (Name "scanl")) (Cons (Atom (Name "f")) (Cons (App (Atom (Name "f")) (Cons (Atom (Name "b")) (Cons (Atom (Name "x")) (Nil)))) (Cons (Atom (Name "xs")) (Nil))))))])
           inferGroup (Right (Forall (Cons ((TVar "t_39")) (Cons ((TVar "t_48")) (Nil))) (TypArr (TypArr (TypVar  (TVar "t_48")) (TypArr (TypVar  (TVar "t_39")) (TypVar  (TVar "t_48")))) (TypArr (TypVar  (TVar "t_48")) (TypArr (AD (TList (TypVar  (TVar "t_39")))) (AD (TList (TypVar  (TVar "t_48")))))))))
 
-  testProgramm "Prelude with exp" Test.Parser.parsedPrelude
+  testProgramm "Prelude with exp" parsedPrelude
     ((App (Atom (Name "sum")) (Cons (App (Atom (Name "map")) (Cons (SectR Power (Atom (AInt 2))) (Cons (List (Cons (Atom (AInt 1)) (Cons (Atom (AInt 2)) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))) (Nil)))) (Nil))))
     (Right (Forall (Nil) (TypCon "Int")))
