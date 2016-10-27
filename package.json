@@ -5,7 +5,7 @@
     "npm": "*"
   },
   "dependencies": {
-    "purescript": "0.10.1",
+    "purescript": "0.9.3",
     "pulp": "9.0.1",
     "bower": "*"
   },

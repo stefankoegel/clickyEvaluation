@@ -5,7 +5,7 @@ import Data.Foreign (unsafeFromForeign)
 import Data.Foldable (any)
 import Data.Either (Either(Right, Left), either)
 import Data.Maybe (Maybe(Just, Nothing), maybe)
-import Data.List (List(Nil), (:), singleton, (!!), drop, deleteAt, length, (..), zipWithA)
+import Data.List (List(Nil), (:), singleton, (!!), drop, length, (..), zipWithA)
 
 import Control.Monad.Eff.JQuery as J
 import Control.Monad.Eff (Eff)
@@ -29,11 +29,11 @@ import TypeChecker (TypeEnv, txToABC, buildPartiallyTypedTree, typeTreeProgramnE
 import Parser (parseDefs, parseExpr)
 import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey, showTypes, isChecked)
 
-main :: DOMEff J.JQuery
+main :: DOMEff Unit
 main = J.ready $ do
-  J.select "#input"
-    >>= J.on "change" (\_ _ -> startEvaluation)
-    >>= J.on "keyup"  (\e _ -> if isEnterKey e then startEvaluation else pure unit)
+  selection <- J.select "#input"
+  J.on "change" (\_ _ -> startEvaluation) selection
+  J.on "keyup"  (\e _ -> if isEnterKey e then startEvaluation else pure unit) selection
   startEvaluation
 
 type DOMEff = Eff (dom :: DOM, console :: CONSOLE, ace :: ACE)
