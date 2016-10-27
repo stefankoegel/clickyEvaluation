@@ -28,6 +28,8 @@ import AST (Atom(..), Binding(..), Expr(..), Qual(..), ExprQual, TypeQual, Index
 import TypeChecker (prettyPrintType, mapM)
 import JSHelpers (showTooltip, children)
 
+data Triple a b c = Triple a b c
+
 pathPropName :: String
 pathPropName = "clickyEvaluation_path"
 
@@ -59,6 +61,7 @@ exprToJQuery output = go (output.expr)
           pure jtypExp
 
 -- TODO rename to fit new Type
+-- TODO: Needs refactoring.
 exprToJQuery' :: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery' output = go id output
   where
@@ -100,23 +103,25 @@ exprToJQuery' output = go id output
       je <- go (p <<< Thrd) {expr:elseExpr, typ:tt3, idTree: i3}
       ifexpr jc jt je t i
 
+    -- TODO: Remove nested case expressions.
     {expr:(ArithmSeq start step end), typ:(TArithmSeq tstart tstep tend t), idTree:(IArithmSeq istart istep iend i)} -> do
       jStart <- go (p <<< Fst)  {expr:start, typ:tstart, idTree:istart}
-      case (isJust step) && (isJust tstep) && (isJust istep) of
-        true  -> case (isJust end) && (isJust tend) && (isJust iend) of
-          true  -> do
-            jStep <- go (p <<< Snd) {expr:(fromJust step), typ:(fromJust tstep), idTree:(fromJust istep)}
-            jEnd  <- go (p <<< Thrd) {expr:(fromJust end), typ:(fromJust tend), idTree:(fromJust iend)}
-            arithmeticSequence jStart (Just jStep) (Just jEnd) t i
-          false -> do
-            jStep <- go (p <<< Snd) {expr:(fromJust step), typ:(fromJust tstep), idTree:(fromJust istep)}
-            arithmeticSequence jStart (Just jStep) Nothing t i
-        false -> case (isJust end) && (isJust tend) && (isJust iend) of
-          true  -> do
-            jEnd  <- go (p <<< Thrd) {expr:(fromJust end), typ:(fromJust tend), idTree:(fromJust iend)}
-            arithmeticSequence jStart Nothing (Just jEnd) t i
-          false -> do
-            arithmeticSequence jStart Nothing Nothing t i
+      case Triple step tstep istep of
+        Triple (Just jstep) (Just jtstep) (Just jistep) ->
+          case Triple end tend iend of
+            Triple (Just jend) (Just jtend) (Just jiend) -> do
+              jStep <- go (p <<< Snd) {expr: jstep, typ: jtstep, idTree: jistep}
+              jEnd  <- go (p <<< Thrd) {expr: jend, typ: jtend, idTree: jiend}
+              arithmeticSequence jStart (Just jStep) (Just jEnd) t i
+            _ -> do
+              jStep <- go (p <<< Snd) {expr: jstep, typ: jtstep, idTree: jistep}
+              arithmeticSequence jStart (Just jStep) Nothing t i
+        _ ->
+          case Triple end tend iend of
+            Triple (Just jend) (Just jtend) (Just jiend) -> do
+              jEnd  <- go (p <<< Thrd) {expr: jend, typ: jtend, idTree: jiend}
+              arithmeticSequence jStart Nothing (Just jEnd) t i
+            _ -> arithmeticSequence jStart Nothing Nothing t i
 
     {expr:(ListComp expr quals), typ:(TListComp texpr tquals t), idTree:(IListComp iexpr iquals i)} -> do
       jExpr  <- go (p <<< Fst) {expr:expr, typ:texpr, idTree:iexpr}
