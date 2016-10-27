@@ -23,8 +23,8 @@
     "purescript-lists": "^1.0.0",
     "purescript-maps": "^1.0.0",
     "purescript-parsing": "^1.0.0",
-    "purescript-partial": "^1.0.0",
     "purescript-sets": "^1.0.0",
-    "purescript-transformers": "^1.0.0"
+    "purescript-transformers": "^1.0.0",
+    "purescript-node-process": "^1.0.0"
   }
 }
