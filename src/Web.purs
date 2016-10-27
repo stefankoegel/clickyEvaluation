@@ -7,7 +7,7 @@ module Web
 
 import Prelude (class Show, class Monad, Unit, (+), bind, ($), (==), (/=), show, (<>), (>>=), flip, pure, (<<<), (<$>), (&&), (>), void, unit, id, (-))
 import Data.Foldable (all)
-import Data.Traversable (for)
+import Data.Traversable (for, for_)
 import Data.String (joinWith)
 import Data.List (List(Nil, Cons), singleton, fromFoldable, toUnfoldable, length, zip, (..), zipWithA)
 import Data.Foreign (unsafeFromForeign, isUndefined)
@@ -93,7 +93,7 @@ exprToJQuery' output = go id output
       jop <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
       j <- go (p <<< Snd) {expr:e, typ:tt, idTree: i}
       section jop j t i'
-    {expr:PrefixOp op, typ:TPrefixOp t, idTree: (IPrefixOp i)} -> makeDiv ("(" <> pPrintOp op <> ")") (toUnfoldable ["prefix", "op"]) >>= addTypetoDiv t >>= addIdtoDiv i
+    {expr:PrefixOp op, typ:TPrefixOp t, idTree: (IPrefixOp i)} -> makeDiv ("(" <> pPrintOp op <> ")") (Array.toUnfoldable ["prefix", "op"]) >>= addTypetoDiv t >>= addIdtoDiv i
     {expr:IfExpr cond thenExpr elseExpr, typ:TIfExpr tt1 tt2  tt3 t,idTree:IIfExpr i1 i2 i3 i} -> do
       jc <- go (p <<< Fst) {expr:cond, typ:tt1, idTree: i1}
       jt <- go (p <<< Snd) {expr:thenExpr, typ:tt2, idTree: i2}
@@ -154,7 +154,9 @@ exprToJQuery' output = go id output
 
   qualifier :: (Path -> Path) -> ExprQual -> TypeQual -> IndexQual -> Eff (dom :: DOM | eff) J.JQuery
   qualifier p (Gen b e) (TGen tb te t) (TGen ib ie i) = do
-      result <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
+      result <- makeDiv "" Nil
+      addTypetoDiv t result
+      addIdtoDiv i result
       binding (Tuple ib (Tuple b tb)) >>= flip J.append result
       makeDiv "<-" Nil >>= flip J.append result
       go p {expr:e, typ:te, idTree:ie} >>= flip J.append result
@@ -172,15 +174,33 @@ checkLength :: forall a b c. List a -> List b -> List c -> Boolean
 checkLength a b c = length a /= 0 && length a == length b && length a == length c && length b == length c
 
 atom :: forall eff. Atom -> Type -> Int ->  Eff (dom :: DOM | eff) J.JQuery
-atom (AInt n) t  i   = makeDiv (show n) (toUnfoldable ["atom", "num"]) >>= addTypetoDiv t >>= addIdtoDiv i
-atom (Bool true) t i = makeDiv "True"  (toUnfoldable ["atom", "bool"]) >>= addTypetoDiv t >>= addIdtoDiv i
-atom (Bool false) t i= makeDiv "False" (toUnfoldable ["atom", "bool"]) >>= addTypetoDiv t >>= addIdtoDiv i
-atom (Char c) t  i  = (makeDiv ("'" <> c <> "'") (toUnfoldable ["atom", "char"])) >>= addTypetoDiv t >>= addIdtoDiv i
+atom (AInt n) t  i   = do
+  div <- makeDiv (show n) (Array.toUnfoldable ["atom", "num"])
+  addTypetoDiv t div
+  addIdtoDiv i div
+  pure div
+atom (Bool true) t i = do
+  div <- makeDiv "True"  (Array.toUnfoldable ["atom", "bool"])
+  addTypetoDiv t div
+  addIdtoDiv i div
+  pure div
+atom (Bool false) t i = do
+  div <- makeDiv "False" (Array.toUnfoldable ["atom", "bool"])
+  addTypetoDiv t div
+  addIdtoDiv i div
+  pure div
+atom (Char c) t  i  = do
+  div <- makeDiv ("'" <> c <> "'") (Array.toUnfoldable ["atom", "char"])
+  addTypetoDiv t div
+  addIdtoDiv i div
+  pure div
 atom (Name name) t i = do
  jtypExp <- makeDiv "" (singleton "atom name typExpContainer")
  jExpand <- buildExpandDiv t
  J.append jExpand jtypExp
- jName <- makeDiv name (toUnfoldable ["atom", "name", "expr"]) >>= addTypetoDiv t >>= addIdtoDiv i
+ jName <- makeDiv name (Array.toUnfoldable ["atom", "name", "expr"])
+ addTypetoDiv t jName
+ addIdtoDiv i jName
  J.append jName jtypExp
  pure jtypExp
 
@@ -188,20 +208,30 @@ binding :: forall eff. Tuple IBinding (Tuple Binding TypeBinding) -> Eff (dom ::
 binding b = case b of
   Tuple (ILit i) (Tuple (Lit a) (TLit t))       -> atom a t i
   cl@(Tuple (IConsLit i1 i2 i) (Tuple (ConsLit b bs) (TConsLit tb tbs t))) -> do
-    jCons <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
+    jCons <- makeDiv "" Nil
+    addTypetoDiv t jCons
+    addIdtoDiv i jCons
     makeDiv "(" (singleton "brace") >>= flip J.append jCons
     consBinding cl jCons
-    makeDiv ")" (singleton "brace") >>= flip J.append jCons
+    div <- makeDiv ")" (singleton "brace")
+    J.append div jCons
+    pure div
   Tuple (IListLit is i)(Tuple (ListLit bs) (TListLit tbs t)) -> do
-    jList <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
+    jList <- makeDiv "" Nil
+    addTypetoDiv t jList
+    addIdtoDiv i jList
     makeDiv "[" (singleton "brace") >>= flip J.append jList
     interleaveM_
       (\b -> binding b >>= flip J.append jList)
       (makeDiv "," (singleton "comma") >>= flip J.append jList)
       (zip is (zip bs tbs))
-    makeDiv "]" (singleton "brace") >>= flip J.append jList
+    div <- makeDiv "]" (singleton "brace")
+    J.append div jList
+    pure div
   Tuple (INTupleLit is i)(Tuple (NTupleLit bs) (TNTupleLit tbs t))-> do
-    jTuple <- makeDiv "" Nil >>= addTypetoDiv t >>= addIdtoDiv i
+    jTuple <- makeDiv "" Nil
+    addTypetoDiv t jTuple
+    addIdtoDiv i jTuple
     makeDiv "(" (singleton "brace") >>= flip J.append jTuple
     let b = (zip is (zip bs tbs))
     interleaveM_ (binding >=> flip J.append jTuple) (makeDiv "," (singleton "comma") >>= flip J.append jTuple) b
@@ -222,7 +252,9 @@ lambda jBinds jBody t i = do
   jtypExp <- makeDiv "" (singleton "lambda typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  jLam <- makeDiv "" (singleton "lambda expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  jLam <- makeDiv "" (singleton "lambda expr")
+  addTypetoDiv t jLam
+  addIdtoDiv i jLam
   open <- makeDiv "(\\" (Cons "brace" (Cons "backslash" Nil))
   J.append open jLam
   for jBinds (flip J.append jLam)
@@ -236,9 +268,13 @@ lambda jBinds jBody t i = do
 
 binary :: forall eff. Op -> Type -> Int -> Type -> Int -> J.JQuery -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 binary op opt opi t i j1 j2 = do
-  dBin <- makeDiv "" (singleton "binary") >>= addTypetoDiv t >>= addIdtoDiv i
+  dBin <- makeDiv "" (singleton "binary")
+  addTypetoDiv t dBin
+  addIdtoDiv i dBin
   J.append j1 dBin
-  dOp <- makeDiv (pPrintOp op) (singleton "op") >>= addTypetoDiv opt >>= addIdtoDiv opi
+  dOp <- makeDiv (pPrintOp op) (singleton "op")
+  addTypetoDiv opt dOp
+  addIdtoDiv opi dOp
   J.append dOp dBin
   J.append j2 dBin
   jtypExp <- makeDiv "" (singleton "binary typExpContainer")
@@ -253,7 +289,9 @@ unary jop jexpr t i = do
   jtypExp <- makeDiv "" (singleton "unary typExpContainer")
   jExpand <-  buildExpandDiv t
   J.append jExpand jtypExp
-  jUnary <- makeDiv "" (singleton "unary expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  jUnary <- makeDiv "" (singleton "unary expr")
+  addTypetoDiv t jUnary
+  addIdtoDiv i jUnary
   J.append jop jUnary
   J.append jexpr jUnary
   J.append jUnary jtypExp
@@ -264,7 +302,9 @@ section j1 j2 t i = do
   jtypExp <- makeDiv "" (singleton "section typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  jSect <- makeDiv "" (singleton "section expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  jSect <- makeDiv "" (singleton "section expr")
+  addTypetoDiv t jSect
+  addIdtoDiv i jSect
   open <- makeDiv "(" (singleton "brace")
   J.append open jSect
   J.append j1 jSect
@@ -279,7 +319,9 @@ ifexpr cond thenExpr elseExpr t i = do
   jtypExp <- makeDiv "" (singleton "if typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  dIf <- makeDiv "" (singleton "if expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  dIf <- makeDiv "" (singleton "if expr")
+  addTypetoDiv t dIf
+  addIdtoDiv i dIf
   makeDiv "if" (singleton "keyword") >>= flip J.append dIf
   J.append cond dIf
   makeDiv "then" (singleton "keyword") >>= flip J.append dIf
@@ -294,7 +336,9 @@ arithmeticSequence start mstep mend t i = do
   jtypExp <- makeDiv "" (singleton "list typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  das <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  das <- makeDiv "" (singleton "list expr")
+  addTypetoDiv t das
+  addIdtoDiv i das
   makeDiv "[" (singleton "brace") >>= flip J.append das
   J.append start das
   maybeStep das mstep
@@ -304,14 +348,14 @@ arithmeticSequence start mstep mend t i = do
   J.append das jtypExp
   pure jtypExp
   where
-    maybeStep :: J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-    maybeStep jquery Nothing = pure jquery
+    maybeStep :: J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) Unit
+    maybeStep jquery Nothing = pure unit
     maybeStep jquery (Just step) = do
       makeDiv "," (singleton "comma") >>= flip J.append jquery
       J.append step jquery
 
-    maybeEnd :: J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
-    maybeEnd jquery Nothing = pure jquery
+    maybeEnd :: J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) Unit
+    maybeEnd jquery Nothing = pure unit
     maybeEnd jquery (Just end) = J.append end jquery
 
 listComp :: forall eff. J.JQuery -> List J.JQuery -> Type -> Int -> Eff (dom :: DOM | eff) J.JQuery
@@ -319,7 +363,9 @@ listComp jExpr jQuals t i = do
   jtypExp <- makeDiv "" (singleton "list typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  das <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  das <- makeDiv "" (singleton "list expr")
+  addTypetoDiv t das
+  addIdtoDiv i das
   makeDiv "[" (singleton "brace") >>= flip J.append das
   J.append jExpr das
   makeDiv "|" (singleton "comma") >>= flip J.append das
@@ -335,7 +381,9 @@ letExpr jBinds jExpr t i = do
   --jtypExp <- makeDiv "" (singleton "let typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  dlet <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  dlet <- makeDiv "" (singleton "list expr")
+  addTypetoDiv t dlet
+  addIdtoDiv i dlet
   --dlet <- makeDiv "" (singleton "let expr") >>= addTypetoDiv t >>= addIdtoDiv i
   makeDiv "let" (singleton "keyword") >>= flip J.append dlet
   interleaveM_ (flip J.append dlet) (makeDiv ";" (singleton "semicolon") >>= flip J.append dlet) jBinds
@@ -366,7 +414,9 @@ tuple js t i = do
   jtypExp <- makeDiv "" (singleton "tuple  typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  dtuple <- makeDiv "" (singleton "tuple  expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  dtuple <- makeDiv "" (singleton "tuple  expr")
+  addTypetoDiv t dtuple
+  addIdtoDiv i dtuple
   open <- makeDiv "(" (singleton "brace")
   J.append open dtuple
   interleaveM_ (flip J.append dtuple) (makeDiv "," (singleton "comma") >>= flip J.append dtuple) js
@@ -380,7 +430,9 @@ list js t   i  = do
   jtypExp <- makeDiv "" (singleton "list typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  dls <- makeDiv "" (singleton "list expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  dls <- makeDiv "" (singleton "list expr")
+  addTypetoDiv t dls
+  addIdtoDiv i dls
   open <- makeDiv "[" (singleton "brace")
   J.append open dls
   interleaveM_ (flip J.append dls) (makeDiv "," (singleton "comma") >>= flip J.append dls) js
@@ -400,8 +452,11 @@ string str t i = do
   jtypExp <- makeDiv "" (singleton "list string typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  jString <- makeDiv ("\"" <> str <> "\"") (toUnfoldable ["list", "string", "expr"]) >>= addTypetoDiv t >>= addIdtoDiv i
+  jString <- makeDiv ("\"" <> str <> "\"") (Array.toUnfoldable ["list", "string", "expr"])
+  addTypetoDiv t jString
+  addIdtoDiv i jString
   J.append jString  jtypExp
+  pure jtypExp
 
 toStr :: List Expr -> Maybe String
 toStr Nil = Nothing
@@ -416,7 +471,9 @@ app jFunc jArgs tFunc t i = do
   jtypExp <- makeDiv "" (singleton "app typExpContainer")
   jExpand <- buildExpandDiv t
   J.append jExpand jtypExp
-  dApp <- makeDiv "" (singleton "app expr") >>= addTypetoDiv t >>= addIdtoDiv i
+  dApp <- makeDiv "" (singleton "app expr")
+  addTypetoDiv t dApp
+  addIdtoDiv i dApp
   J.addClass "func" jFunc
   J.addClass "funcContainer" jFunc
   innerExpr <- children ".expr" jFunc
@@ -439,7 +496,7 @@ makeDiv :: forall eff. String -> List Class -> Eff (dom :: DOM | eff) J.JQuery
 makeDiv text classes = do
   d <- J.create "<div></div>"
   J.setText text d
-  for classes (flip J.addClass d)
+  for_ classes (flip J.addClass d)
   pure d
 
 emptyJQuery:: forall eff . Eff (dom :: DOM | eff) J.JQuery
@@ -456,26 +513,31 @@ addTypetoDiv typ d = do
   J.append outer d
   J.appendText text d
   J.on "mouseenter" (\e div -> J.stopPropagation e >>= \_ -> showTooltip div outer e) d
+  pure d
 
 
 addIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 addIdtoDiv id d = do
     J.setAttr "id" ("expr"<>(show id)) d
+    pure d
 
 addTypIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 addTypIdtoDiv id d = do
     J.setAttr "id" ("typ"<>(show id)) d
+    pure d
 
 addResultIdtoDiv:: forall eff a. (Show a) => a -> J.JQuery -> Eff (dom :: DOM | eff) J.JQuery
 addResultIdtoDiv id d = do
     J.setAttr "id" ("typ" <> (show id) <> "result") d
-
+    pure d
 
 buildExpandDiv:: forall eff. Type  -> Eff (dom :: DOM | eff) J.JQuery
 buildExpandDiv t  = do
   typC <- makeDiv ("::" <> prettyPrintType t) $ Cons "type" Nil
   case t of
-    (TypeError _) -> J.css {color: "red"} typC
+    (TypeError _) -> do
+      J.css {color: "red"} typC
+      pure typC
     _ -> pure typC
   expandC <- makeDiv "" $ Cons "expand"  Nil
   jArrow <- makeDiv "▼" $ Cons "type-arr" Nil
