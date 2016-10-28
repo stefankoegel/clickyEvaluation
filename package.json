@@ -5,14 +5,14 @@
     "npm": "*"
   },
   "dependencies": {
-    "purescript": "0.8.5",
-    "pulp": "8.2.1",
+    "purescript": "0.9.3",
+    "pulp": "9.0.1",
     "bower": "*"
   },
   "scripts": {
     "postinstall": "pulp --version && bower --version && bower update",
     "build": "pulp --version && pulp build --to html/libs/Main.js",
-    "build_components": "psc \"bower_components/purescript-*/src/**/*.purs\" \"bower_components/purescript-*/src/**/*.js\" \"src/*.js\" \"src/*.purs\" 2> errors.txt && wc errors.txt && echo \"Warnings: $(grep Warning errors.txt | wc -l)\"",
+    "build_components": "psc \"bower_components/purescript-*/src/**/*.purs\" \"src/*.purs\" 2> errors.txt && wc errors.txt && echo \"Warnings: $(grep Warning errors.txt | wc -l)\"",
     "test": "pulp test",
     "watch": "pulp -w test"
   }

@@ -1,8 +1,9 @@
 module Test.Parser where
 
-import Prelude (class Eq, class Show, Unit, (++), ($), bind, show, unit, return, (==), (<<<), negate)
+import Prelude (class Eq, class Show, Unit, (<>), ($), bind, show, unit, pure, (==), (<<<), negate)
 import Data.Either (Either(..))
-import Data.List (List(..), toList, singleton)
+import Data.List (List(..), singleton)
+import Data.Array (toUnfoldable) as Array
 import Data.Tuple (Tuple(..))
 import Data.Maybe (Maybe(..))
 
@@ -14,16 +15,19 @@ import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Op(..), Qual(..))
 import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent)
 import IndentParser (IndentParser)
 
+toList :: forall a. Array a -> List a
+toList = Array.toUnfoldable
+
 tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton
 
 test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Writer (List String) Unit
 test name p input expected = case runParserIndent p input of
-  Left  (ParseError { position = p, message = m }) -> tell' $ "Parse fail (" ++ name ++ "): " ++ show p ++ " " ++ m
+  Left  (ParseError { position: p, message: m }) -> tell' $ "Parse fail (" <> name <> "): " <> show p <> " " <> m
   Right result           -> 
     if result == expected
-      then return unit --tell $ "Parse success (" ++ name ++ ")"
-      else tell' $ "Parse fail (" ++ name ++ "): " ++ show result ++ " /= " ++ show expected
+      then pure unit --tell $ "Parse success (" <> name <> ")"
+      else tell' $ "Parse fail (" <> name <> "): " <> show result <> " /= " <> show expected
 
 aint :: Int -> Expr
 aint = Atom <<< AInt
@@ -316,102 +320,102 @@ runTests = do
 
 prelude :: String
 prelude =
-  "and (True:xs)  = and xs\n" ++
-  "and (False:xs) = False\n" ++
-  "and []         = True\n" ++
-  "\n" ++
-  "or (False:xs) = or xs\n" ++
-  "or (True:xs)  = True\n" ++
-  "or []         = False\n" ++
-  "\n" ++
-  "all p = and . map p\n" ++
-  "any p = or . map p\n" ++
-  "\n" ++
-  "head (x:xs) = x\n" ++
-  "tail (x:xs) = xs\n" ++
-  "\n" ++
-  "take 0 xs     = []\n" ++
-  "take n (x:xs) = x : take (n - 1) xs\n" ++
-  "\n" ++
-  "drop 0 xs     = xs\n" ++
-  "drop n (x:xs) = drop (n - 1) xs\n" ++
-  "\n" ++
-  "elem e []     = False\n" ++
-  "elem e (x:xs) = if e == x then True else elem e xs\n" ++
-  "\n" ++
-  "max a b = if a >= b then a else b\n" ++
-  "min a b = if b >= a then a else b\n" ++
-  "\n" ++
-  "maximum (x:xs) = foldr max x xs\n" ++
-  "minimum (x:xs) = foldr min x xs\n" ++
-  "\n" ++
-  "length []     = 0\n" ++
-  "length (x:xs) = 1 + length xs\n" ++
-  "\n" ++
-  "zip (x:xs) (y:ys) = (x, y) : zip xs ys\n" ++
-  "zip []      _     = []\n" ++
-  "zip _       []    = []\n" ++
-  "\n" ++
-  "zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys\n" ++
-  "zipWith _ []     _      = []\n" ++
-  "zipWith _ _      []     = []\n" ++
-  "\n" ++
-  "unzip []          = ([], [])\n" ++
-  "unzip ((a, b):xs) = (\\(as, bs) -> (a:as, b:bs)) $ unzip xs\n" ++
-  "\n" ++
-  "fst (x,_) = x\n" ++
-  "snd (_,x) = x\n" ++
-  "\n" ++
-  "curry f a b = f (a, b)\n" ++
-  "uncurry f (a, b) = f a b\n" ++
-  "\n" ++
-  "repeat x = x : repeat x\n" ++
-  "\n" ++
-  "replicate 0 _ = []\n" ++
-  "replicate n x = x : replicate (n - 1) x\n" ++
-  "\n" ++
-  "enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []\n" ++
-  "\n" ++
-  "sum (x:xs) = x + sum xs\n" ++
-  "sum [] = 0\n" ++
-  "\n" ++
-  "product (x:xs) = x * product xs\n" ++
-  "product [] = 1\n" ++
-  "\n" ++
-  "reverse []     = []\n" ++
-  "reverse (x:xs) = reverse xs ++ [x]\n" ++
-  "\n" ++
-  "concat = foldr (++) []\n" ++
-  "\n" ++
-  "map f []     = []\n" ++
-  "map f (x:xs) = f x : map f xs\n" ++
-  "\n" ++
-  "not True  = False\n" ++
-  "not False = True\n" ++
-  "\n" ++
-  "filter p (x:xs) = if p x then x : filter p xs else filter p xs\n" ++
-  "filter p []     = []\n" ++
-  "\n" ++
-  "foldr f ini []     = ini\n" ++
-  "foldr f ini (x:xs) = f x (foldr f ini xs)\n" ++
-  "\n" ++
-  "foldl f acc []     = acc\n" ++
-  "foldl f acc (x:xs) = foldl f (f acc x) xs\n" ++
-  "\n" ++
-  "scanl f b []     = [b]\n" ++
-  "scanl f b (x:xs) = b : scanl f (f b x) xs\n" ++
-  "\n" ++
-  "iterate f x = x : iterate f (f x)\n" ++
-  "\n" ++
-  "id x = x\n" ++
-  "\n" ++
-  "const x _ = x\n" ++
-  "\n" ++
-  "flip f x y = f y x\n" ++
-  "\n" ++
-  "even n = (n `mod` 2) == 0\n" ++
-  "odd n = (n `mod` 2) == 1\n" ++
-  "\n" ++
+  "and (True:xs)  = and xs\n" <>
+  "and (False:xs) = False\n" <>
+  "and []         = True\n" <>
+  "\n" <>
+  "or (False:xs) = or xs\n" <>
+  "or (True:xs)  = True\n" <>
+  "or []         = False\n" <>
+  "\n" <>
+  "all p = and . map p\n" <>
+  "any p = or . map p\n" <>
+  "\n" <>
+  "head (x:xs) = x\n" <>
+  "tail (x:xs) = xs\n" <>
+  "\n" <>
+  "take 0 xs     = []\n" <>
+  "take n (x:xs) = x : take (n - 1) xs\n" <>
+  "\n" <>
+  "drop 0 xs     = xs\n" <>
+  "drop n (x:xs) = drop (n - 1) xs\n" <>
+  "\n" <>
+  "elem e []     = False\n" <>
+  "elem e (x:xs) = if e == x then True else elem e xs\n" <>
+  "\n" <>
+  "max a b = if a >= b then a else b\n" <>
+  "min a b = if b >= a then a else b\n" <>
+  "\n" <>
+  "maximum (x:xs) = foldr max x xs\n" <>
+  "minimum (x:xs) = foldr min x xs\n" <>
+  "\n" <>
+  "length []     = 0\n" <>
+  "length (x:xs) = 1 + length xs\n" <>
+  "\n" <>
+  "zip (x:xs) (y:ys) = (x, y) : zip xs ys\n" <>
+  "zip []      _     = []\n" <>
+  "zip _       []    = []\n" <>
+  "\n" <>
+  "zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys\n" <>
+  "zipWith _ []     _      = []\n" <>
+  "zipWith _ _      []     = []\n" <>
+  "\n" <>
+  "unzip []          = ([], [])\n" <>
+  "unzip ((a, b):xs) = (\\(as, bs) -> (a:as, b:bs)) $ unzip xs\n" <>
+  "\n" <>
+  "fst (x,_) = x\n" <>
+  "snd (_,x) = x\n" <>
+  "\n" <>
+  "curry f a b = f (a, b)\n" <>
+  "uncurry f (a, b) = f a b\n" <>
+  "\n" <>
+  "repeat x = x : repeat x\n" <>
+  "\n" <>
+  "replicate 0 _ = []\n" <>
+  "replicate n x = x : replicate (n - 1) x\n" <>
+  "\n" <>
+  "enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []\n" <>
+  "\n" <>
+  "sum (x:xs) = x + sum xs\n" <>
+  "sum [] = 0\n" <>
+  "\n" <>
+  "product (x:xs) = x * product xs\n" <>
+  "product [] = 1\n" <>
+  "\n" <>
+  "reverse []     = []\n" <>
+  "reverse (x:xs) = reverse xs ++ [x]\n" <>
+  "\n" <>
+  "concat = foldr (++) []\n" <>
+  "\n" <>
+  "map f []     = []\n" <>
+  "map f (x:xs) = f x : map f xs\n" <>
+  "\n" <>
+  "not True  = False\n" <>
+  "not False = True\n" <>
+  "\n" <>
+  "filter p (x:xs) = if p x then x : filter p xs else filter p xs\n" <>
+  "filter p []     = []\n" <>
+  "\n" <>
+  "foldr f ini []     = ini\n" <>
+  "foldr f ini (x:xs) = f x (foldr f ini xs)\n" <>
+  "\n" <>
+  "foldl f acc []     = acc\n" <>
+  "foldl f acc (x:xs) = foldl f (f acc x) xs\n" <>
+  "\n" <>
+  "scanl f b []     = [b]\n" <>
+  "scanl f b (x:xs) = b : scanl f (f b x) xs\n" <>
+  "\n" <>
+  "iterate f x = x : iterate f (f x)\n" <>
+  "\n" <>
+  "id x = x\n" <>
+  "\n" <>
+  "const x _ = x\n" <>
+  "\n" <>
+  "flip f x y = f y x\n" <>
+  "\n" <>
+  "even n = (n `mod` 2) == 0\n" <>
+  "odd n = (n `mod` 2) == 1\n" <>
+  "\n" <>
   "fix f = f (fix f)\n"
 
 parsedPrelude :: List Definition

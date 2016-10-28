@@ -1,6 +1,6 @@
 module AST where
 
-import Prelude (class Show, class Eq, class Ord, show, (++))
+import Prelude (class Show, class Eq, class Ord, show, (<>))
 import Data.List (List)
 import Data.Maybe (Maybe)
 import Data.Tuple (Tuple)
@@ -166,10 +166,10 @@ data Path = Nth Int Path
 
 instance showPath :: Show Path where
   show p = case p of
-    Nth i p -> "(Nth " ++ show i ++ " " ++ show p ++")"
-    Fst   p -> "(Fst " ++ show p ++")"
-    Snd   p -> "(Snd " ++ show p ++")"
-    Thrd   p -> "(Thrd " ++ show p ++")"
+    Nth i p -> "(Nth " <> show i <> " " <> show p <>")"
+    Fst   p -> "(Fst " <> show p <>")"
+    Snd   p -> "(Snd " <> show p <>")"
+    Thrd   p -> "(Thrd " <> show p <>")"
     End     -> "End"
 
 derive instance eqDefinition :: Eq Definition
@@ -192,7 +192,7 @@ instance showOp :: Show Op where
     And    -> "And"
     Or     -> "Or"
     Dollar -> "Dollar"
-    InfixFunc name -> "(InfixFunc " ++ name ++ ")"
+    InfixFunc name -> "(InfixFunc " <> name <> ")"
 
 pPrintOp :: Op -> String
 pPrintOp op = case op of
@@ -202,7 +202,7 @@ pPrintOp op = case op of
   Add    -> "+"
   Sub    -> "-"
   Colon  -> ":"
-  Append -> "++"
+  Append -> "<>"
   Equ    -> "=="
   Neq    -> "/="
   Lt     -> "<"
@@ -212,59 +212,59 @@ pPrintOp op = case op of
   And    -> "&&"
   Or     -> "||"
   Dollar -> "$"
-  InfixFunc n -> "`" ++ n ++ "`"
+  InfixFunc n -> "`" <> n <> "`"
 
 instance showAtom :: Show Atom where
   show atom = case atom of
-    AInt number -> "AInt " ++ show number
-    Bool bool   -> "Bool " ++ show bool
-    Char string -> "Char " ++ show string
-    Name string -> "Name " ++ show string
+    AInt number -> "AInt " <> show number
+    Bool bool   -> "Bool " <> show bool
+    Char string -> "Char " <> show string
+    Name string -> "Name " <> show string
 
 instance showQual :: (Show b, Show e) => Show (Qual b e) where
   show q = case q of
-    Gen b e -> "Gen (" ++ show b ++ " " ++ show e ++ ")"
-    Let b e -> "Let (" ++ show b ++ " " ++ show e ++ ")"
-    Guard e -> "Guard (" ++ show e ++ ")" 
+    Gen b e -> "Gen (" <> show b <> " " <> show e <> ")"
+    Let b e -> "Let (" <> show b <> " " <> show e <> ")"
+    Guard e -> "Guard (" <> show e <> ")"
 
 instance showQualTree :: (Show a, Show b, Show c) => Show (QualTree a b c) where
-  show (TGen a b c) = "TGen (" ++ show a ++ " " ++ show b ++ " " ++ show c ++ ")"
-  show (TLet a b c) = "TLet (" ++ show a ++ " " ++ show b ++ " " ++ show c ++ ")"
-  show (TGuard a c)  = "TGuard (" ++ show a ++ " " ++ show c ++ ")"
+  show (TGen a b c) = "TGen (" <> show a <> " " <> show b <> " " <> show c <> ")"
+  show (TLet a b c) = "TLet (" <> show a <> " " <> show b <> " " <> show c <> ")"
+  show (TGuard a c)  = "TGuard (" <> show a <> " " <> show c <> ")"
 
 instance showExpr :: Show Expr where
   show expr = case expr of
-    Atom atom       -> "Atom (" ++ show atom ++ ")"
-    List ls         -> "List (" ++ show ls ++ ")"
-    NTuple ls       -> "NTuple (" ++ show ls ++ ")"
-    Binary op e1 e2 -> "Binary " ++ show op ++ " (" ++ show e1 ++ ") (" ++ show e2 ++ ")"
-    Unary op e      -> "Unary " ++ show op ++ " (" ++ show e ++ ")"
-    SectL expr op   -> "SectL (" ++ show expr ++ ") " ++ show op
-    SectR op expr   -> "SectR " ++ show op ++ " (" ++ show expr ++ ")"
-    PrefixOp op     -> "PrefixOp " ++ show op
-    IfExpr ce te ee  -> "IfExpr (" ++ show ce ++ ") (" ++ show te ++ ") (" ++ show ee ++ ")"
-    ArithmSeq s by e -> "ArithmSeq (" ++ show s ++ ")" ++ show by ++ ".." ++ show e ++ ")"
-    LetExpr b e   -> "LetExpr (" ++ show b ++ ") (" ++ show e ++ ")"
-    Lambda binds body -> "Lambda (" ++ show binds ++ ") (" ++ show body ++ ")"
-    App func args   -> "App (" ++ show func ++ ") (" ++ show args ++ ")"
-    ListComp expr quals -> "ListComp (" ++ show expr ++ ")" ++ "(" ++ show quals ++ "))"
+    Atom atom       -> "Atom (" <> show atom <> ")"
+    List ls         -> "List (" <> show ls <> ")"
+    NTuple ls       -> "NTuple (" <> show ls <> ")"
+    Binary op e1 e2 -> "Binary " <> show op <> " (" <> show e1 <> ") (" <> show e2 <> ")"
+    Unary op e      -> "Unary " <> show op <> " (" <> show e <> ")"
+    SectL expr op   -> "SectL (" <> show expr <> ") " <> show op
+    SectR op expr   -> "SectR " <> show op <> " (" <> show expr <> ")"
+    PrefixOp op     -> "PrefixOp " <> show op
+    IfExpr ce te ee  -> "IfExpr (" <> show ce <> ") (" <> show te <> ") (" <> show ee <> ")"
+    ArithmSeq s by e -> "ArithmSeq (" <> show s <> ")" <> show by <> ".." <> show e <> ")"
+    LetExpr b e   -> "LetExpr (" <> show b <> ") (" <> show e <> ")"
+    Lambda binds body -> "Lambda (" <> show binds <> ") (" <> show body <> ")"
+    App func args   -> "App (" <> show func <> ") (" <> show args <> ")"
+    ListComp expr quals -> "ListComp (" <> show expr <> ")" <> "(" <> show quals <> "))"
 
 instance showBinding :: Show Binding where
   show binding = case binding of
-    Lit atom     -> "Lit (" ++ show atom ++ ")"
-    ConsLit b bs -> "ConsLit (" ++ show b ++ ") (" ++ show bs ++ ")"
-    ListLit bs   -> "ListLit (" ++ show bs ++ ")"
-    NTupleLit ls -> "NTupleLit (" ++ show ls ++ ")"
+    Lit atom     -> "Lit (" <> show atom <> ")"
+    ConsLit b bs -> "ConsLit (" <> show b <> ") (" <> show bs <> ")"
+    ListLit bs   -> "ListLit (" <> show bs <> ")"
+    NTupleLit ls -> "NTupleLit (" <> show ls <> ")"
 
 instance showDefinition :: Show Definition where
-  show (Def name bindings body) = "Def " ++ show name ++ " (" ++ show bindings ++ ") (" ++ show body ++ ")"
+  show (Def name bindings body) = "Def " <> show name <> " (" <> show bindings <> ") (" <> show body <> ")"
 
 instance showType :: Show Type where
-  show (TypVar var) = "(TypVar  " ++ show var ++ ")"
-  show (TypCon con) = "(TypCon " ++ show con ++ ")"
-  show (TypArr t1 t2) = "(TypArr "++ show t1 ++" " ++ show t2 ++ ")"
-  show (AD ad) = "(AD "++ show ad ++ ")"
-  show (TypeError err) ="(TypeError "++ show err ++")"
+  show (TypVar var) = "(TypVar  " <> show var <> ")"
+  show (TypCon con) = "(TypCon " <> show con <> ")"
+  show (TypArr t1 t2) = "(TypArr "<> show t1 <>" " <> show t2 <> ")"
+  show (AD ad) = "(AD "<> show ad <> ")"
+  show (TypeError err) ="(TypeError "<> show err <>")"
 
 derive instance eqType :: Eq Type
 
@@ -273,45 +273,45 @@ derive instance ordTVar :: Ord TVar
 derive instance eqTVar :: Eq TVar
 
 instance showTVar :: Show TVar where
-  show (TVar a) = "(TVar " ++ show a ++ ")"
+  show (TVar a) = "(TVar " <> show a <> ")"
 
 instance showAD :: Show AD where
-  show (TList t) = "(TList "++ show t ++")"
-  show (TTuple tl) = "(TTuple ("++ show tl ++ "))"
+  show (TList t) = "(TList "<> show t <>")"
+  show (TTuple tl) = "(TTuple ("<> show tl <> "))"
 
 derive instance eqAD :: Eq AD
 
 instance showTypeError :: Show TypeError where
-  show (UnificationFail a b) = "(UnificationFail "++ show a ++ " " ++ show b ++")"
-  show (InfiniteType a b ) = "(InfiniteType " ++ show a ++ " " ++ show b ++ ")"
-  show (UnboundVariable a) = "(UnboundVariable " ++ show a ++ ")"
-  show (UnificationMismatch a b) = "(UnificationMismatch " ++ show a ++ " " ++ show b ++ ")"
-  show (UnknownError s) = "(UnknownError " ++ s ++ ")"
-  show (NoInstanceOfEnum t) = "(" ++ show t ++ "is no instance of Enum)"
+  show (UnificationFail a b) = "(UnificationFail "<> show a <> " " <> show b <>")"
+  show (InfiniteType a b ) = "(InfiniteType " <> show a <> " " <> show b <> ")"
+  show (UnboundVariable a) = "(UnboundVariable " <> show a <> ")"
+  show (UnificationMismatch a b) = "(UnificationMismatch " <> show a <> " " <> show b <> ")"
+  show (UnknownError s) = "(UnknownError " <> s <> ")"
+  show (NoInstanceOfEnum t) = "(" <> show t <> "is no instance of Enum)"
 
 derive instance eqTypeError :: Eq TypeError
 
 instance showTypeTree :: Show TypeTree where
-  show (TAtom t) = "(TAtom " ++ show t ++ ")"
-  show (TListTree lt t) = "(TListTree (" ++ show lt ++ ") " ++ show t ++ ")"
-  show (TNTuple lt t) = "(TNTuple ("++ show lt ++ ") " ++ show t ++ ")"
-  show (TBinary t1 tt1 tt2 t) = "(TBinary " ++ show t1 ++ " " ++ show tt1 ++  " " ++ show tt2 ++ " " ++ show t ++ ")"
-  show (TUnary t1 tt t) = "(TUnary "++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
-  show (TSectL tt t1 t) = "(TSectL "++ show tt ++ " "++ show t1 ++ " " ++ show t ++ ")"
-  show (TSectR t1 tt t) = "(TSectR " ++ show t1 ++ " " ++ show tt ++ " " ++ show t ++ ")"
-  show (TPrefixOp t) = "(TPrefixOp " ++ show t ++ ")"
-  show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " ++ show tt1 ++ " " ++ show tt2 ++ " " ++ show tt3 ++ " " ++ show t ++ ")"
-  show (TArithmSeq s b e t) = "(TArithmSeq " ++ show s ++ " " ++ show b ++ " " ++ show e ++ ".." ++ show t ++ ")"
-  show (TLetExpr bin tt t) = "(TLetExpr " ++ show bin ++ " " ++ show tt ++ " " ++ show t ++ ")"
-  show (TLambda lb tt t ) = "(TLambda " ++ show lb ++ " " ++ show tt ++ " " ++ show t ++ ")"
-  show (TApp tt1 tl t) = "(TApp " ++ show tt1 ++ " (" ++ show tl ++ ") " ++ show t ++ ")"
-  show (TListComp e qs t) = "(TListComp " ++ show e ++ " (" ++ show qs ++ ") " ++ show t ++ ")"
+  show (TAtom t) = "(TAtom " <> show t <> ")"
+  show (TListTree lt t) = "(TListTree (" <> show lt <> ") " <> show t <> ")"
+  show (TNTuple lt t) = "(TNTuple ("<> show lt <> ") " <> show t <> ")"
+  show (TBinary t1 tt1 tt2 t) = "(TBinary " <> show t1 <> " " <> show tt1 <>  " " <> show tt2 <> " " <> show t <> ")"
+  show (TUnary t1 tt t) = "(TUnary "<> show t1 <> " " <> show tt <> " " <> show t <> ")"
+  show (TSectL tt t1 t) = "(TSectL "<> show tt <> " "<> show t1 <> " " <> show t <> ")"
+  show (TSectR t1 tt t) = "(TSectR " <> show t1 <> " " <> show tt <> " " <> show t <> ")"
+  show (TPrefixOp t) = "(TPrefixOp " <> show t <> ")"
+  show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " <> show tt1 <> " " <> show tt2 <> " " <> show tt3 <> " " <> show t <> ")"
+  show (TArithmSeq s b e t) = "(TArithmSeq " <> show s <> " " <> show b <> " " <> show e <> ".." <> show t <> ")"
+  show (TLetExpr bin tt t) = "(TLetExpr " <> show bin <> " " <> show tt <> " " <> show t <> ")"
+  show (TLambda lb tt t ) = "(TLambda " <> show lb <> " " <> show tt <> " " <> show t <> ")"
+  show (TApp tt1 tl t) = "(TApp " <> show tt1 <> " (" <> show tl <> ") " <> show t <> ")"
+  show (TListComp e qs t) = "(TListComp " <> show e <> " (" <> show qs <> ") " <> show t <> ")"
 
 instance showTypeBinding:: Show TypeBinding where
-  show (TLit t) = "(TLit "++ show t ++")"
-  show (TConsLit b1 b2 t) = "(TConsLit "++ show b1 ++ " " ++ show b2 ++ " " ++ show t ++")"
-  show (TListLit lb t) = "(TListLit " ++ show lb ++ " "++ show t ++")"
-  show (TNTupleLit lb t) = "(TNTupleLit " ++ show lb ++ " "++ show t ++")"
+  show (TLit t) = "(TLit "<> show t <>")"
+  show (TConsLit b1 b2 t) = "(TConsLit "<> show b1 <> " " <> show b2 <> " " <> show t <>")"
+  show (TListLit lb t) = "(TListLit " <> show lb <> " "<> show t <>")"
+  show (TNTupleLit lb t) = "(TNTupleLit " <> show lb <> " "<> show t <>")"
 
 extractType:: TypeTree -> Type
 extractType (TAtom t)            = t

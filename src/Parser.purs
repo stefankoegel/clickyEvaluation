@@ -1,15 +1,17 @@
 module Parser where
 
-import Prelude (Unit, void, class Monad, bind, return, ($), (<$>), (<<<), (>>=), (+), (*), (++), id, flip, negate)
+import Prelude (Unit, void, class Monad, bind, ($), (<$>), (<<<), (>>=), (+), (*), (<>), id, flip, negate)
 import Data.String as String
 import Data.Foldable (foldl)
-import Data.List (List(..), many, toList, concat, elemIndex, fromList)
+import Data.List (List(..), many, concat, elemIndex)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..), fst)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
 import Data.Array (modifyAt, snoc)
+import Data.Array (fromFoldable, toUnfoldable) as Array
 import Data.Either (Either)
 
+import Control.Applicative (pure)
 import Control.Alt ((<|>))
 import Control.Apply ((<*), (*>), lift2)
 import Control.Lazy (fix)
@@ -44,7 +46,7 @@ skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
 
 --lexeme parser (skips trailing whitespaces and linebreaks)
 ilexe :: forall a m. (Monad m) => ParserT String m a -> ParserT String m a
-ilexe p = p >>= \a -> skipWhite *> return a
+ilexe p = p >>= \a -> skipWhite *> pure a
 
 -- parses <p> if it is on the same line or indented, does NOT change indentation state
 indent :: forall a. IndentParser String a -> IndentParser String a
@@ -73,15 +75,15 @@ integer = convert <$> many1 digit
     table _   = 47
 
 boolean :: forall m. (Monad m) => ParserT String m Boolean
-boolean = string "True"  *> return true
-      <|> string "False" *> return false
+boolean = string "True"  *> pure true
+      <|> string "False" *> pure false
 
 charLiteral :: forall m. (Monad m) => ParserT String m Char
 charLiteral = do 
   char '\''
   c <- character'
   char '\''
-  return c
+  pure c
 
 -- | Parser for characters at the start of variables
 lower :: forall m. (Monad m) => ParserT String m Char
@@ -94,8 +96,8 @@ anyLetter = char '_' <|> lower <|> upper <|> char '\'' <|> digit
 character' :: forall m. (Monad m) => ParserT String m Char
 character' =
       (char '\\' *>
-        (    (char 'n' *> return '\n')
-         <|> (char 'r' *> return '\r')
+        (    (char 'n' *> pure '\n')
+         <|> (char 'r' *> pure '\r')
          <|> char '\\'
          <|> char '"'
          <|> char '\''))
@@ -106,14 +108,14 @@ name :: forall m. (Monad m) => ParserT String m String
 name = do
   c  <- char '_' <|> lower
   cs <- many anyLetter
-  let nm = String.fromCharArray $ fromList $ Cons c cs
+  let nm = String.fromCharArray $ Array.fromFoldable $ Cons c cs
   case elemIndex nm reservedWords of
-    Nothing -> return nm 
-    Just _  -> fail $ nm ++ " is a reserved word!"
+    Nothing -> pure nm
+    Just _  -> fail $ nm <> " is a reserved word!"
   where
     -- | List of reserved key words
     reservedWords :: List String
-    reservedWords = toList $ (unGenLanguageDef haskellDef).reservedNames
+    reservedWords = Array.toUnfoldable $ (unGenLanguageDef haskellDef).reservedNames
 
 ---------------------------------------------------------
 -- Parsers for Atoms
@@ -129,7 +131,7 @@ bool = Bool <$> boolean
 
 -- | Parser for Char
 character :: forall m. (Monad m) => ParserT String m Atom
-character = (Char <<< String.fromChar) <$> charLiteral
+character = (Char <<< String.singleton) <$> charLiteral
 
 -- | Parser for variable atoms
 variable :: forall m. (Monad m) => ParserT String m Atom
@@ -175,14 +177,14 @@ operatorTable = infixTable2
     infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
 
     infixTable :: OperatorTable m String Expr
-    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> return (Binary op)) assoc)) <$> x) <$> infixOperators
+    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> pure (Binary op)) assoc)) <$> x) <$> infixOperators
 
     unaryMinus :: Operator m String Expr
     unaryMinus = Prefix $ spaced minusParse
       where 
         minusParse = do
           string "-"
-          return $ \e -> case e of
+          pure $ \e -> case e of
             Atom (AInt ai) -> (Atom (AInt (-ai)))
             _              -> Unary Sub e
 
@@ -193,20 +195,20 @@ operatorTable = infixTable2
           char '`'
           n <- name
           char '`'
-          return $ \e1 e2 -> Binary (InfixFunc n) e1 e2
+          pure $ \e1 e2 -> Binary (InfixFunc n) e1 e2
 
     -- | Parse an expression between spaces (backtracks)
     spaced :: forall a. ParserT String m a -> ParserT String m a
     spaced p = PC.try $ PC.between skipSpaces skipSpaces p
 
 opParser :: forall m. (Monad m) => ParserT String m Op
-opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> return op)) <$> x) $ concat $ (\x -> toList <$> x) $ toList infixOperators) <|> infixFunc
+opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> pure op)) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators) <|> infixFunc
   where 
     infixFunc = do
       char '`'
       n <- name
       char '`'
-      return $ InfixFunc n
+      pure $ InfixFunc n
 
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
 base :: IndentParser String Expr -> IndentParser String Expr
@@ -233,8 +235,8 @@ applicationOrSingleExpression expr = do
   e     <- ilexe $ base expr
   mArgs <- PC.optionMaybe (PC.try $ ((PC.try (indent (base expr))) `PC.sepEndBy1` skipWhite))
   case mArgs of
-    Nothing   -> return e
-    Just args -> return $ App e args
+    Nothing   -> pure e
+    Just args -> pure $ App e args
 
 -- | Parse an if_then_else construct - layout sensitive
 ifThenElse :: IndentParser String Expr -> IndentParser String Expr
@@ -245,7 +247,7 @@ ifThenElse expr = do
   thenExpr <- indent expr
   indent $ string "else"
   elseExpr <- indent expr
-  return $ IfExpr testExpr thenExpr elseExpr
+  pure $ IfExpr testExpr thenExpr elseExpr
 
 -- | Parser for tuples or bracketed expressions - layout sensitive
 tuplesOrBrackets :: IndentParser String Expr -> IndentParser String Expr
@@ -257,8 +259,8 @@ tuplesOrBrackets expr = do
     (indent expr) `PC.sepBy1` (PC.try $ indent $ char ',')
   indent $ char ')'
   case mes of
-    Nothing -> return e
-    Just es -> return $ NTuple (Cons e es)
+    Nothing -> pure e
+    Just es -> pure $ NTuple (Cons e es)
 
 -- | Parser for operator sections - layout sensitive
 section :: IndentParser String Expr -> IndentParser String Expr
@@ -272,11 +274,11 @@ section expr = do
   case me1 of
     Nothing ->
       case me2 of
-        Nothing -> return $ PrefixOp op
-        Just e2 -> return $ SectR op e2
+        Nothing -> pure $ PrefixOp op
+        Just e2 -> pure $ SectR op e2
     Just e1 ->
       case me2 of
-        Nothing -> return $ SectL e1 op
+        Nothing -> pure $ SectL e1 op
         Just _ -> fail "Cannot have a section with two expressions!"
 
 -- | Parser for lists - layout sensitive
@@ -285,7 +287,7 @@ list expr = do
   ilexe $ char '['
   exprs <- (indent expr) `PC.sepBy` (PC.try $ indent $ char ',')
   indent $ char ']'
-  return $ List exprs
+  pure $ List exprs
 
 -- | Parser for Arithmetic Sequences - layout sensitive
 arithmeticSequence :: IndentParser String Expr -> IndentParser String Expr
@@ -296,7 +298,7 @@ arithmeticSequence expr = do
   indent $ string ".."
   end   <- PC.optionMaybe $ indent expr
   indent $ char ']'
-  return $ ArithmSeq start step end
+  pure $ ArithmSeq start step end
 
 -- | Parser for list comprehensions - layout sensitive
 listComp :: IndentParser String Expr -> IndentParser String Expr
@@ -307,7 +309,7 @@ listComp expr = do
   skipWhite
   quals <- (indent $ qual expr) `PC.sepBy1` (PC.try $ indent $ char ',')
   indent $ char ']'
-  return $ ListComp start quals
+  pure $ ListComp start quals
   where
     -- | Parser for list comprehension qualifiers
     qual :: IndentParser String Expr -> IndentParser String ExprQual
@@ -318,13 +320,13 @@ listComp expr = do
           b <- indent binding
           indent $ char '='
           e <- indent expr
-          return $ Let b e
+          pure $ Let b e
         parseGen = do
           b <- ilexe binding
           indent $ string "<-"
           e <- indent expr
-          return $ Gen b e
-        parseGuard = ilexe expr >>= (return <<< Guard)
+          pure $ Gen b e
+        parseGuard = ilexe expr >>= (pure <<< Guard)
 
 -- | Parser for strings ("example")
 charList :: forall m. (Monad m) => ParserT String m Expr
@@ -333,7 +335,7 @@ charList = do
   strs <- many character'
   char '"'
   skipWhite
-  return (List ((Atom <<< Char <<< String.fromChar) <$> strs))
+  pure (List ((Atom <<< Char <<< String.singleton) <$> strs))
 
 -- | Parse a lambda expression - layout sensitive
 lambda :: IndentParser String Expr -> IndentParser String Expr
@@ -342,7 +344,7 @@ lambda expr = do
   binds <- many1 $ indent binding
   indent $ string "->"
   body <- indent expr
-  return $ Lambda binds body
+  pure $ Lambda binds body
 
 -- Parser for let expressions - layout sensitive
 letExpr :: IndentParser String Expr -> IndentParser String Expr
@@ -351,21 +353,21 @@ letExpr expr = do
   binds <- indent $ bindingBlock expr
   indent $ string "in"
   body  <- indent $ withPos expr
-  return $ LetExpr binds body
+  pure $ LetExpr binds body
   where
     bindingItem :: IndentParser String Expr -> IndentParser String (Tuple Binding Expr)
     bindingItem expr = do
       b <- ilexe binding
       indent $ char '='
       e <- indent $ withPos expr
-      return $ Tuple b e
+      pure $ Tuple b e
 
     bindingBlock :: IndentParser String Expr -> IndentParser String (List (Tuple Binding Expr))
     bindingBlock expr = curly <|> (PC.try layout) <|> (PC.try iblock)
       where 
         curly  = PC.between (ilexe $ char '{') (ilexe $ char '}') iblock 
         iblock = (bindingItem expr) `PC.sepBy1` (ilexe $ char ';')  
-        layout = block1 (PC.try $ bindingItem expr >>= \x -> PC.notFollowedBy (ilexe $ char ';') *> return x)
+        layout = block1 (PC.try $ bindingItem expr >>= \x -> PC.notFollowedBy (ilexe $ char ';') *> pure x)
 
 -- | Parse an arbitrary expression
 expression :: IndentParser String Expr
@@ -391,21 +393,21 @@ consLit bnd = do
   ilexe $ char '('
   b <- indent consLit'
   indent $ char ')'
-  return b
+  pure b
   where
     consLit' :: IndentParser String Binding
     consLit' = do
       b <- ilexe $ bnd
       indent $ char ':'
       bs <- (PC.try $ indent consLit') <|> (indent bnd)
-      return $ ConsLit b bs
+      pure $ ConsLit b bs
 
 listLit :: IndentParser String Binding -> IndentParser String Binding
 listLit bnd = do
   ilexe $ char '['
   bs <- (indent bnd) `PC.sepBy` (PC.try $ indent $ char ',')
   indent $ char ']'
-  return $ ListLit bs
+  pure $ ListLit bs
 
 tupleLit :: IndentParser String Binding -> IndentParser String Binding
 tupleLit bnd = do
@@ -414,7 +416,7 @@ tupleLit bnd = do
   indent $ char ','
   bs <- (indent bnd) `PC.sepBy1` (PC.try $ indent $ char ',')
   indent $ char ')'
-  return $ NTupleLit (Cons b bs)
+  pure $ NTupleLit (Cons b bs)
 
 binding :: IndentParser String Binding
 binding = fix $ \bnd ->
@@ -433,7 +435,7 @@ definition = do
   binds   <- many $ indent binding
   indent $ char '='
   body    <- indent expression
-  return $ Def defName binds body
+  pure $ Def defName binds body
 
 definitions :: IndentParser String (List Definition)
 definitions = skipWhite *> block definition
