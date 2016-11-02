@@ -13,8 +13,9 @@ import Data.Array as Array
 import Data.Map as Map
 import Data.Map (Map, insert, lookup, empty)
 import Data.Tuple (Tuple(Tuple), snd, fst)
+import Data.Traversable (traverse)
 import Data.Set as Set
-import Data.Foldable (foldl, foldr, foldMap)
+import Data.Foldable (foldl, foldr, foldMap, elem)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.String (toCharArray, fromCharArray)
 
@@ -194,7 +195,7 @@ envUnion (TypeEnv a) (TypeEnv b) = TypeEnv $ a `Map.union` b
 
 instantiate ::  Scheme -> Infer Type
 instantiate (Forall as t) = do
-  as' <- mapM (const fresh) as
+  as' <- traverse (const fresh) as
   let s = Map.fromFoldable $ zip as as'
   pure $ apply s t
 
@@ -227,26 +228,6 @@ overlappingBindings (Cons x xs) = (filter (\y -> elem y (concatMap boundNames xs
       go (ListLit bs)      = foldMap go bs
       go (NTupleLit bs)    = foldMap go bs
       go _                 = Nil
-
--- TODO find Purescript equivalents
-------------------------------------------------------------------------------------
-mapM :: forall a b m. (Monad m) => (a -> m b) -> List a -> m (List b)
-mapM f as = foldr k (pure Nil) as
-            where
-              k a r = do
-                x <- f a
-                xs <- r
-                pure (x:xs)
-
-mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
-mapM' f Nothing  = pure Nothing
-mapM' f (Just x) = Just <$> (f x)
-
-elem :: forall a. (Eq a) => a -> List a -> Boolean
-elem x Nil = false
-elem x (Cons y ys) = x == y || elem x ys
-
-------------------------------------------------------------------------------------
 
 lookupEnv :: TypeEnv -> Atom -> Infer (Tuple Subst Type)
 lookupEnv (TypeEnv env) x = do
@@ -362,8 +343,8 @@ infer env ex = case ex of
 
   ArithmSeq begin jstep jend -> do
     Tuple s1 t1 <- infer env begin
-    tup2 <- mapM' (infer env) jstep
-    tup3 <- mapM' (infer env) jend
+    tup2 <- traverse (infer env) jstep
+    tup3 <- traverse (infer env) jend
     let t2 = snd <$> tup2
     let t3 = snd <$> tup3
     let s2 = maybe nullSubst fst tup2
@@ -608,7 +589,7 @@ getTypEnv b  env= case evalState (runExceptT (extractBinding b)) initUnique of
 
 getTypEnvFromList::  List Binding -> TypeEnv-> Maybe TypeEnv
 getTypEnvFromList bs env = do
-                  mTypList <-  mapM (flip getTypEnv emptyTyenv) bs
+                  mTypList <- traverse (flip getTypEnv emptyTyenv) bs
                   pure $ foldr (\a b -> unionTypeEnv a b) env mTypList
 
 unionTypeEnv :: TypeEnv -> TypeEnv -> TypeEnv
@@ -790,11 +771,11 @@ helptxToABC tt = go tt
   where
     go (TAtom t) = helpTypeToABC t >>= \t -> pure $ TAtom t
     go (TListTree tts t) = do
-      tts' <- mapM helptxToABC tts
+      tts' <- traverse helptxToABC tts
       t' <- helpTypeToABC t
       pure $ TListTree tts' t'
     go (TNTuple tts t) = do
-      tts' <- mapM helptxToABC tts
+      tts' <- traverse helptxToABC tts
       t' <- helpTypeToABC t
       pure $ TNTuple tts' t'
     go (TBinary t1 tt1 tt2 t) = do
@@ -827,28 +808,28 @@ helptxToABC tt = go tt
       pure $ TIfExpr tt1' tt2' tt3' t'
     go (TArithmSeq tt1 tt2 tt3 t) = do
       tt1' <- helptxToABC tt1
-      tt2' <- mapM' helptxToABC tt2
-      tt3' <- mapM' helptxToABC tt3
+      tt2' <- traverse helptxToABC tt2
+      tt3' <- traverse helptxToABC tt3
       t'   <- helpTypeToABC t
       pure $ TArithmSeq tt1' tt2' tt3' t'        
     go (TLetExpr bin tt t) = do
-      bin' <- mapM (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
+      bin' <- traverse (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
       tt'  <- helptxToABC tt
       t'   <- helpTypeToABC t
       pure $ TLetExpr bin' tt' t'
     go (TLambda tbs tt t) = do
-      tbs' <- mapM helpBindingToABC tbs
+      tbs' <- traverse helpBindingToABC tbs
       tt' <- helptxToABC tt
       t' <- helpTypeToABC t
       pure $ TLambda tbs' tt' t'
     go (TApp tt tts t) = do
       tt' <- helptxToABC tt
-      tts' <- mapM helptxToABC tts
+      tts' <- traverse helptxToABC tts
       t' <- helpTypeToABC t
       pure $ TApp tt' tts' t'
     go (TListComp tt tts t) = do
       tt'  <- helptxToABC tt
-      tts' <- mapM helptxToABCQual tts
+      tts' <- traverse helptxToABCQual tts
       t'   <- helpTypeToABC t
       pure $ TListComp tt' tts' t'      
 
@@ -894,7 +875,7 @@ helpTypeToABC t = go t
 
 helpADTypeToABC :: AD -> State {count :: Int, env:: (Map String String)} AD
 helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> pure $ TList t
-helpADTypeToABC (TTuple ts) = mapM helpTypeToABC ts >>= \ts -> pure $ TTuple ts
+helpADTypeToABC (TTuple ts) = traverse helpTypeToABC ts >>= \ts -> pure $ TTuple ts
 
 helpBindingToABC :: TypeBinding -> State {count :: Int, env :: (Map String String)} TypeBinding
 helpBindingToABC bin = go bin
@@ -906,11 +887,11 @@ helpBindingToABC bin = go bin
       t' <- helpTypeToABC t
       pure $ TConsLit tb1' tb2' t'
     go (TListLit tbs t) = do
-      tbs' <- mapM helpBindingToABC tbs
+      tbs' <- traverse helpBindingToABC tbs
       t' <- helpTypeToABC t
       pure $ TListLit tbs' t'
     go (TNTupleLit tbs t) = do
-      tbs' <- mapM helpBindingToABC tbs
+      tbs' <- traverse helpBindingToABC tbs
       t' <- helpTypeToABC t
       pure $ TNTupleLit tbs' t'
 
