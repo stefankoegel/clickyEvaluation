@@ -206,7 +206,7 @@ envUnion (TypeEnv a) (TypeEnv b) = TypeEnv $ a `Map.union` b
 instantiate ::  Scheme -> Infer Type
 instantiate (Forall as t) = do
   as' <- mapM (const fresh) as
-  let s = Map.fromList $ zip as as'
+  let s = Map.fromFoldable $ zip as as'
   pure $ apply s t
 
 generalize :: TypeEnv -> Type -> Scheme

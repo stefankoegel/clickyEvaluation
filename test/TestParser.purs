@@ -7,7 +7,7 @@ import Data.Array (toUnfoldable) as Array
 import Data.Tuple (Tuple(..))
 import Data.Maybe (Maybe(..))
 
-import Text.Parsing.Parser (ParseError(ParseError))
+import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
 
 import Control.Monad.Writer (Writer, tell)
 
@@ -23,7 +23,7 @@ tell' = tell <<< singleton
 
 test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Writer (List String) Unit
 test name p input expected = case runParserIndent p input of
-  Left  (ParseError { position: p, message: m }) -> tell' $ "Parse fail (" <> name <> "): " <> show p <> " " <> m
+  Left parseError -> tell' $ "Parse fail (" <> name <> "): " <> show (parseErrorPosition parseError) <> " " <> parseErrorMessage parseError
   Right result           -> 
     if result == expected
       then pure unit --tell $ "Parse success (" <> name <> ")"

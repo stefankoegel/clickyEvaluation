@@ -9,7 +9,7 @@ import Data.Tuple (Tuple(Tuple))
 import Data.Maybe (Maybe(Nothing, Just), fromMaybe)
 import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
-import Data.Identity (Identity, runIdentity)
+import Data.Identity (Identity)
 import Data.Either (Either(..), either)
 import Data.Monoid (class Monoid)
 import Data.String (toChar)
@@ -19,7 +19,8 @@ import Data.Enum (fromEnum)
 import Control.Applicative (pure)
 import Control.Apply ((*>))
 import Control.Alt ((<|>))
-import Control.Monad.Trans (lift)
+import Control.Comonad (extract)
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.State.Trans (StateT, get, modify, runStateT, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
@@ -74,12 +75,12 @@ instance showMatchingError :: Show MatchingError where
 type Evaluator = ExceptT EvalError Identity
 
 runEvalM :: forall a. Evaluator a -> Either EvalError a
-runEvalM = runIdentity <<< runExceptT
+runEvalM = extract <<< runExceptT
 
 type Matcher = ExceptT MatchingError Identity
 
 runMatcherM :: forall a. Matcher a -> Either MatchingError a
-runMatcherM = runIdentity <<< runExceptT
+runMatcherM = extract <<< runExceptT
 
 mapWithPath :: Path -> (Expr -> Evaluator Expr) -> Expr -> Evaluator Expr
 mapWithPath p f = go p
