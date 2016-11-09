@@ -13,7 +13,7 @@ import Control.Monad.Eff.Console (CONSOLE)
 import Control.Monad.State.Trans (StateT, modify, get, runStateT)
 import Control.Monad.Eff.Class (liftEff)
 
-import Text.Parsing.Parser (ParseError(ParseError))
+import Text.Parsing.Parser (parseErrorPosition)
 import Text.Parsing.Parser.Pos (Position(Position))
 import DOM (DOM)
 import Ace as Ace
@@ -52,9 +52,10 @@ startEvaluation = do
     Left err   -> showInfo "Expression" (show err)
     Right expr -> do
       case defsToEnv <$> parseDefs definitions of
-        Left err@(ParseError { position: (Position { line: line, column: column }) })  -> do
-          showInfo "Definitions" (show err)
-          markText (line - 1) column
+        Left parseError  -> do
+          showInfo "Definitions" (show parseError)
+          (Position pos) <- pure $ parseErrorPosition parseError
+          markText (pos.line - 1) pos.column
         Right env -> case buildTypeEnv (envToDefs env) of --  type Env
           Left err -> showInfo "Definitions" (prettyPrintTypeError err)
           Right typEnv -> do

@@ -13,19 +13,19 @@ module IndentParser (
     indentAp, (<+/>), indentNoAp, (<-/>), indentMany, (<*/>), indentOp, (<?/>), Optional(..)
 ) where
       
-import Prelude (class Monad, Unit, id, ap, const, ($), flip, unit, (==), bind, (<=))
+import Prelude (class Monad, Unit, id, ap, const, ($), flip, unit, (==), bind, (<=), (>>=))
 import Data.List (List(..), many)
 import Data.Maybe (Maybe(..))
 
 import Control.Alt ((<|>))
 import Control.Apply ((*>), lift2)
 import Control.Applicative (pure)
-import Control.Monad.Trans (lift)
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.State (State, evalState)
-import Control.Monad.State.Trans (get, put)
+import Control.Monad.State.Trans (gets, get, put)
 import Data.Either (Either(..))
 
-import Text.Parsing.Parser (ParseError, ParserT(..), PState(..), fail)
+import Text.Parsing.Parser (ParseError, ParserT(..), ParseState(..), fail)
 import Text.Parsing.Parser.Combinators
 import Text.Parsing.Parser.Pos (Position(..), initialPos)
 import Text.Parsing.Parser.String (string, oneOf)
@@ -62,11 +62,10 @@ import Text.Parsing.Parser.String (string, oneOf)
 --   be @ Identity @ as with any @ ParserT @
 type IndentParser s a = ParserT s (State Position) a
 
-
 -- | @ getPosition @ returns current position
 --   should probably be added to Text.Parsing.Parser.Pos
 getPosition :: forall m s. (Monad m) => ParserT s m Position
-getPosition = ParserT $ \(PState { input: (i :: s), position: (pos :: Position)}) -> pure {input: (i :: s), result: (Right (pos :: Position)) :: Either ParseError Position, consumed: false, position: (pos :: Position)}
+getPosition = get >>= \(ParseState _ pos _) -> pure pos
 
 -- | simple helper function to avoid typ-problems with MonadState instance
 get' :: forall s. IndentParser s Position

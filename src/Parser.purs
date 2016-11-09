@@ -17,7 +17,7 @@ import Control.Apply ((<*), (*>), lift2)
 import Control.Lazy (fix)
 import Control.Monad.State (runState) 
 
-import Text.Parsing.Parser (ParseError, ParserT, PState(..), runParserT, fail)
+import Text.Parsing.Parser (ParseError, ParserT, ParseState(..), runParserT, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
 import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
@@ -376,7 +376,7 @@ expression = do
   fix $ \expr -> buildExprParser operatorTable (syntax expr)
 
 runParserIndent :: forall a. IndentParser String a -> String -> Either ParseError a
-runParserIndent p src = fst $ flip runState initialPos $ runParserT (PState {input: src,position: initialPos}) p
+runParserIndent p src = fst $ flip runState initialPos $ runParserT src p
 
 parseExpr :: String -> Either ParseError Expr
 parseExpr = runParserIndent expression
