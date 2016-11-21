@@ -26,7 +26,7 @@ data Scheme = Forall (List TVar) Type
 instance showScheme :: Show Scheme where
   show (Forall a b) = "Forall (" <> show a <> ") " <> show b
 
-data TypeEnv = TypeEnv (Map.Map Atom Scheme)
+data TypeEnv = TypeEnv (Map.Map TVar Scheme)
 
 instance showTypeEnv :: Show TypeEnv where
   show (TypeEnv a) = show a
@@ -75,7 +75,7 @@ instance subAD :: Substitutable AD where
   ftv (TList t) = ftv t
   ftv (TTuple t) = ftv t
 
-instance subTupAtomScheme :: Substitutable (Tuple Atom Scheme) where
+instance subTupTVarScheme :: Substitutable (Tuple String Scheme) where
   apply s (Tuple a b) = Tuple a (apply s b)
 
   ftv (Tuple _ b) = ftv b
@@ -143,7 +143,7 @@ instance subTypeBinding :: Substitutable TypeBinding where
 initUnique :: Unique
 initUnique = Unique { count : 0 }
 
-extend :: TypeEnv -> Tuple Atom Scheme -> TypeEnv
+extend :: TypeEnv -> Tuple TVar Scheme -> TypeEnv
 extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
 
 nullSubst:: Subst
@@ -229,15 +229,12 @@ overlappingBindings (Cons x xs) = (filter (\y -> elem y (concatMap boundNames xs
       go (NTupleLit bs)    = foldMap go bs
       go _                 = Nil
 
-lookupEnv :: TypeEnv -> Atom -> Infer (Tuple Subst Type)
-lookupEnv (TypeEnv env) x = do
-  case Map.lookup x env of
-    Nothing -> throwError $ UnboundVariable (f x)
+lookupEnv :: TypeEnv -> TVar -> Infer (Tuple Subst Type)
+lookupEnv (TypeEnv env) tvar = do
+  case Map.lookup tvar env of
+    Nothing -> throwError $ UnboundVariable tvar
     Just s  -> do t <- instantiate s
                   pure (Tuple nullSubst t)
-  where
-    f (Name x) = x
-    f x = show x
 
 inferType :: TypeEnv -> Expr -> Infer (Tuple Subst Type)
 inferType env exp = do
@@ -270,11 +267,11 @@ inferBindings env (Cons (Tuple bin expr) rest) = do
 
 infer :: TypeEnv -> Expr -> Infer (Tuple Subst TypeTree)
 infer env ex = case ex of
-  Atom (Name n) -> case n of
+  Atom (Name name) -> case name of
     "mod" -> pure $ Tuple nullSubst (TAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
     "div" -> pure $ Tuple nullSubst (TAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
     _     -> do
-      Tuple s t <- lookupEnv env (Name n)
+      Tuple s t <- lookupEnv env name
       pure (Tuple s $ TAtom t)
   Atom (Bool _) -> pure (Tuple nullSubst $ TAtom (TypCon "Bool"))
   Atom (Char _) -> pure (Tuple nullSubst $ TAtom (TypCon "Char"))
@@ -333,9 +330,8 @@ infer env ex = case ex of
     freshVar <- fresh
     case freshVar of
       t@(TypVar t') -> do
-        let name = Name $ "if"
-        let env' = env `extend` (Tuple name (Forall (Cons t' Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
-        inferred <- infer env' (App (Atom  name) (toUnfoldable [cond, tr, fl]))
+        let env' = env `extend` (Tuple "if" (Forall (Cons t' Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
+        inferred <- infer env' (App (Atom $ Name "if") (toUnfoldable [cond, tr, fl]))
         case inferred of
           Tuple s (TApp tt (Cons tcond (Cons ttr (Cons tfl Nil))) ift) -> pure (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
           _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
@@ -496,16 +492,16 @@ inferOp env op = do
 inferDef :: TypeEnv -> Definition -> Infer (Tuple Subst Type)
 inferDef env (Def str bin exp) = do
     tv <- fresh
-    let env' = env `extend` (Tuple (Name str) (Forall Nil tv))
+    let env' = env `extend` (Tuple str (Forall Nil tv))
     let exp' = Lambda bin exp
     Tuple s1 t1' <- infer env' exp'
     let t1 = extractType t1'
-    let env'' = env `extend` (Tuple (Name str) (Forall Nil (apply s1 t1)))
+    let env'' = env `extend` (Tuple str (Forall Nil (apply s1 t1)))
     Tuple s2 t2 <- infer env'' exp'
     s3 <- unify (apply s1 t1) (apply s2 (extractType t2))
     pure $ Tuple (s3 `compose` s1) (apply s3 (apply s1 t1))
 
-extractConsLit:: Type -> Binding -> Infer (Tuple (List (Tuple Atom Scheme)) TypeBinding)
+extractConsLit :: Type -> Binding -> Infer (Tuple (List (Tuple TVar Scheme)) TypeBinding)
 extractConsLit tv (ConsLit a b@(ConsLit _ _)) = do
   Tuple list1 typ1 <- extractBinding a
   secondBinding <- extractBinding b
@@ -516,12 +512,12 @@ extractConsLit tv (ConsLit a b@(ConsLit _ _)) = do
       pure $ Tuple (apply s2 (apply s1 (list1 <> list2))) (apply s2 (apply s1 (TConsLit typ1 t2 (AD $ TList typ2))))
     _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
 
-extractConsLit tv (ConsLit a (Lit b)) = do
+extractConsLit tv (ConsLit a (Lit (Name name))) = do
   Tuple list typ <- extractBinding a
   s1 <- unify tv (extractBindingType typ)
   let list' = apply s1 list
   let ltyp = AD $ TList (apply s1 tv)
-  pure $ Tuple (Cons (Tuple b $ Forall Nil ltyp) list') $ (apply s1 (TConsLit typ (TLit ltyp) ltyp))
+  pure $ Tuple (Cons (Tuple name $ Forall Nil ltyp) list') $ (apply s1 (TConsLit typ (TLit ltyp) ltyp))
 
 extractConsLit tv (ConsLit a b@(ListLit _)) = do
   Tuple list1 typ1 <- extractBinding a
@@ -535,7 +531,7 @@ extractConsLit tv (ConsLit a b@(ListLit _)) = do
 
 extractConsLit _ _ = throwError $ UnknownError "congrats you found a bug in TypeChecker.extractConsLit"
 
-extractListLit :: List Binding -> Infer (List (Tuple (List (Tuple Atom Scheme)) TypeBinding))
+extractListLit :: List Binding -> Infer (List (Tuple (List (Tuple TVar Scheme)) TypeBinding))
 extractListLit (Cons a Nil) = do
   b1 <- extractBinding a
   pure (Cons b1 Nil)
@@ -547,10 +543,10 @@ extractListLit (Cons a b) = do
 
 extractListLit Nil = pure Nil
 
-extractBinding:: Binding -> Infer (Tuple (List (Tuple Atom Scheme)) TypeBinding)
-extractBinding (Lit a@(Name _)) = do
+extractBinding :: Binding -> Infer (Tuple (List (Tuple TVar Scheme)) TypeBinding)
+extractBinding (Lit (Name name)) = do
   tv <- fresh
-  pure $ Tuple (toUnfoldable [(Tuple a (Forall Nil tv))]) (TLit tv)
+  pure $ Tuple (toUnfoldable [(Tuple name (Forall Nil tv))]) (TLit tv)
 extractBinding (Lit (Bool _)) = pure $ Tuple Nil $ TLit (TypCon "Bool")
 extractBinding (Lit (Char _)) = pure $ Tuple Nil $ TLit (TypCon "Char")
 extractBinding (Lit (AInt _)) = pure $ Tuple Nil $ TLit (TypCon "Int")
@@ -582,8 +578,8 @@ extractBinding (NTupleLit a) = do
   let tup = unzip bs
   pure $ Tuple (concat $ fst tup) (TNTupleLit (snd tup) (AD $ TTuple $ (map extractBindingType (snd tup))))
 
-getTypEnv:: Binding -> TypeEnv -> Maybe TypeEnv
-getTypEnv b  env= case evalState (runExceptT (extractBinding b)) initUnique of
+getTypEnv :: Binding -> TypeEnv -> Maybe TypeEnv
+getTypEnv b env = case evalState (runExceptT (extractBinding b)) initUnique of
     Left _ -> Nothing
     Right (Tuple bs _) -> Just $ foldr (\a b -> extend b a) env bs
 
@@ -632,7 +628,7 @@ buildTypeEnvFromGroups env groupMap k@(Cons key keys) =
     Nothing -> Left $ UnboundVariable key
     Just defs -> case runInfer $ inferGroup env defs of
       Right scheme -> buildTypeEnvFromGroups
-        (env `extend` (Tuple (Name key) scheme)) (Map.delete key groupMap) keys
+        (env `extend` (Tuple key scheme)) (Map.delete key groupMap) keys
       Left (UnboundVariable var) -> buildTypeEnvFromGroups
         env groupMap (Cons var (delete var k))
       Left err -> Left err
