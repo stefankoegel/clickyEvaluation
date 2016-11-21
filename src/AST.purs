@@ -109,7 +109,7 @@ data IBinding  = ILit                       Int
               | IListLit (List IBinding)    Int
               | INTupleLit (List IBinding)  Int
 
-data TVar = TVar String
+type TVar = String
 
 data Type
     = TypVar TVar -- Typ Variables e.x. a
@@ -267,13 +267,6 @@ instance showType :: Show Type where
   show (TypeError err) ="(TypeError "<> show err <>")"
 
 derive instance eqType :: Eq Type
-
-derive instance ordTVar :: Ord TVar
-
-derive instance eqTVar :: Eq TVar
-
-instance showTVar :: Show TVar where
-  show (TVar a) = "(TVar " <> show a <> ")"
 
 instance showAD :: Show AD where
   show (TList t) = "(TList "<> show t <>")"

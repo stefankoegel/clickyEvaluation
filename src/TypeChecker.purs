@@ -153,7 +153,7 @@ fresh :: Infer Type
 fresh = do
   Unique s <- get
   put (Unique {count:(s.count+1)})
-  pure $ TypVar $ TVar $ "t_" <> show s.count
+  pure $ TypVar $ "t_" <> show s.count
 
 unify ::  Type -> Type -> Infer Subst
 unify (TypArr l r) (TypArr l' r')  = do
@@ -663,7 +663,7 @@ closeOver' :: (Tuple (Map.Map TVar Type) TypeTree) -> TypeTree
 closeOver' (Tuple s tt) = apply s tt
 
 prettyPrintType:: Type -> String
-prettyPrintType (TypVar (TVar a)) = a
+prettyPrintType (TypVar tvar) = tvar
 prettyPrintType (TypCon a) =  a
 prettyPrintType (TypArr t1@(TypArr _ _) t2) = "(" <> prettyPrintType t1 <> ")" <> " -> " <> prettyPrintType t2
 prettyPrintType (TypArr t1 t2) = prettyPrintType t1 <> " -> " <> prettyPrintType t2
@@ -856,16 +856,16 @@ helptxToABCQual q = case q of
 helpTypeToABC :: Type  -> State {count :: Int, env:: (Map String String)} Type
 helpTypeToABC t = go t
   where
-   go (TypVar (TVar var)) = do
+   go (TypVar var) = do
       {env: env} :: {count:: Int, env:: Map String String} <- get
       case lookup var env of
-        Just var' -> pure $ TypVar (TVar var')
+        Just var' -> pure $ TypVar var'
         Nothing -> do
           var' <- freshLetter
           let env' = insert var var' env
           {count: count} :: {count :: Int, env :: Map String String} <- get
           put {count:count, env:env'}
-          pure $ TypVar (TVar var')
+          pure $ TypVar var'
    go (TypArr t1 t2) = do
         t1' <- helpTypeToABC t1
         t2' <- helpTypeToABC t2
@@ -925,7 +925,7 @@ newTypVar1 i = case (letters1 !! (i)) of
 prettyPrintTypeError :: TypeError -> String
 prettyPrintTypeError (UnificationFail t1 t2) = "UnificationFail: Can't unify "
   <> prettyPrintType t1 <> " with " <> prettyPrintType t2
-prettyPrintTypeError (InfiniteType (TVar str) t) = "InfiniteType: cannot construct the infinite type: "
+prettyPrintTypeError (InfiniteType str t) = "InfiniteType: cannot construct the infinite type: "
   <> str <> " ~ " <> prettyPrintType t
 prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope " <> var
 prettyPrintTypeError (UnknownError str) = "UnknownError: " <> str
