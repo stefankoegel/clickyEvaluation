@@ -166,7 +166,7 @@ unify t (TypVar a) = bindVar a t
 unify (TypCon a) (TypCon b) | a == b = pure nullSubst
 unify (AD a) (AD b) | a == b = pure nullSubst
 unify (AD a) (AD b) = unifyAD a b
-unify t1 t2 = throwError $ UnificationFail t1 t2
+unify t1 t2 = throwError $ normalizeTypeError $ UnificationFail t1 t2
 
 unifyAD :: AD -> AD -> Infer Subst
 unifyAD (TList a) (TList b) = unify a b
@@ -176,12 +176,12 @@ unifyAD (TTuple (Cons a as)) (TTuple (Cons b bs)) = do
   pure (s1 `compose` s2)
 unifyAD (TTuple Nil) (TTuple Nil) = pure nullSubst
 
-unifyAD a b = throwError $ UnificationFail (AD a) (AD b)
+unifyAD a b = throwError $ normalizeTypeError $ UnificationFail (AD a) (AD b)
 
 bindVar ::  TVar -> Type -> Infer Subst
 bindVar a t
   | t == (TypVar a) = pure nullSubst
-  | occursCheck a t = throwError $ InfiniteType a t
+  | occursCheck a t = throwError $ normalizeTypeError $ InfiniteType a t
   | otherwise       = pure $ Map.singleton a t
 
 occursCheck :: forall a.  (Substitutable a) => TVar -> a -> Boolean
@@ -206,11 +206,10 @@ generalize env t  = Forall as t
 runInfer :: Infer (Tuple Subst Type) -> Either TypeError Scheme
 runInfer m = case evalState (runExceptT m) initUnique of
   Left err -> Left err
-  Right res -> Right $ closeOver res
+  Right res -> Right $ closeOverType res
 
-closeOver :: (Tuple (Map.Map TVar Type) Type) -> Scheme
-closeOver (Tuple sub ty) = sc --TODO add normalize back in
-  where sc = generalize emptyTyenv (apply sub ty)
+closeOverType :: (Tuple Subst Type) -> Scheme
+closeOverType (Tuple sub ty) = generalize emptyTyenv (apply sub ty)
 
 emptyTyenv :: TypeEnv
 emptyTyenv = TypeEnv Map.empty
@@ -347,7 +346,7 @@ infer env ex = case ex of
     let s3 = maybe nullSubst fst tup3
     let s  = s1 `compose` s2 `compose` s3
     let tt = extractType t1   
-    let typeMissMatch m1 m2 = fromMaybe (UnknownError "congrats you found a bug TypeChecker.infer (ArithmSeq begin jstep jend)") (lift2 UnificationFail m1 m2)
+    let typeMissMatch m1 m2 = fromMaybe (UnknownError "congrats you found a bug TypeChecker.infer (ArithmSeq begin jstep jend)") (normalizeTypeError <$> lift2 UnificationFail m1 m2)
     ifM (pure (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t2))))
       (throwError (typeMissMatch (Just tt) (extractType <$> t2)))
       (ifM (pure (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t3))))
@@ -445,12 +444,12 @@ inferQual env (Gen bin e1) = do
       let env' = apply s2 (foldr (\a b -> extend b a) env list)      
       let sC = s1 `compose` s2
       pure $ Tuple sC $ Tuple (apply sC (TGen typ t1 t)) env'
-    _ -> fresh >>= (\t -> throwError $ UnificationFail (extractType t1) (AD (TList t)))
+    _ -> fresh >>= (\t -> throwError $ normalizeTypeError $ UnificationFail (extractType t1) (AD (TList t)))
 inferQual env (Guard expr) = do
   Tuple s t <- infer env expr
   case extractType t of
     TypCon "Bool" -> pure $ Tuple s $ Tuple (apply s (TGuard t (extractType t))) env
-    _             -> throwError $ UnificationFail (extractType t) (TypCon "Bool")
+    _             -> throwError $ normalizeTypeError $ UnificationFail (extractType t) (TypCon "Bool")
 
 inferQuals :: TypeEnv -> List ExprQual -> Infer (Tuple Subst (Tuple (List TypeQual) TypeEnv))
 inferQuals env Nil = pure $ Tuple nullSubst $ Tuple Nil emptyTyenv
@@ -646,17 +645,17 @@ typeTreeProgramn defs exp = case m of
   Left e -> Left e
   Right m' -> case evalState (runExceptT m') initUnique of
     Left err -> Left err
-    Right res -> Right $ closeOver' res
+    Right res -> Right $ closeOverTypeTree res
   where
     m = (infer <$> (buildTypeEnv defs) <*> pure exp)
 
 typeTreeProgramnEnv:: TypeEnv -> Expr -> Either TypeError TypeTree
 typeTreeProgramnEnv env expr = case evalState (runExceptT (infer env expr)) initUnique of
       Left err -> Left err
-      Right res -> Right $ closeOver' res
+      Right res -> Right $ closeOverTypeTree res
 
-closeOver' :: (Tuple (Map.Map TVar Type) TypeTree) -> TypeTree
-closeOver' (Tuple s tt) = apply s tt
+closeOverTypeTree :: (Tuple Subst TypeTree) -> TypeTree
+closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
 
 prettyPrintType:: Type -> String
 prettyPrintType (TypVar tvar) = tvar
@@ -758,9 +757,8 @@ eqTypeList map (Cons a as) (Cons b bs) = let tup1 = eqType map a b in if (fst tu
 eqTypeList map Nil Nil = Tuple true map
 eqTypeList map _ _ = Tuple false map
 
-
-txToABC:: TypeTree -> TypeTree
-txToABC tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
+normalizeTypeTree :: TypeTree -> TypeTree
+normalizeTypeTree tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
 
 helptxToABC:: TypeTree -> State {count:: Int, env:: Map String String} TypeTree
 helptxToABC tt = go tt
@@ -829,8 +827,13 @@ helptxToABC tt = go tt
       t'   <- helpTypeToABC t
       pure $ TListComp tt' tts' t'      
 
-typeToABC:: Type -> Type
-typeToABC t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
+normalizeType :: Type -> Type
+normalizeType t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
+
+normalizeTypeError :: TypeError -> TypeError
+normalizeTypeError (UnificationFail t1 t2) = UnificationFail (normalizeType t1) (normalizeType t2)
+normalizeTypeError (InfiniteType tvar t) = InfiniteType (prettyPrintType $ normalizeType $ TypVar tvar) (normalizeType t)
+normalizeTypeError error = error
 
 helptxToABCQual:: TypeQual -> State {count:: Int, env:: Map String String} TypeQual
 helptxToABCQual q = case q of
@@ -921,8 +924,8 @@ newTypVar1 i = case (letters1 !! (i)) of
 prettyPrintTypeError :: TypeError -> String
 prettyPrintTypeError (UnificationFail t1 t2) = "UnificationFail: Can't unify "
   <> prettyPrintType t1 <> " with " <> prettyPrintType t2
-prettyPrintTypeError (InfiniteType str t) = "InfiniteType: cannot construct the infinite type: "
-  <> str <> " ~ " <> prettyPrintType t
+prettyPrintTypeError (InfiniteType tvar t) = "InfiniteType: cannot construct the infinite type: "
+  <> tvar <> " ~ " <> prettyPrintType t
 prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope " <> var
 prettyPrintTypeError (UnknownError str) = "UnknownError: " <> str
 prettyPrintTypeError defaultCase = show defaultCase
