@@ -127,7 +127,6 @@ data TypeError
   = UnificationFail Type Type
   | InfiniteType TVar Type
   | UnboundVariable String
-  | UnificationMismatch (List Type) (List Type)
   | UnknownError String
   | NoInstanceOfEnum Type
 
@@ -278,7 +277,6 @@ instance showTypeError :: Show TypeError where
   show (UnificationFail a b) = "(UnificationFail "<> show a <> " " <> show b <>")"
   show (InfiniteType a b ) = "(InfiniteType " <> show a <> " " <> show b <> ")"
   show (UnboundVariable a) = "(UnboundVariable " <> show a <> ")"
-  show (UnificationMismatch a b) = "(UnificationMismatch " <> show a <> " " <> show b <> ")"
   show (UnknownError s) = "(UnknownError " <> s <> ")"
   show (NoInstanceOfEnum t) = "(" <> show t <> "is no instance of Enum)"
 
