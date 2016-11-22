@@ -147,7 +147,7 @@ runTests = do
   testInfer "Binding Tuple 3" (Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"])))
     inferDef (Right (Forall ("t_3" : "t_4" : "t_5" : Nil) (TypArr (AD (TTuple (Cons ((TypArr (TypVar "t_3") (TypArr (TypVar "t_4") (TypVar "t_5")))) (Cons ((TypVar "t_3")) (Cons ((TypVar "t_4")) (Nil)))))) (TypVar "t_5"))))
   testInfer "ListLit Binding" (Def "list" (toList [ListLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"])))
-    inferDef (Left ((InfiniteType "t_3" (TypArr (TypVar "t_3") (TypVar "t_6")))))
+    inferDef (Left ((InfiniteType "a" (TypArr (TypVar "a") (TypVar "b")))))
   testInfer "NTupleLit Binding LetExp" (LetExpr (Cons (Tuple (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")]))) Nil) (App (aname "a") (toList [aname "b"])))
     inferType (Right (Forall (Nil) (TypCon "Char")))
   testInfer "Lambda App" (App (Lambda (Cons (Lit (Name "f")) (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (App (Atom (Name "f")) (Cons (Atom (Name "a")) (Cons (Atom (Name "b")) (Nil))))) (Cons (PrefixOp Add) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))
