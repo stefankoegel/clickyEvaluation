@@ -1,7 +1,7 @@
 module Test.TypeChecker where
 
-import AST (AD(TList, TTuple), Atom(AInt, Name, Char), Binding(Lit, ConsLit, ListLit, NTupleLit), Definition(Def), Expr(Atom, List, SectR, App, Binary, PrefixOp, Lambda, NTuple, LetExpr, SectL), Op(Power, Colon, Add, Append), TVar, Type(TypCon, TypVar, AD, TypArr), TypeError(InfiniteType, UnificationFail, UnknownError))
-import TypeChecker (Subst, Infer, TypeEnv, Scheme(Forall), inferGroup, inferType, inferDef, prettyPrintType, emptyTyenv, runInfer, typeProgramn, eqScheme)
+import AST (AD(TList, TTuple), Atom(AInt, Name, Char), Binding(Lit, ConsLit, ListLit, NTupleLit), Definition(Def), Expr(Atom, List, SectR, App, Binary, PrefixOp, Lambda, NTuple, LetExpr, SectL), Op(Power, Colon, Add, Append), TVar, Type(TypCon, TypVar, AD, TypArr), TypeError(InfiniteType, UnificationFail, UnknownError), prettyPrintType)
+import TypeChecker (Subst, Infer, TypeEnv, Scheme(Forall), inferGroup, inferType, inferDef, emptyTyenv, runInfer, typeProgramn, eqScheme)
 import Parser (expression, definition, runParserIndent)
 
 import Prelude (Unit, bind, ($), show, (==), (<>))

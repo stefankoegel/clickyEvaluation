@@ -24,8 +24,8 @@ import Ace.Range as  Range
 
 import Web (exprToJQuery, getPath, idExpr, makeDiv)
 import Evaluator (evalPath1, evalPathAll, Env(), defsToEnv, envToDefs, EvalError(..), MatchingError(..))
-import AST (Path, Expr, TypeTree, Output, TypeError)
-import TypeChecker (TypeEnv, buildPartiallyTypedTree, typeTreeProgramnEnv, checkForError, prettyPrintTypeError, buildTypeEnv)
+import AST (Path, Expr, TypeTree, Output, TypeError, prettyPrintTypeError)
+import TypeChecker (TypeEnv, buildPartiallyTypedTree, typeTreeProgramnEnv, checkForError, buildTypeEnv)
 import Parser (parseDefs, parseExpr)
 import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey, showTypes, isChecked)
 

@@ -19,7 +19,7 @@ import Data.Foldable (foldl, foldr, foldMap, elem)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.String (toCharArray, fromCharArray)
 
-import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Qual(..), ExprQual, QualTree(..), TypeQual, Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..), extractType, extractBindingType)
+import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Qual(..), ExprQual, QualTree(..), TypeQual, Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..), extractType, extractBindingType, prettyPrintType, prettyPrintTypeError)
 
 data Scheme = Forall (List TVar) Type
 
@@ -657,19 +657,6 @@ typeTreeProgramnEnv env expr = case evalState (runExceptT (infer env expr)) init
 closeOverTypeTree :: (Tuple Subst TypeTree) -> TypeTree
 closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
 
-prettyPrintType:: Type -> String
-prettyPrintType (TypVar tvar) = tvar
-prettyPrintType (TypCon a) =  a
-prettyPrintType (TypArr t1@(TypArr _ _) t2) = "(" <> prettyPrintType t1 <> ")" <> " -> " <> prettyPrintType t2
-prettyPrintType (TypArr t1 t2) = prettyPrintType t1 <> " -> " <> prettyPrintType t2
-prettyPrintType (AD a) = prettyPrintAD a
-prettyPrintType (TypeError a) = prettyPrintTypeError a
-
-prettyPrintAD:: AD -> String
-prettyPrintAD (TList a) = "[" <> prettyPrintType a <> "]"
-prettyPrintAD (TTuple (Cons t1 a)) = foldl (\s t -> s <> "," <> prettyPrintType t) ("(" <> prettyPrintType t1 ) a  <> ")"
-prettyPrintAD (TTuple Nil) = "()"
-
 emptyType:: Type
 emptyType = TypCon ""
 
@@ -920,15 +907,6 @@ newTypVar1 :: Int -> List Char
 newTypVar1 i = case (letters1 !! (i)) of
   Just c ->  Cons c Nil
   Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) <> (newTypVar i2)
-
-prettyPrintTypeError :: TypeError -> String
-prettyPrintTypeError (UnificationFail t1 t2) = "UnificationFail: Can't unify "
-  <> prettyPrintType t1 <> " with " <> prettyPrintType t2
-prettyPrintTypeError (InfiniteType tvar t) = "InfiniteType: cannot construct the infinite type: "
-  <> tvar <> " ~ " <> prettyPrintType t
-prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope " <> var
-prettyPrintTypeError (UnknownError str) = "UnknownError: " <> str
-prettyPrintTypeError defaultCase = show defaultCase
 
 checkForError :: Path -> TypeTree -> Boolean
 checkForError p' tt = case p' of

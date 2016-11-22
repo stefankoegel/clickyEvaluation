@@ -24,8 +24,7 @@ import Control.Monad.State (State, put, get, runState)
 import DOM (DOM)
 
 
-import AST (Atom(..), Binding(..), Expr(..), Qual(..), ExprQual, TypeQual, IndexQual, QualTree(..), Op(), pPrintOp, Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..), extractType)
-import TypeChecker (prettyPrintType)
+import AST (Atom(..), Binding(..), Expr(..), Qual(..), ExprQual, TypeQual, IndexQual, QualTree(..), Op(), pPrintOp, Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..), extractType, prettyPrintType)
 import JSHelpers (showTooltip, children)
 
 data Triple a b c = Triple a b c
