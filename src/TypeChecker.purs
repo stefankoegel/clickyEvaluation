@@ -7,7 +7,7 @@ import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
 import Data.Either (Either(Left, Right))
-import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, length, concat, (!!))
+import Data.List (List(..), filter, delete, concatMap, unzip, fold, foldM, (:), zip, singleton, length, concat, (!!))
 import Data.Array (toUnfoldable)
 import Data.Array as Array
 import Data.Map as Map
@@ -145,6 +145,9 @@ initUnique = Unique { count : 0 }
 
 extend :: TypeEnv -> Tuple TVar Scheme -> TypeEnv
 extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
+
+extendMultiple :: TypeEnv -> List (Tuple TVar Scheme) -> TypeEnv
+extendMultiple = foldr (flip extend)
 
 nullSubst:: Subst
 nullSubst = Map.empty
@@ -435,16 +438,30 @@ inferQual env (Let bin e1) = do
   let env' = apply s2 (foldr (\a b -> extend b a) env list)
   let sC = s1 `compose` s2
   pure $ Tuple sC $ Tuple (apply sC (TLet typ t1 (extractType t1))) env'
-inferQual env (Gen bin e1) = do 
-  Tuple s1 t1 <- infer env e1 
-  case extractType t1 of 
+inferQual env (Gen bin expr) = do
+  Tuple s1 exprType <- infer env expr
+  case extractType exprType of
+    -- Type is: [T]
     AD (TList t) -> do 
       (Tuple list typ) <- extractBinding bin
       s2 <- unify (extractBindingType typ) t
-      let env' = apply s2 (foldr (\a b -> extend b a) env list)      
+      let env' = apply s2 (foldr (\a b -> extend b a) env list)
       let sC = s1 `compose` s2
-      pure $ Tuple sC $ Tuple (apply sC (TGen typ t1 t)) env'
-    _ -> fresh >>= (\t -> throwError $ normalizeTypeError $ UnificationFail (extractType t1) (AD (TList t)))
+      pure $ Tuple sC $ Tuple (apply sC (TGen typ exprType t)) env'
+
+    -- Type is: T (a hopefully bound type variable)
+    -- Think: [ bin | x <- expr], where x is found in bin
+    TypVar tvar -> do
+      -- First extract the binding and the corresponding type t0.
+      -- Then unify [t0] with the type variable tvar [t0] ~ tvar.
+      -- Apply the resulting substitution to the environment extended by the binding.
+      Tuple binding typedBinding <- extractBinding bin
+      subst <- unify (AD $ TList $ extractBindingType typedBinding) (TypVar tvar)
+      let env' = apply subst $ env `extendMultiple` binding
+      let typeTree = TGen typedBinding exprType (TypVar tvar)
+      pure $ Tuple subst (Tuple (apply subst typeTree) env')
+
+    _ -> fresh >>= (\t -> throwError $ normalizeTypeError $ UnificationFail (extractType exprType) (AD (TList t)))
 inferQual env (Guard expr) = do
   Tuple s t <- infer env expr
   case extractType t of
