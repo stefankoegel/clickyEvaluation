@@ -1,7 +1,7 @@
 module AST where
 
-import Prelude (class Show, class Eq, class Ord, show, (<>))
-import Data.List (List)
+import Prelude (class Eq, class Ord, class Show, map, show, (<>), (<<<), ($))
+import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe)
 import Data.Tuple (Tuple)
 
@@ -109,7 +109,7 @@ data IBinding  = ILit                       Int
               | IListLit (List IBinding)    Int
               | INTupleLit (List IBinding)  Int
 
-data TVar = TVar String
+type TVar = String
 
 data Type
     = TypVar TVar -- Typ Variables e.x. a
@@ -127,7 +127,6 @@ data TypeError
   = UnificationFail Type Type
   | InfiniteType TVar Type
   | UnboundVariable String
-  | UnificationMismatch (List Type) (List Type)
   | UnknownError String
   | NoInstanceOfEnum Type
 
@@ -268,13 +267,6 @@ instance showType :: Show Type where
 
 derive instance eqType :: Eq Type
 
-derive instance ordTVar :: Ord TVar
-
-derive instance eqTVar :: Eq TVar
-
-instance showTVar :: Show TVar where
-  show (TVar a) = "(TVar " <> show a <> ")"
-
 instance showAD :: Show AD where
   show (TList t) = "(TList "<> show t <>")"
   show (TTuple tl) = "(TTuple ("<> show tl <> "))"
@@ -285,7 +277,6 @@ instance showTypeError :: Show TypeError where
   show (UnificationFail a b) = "(UnificationFail "<> show a <> " " <> show b <>")"
   show (InfiniteType a b ) = "(InfiniteType " <> show a <> " " <> show b <> ")"
   show (UnboundVariable a) = "(UnboundVariable " <> show a <> ")"
-  show (UnificationMismatch a b) = "(UnificationMismatch " <> show a <> " " <> show b <> ")"
   show (UnknownError s) = "(UnknownError " <> s <> ")"
   show (NoInstanceOfEnum t) = "(" <> show t <> "is no instance of Enum)"
 
@@ -312,6 +303,26 @@ instance showTypeBinding:: Show TypeBinding where
   show (TConsLit b1 b2 t) = "(TConsLit "<> show b1 <> " " <> show b2 <> " " <> show t <>")"
   show (TListLit lb t) = "(TListLit " <> show lb <> " "<> show t <>")"
   show (TNTupleLit lb t) = "(TNTupleLit " <> show lb <> " "<> show t <>")"
+
+prettyPrintType :: Type -> String
+prettyPrintType (TypVar tvar) = tvar
+prettyPrintType (TypCon str) = str
+prettyPrintType (TypeError err) = prettyPrintTypeError err
+prettyPrintType (TypArr t1@(TypArr _ _) t2) = "(" <> prettyPrintType t1 <> ")" <> " -> " <> prettyPrintType t2
+prettyPrintType (TypArr t1 t2) = prettyPrintType t1 <> " -> " <> prettyPrintType t2
+prettyPrintType (AD (TList t)) = "[" <> prettyPrintType t <> "]"
+prettyPrintType (AD (TTuple ts)) = "(" <> (fold <<< separateWith ", " <<< map prettyPrintType $ ts) <> ")"
+    where
+    separateWith :: String -> List String -> List String
+    separateWith _ Nil = "" : Nil
+    separateWith sep (t:ts) = t : map ((<>) sep) ts
+
+prettyPrintTypeError :: TypeError -> String
+prettyPrintTypeError (UnificationFail t1 t2) = "UnificationFail: Can't unify " <> prettyPrintType t1 <> " with " <> prettyPrintType t2
+prettyPrintTypeError (InfiniteType tvar t) = "InfiniteType: cannot construct the infinite type: " <> tvar <> " ~ " <> prettyPrintType t
+prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope " <> var
+prettyPrintTypeError (NoInstanceOfEnum t) = "No instance for Enum " <> prettyPrintType t <> " defined."
+prettyPrintTypeError (UnknownError str) = "UnknownError: " <> str
 
 extractType:: TypeTree -> Type
 extractType (TAtom t)            = t

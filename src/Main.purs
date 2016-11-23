@@ -24,8 +24,8 @@ import Ace.Range as  Range
 
 import Web (exprToJQuery, getPath, idExpr, makeDiv)
 import Evaluator (evalPath1, evalPathAll, Env(), defsToEnv, envToDefs, EvalError(..), MatchingError(..))
-import AST (Path, Expr, TypeTree, Output, TypeError)
-import TypeChecker (TypeEnv, txToABC, buildPartiallyTypedTree, typeTreeProgramnEnv, checkForError, prettyPrintTypeError, buildTypeEnv)
+import AST (Path, Expr, TypeTree, Output, TypeError, prettyPrintTypeError)
+import TypeChecker (TypeEnv, buildPartiallyTypedTree, typeTreeProgramnEnv, checkForError, buildTypeEnv)
 import Parser (parseDefs, parseExpr)
 import JSHelpers (ctrlKeyPressed, prepend, jqMap, warnOnRefresh, isEnterKey, showTypes, isChecked)
 
@@ -59,7 +59,7 @@ startEvaluation = do
         Right env -> case buildTypeEnv (envToDefs env) of --  type Env
           Left err -> showInfo "Definitions" (prettyPrintTypeError err)
           Right typEnv -> do
-            let showEvalState typ' = let typ = txToABC typ' in
+            let showEvalState = \typ ->
               let idTree = idExpr expr in
               void $ runStateT showEvaluationState { env: env, out: {expr:expr, typ:typ, idTree:idTree}, history: Nil, typEnv:typEnv }
             case typeTreeProgramnEnv typEnv expr of
@@ -274,8 +274,7 @@ evalExpr eval path = do
     Left msg    -> pure unit
     Right expr' -> do
         let eitherTyp = typeTreeProgramnEnv typEnv expr'
-        let typ'' = either (\_ -> buildPartiallyTypedTree typEnv expr') id eitherTyp
-        let typ' = txToABC typ''
+        let typ' = either (\_ -> buildPartiallyTypedTree typEnv expr') id eitherTyp
         modify (\es -> es { out = {expr:expr', typ:typ', idTree:idExpr expr'} })
         modify (\es -> es { history = out : es.history })
         showEvaluationState

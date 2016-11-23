@@ -7,12 +7,12 @@ module Web
 
 import Prelude (class Show, class Monad, Unit, (+), bind, ($), (==), (/=), show, (<>), (>>=), flip, pure, (<<<), (<$>), (&&), (>), void, unit, id, (-))
 import Data.Foldable (all)
-import Data.Traversable (for, for_)
 import Data.String (joinWith)
 import Data.List (List(Nil, Cons), singleton, fromFoldable, toUnfoldable, length, zip, (..), zipWithA)
 import Data.Foreign (unsafeFromForeign, isUndefined)
 import Data.Maybe (Maybe(..), isJust, fromJust)
 import Data.Tuple (Tuple(..), fst, snd)
+import Data.Traversable (for, for_, traverse)
 import Data.Array as Array
 
 import Control.Apply ((*>))
@@ -24,8 +24,7 @@ import Control.Monad.State (State, put, get, runState)
 import DOM (DOM)
 
 
-import AST (Atom(..), Binding(..), Expr(..), Qual(..), ExprQual, TypeQual, IndexQual, QualTree(..), Op(), pPrintOp, Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..), extractType)
-import TypeChecker (prettyPrintType, mapM)
+import AST (Atom(..), Binding(..), Expr(..), Qual(..), ExprQual, TypeQual, IndexQual, QualTree(..), Op(), pPrintOp, Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..), extractType, prettyPrintType)
 import JSHelpers (showTooltip, children)
 
 data Triple a b c = Triple a b c
@@ -148,7 +147,7 @@ exprToJQuery' output = go id output
         let fstBoundle = zip (fst <$> ibinds) (zip (fst <$> binds) (fst <$> tbinds))
             sndBoundle = zip (snd <$> ibinds) (zip (snd <$> binds) (snd <$> tbinds))
 
-        jbinds <- mapM binding fstBoundle
+        jbinds <- traverse binding fstBoundle
         jexprs <- zipWithA (\x (Tuple i (Tuple b t)) -> go (p <<< Nth x) {expr: b, typ: t, idTree: i}) (1 .. (length sndBoundle)) sndBoundle
         jletBinds <- zipWithA letBinding jbinds jexprs
 
@@ -568,20 +567,16 @@ buildExpandDiv t  = do
 idExpr:: Expr -> IndexTree
 idExpr e = fst $ runState (indexExpr e) {count:0}
 
-mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
-mapM' f Nothing  = pure Nothing
-mapM' f (Just x) = Just <$> (f x)
-
 indexExpr:: Expr -> State {count:: Int} IndexTree
 indexExpr (Atom _) = do
                   i <- fresh
                   pure $ IAtom i
 indexExpr (List es) = do
-                  is <- mapM indexExpr es
+                  is <- traverse indexExpr es
                   i <- fresh
                   pure $ IListTree is i
 indexExpr (NTuple es) = do
-                  is <- mapM indexExpr es
+                  is <- traverse indexExpr es
                   i <- fresh
                   pure $ INTuple is i
 indexExpr (Binary _ e1 e2) = do
@@ -616,29 +611,29 @@ indexExpr (IfExpr e1 e2 e3) = do
                   pure $ IIfExpr i1 i2 i3 i
 indexExpr (ArithmSeq e1 e2 e3) = do
                   i1 <- indexExpr e1
-                  i2 <- mapM' indexExpr e2
-                  i3 <- mapM' indexExpr e3
+                  i2 <- traverse indexExpr e2
+                  i3 <- traverse indexExpr e3
                   i <- fresh
                   pure $ IArithmSeq i1 i2 i3 i
 indexExpr (LetExpr bin e) = do
-                  ib <- mapM (indexBinding <<< fst) bin
-                  ie <- mapM (indexExpr <<< snd) bin
+                  ib <- traverse (indexBinding <<< fst) bin
+                  ie <- traverse (indexExpr <<< snd) bin
                   i2 <- indexExpr e
                   i  <- fresh
                   pure $ ILetExpr (zip ib ie) i2 i
 indexExpr (Lambda bs e) = do
-                 ibs <- mapM indexBinding bs
+                 ibs <- traverse indexBinding bs
                  i <- indexExpr e
                  i' <- fresh
                  pure $ ILambda ibs i i'
 indexExpr (App e es) = do
                 e1 <- indexExpr e
-                is <- mapM indexExpr es
+                is <- traverse indexExpr es
                 i <- fresh
                 pure $ IApp e1 is i
 indexExpr (ListComp e qs) = do
                 e1 <- indexExpr e
-                is <- mapM indexQual qs
+                is <- traverse indexQual qs
                 i <- fresh
                 pure $ IListComp e1 is i
 
@@ -668,11 +663,11 @@ indexBinding (ConsLit b1 b2 ) = do
                       i <- fresh
                       pure $ IConsLit i1 i2 i
 indexBinding (ListLit bs) = do
-                        is <- mapM indexBinding bs
+                        is <- traverse indexBinding bs
                         i <- fresh
                         pure $ IListLit is i
 indexBinding (NTupleLit bs) = do
-                      is <- mapM indexBinding bs
+                      is <- traverse indexBinding bs
                       i <- fresh
                       pure $ INTupleLit is i
 
