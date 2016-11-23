@@ -1,6 +1,6 @@
 module Test.TypeChecker where
 
-import AST (AD(TList, TTuple), Atom(AInt, Name, Char), Binding(Lit, ConsLit, ListLit, NTupleLit), Definition(Def), Expr(Atom, List, SectR, App, Binary, PrefixOp, Lambda, NTuple, LetExpr, SectL), Op(Power, Colon, Add, Append), TVar, Type(TypCon, TypVar, AD, TypArr), TypeError(InfiniteType, UnificationFail, UnknownError), prettyPrintType)
+import AST (AD(TList, TTuple), Atom(AInt, Name, Char), Binding(Lit, ConsLit, ListLit, NTupleLit), Definition(Def), Expr(Atom, List, SectR, App, Binary, PrefixOp, Lambda, NTuple, LetExpr, SectL, ListComp), Op(Power, Colon, Add, Append), TVar, Type(TypCon, TypVar, AD, TypArr), TypeError(InfiniteType, UnificationFail, UnknownError), Qual(..), prettyPrintType)
 import TypeChecker (Subst, Infer, TypeEnv, Scheme(Forall), inferGroup, inferType, inferDef, emptyTyenv, runInfer, typeProgramn, eqScheme)
 import Parser (expression, definition, runParserIndent)
 
@@ -169,3 +169,9 @@ runTests = do
   testProgramm "Prelude with exp" parsedPrelude
     ((App (Atom (Name "sum")) (Cons (App (Atom (Name "map")) (Cons (SectR Power (Atom (AInt 2))) (Cons (List (Cons (Atom (AInt 1)) (Cons (Atom (AInt 2)) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))) (Nil)))) (Nil))))
     (Right (Forall (Nil) (TypCon "Int")))
+
+  -- ((\xs -> [ x | x <- xs ]) [1]) :: [Int]
+  testInfer "List comprehension inside Lambda"
+    (App (Lambda ((Lit $ Name "xs") : Nil) (ListComp (Atom $ Name "x") ((Gen (Lit $ Name "x") (Atom $ Name "xs")) : Nil))) ((List $ ((Atom $ AInt 1) : Nil)) : Nil))
+    inferType
+    (Right (Forall (Nil) (AD $ TList $ TypCon "Int")))
