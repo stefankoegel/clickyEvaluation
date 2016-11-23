@@ -440,6 +440,7 @@ inferQual env (Let bin e1) = do
   pure $ Tuple sC $ Tuple (apply sC (TLet typ t1 (extractType t1))) env'
 inferQual env (Gen bin expr) = do
   Tuple s1 exprType <- infer env expr
+  -- Think: [ bin | x <- expr], where x is found in bin
   case extractType exprType of
     -- Type is: [T]
     AD (TList t) -> do 
@@ -450,15 +451,15 @@ inferQual env (Gen bin expr) = do
       pure $ Tuple sC $ Tuple (apply sC (TGen typ exprType t)) env'
 
     -- Type is: T (a hopefully bound type variable)
-    -- Think: [ bin | x <- expr], where x is found in bin
     TypVar tvar -> do
       -- First extract the binding and the corresponding type t0.
-      -- Then unify [t0] with the type variable tvar [t0] ~ tvar.
+      -- Then unify [t0] with the type variable tvar ([t0] ~ tvar).
       -- Apply the resulting substitution to the environment extended by the binding.
-      Tuple binding typedBinding <- extractBinding bin
-      subst <- unify (AD $ TList $ extractBindingType typedBinding) (TypVar tvar)
-      let env' = apply subst $ env `extendMultiple` binding
-      let typeTree = TGen typedBinding exprType (TypVar tvar)
+      Tuple binding bindingType <- extractBinding bin
+      s2 <- unify (AD $ TList $ extractBindingType bindingType) (TypVar tvar)
+      let env' = apply s2 $ env `extendMultiple` binding
+      let typeTree = TGen bindingType exprType (TypVar tvar)
+      let subst = s1 `compose` s2
       pure $ Tuple subst (Tuple (apply subst typeTree) env')
 
     _ -> fresh >>= (\t -> throwError $ normalizeTypeError $ UnificationFail (extractType exprType) (AD (TList t)))
