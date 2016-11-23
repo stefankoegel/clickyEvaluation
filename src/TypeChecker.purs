@@ -1,13 +1,13 @@
 module TypeChecker where
 
-import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), (||), bind, const, otherwise, show, (+), div, mod, flip, (<>))
+import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>))
 
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
 import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
 import Data.Either (Either(Left, Right))
-import Data.List (List(..), filter, delete, concatMap, unzip, fold, foldM, (:), zip, singleton, length, concat, (!!))
+import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, length, concat, (!!))
 import Data.Array (toUnfoldable)
 import Data.Array as Array
 import Data.Map as Map
@@ -15,11 +15,11 @@ import Data.Map (Map, insert, lookup, empty)
 import Data.Tuple (Tuple(Tuple), snd, fst)
 import Data.Traversable (traverse)
 import Data.Set as Set
-import Data.Foldable (foldl, foldr, foldMap, elem)
+import Data.Foldable (foldr, foldMap, elem)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.String (toCharArray, fromCharArray)
 
-import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Qual(..), ExprQual, QualTree(..), TypeQual, Op(..), TVar(..), Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..), extractType, extractBindingType, prettyPrintType, prettyPrintTypeError)
+import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Qual(..), ExprQual, QualTree(..), TypeQual, Op(..), TVar, Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..), extractType, extractBindingType, prettyPrintType)
 
 data Scheme = Forall (List TVar) Type
 
@@ -35,7 +35,6 @@ data Unique = Unique { count :: Int }
 
 type Infer a = ExceptT TypeError (State Unique) a
 
-type Constraint = Tuple Type Type
 type Subst = Map.Map TVar Type
 
 class Substitutable a where
@@ -83,7 +82,7 @@ instance subTupTVarScheme :: Substitutable (Tuple String Scheme) where
 instance subQual :: (Substitutable b, Substitutable e) => Substitutable (Qual b e) where
   apply s (Gen b e) = Gen (apply s b) (apply s e)
   apply s (Let b e) = Let (apply s b) (apply s e)
-  apply s (Guard e) = Guard (apply s e) 
+  apply s (Guard e) = Guard (apply s e)
 
   ftv (Gen _ t) = ftv t
   ftv (Let _ t) = ftv t
@@ -92,7 +91,7 @@ instance subQual :: (Substitutable b, Substitutable e) => Substitutable (Qual b 
 instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => Substitutable (QualTree a b c) where
   apply s (TGen a b c) = TGen (apply s a) (apply s b) (apply s c)
   apply s (TLet a b c) = TLet (apply s a) (apply s b) (apply s c)
-  apply s (TGuard a c) = TGuard (apply s a) (apply s c) 
+  apply s (TGuard a c) = TGuard (apply s a) (apply s c)
 
   ftv (TGen a b c) = ftv c
   ftv (TLet a b c) = ftv c
@@ -108,7 +107,7 @@ instance subTypeTree :: Substitutable TypeTree where
   apply s (TSectR op tt t) = TSectR (apply s op) (apply s tt) (apply s t)
   apply s (TPrefixOp t) = TPrefixOp $ apply s t
   apply s (TIfExpr tt1 tt2 tt3 t) = TIfExpr (apply s tt1) (apply s tt2) (apply s tt3) (apply s t)
-  apply s (TArithmSeq st by end t) = TArithmSeq (apply s st) ((apply s) <$> by) ((apply s) <$> end) (apply s t) 
+  apply s (TArithmSeq st by end t) = TArithmSeq (apply s st) ((apply s) <$> by) ((apply s) <$> end) (apply s t)
   apply s (TLetExpr bin tt t) = TLetExpr ((\(Tuple x y) -> (Tuple (apply s x) (apply s y))) <$> bin) (apply s tt) (apply s t)
   apply s (TLambda lb tt t) = TLambda (apply s lb) (apply s tt) (apply s t)
   apply s (TApp tt1 l t) = TApp (apply s tt1) (apply s l) (apply s t)
@@ -149,7 +148,7 @@ extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
 extendMultiple :: TypeEnv -> List (Tuple TVar Scheme) -> TypeEnv
 extendMultiple = foldr (flip extend)
 
-nullSubst:: Subst
+nullSubst :: Subst
 nullSubst = Map.empty
 
 fresh :: Infer Type
@@ -158,7 +157,7 @@ fresh = do
   put (Unique {count:(s.count+1)})
   pure $ TypVar $ "t_" <> show s.count
 
-unify ::  Type -> Type -> Infer Subst
+unify :: Type -> Type -> Infer Subst
 unify (TypArr l r) (TypArr l' r')  = do
     s1 <- unify l l'
     s2 <- unify (apply s1 r) (apply s1 r')
@@ -193,7 +192,7 @@ occursCheck a t = a `Set.member` ftv t
 compose :: Subst -> Subst -> Subst
 compose s1 s2 = map (apply s1) s2 `Map.union` s1
 
-envUnion :: TypeEnv -> TypeEnv -> TypeEnv 
+envUnion :: TypeEnv -> TypeEnv -> TypeEnv
 envUnion (TypeEnv a) (TypeEnv b) = TypeEnv $ a `Map.union` b
 
 instantiate ::  Scheme -> Infer Type
@@ -281,13 +280,13 @@ infer env ex = case ex of
 
   Lambda (Cons bin Nil) e -> do
     Tuple envL tvB <- extractBinding bin
-    let env' = foldr (\a b -> extend b a) env envL
+    let env' = env `extendMultiple` envL
     Tuple s1 t1 <- infer env' e
     pure (Tuple s1 $ apply s1 (TLambda (Cons tvB Nil) t1 $ (extractBindingType tvB) `TypArr` (extractType t1)))
 
   Lambda (Cons bin xs) e -> do
     Tuple envL tvB <- extractBinding bin
-    let env' = foldr (\a b -> extend b a) env envL
+    let env' = env `extendMultiple` envL
     inferred <- infer env' (Lambda xs e)
     case inferred of
       (Tuple s1 (TLambda tb tt t1)) ->
@@ -348,7 +347,7 @@ infer env ex = case ex of
     let s2 = maybe nullSubst fst tup2
     let s3 = maybe nullSubst fst tup3
     let s  = s1 `compose` s2 `compose` s3
-    let tt = extractType t1   
+    let tt = extractType t1
     let typeMissMatch m1 m2 = fromMaybe (UnknownError "congrats you found a bug TypeChecker.infer (ArithmSeq begin jstep jend)") (normalizeTypeError <$> lift2 UnificationFail m1 m2)
     ifM (pure (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t2))))
       (throwError (typeMissMatch (Just tt) (extractType <$> t2)))
@@ -433,22 +432,22 @@ infer env ex = case ex of
 inferQual :: TypeEnv -> ExprQual -> Infer (Tuple Subst (Tuple TypeQual TypeEnv))
 inferQual env (Let bin e1) = do
   Tuple s1 t1    <- infer env e1
-  Tuple list typ <- extractBinding bin
-  s2 <- unify (extractBindingType typ) (extractType t1)
-  let env' = apply s2 (foldr (\a b -> extend b a) env list)
-  let sC = s1 `compose` s2
-  pure $ Tuple sC $ Tuple (apply sC (TLet typ t1 (extractType t1))) env'
+  Tuple binding bindingType <- extractBinding bin
+  s2 <- unify (extractBindingType bindingType) (extractType t1)
+  let env' = apply s2 $ env `extendMultiple` binding
+  let subst = s1 `compose` s2
+  pure $ Tuple subst $ Tuple (apply subst (TLet bindingType t1 (extractType t1))) env'
 inferQual env (Gen bin expr) = do
   Tuple s1 exprType <- infer env expr
   -- Think: [ bin | x <- expr], where x is found in bin
   case extractType exprType of
     -- Type is: [T]
-    AD (TList t) -> do 
-      (Tuple list typ) <- extractBinding bin
-      s2 <- unify (extractBindingType typ) t
-      let env' = apply s2 (foldr (\a b -> extend b a) env list)
-      let sC = s1 `compose` s2
-      pure $ Tuple sC $ Tuple (apply sC (TGen typ exprType t)) env'
+    AD (TList t) -> do
+      (Tuple binding bindingType) <- extractBinding bin
+      s2 <- unify (extractBindingType bindingType) t
+      let env' = apply s2 $ env `extendMultiple` binding
+      let subst = s1 `compose` s2
+      pure $ Tuple subst $ Tuple (apply subst (TGen bindingType exprType t)) env'
 
     -- Type is: T (a hopefully bound type variable)
     TypVar tvar -> do
@@ -598,9 +597,9 @@ extractBinding (NTupleLit a) = do
 getTypEnv :: Binding -> TypeEnv -> Maybe TypeEnv
 getTypEnv b env = case evalState (runExceptT (extractBinding b)) initUnique of
     Left _ -> Nothing
-    Right (Tuple bs _) -> Just $ foldr (\a b -> extend b a) env bs
+    Right (Tuple bs _) -> Just $ env `extendMultiple` bs
 
-getTypEnvFromList::  List Binding -> TypeEnv-> Maybe TypeEnv
+getTypEnvFromList :: List Binding -> TypeEnv -> Maybe TypeEnv
 getTypEnvFromList bs env = do
                   mTypList <- traverse (flip getTypEnv emptyTyenv) bs
                   pure $ foldr (\a b -> unionTypeEnv a b) env mTypList
@@ -608,7 +607,7 @@ getTypEnvFromList bs env = do
 unionTypeEnv :: TypeEnv -> TypeEnv -> TypeEnv
 unionTypeEnv (TypeEnv a) (TypeEnv b) = TypeEnv (Map.union a b)
 
-inferGroup:: TypeEnv -> List Definition -> Infer (Tuple Subst Type)
+inferGroup :: TypeEnv -> List Definition -> Infer (Tuple Subst Type)
 inferGroup _ Nil = throwError $ UnknownError "Cant type empty Group"
 inferGroup env (Cons def1 Nil) = inferDef env def1
 inferGroup env (Cons def1 defs) = do
@@ -617,14 +616,14 @@ inferGroup env (Cons def1 defs) = do
   s3 <- unify t1 t2
   pure $ Tuple s3 (apply s3 t1)
 
-buildTypeEnv:: List Definition -> Either TypeError TypeEnv
+buildTypeEnv :: List Definition -> Either TypeError TypeEnv
 buildTypeEnv Nil = Right emptyTyenv
 buildTypeEnv defs = buildTypeEnvFromGroups emptyTyenv groupMap keys
   where
     groupMap = buildGroups defs
     keys = Map.keys groupMap
 
-buildGroups:: List Definition -> Map.Map String (List Definition)
+buildGroups :: List Definition -> Map.Map String (List Definition)
 buildGroups Nil = Map.empty
 buildGroups (Cons def@(Def str bin exp) Nil) =
   Map.singleton str (Cons def Nil)
@@ -637,7 +636,7 @@ buildGroups (Cons def@(Def str bin exp) defs) =
     defMap = buildGroups defs
     binList = Map.lookup str defMap
 --                         old -> grouped Definitions -> keys -> new
-buildTypeEnvFromGroups:: TypeEnv -> Map.Map String (List Definition)
+buildTypeEnvFromGroups :: TypeEnv -> Map.Map String (List Definition)
   -> List String -> Either TypeError TypeEnv
 buildTypeEnvFromGroups env _ Nil = Right env
 buildTypeEnvFromGroups env groupMap k@(Cons key keys) =
@@ -652,13 +651,13 @@ buildTypeEnvFromGroups env groupMap k@(Cons key keys) =
   where
     mayDefs = Map.lookup key groupMap
 
-typeProgramn:: List Definition -> Expr -> Either TypeError Scheme
+typeProgramn :: List Definition -> Expr -> Either TypeError Scheme
 typeProgramn defs exp = case runInfer <$>
     (inferType <$> (buildTypeEnv defs) <*> pure exp) of
   Left err -> Left err
   Right a -> a
 
-typeTreeProgramn:: List Definition -> Expr -> Either TypeError TypeTree
+typeTreeProgramn :: List Definition -> Expr -> Either TypeError TypeTree
 typeTreeProgramn defs exp = case m of
   Left e -> Left e
   Right m' -> case evalState (runExceptT m') initUnique of
@@ -667,7 +666,7 @@ typeTreeProgramn defs exp = case m of
   where
     m = (infer <$> (buildTypeEnv defs) <*> pure exp)
 
-typeTreeProgramnEnv:: TypeEnv -> Expr -> Either TypeError TypeTree
+typeTreeProgramnEnv :: TypeEnv -> Expr -> Either TypeError TypeTree
 typeTreeProgramnEnv env expr = case evalState (runExceptT (infer env expr)) initUnique of
       Left err -> Left err
       Right res -> Right $ closeOverTypeTree res
@@ -675,7 +674,7 @@ typeTreeProgramnEnv env expr = case evalState (runExceptT (infer env expr)) init
 closeOverTypeTree :: (Tuple Subst TypeTree) -> TypeTree
 closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
 
-emptyType:: Type
+emptyType :: Type
 emptyType = TypCon ""
 
 -- typeTreeProgramnEnv env expr
@@ -694,7 +693,7 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
   f err (PrefixOp _) = TPrefixOp (TypeError err)
   f err (IfExpr e1 e2 e3) = TIfExpr (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (buildPartiallyTypedTree env e3) (TypeError err)
   f err (ArithmSeq e1 e2 e3) = TArithmSeq (buildPartiallyTypedTree env e1) ((buildPartiallyTypedTree env) <$> e2) ((buildPartiallyTypedTree env) <$> e3) (TypeError err)
-  f err (LetExpr bin expr) = let 
+  f err (LetExpr bin expr) = let
     tup   = buildPartiallyTypedTreeBindings env bin
     env'  = fst tup
     binds = snd tup in TLetExpr binds (buildPartiallyTypedTree env' expr) (TypeError err)
@@ -722,27 +721,27 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
 
   buildPartiallyTypedTreeQual :: TypeError -> TypeEnv -> ExprQual -> TypeQual
   buildPartiallyTypedTreeQual err env qual = case qual of
-    Let bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in 
+    Let bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
       TLet (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
     Gen bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
       TGen (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
-    Guard expr   -> TGuard (buildPartiallyTypedTree env expr) (TypeError err) 
+    Guard expr   -> TGuard (buildPartiallyTypedTree env expr) (TypeError err)
 
   buildPartiallyTypedTreeBindings :: TypeEnv -> List (Tuple Binding Expr) -> Tuple TypeEnv (List (Tuple TypeBinding TypeTree))
-  buildPartiallyTypedTreeBindings env binds = case binds of 
-    Nil                   -> Tuple env Nil 
+  buildPartiallyTypedTreeBindings env binds = case binds of
+    Nil                   -> Tuple env Nil
     Cons (Tuple b e) bs -> let
-      t     = buildPartiallyTypedTree env e 
+      t     = buildPartiallyTypedTree env e
       env'  = fromMaybe env (getTypEnv b env)
-      env'' = envUnion env env' in 
-        case buildPartiallyTypedTreeBindings env'' bs of 
+      env'' = envUnion env env' in
+        case buildPartiallyTypedTreeBindings env'' bs of
           Tuple envR rest -> Tuple envR $ (Tuple (g b) t) : rest
 
 eqScheme :: Scheme -> Scheme -> Boolean
 eqScheme (Forall l1 t1) (Forall l2 t2)
   = ((length l1) == (length l2)) && (fst (eqType Map.empty t1 t2))
 
-eqType:: Map.Map TVar TVar -> Type -> Type ->Tuple Boolean (Map.Map TVar TVar)
+eqType :: Map.Map TVar TVar -> Type -> Type -> Tuple Boolean (Map.Map TVar TVar)
 eqType map (TypVar a) (TypVar b) = case  Map.lookup a map of
   Just b' -> Tuple (b' == b) (map)
   Nothing -> Tuple true (Map.insert a b map)
@@ -755,7 +754,7 @@ eqType map (AD (TList a)) (AD (TList b)) = eqType map a b
 eqType map (AD (TTuple a)) (AD (TTuple b)) = eqTypeList map a b
 eqType map _ _ = Tuple false map
 
-eqTypeList:: Map.Map TVar TVar -> List Type -> List Type -> Tuple Boolean (Map.Map TVar TVar)
+eqTypeList :: Map.Map TVar TVar -> List Type -> List Type -> Tuple Boolean (Map.Map TVar TVar)
 eqTypeList map (Cons a as) (Cons b bs) = let tup1 = eqType map a b in if (fst tup1)
   then eqTypeList (snd tup1) as bs
   else Tuple false (snd tup1)
@@ -765,7 +764,7 @@ eqTypeList map _ _ = Tuple false map
 normalizeTypeTree :: TypeTree -> TypeTree
 normalizeTypeTree tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
 
-helptxToABC:: TypeTree -> State {count:: Int, env:: Map String String} TypeTree
+helptxToABC :: TypeTree -> State {count :: Int, env :: Map String String} TypeTree
 helptxToABC tt = go tt
   where
     go (TAtom t) = helpTypeToABC t >>= \t -> pure $ TAtom t
@@ -810,7 +809,7 @@ helptxToABC tt = go tt
       tt2' <- traverse helptxToABC tt2
       tt3' <- traverse helptxToABC tt3
       t'   <- helpTypeToABC t
-      pure $ TArithmSeq tt1' tt2' tt3' t'        
+      pure $ TArithmSeq tt1' tt2' tt3' t'
     go (TLetExpr bin tt t) = do
       bin' <- traverse (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
       tt'  <- helptxToABC tt
@@ -830,7 +829,7 @@ helptxToABC tt = go tt
       tt'  <- helptxToABC tt
       tts' <- traverse helptxToABCQual tts
       t'   <- helpTypeToABC t
-      pure $ TListComp tt' tts' t'      
+      pure $ TListComp tt' tts' t'
 
 normalizeType :: Type -> Type
 normalizeType t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
@@ -840,7 +839,7 @@ normalizeTypeError (UnificationFail t1 t2) = UnificationFail (normalizeType t1) 
 normalizeTypeError (InfiniteType tvar t) = InfiniteType (prettyPrintType $ normalizeType $ TypVar tvar) (normalizeType t)
 normalizeTypeError error = error
 
-helptxToABCQual:: TypeQual -> State {count:: Int, env:: Map String String} TypeQual
+helptxToABCQual :: TypeQual -> State {count :: Int, env :: Map String String} TypeQual
 helptxToABCQual q = case q of
   TGen b e t -> do
     b' <- helpBindingToABC b
@@ -857,11 +856,11 @@ helptxToABCQual q = case q of
     t' <- helpTypeToABC t
     pure $ TGuard e' t'
 
-helpTypeToABC :: Type  -> State {count :: Int, env:: (Map String String)} Type
+helpTypeToABC :: Type  -> State {count :: Int, env :: (Map String String)} Type
 helpTypeToABC t = go t
   where
    go (TypVar var) = do
-      {env: env} :: {count:: Int, env:: Map String String} <- get
+      {env: env} :: {count :: Int, env :: Map String String} <- get
       case lookup var env of
         Just var' -> pure $ TypVar var'
         Nothing -> do
@@ -877,14 +876,14 @@ helpTypeToABC t = go t
    go (AD a) = helpADTypeToABC a >>= \a -> pure $ AD a
    go a = pure a
 
-helpADTypeToABC :: AD -> State {count :: Int, env:: (Map String String)} AD
+helpADTypeToABC :: AD -> State {count :: Int, env :: (Map String String)} AD
 helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> pure $ TList t
 helpADTypeToABC (TTuple ts) = traverse helpTypeToABC ts >>= \ts -> pure $ TTuple ts
 
 helpBindingToABC :: TypeBinding -> State {count :: Int, env :: (Map String String)} TypeBinding
 helpBindingToABC bin = go bin
   where
-    go (TLit t) = helpTypeToABC t >>= \t ->pure $ TLit t
+    go (TLit t) = helpTypeToABC t >>= \t -> pure $ TLit t
     go (TConsLit tb1 tb2 t) = do
       tb1' <- helpBindingToABC tb1
       tb2' <- helpBindingToABC tb2
@@ -930,30 +929,30 @@ checkForError :: Path -> TypeTree -> Boolean
 checkForError p' tt = case p' of
   End -> isTypeError $ extractType tt
   Fst p -> case tt of
-      TBinary op e1 e2 _-> checkForError p e1
-      TUnary op e      _-> checkForError p e
-      TSectL e op      _-> checkForError p e
-      TIfExpr ce te ee _-> checkForError p ce
+      TBinary op e1 e2 _ -> checkForError p e1
+      TUnary op e      _ -> checkForError p e
+      TSectL e op      _ -> checkForError p e
+      TIfExpr ce te ee _ -> checkForError p ce
       TArithmSeq ce te ee _ -> checkForError p ce
-      TLambda bs body  _-> checkForError p body
-      TApp e es        _-> checkForError p e
-      TListComp e _    _-> checkForError p e
+      TLambda bs body  _ -> checkForError p body
+      TApp e es        _ -> checkForError p e
+      TListComp e _    _ -> checkForError p e
       TLetExpr (Cons (Tuple _ e) _) _ _ -> checkForError p e
       _               -> true
   Snd p -> case tt of
-      TBinary op e1 e2 _-> checkForError p e2
-      TSectR op e      _-> checkForError p e
-      TIfExpr ce te ee _-> checkForError p te
-      TArithmSeq ce (Just te) ee _-> checkForError p te
+      TBinary op e1 e2 _ -> checkForError p e2
+      TSectR op e      _ -> checkForError p e
+      TIfExpr ce te ee _ -> checkForError p te
+      TArithmSeq ce (Just te) ee _ -> checkForError p te
       _               -> true
   Thrd p -> case tt of
-      TIfExpr ce te ee _-> checkForError p ee
-      TArithmSeq ce te (Just ee) _-> checkForError p ee
+      TIfExpr ce te ee _ -> checkForError p ee
+      TArithmSeq ce te (Just ee) _ -> checkForError p ee
       _ -> true
   Nth n p -> case tt of
-      TListTree es  _-> nth n es p
-      TNTuple es _-> nth n es p
-      TApp e' es _-> nth n es p
+      TListTree es  _ -> nth n es p
+      TNTuple es _ -> nth n es p
+      TApp e' es _ -> nth n es p
       TListComp e' es _ -> nth' n es p
       _        -> true
   where
@@ -963,7 +962,7 @@ checkForError p' tt = case p' of
 
     nth' n es p = case (!!) es n of
       Nothing -> true
-      Just e -> checkForError' p e              
+      Just e -> checkForError' p e
 
 checkForError' :: Path -> TypeQual -> Boolean
 checkForError' p' q = case p' of
@@ -973,7 +972,7 @@ checkForError' p' q = case p' of
       TGen bin expr t -> checkForError p expr
       TGuard expr t   -> checkForError p expr
   _ -> true
-  where 
+  where
     extractedType qu = case qu of
       TLet _ _ t -> t
       TGen _ _ t -> t
