@@ -1,23 +1,23 @@
 module TypeChecker where
 
-import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>))
+import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (<<<))
 
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
 import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
 import Data.Either (Either(Left, Right))
-import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, length, concat, (!!))
-import Data.Array (toUnfoldable)
+import Data.List (List(..), filter, delete, concatMap, reverse, unzip, foldM, (:), zip, singleton, length, concat, (!!))
 import Data.Array as Array
 import Data.Map as Map
 import Data.Map (Map, insert, lookup, empty)
 import Data.Tuple (Tuple(Tuple), snd, fst)
 import Data.Traversable (traverse)
 import Data.Set as Set
-import Data.Foldable (foldr, foldMap, elem)
+import Data.Foldable (foldl, foldr, foldMap, elem)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.String (toCharArray, fromCharArray)
+import Data.Char as Char
 
 import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Qual(..), ExprQual, QualTree(..), TypeQual, Op(..), TVar, Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..), extractType, extractBindingType, prettyPrintType)
 
@@ -332,7 +332,7 @@ infer env ex = case ex of
     case freshVar of
       t@(TypVar t') -> do
         let env' = env `extend` (Tuple "if" (Forall (Cons t' Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
-        inferred <- infer env' (App (Atom $ Name "if") (toUnfoldable [cond, tr, fl]))
+        inferred <- infer env' (App (Atom $ Name "if") (Array.toUnfoldable [cond, tr, fl]))
         case inferred of
           Tuple s (TApp tt (Cons tcond (Cons ttr (Cons tfl Nil))) ift) -> pure (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
           _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
@@ -562,7 +562,7 @@ extractListLit Nil = pure Nil
 extractBinding :: Binding -> Infer (Tuple (List (Tuple TVar Scheme)) TypeBinding)
 extractBinding (Lit (Name name)) = do
   tv <- fresh
-  pure $ Tuple (toUnfoldable [(Tuple name (Forall Nil tv))]) (TLit tv)
+  pure $ Tuple (Array.toUnfoldable [(Tuple name (Forall Nil tv))]) (TLit tv)
 extractBinding (Lit (Bool _)) = pure $ Tuple Nil $ TLit (TypCon "Bool")
 extractBinding (Lit (Char _)) = pure $ Tuple Nil $ TLit (TypCon "Char")
 extractBinding (Lit (AInt _)) = pure $ Tuple Nil $ TLit (TypCon "Int")
@@ -864,11 +864,11 @@ helpTypeToABC t = go t
       case lookup var env of
         Just var' -> pure $ TypVar var'
         Nothing -> do
-          var' <- freshLetter
-          let env' = insert var var' env
-          {count: count} :: {count :: Int, env :: Map String String} <- get
-          put {count:count, env:env'}
-          pure $ TypVar var'
+          {count: count} <- get
+          let newVarName = getNthName count
+          let env' = insert var newVarName env
+          put {count: count + 1, env: env'}
+          pure $ TypVar newVarName
    go (TypArr t1 t2) = do
         t1' <- helpTypeToABC t1
         t2' <- helpTypeToABC t2
@@ -898,32 +898,18 @@ helpBindingToABC bin = go bin
       t' <- helpTypeToABC t
       pure $ TNTupleLit tbs' t'
 
-freshLetter :: State {count :: Int, env :: Map String String} String
-freshLetter = do
-    {count: count, env: env} :: {count :: Int, env :: Map String String} <- get
-    put {count: count + 1, env: env}
-    pure $ charListToString (newTypVar count)
-    where
-      charListToString :: List Char -> String
-      charListToString xs = fromCharArray (Array.fromFoldable xs)
+-- Given an int generate an array of integers used as indices into the alphabet in `getNthName`.
+-- Example: map indexList (700..703) => [[24,25],[25,25],[0,0,0],[1,0,0]]
+indexList :: Int -> Array Int
+indexList n | n `div` 26 > 0 = n `mod` 26 `Array.cons` indexList (n `div` 26 - 1)
+indexList n = [n `mod` 26]
 
-letters :: List Char
-letters = (toUnfoldable $ toCharArray "abcdefghijklmnopqrstuvwxyz")
-
-letters1 :: List Char
-letters1 = (toUnfoldable $ toCharArray " abcdefghijklmnopqrstuvwxyz")
-
-newTypVar :: Int -> List Char
-newTypVar i = case (letters !! i) of
-  Just c ->  Cons c Nil
-  Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) <> (newTypVar i2)
-
--- workaround
--- if i  subtract one from i => stack overflow at ~50
-newTypVar1 :: Int -> List Char
-newTypVar1 i = case (letters1 !! (i)) of
-  Just c ->  Cons c Nil
-  Nothing -> let i1 = (i `div` 26) in let i2 = (i `mod` 26) in (newTypVar1 i1) <> (newTypVar i2)
+-- Given an int choose a new name. We choose names simply by indexing into the alphabet. As soon
+-- "z" is reached, begin with "aa" and so on.
+-- Example: map getNthName (700..703) => ["zy","zz","aaa","aab"]
+getNthName :: Int -> String
+getNthName = fromCharArray <<< toCharArray <<< Array.reverse <<< indexList
+  where toCharArray = map (Char.fromCharCode <<< ((+) 97))
 
 checkForError :: Path -> TypeTree -> Boolean
 checkForError p' tt = case p' of
