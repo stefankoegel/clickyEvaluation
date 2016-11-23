@@ -179,9 +179,9 @@ eval1 env expr = case expr of
 --  (List (e:es))                      -> pure $ Binary Cons e (List es)
   (App (Binary Composition f g) (Cons e Nil)) -> pure $ App f (singleton $ App g (Cons e Nil))
   (App (Lambda binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
-  (App (SectL e1 op) (Cons e2 Nil))           -> binary env op e1 e2 <|> (pure $ Binary op e1 e2)
-  (App (SectR op e2) (Cons e1 Nil))           -> binary env op e1 e2 <|> (pure $ Binary op e1 e2)
-  (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))         -> binary env op e1 e2 <|> (pure $ Binary op e1 e2)
+  (App (SectL e1 op) (Cons e2 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary op e1 e2)
+  (App (SectR op e2) (Cons e1 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary op e1 e2)
+  (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))         -> {-binary env op e1 e2 <|>-} (pure $ Binary op e1 e2)
   (App (Atom (Name name)) args)      -> apply env name args
   (App (App func es) es')            -> pure $ App func (es <> es')
   (ListComp e qs)                    -> evalListComp e qs
@@ -354,7 +354,7 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
     evalArithmSeq' :: Evaluator Expr
     evalArithmSeq' = case (exprFromStepTo start step end) of
       Quat Nothing _ _ _          -> pure $ List Nil
-      Quat (Just a) Nothing _ _   -> pure $ List (singleton a)
+      Quat (Just a) Nothing _ _   -> pure $ Binary Colon a (List Nil)
       Quat (Just a) (Just na) b c -> pure $ Binary Colon a (ArithmSeq na b c)
 
 ------------------------------------------------------------------------------------------

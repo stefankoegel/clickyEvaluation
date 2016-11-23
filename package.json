@@ -11,8 +11,7 @@
   },
   "scripts": {
     "postinstall": "pulp --version && bower --version && bower update",
-    "build": "pulp --version && pulp build --to html/libs/Main.js",
-    "build_components": "psc \"bower_components/purescript-*/src/**/*.purs\" \"src/*.purs\" 2> errors.txt && wc errors.txt && echo \"Warnings: $(grep Warning errors.txt | wc -l)\"",
+    "build": "pulp build --to html/libs/Main.js",
     "test": "pulp test",
     "watch": "pulp -w test"
   }
