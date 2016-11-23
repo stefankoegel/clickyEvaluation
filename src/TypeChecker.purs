@@ -151,11 +151,14 @@ extendMultiple = foldr (flip extend)
 nullSubst :: Subst
 nullSubst = Map.empty
 
+freshTVar :: Infer String
+freshTVar = do
+    Unique s <- get
+    put (Unique { count: (s.count + 1) })
+    pure $ "t_" <> show s.count
+
 fresh :: Infer Type
-fresh = do
-  Unique s <- get
-  put (Unique {count:(s.count+1)})
-  pure $ TypVar $ "t_" <> show s.count
+fresh = TypVar <$> freshTVar
 
 unify :: Type -> Type -> Infer Subst
 unify (TypArr l r) (TypArr l' r')  = do
@@ -195,7 +198,7 @@ compose s1 s2 = map (apply s1) s2 `Map.union` s1
 envUnion :: TypeEnv -> TypeEnv -> TypeEnv
 envUnion (TypeEnv a) (TypeEnv b) = TypeEnv $ a `Map.union` b
 
-instantiate ::  Scheme -> Infer Type
+instantiate :: Scheme -> Infer Type
 instantiate (Forall as t) = do
   as' <- traverse (const fresh) as
   let s = Map.fromFoldable $ zip as as'
@@ -295,7 +298,7 @@ infer env ex = case ex of
 
   Lambda Nil e -> infer env e
 
-    -- one element list
+  -- one element list
   App e1 (Cons e2 Nil) -> do
     tv <- fresh
     Tuple s1 t1 <- infer env e1
@@ -327,15 +330,12 @@ infer env ex = case ex of
       pure $ Tuple s $ apply s $ TLetExpr resb te (extractType te)
 
   IfExpr cond tr fl -> do
-    tv <- fresh
-    freshVar <- fresh
-    case freshVar of
-      t@(TypVar t') -> do
-        let env' = env `extend` (Tuple "if" (Forall (Cons t' Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
-        inferred <- infer env' (App (Atom $ Name "if") (Array.toUnfoldable [cond, tr, fl]))
-        case inferred of
-          Tuple s (TApp tt (Cons tcond (Cons ttr (Cons tfl Nil))) ift) -> pure (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
-          _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+    tvar <- freshTVar
+    let t = TypVar tvar
+    let env' = env `extend` (Tuple "if" (Forall (tvar : Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
+    inferred <- infer env' (App (Atom $ Name "if") (cond : tr : fl : Nil))
+    case inferred of
+      Tuple s (TApp tt (Cons tcond (Cons ttr (Cons tfl Nil))) ift) -> pure (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
       _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
 
   ArithmSeq begin jstep jend -> do
