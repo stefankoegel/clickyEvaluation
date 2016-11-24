@@ -167,7 +167,7 @@ div.historyBox {
   display: block;
 }
 
-.binary, .app, .if {
+.binary, .app, .if, .output > .top > .atom {
   background: #eee;
   padding: 10px;
   border-radius: 5px;
@@ -191,7 +191,7 @@ div.clickable {
   color: #4271AE;
 }
 
-div.op, div.brace, div.comma {
+div.op, div.brace, div.comma, div.semicolon, div.dot {
   margin: 0px;
 }
 
