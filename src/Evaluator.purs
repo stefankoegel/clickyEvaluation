@@ -367,16 +367,20 @@ evalListComp expr (Cons q qs) = case q of
   Guard (Atom (Bool false)) -> pure $ List Nil
   Guard (Atom (Bool true))  -> if null qs then pure (List (singleton expr)) else pure (ListComp expr qs)
   Gen _ (List Nil)          -> pure $ List Nil
-  Gen b (List (Cons e Nil)) -> pure $ ListComp expr (Cons (Let b e) qs)
+  -- Gen b (List (Cons e Nil)) -> evalListComp expr (Cons (Let b e) qs)
   Gen b (List (Cons e es))  -> do
-    listcomp1 <- pure $ ListComp expr (Cons (Let b e) qs)
+    listcomp1 <- evalListComp expr (Cons (Let b e) qs)
     listcomp2 <- pure $ ListComp expr (Cons (Gen b (List es)) qs)
-    pure $ Binary Append listcomp1 listcomp2
-  Gen b (Binary Colon e (List Nil)) -> pure $ ListComp expr (Cons (Let b e) qs)
+    case listcomp1 of
+      List (Cons x Nil) -> pure $ Binary Colon x listcomp2
+      _ -> pure $ Binary Append listcomp1 listcomp2
+  -- Gen b (Binary Colon e (List Nil)) -> evalListComp expr (Cons (Let b e) qs)
   Gen b (Binary Colon e es)  -> do
-    listcomp1 <- pure $ ListComp expr (Cons (Let b e) qs)
+    listcomp1 <- evalListComp expr (Cons (Let b e) qs)
     listcomp2 <- pure $ ListComp expr (Cons (Gen b es) qs)
-    pure $ Binary Append listcomp1 listcomp2
+    case listcomp1 of
+      List (Cons x Nil) -> pure $ Binary Colon x listcomp2
+      _ -> pure $ Binary Append listcomp1 listcomp2
   Let b e -> case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
     Right r -> do
       Tuple qs' r' <- runStateT (replaceQualifiers qs) r
