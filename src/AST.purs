@@ -201,7 +201,7 @@ pPrintOp op = case op of
   Add    -> "+"
   Sub    -> "-"
   Colon  -> ":"
-  Append -> "<>"
+  Append -> "++"
   Equ    -> "=="
   Neq    -> "/="
   Lt     -> "<"
