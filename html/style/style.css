@@ -1,5 +1,5 @@
 body {
-  background: #999;
+  background: #ddd;
   overflow-x: hidden;
 }
 
@@ -26,7 +26,7 @@ h3 {
   font-family: monospace;
   font-size: 15px;
   border: none;
-  background: #ddd;
+  background: #fff;
   padding: 10px;
   margin: 5px;
   border-radius: 4px;
@@ -171,7 +171,7 @@ div.historyBox {
   display: block;
 }
 
-.binary, .app, .if {
+.binary, .app, .if, .output > .top > .atom {
   padding: 10px;
   border-radius: 5px;
   box-shadow: 2px 2px 5px 0 #333;
@@ -187,15 +187,23 @@ div.clickable {
 }
 
 .num, .bool {
-  color: #e4e;
+  color: #F5871F;
 }
 
 .name {
-  color: #f62;
+  color: #4271AE;
 }
 
-div.op, div.brace, div.comma {
+div.op, div.brace, div.comma, div.semicolon, div.dot {
   margin: 0px;
+}
+
+div.op {
+  color: #3E999F;
+}
+
+div.keyword {
+  color: #8959A8;
 }
 
 #info {

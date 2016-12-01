@@ -2,25 +2,32 @@ module Test.Parser where
 
 import Prelude
 import Data.Either (Either(..))
-import Data.List (List(..), toList, singleton)
+import Data.List (List(..), singleton)
+import Data.Array (toUnfoldable) as Array
+import Data.Tuple (Tuple(..))
+import Data.Maybe (Maybe(..))
 
-import Text.Parsing.Parser  (Parser, ParseError(ParseError), runParser)
+import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
 
 import Control.Monad.Writer (Writer, tell)
 
-import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..))
-import Parser (expression, atom, definitions, definition, binding, variable, bool, int)
+import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), Qual(..))
+import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent)
+import IndentParser (IndentParser)
+
+toList :: forall a. Array a -> List a
+toList = Array.toUnfoldable
 
 tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton
 
-test :: forall a. (Show a, Eq a) => String -> Parser String a -> String -> a -> Writer (List String) Unit
-test name p input expected = case runParser input p of
-  Left  (ParseError { position = p, message = m }) -> tell' $ "Parse fail (" ++ name ++ "): " ++ show p ++ " " ++ m
+test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Writer (List String) Unit
+test name p input expected = case runParserIndent p input of
+  Left parseError -> tell' $ "Parse fail (" <> name <> "): " <> show (parseErrorPosition parseError) <> " " <> parseErrorMessage parseError
   Right result           -> 
     if result == expected
-      then return unit --tell $ "Parse success (" ++ name ++ ")"
-      else tell' $ "Parse fail (" ++ name ++ "): " ++ show result ++ " /= " ++ show expected
+      then pure unit --tell $ "Parse success (" <> name <> ")"
+      else tell' $ "Parse fail (" <> name <> "): " <> show result <> " /= " <> show expected
 
 aint :: Int -> Expr
 aint i = Atom unit $ AInt i
@@ -241,19 +248,13 @@ runTests = do
   test "sectL3" expression "([1] ++)" (SectL unit (List unit $ toList [aint 1]) Append)
   test "sectL4" expression "(   ( 2 +  2 )  <= )" (SectL unit (Binary unit Add (aint 2) (aint 2)) Leq)
 
-  test "let1" expression "let x = 1 in x + x" (LetExpr unit (Lit (Name "x")) (aint 1) (Binary unit Add (aname "x") (aname "x")))
-  test "let2" expression "letty + let x = 1 in x" (Binary unit Add (aname "letty") (LetExpr unit (Lit (Name "x")) (aint 1) (aname "x")))
-  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z"
-    (LetExpr unit
-      (Lit (Name "x"))
-      (LetExpr unit
-        (Lit (Name "y"))
-        (aint 1)
-        (aname "y"))
-      (LetExpr unit
-        (Lit (Name "z"))
-        (aint 2)
-        (Binary unit Add (aname "x") (aname "z"))))
+  test "let1" expression "let x = 1 in x + x" (LetExpr unit (Cons (Tuple (Lit (Name "x")) (aint 1)) Nil) (Binary unit Add (aname "x") (aname "x")))
+  test "let2" expression "letty + let x = 1 in x" (Binary unit Add (aname "letty") (LetExpr unit (Cons (Tuple (Lit (Name "x")) (aint 1)) Nil) (aname "x")))
+  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z" (LetExpr unit (Cons (Tuple (Lit (Name "x")) (LetExpr unit (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 1))) (Nil)) (Atom unit (Name "y")))) (Nil)) (LetExpr unit (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 2))) (Nil)) (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "z")))))
+  test "let4" expression "let { x = 1; y = 2; z = 3} in x + y + z"              (LetExpr unit (Cons (Tuple (Lit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
+  test "let5" expression "let x = 1; y = 2; z = 3 in x + y + z"                 (LetExpr unit (Cons (Tuple (Lit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
+  test "let6" expression "let x = 1\n    y = 2\n    z = 3 in x + y + z"         (LetExpr unit (Cons (Tuple (Lit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
+  test "let7" expression "let {\n  x = 1 ;\n  y = 2 ;\n  z = 3\n} in x + y + z" (LetExpr unit (Cons (Tuple (Lit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
 
   test "consLit1" binding "(x:xs)" (ConsLit (Lit (Name "x")) (Lit (Name "xs")))
   test "consLit2" binding "(x:(y:zs))" (ConsLit (Lit (Name "x")) (ConsLit (Lit (Name "y")) (Lit (Name "zs"))))
@@ -311,104 +312,111 @@ runTests = do
   test "string1" expression "\"asdf\"" (List unit $ toList [Atom unit (Char "a"), Atom unit (Char "s"), Atom unit (Char "d"), Atom unit (Char "f")])
   test "string2" expression "\"\\\\\\n\\\"\\\'\"" (List unit $ toList [Atom unit (Char "\\"), Atom unit (Char "\n"), Atom unit (Char "\""), Atom unit (Char "'")])
 
+  test "listComp1" expression "[ x | x <- [1,2,3] ]" $ ListComp unit (Atom unit (Name "x")) (toList [Gen (Lit (Name "x")) (List unit (toList [Atom unit (AInt 1), Atom unit (AInt 2), Atom unit (AInt 3)]))])
+  test "listComp2" expression "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp unit (Binary unit Add (Atom unit (Name "b")) (Atom unit (Name ("c")))) $ toList [Let (Lit (Name "b")) (Atom unit (AInt 3)),
+    Gen (Lit (Name "c")) (ArithmSeq unit (Atom unit (AInt 1)) Nothing Nothing)]
+  test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp unit (Binary unit Mul (Atom unit (Name "a")) (Atom unit (Name "b"))) $ toList [Let (Lit (Name "a")) (Atom unit (AInt 5)),
+    Let (Lit (Name "b")) (Binary unit Add (Atom unit (Name "a")) (Atom unit (AInt 1)))]
+
+
 prelude :: String
 prelude =
-  "and (True:xs)  = and xs\n" ++
-  "and (False:xs) = False\n" ++
-  "and []         = True\n" ++
-  "\n" ++
-  "or (False:xs) = or xs\n" ++
-  "or (True:xs)  = True\n" ++
-  "or []         = False\n" ++
-  "\n" ++
-  "all p = and . map p\n" ++
-  "any p = or . map p\n" ++
-  "\n" ++
-  "head (x:xs) = x\n" ++
-  "tail (x:xs) = xs\n" ++
-  "\n" ++
-  "take 0 xs     = []\n" ++
-  "take n (x:xs) = x : take (n - 1) xs\n" ++
-  "\n" ++
-  "drop 0 xs     = xs\n" ++
-  "drop n (x:xs) = drop (n - 1) xs\n" ++
-  "\n" ++
-  "elem e []     = False\n" ++
-  "elem e (x:xs) = if e == x then True else elem e xs\n" ++
-  "\n" ++
-  "max a b = if a >= b then a else b\n" ++
-  "min a b = if b >= a then a else b\n" ++
-  "\n" ++
-  "maximum (x:xs) = foldr max x xs\n" ++
-  "minimum (x:xs) = foldr min x xs\n" ++
-  "\n" ++
-  "length []     = 0\n" ++
-  "length (x:xs) = 1 + length xs\n" ++
-  "\n" ++
-  "zip (x:xs) (y:ys) = (x, y) : zip xs ys\n" ++
-  "zip []      _     = []\n" ++
-  "zip _       []    = []\n" ++
-  "\n" ++
-  "zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys\n" ++
-  "zipWith _ []     _      = []\n" ++
-  "zipWith _ _      []     = []\n" ++
-  "\n" ++
-  "unzip []          = ([], [])\n" ++
-  "unzip ((a, b):xs) = (\\(as, bs) -> (a:as, b:bs)) $ unzip xs\n" ++
-  "\n" ++
-  "fst (x,_) = x\n" ++
-  "snd (_,x) = x\n" ++
-  "\n" ++
-  "curry f a b = f (a, b)\n" ++
-  "uncurry f (a, b) = f a b\n" ++
-  "\n" ++
-  "repeat x = x : repeat x\n" ++
-  "\n" ++
-  "replicate 0 _ = []\n" ++
-  "replicate n x = x : replicate (n - 1) x\n" ++
-  "\n" ++
-  "enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []\n" ++
-  "\n" ++
-  "sum (x:xs) = x + sum xs\n" ++
-  "sum [] = 0\n" ++
-  "\n" ++
-  "product (x:xs) = x * product xs\n" ++
-  "product [] = 1\n" ++
-  "\n" ++
-  "reverse []     = []\n" ++
-  "reverse (x:xs) = reverse xs ++ [x]\n" ++
-  "\n" ++
-  "concat = foldr (++) []\n" ++
-  "\n" ++
-  "map f []     = []\n" ++
-  "map f (x:xs) = f x : map f xs\n" ++
-  "\n" ++
-  "not True  = False\n" ++
-  "not False = True\n" ++
-  "\n" ++
-  "filter p (x:xs) = if p x then x : filter p xs else filter p xs\n" ++
-  "filter p []     = []\n" ++
-  "\n" ++
-  "foldr f ini []     = ini\n" ++
-  "foldr f ini (x:xs) = f x (foldr f ini xs)\n" ++
-  "\n" ++
-  "foldl f acc []     = acc\n" ++
-  "foldl f acc (x:xs) = foldl f (f acc x) xs\n" ++
-  "\n" ++
-  "scanl f b []     = [b]\n" ++
-  "scanl f b (x:xs) = b : scanl f (f b x) xs\n" ++
-  "\n" ++
-  "iterate f x = x : iterate f (f x)\n" ++
-  "\n" ++
-  "id x = x\n" ++
-  "\n" ++
-  "const x _ = x\n" ++
-  "\n" ++
-  "flip f x y = f y x\n" ++
-  "\n" ++
-  "even n = (n `mod` 2) == 0\n" ++
-  "odd n = (n `mod` 2) == 1\n" ++
-  "\n" ++
+  "and (True:xs)  = and xs\n" <>
+  "and (False:xs) = False\n" <>
+  "and []         = True\n" <>
+  "\n" <>
+  "or (False:xs) = or xs\n" <>
+  "or (True:xs)  = True\n" <>
+  "or []         = False\n" <>
+  "\n" <>
+  "all p = and . map p\n" <>
+  "any p = or . map p\n" <>
+  "\n" <>
+  "head (x:xs) = x\n" <>
+  "tail (x:xs) = xs\n" <>
+  "\n" <>
+  "take 0 xs     = []\n" <>
+  "take n (x:xs) = x : take (n - 1) xs\n" <>
+  "\n" <>
+  "drop 0 xs     = xs\n" <>
+  "drop n (x:xs) = drop (n - 1) xs\n" <>
+  "\n" <>
+  "elem e []     = False\n" <>
+  "elem e (x:xs) = if e == x then True else elem e xs\n" <>
+  "\n" <>
+  "max a b = if a >= b then a else b\n" <>
+  "min a b = if b >= a then a else b\n" <>
+  "\n" <>
+  "maximum (x:xs) = foldr max x xs\n" <>
+  "minimum (x:xs) = foldr min x xs\n" <>
+  "\n" <>
+  "length []     = 0\n" <>
+  "length (x:xs) = 1 + length xs\n" <>
+  "\n" <>
+  "zip (x:xs) (y:ys) = (x, y) : zip xs ys\n" <>
+  "zip []      _     = []\n" <>
+  "zip _       []    = []\n" <>
+  "\n" <>
+  "zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys\n" <>
+  "zipWith _ []     _      = []\n" <>
+  "zipWith _ _      []     = []\n" <>
+  "\n" <>
+  "unzip []          = ([], [])\n" <>
+  "unzip ((a, b):xs) = (\\(as, bs) -> (a:as, b:bs)) $ unzip xs\n" <>
+  "\n" <>
+  "fst (x,_) = x\n" <>
+  "snd (_,x) = x\n" <>
+  "\n" <>
+  "curry f a b = f (a, b)\n" <>
+  "uncurry f (a, b) = f a b\n" <>
+  "\n" <>
+  "repeat x = x : repeat x\n" <>
+  "\n" <>
+  "replicate 0 _ = []\n" <>
+  "replicate n x = x : replicate (n - 1) x\n" <>
+  "\n" <>
+  "enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []\n" <>
+  "\n" <>
+  "sum (x:xs) = x + sum xs\n" <>
+  "sum [] = 0\n" <>
+  "\n" <>
+  "product (x:xs) = x * product xs\n" <>
+  "product [] = 1\n" <>
+  "\n" <>
+  "reverse []     = []\n" <>
+  "reverse (x:xs) = reverse xs ++ [x]\n" <>
+  "\n" <>
+  "concat = foldr (++) []\n" <>
+  "\n" <>
+  "map f []     = []\n" <>
+  "map f (x:xs) = f x : map f xs\n" <>
+  "\n" <>
+  "not True  = False\n" <>
+  "not False = True\n" <>
+  "\n" <>
+  "filter p (x:xs) = if p x then x : filter p xs else filter p xs\n" <>
+  "filter p []     = []\n" <>
+  "\n" <>
+  "foldr f ini []     = ini\n" <>
+  "foldr f ini (x:xs) = f x (foldr f ini xs)\n" <>
+  "\n" <>
+  "foldl f acc []     = acc\n" <>
+  "foldl f acc (x:xs) = foldl f (f acc x) xs\n" <>
+  "\n" <>
+  "scanl f b []     = [b]\n" <>
+  "scanl f b (x:xs) = b : scanl f (f b x) xs\n" <>
+  "\n" <>
+  "iterate f x = x : iterate f (f x)\n" <>
+  "\n" <>
+  "id x = x\n" <>
+  "\n" <>
+  "const x _ = x\n" <>
+  "\n" <>
+  "flip f x y = f y x\n" <>
+  "\n" <>
+  "even n = (n `mod` 2) == 0\n" <>
+  "odd n = (n `mod` 2) == 1\n" <>
+  "\n" <>
   "fix f = f (fix f)\n"
 
 parsedPrelude :: List Definition

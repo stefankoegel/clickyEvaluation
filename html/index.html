@@ -4,34 +4,176 @@
     <title>Clicky Evaluation</title>
     <meta charset="utf8">
     <link rel="stylesheet" href="style/style.css" charset="utf-8">
-    <script src="https://code.jquery.com/jquery-1.11.2.min.js"></script>
-    <script src="Main.js"></script>
+    <link rel="stylesheet" href="style/showType.css" charset="utf-8" id="showTypeStylesheet">
+    <link href="style/bootstrap-switch.min.css" rel="stylesheet">
+    <script src="libs/jquery-1.11.2.min.js"></script>
+    <script src="libs/bootstrap-switch.min.js"></script>
   </head>
   <body>
 
-    <div id="output-container" class="output output1"></div>
-    <div id="output-container" class="output output2"></div>
-    <div id="output-container" class="output output3"></div>
-    <div id="output-container" class="output output4"></div>
-    <div id="output-container" class="output output5"></div>
-    <div id="output-container" class="output output6"></div>
-    <div id="output-container" class="output output7"></div>
-    <div id="output-container" class="output output8"></div>
-    <div id="output-container" class="output output9"></div>
-    <div id="output-container" class="output output10"></div>
+    <script type="text/javascript" src="libs/ace.js" charset="utf-8"></script>
+    <script type="text/javascript" src="libs/theme-tomorrow.js" charset="utf-8"></script>
+    <script type="text/javascript" src="libs/mode-haskell.js" charset="utf-8"></script>
+    <script>
+      jQuery(function() {
+        // ace editor setup
+        var editor = ace.edit("definitions");
+        editor.setTheme("ace/theme/tomorrow");
+        editor.getSession().setMode("ace/mode/haskell");
+        editor.getSession().setTabSize(8);
+        editor.setShowPrintMargin(false);
 
-<script type="text/javascript">
-  PS.Main.makeCE("((3 + 4) : (7 * 9) : []) ++ [9]")(".output1")();
-  PS.Main.makeCE("(\\(x:[(y, z)]) -> x)")(".output2")();
-  PS.Main.makeCE("(\\x y -> 1 + 2 + 3 + 4 + 5 + x * y + x *  12) (7 * 7) (8 + 8)")(".output3")();
-  PS.Main.makeCE("(\\(x:xs) [y] (a, b) -> x * 2 + y * 3 + a * 5 + b * 7) [1, 2, 3] [4] (5, 6)")(".output4")();
-  PS.Main.makeCE("((60 + 6) `div`) . (*2) $ (+) 1 2")(".output5")();
-  PS.Main.makeCE("if 5 < 10 then 1 + 2 + 3 * 4 else 1 `div` 0")(".output6")();
-  PS.Main.makeCE("sum (map (^2) [1, 2, 3, 4])")(".output7")();
-  PS.Main.makeCE("foldl (*) 1 [2, 3, 4, 5, 6, 7]")(".output8")();
-  PS.Main.makeCEwithDefs("fib 4")("fib 0 = 0\nfib 1 = 1\nfib n = fib (n - 1) + fib (n - 2)")(".output9")();
-  PS.Main.makeCEwithDefs("fib 10")("fib n = fibAcc 0 1 n\nfibAcc a b 0 = a\nfibAcc a b n = fibAcc b (a + b) (n - 1)")(".output10")();
-</script>
+        // bootstrapSwitch for types
+        $.fn.bootstrapSwitch.defaults.size = 'mini';
+        var checkbox = $("#typecheckbox")
+        checkbox.bootstrapSwitch();
+        checkbox.on('switchChange.bootstrapSwitch', function (event, state) {
+          var styleLink = $("#showTypeStylesheet");
+          if(state){
+            styleLink.attr({"href":"style/showType.css"});
+          }
+          else{
+            styleLink.attr({"href":"style/hideType.css"});
+          }
+        });
+
+        // bootstrapSwitch for history
+        var historycheckbox = $("#historycheckbox")
+        historycheckbox.bootstrapSwitch();
+        historycheckbox.on('switchChange.bootstrapSwitch', function (event, state) {
+          if(state) {
+            historycheckbox.prop('checked', true);
+          } else {
+            historycheckbox.prop('checked', false);
+          }
+        });
+      });
+    </script>
+    <script charset="utf-8" src="libs/Main.js"></script>
+
+    <div id="info"></div>
+
+    <h3>Expression</h3>
+
+    <div id="inputBar">
+          <input type="text" id="input"  value="sum (map (^2) [1,2,3,4])">
+      <div id="options">
+        <input type="checkbox" id="typecheckbox" checked="checked"/> Show types &nbsp;&nbsp;|&nbsp;&nbsp;
+        <input type="checkbox" id="historycheckbox" checked="checked"/> Show history <br/>
+      </div>
+    </div>
+
+  <div class="frame">
+    <div id="topLevelOutput-container">
+        <div id="output-container">
+        </div>
+    </div>
+  </div>
+
+<h3> History </h3>
+    <div id="history-container">
+    </div>
+
+    <h3>Definitions</h3>
+    <div class="ace" id="definitions">
+and (True:xs)  = and xs
+and (False:xs) = False
+and []         = True
+
+or (False:xs) = or xs
+or (True:xs)  = True
+or []         = False
+
+all p = and . map p
+any p = or . map p
+
+head (x:xs) = x
+tail (x:xs) = xs
+
+take 0 xs     = []
+take n (x:xs) = x : take (n - 1) xs
+
+drop 0 xs     = xs
+drop n (x:xs) = drop (n - 1) xs
+
+elem e []     = False
+elem e (x:xs) = if e == x then True else elem e xs
+
+max a b = if a >= b then a else b
+min a b = if a <= b then a else b
+
+maximum (x:xs) = foldl max x xs
+minimum (x:xs) = foldl min x xs
+
+length []     = 0
+length (x:xs) = 1 + length xs
+
+zip (x:xs) (y:ys) = (x, y) : zip xs ys
+zip []      _     = []
+zip _       []    = []
+
+zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys
+zipWith _ []     _      = []
+zipWith _ _      []     = []
+
+unzip []          = ([], [])
+unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs
+
+fst (x,_) = x
+snd (_,y) = y
+
+curry f a b = f (a, b)
+uncurry f (a, b) = f a b
+
+repeat x = x : repeat x
+
+replicate 0 _ = []
+replicate n x = x : replicate (n - 1) x
+
+enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []
+
+sum (x:xs) = x + sum xs
+sum [] = 0
+
+product (x:xs) = x * product xs
+product [] = 1
+
+reverse []     = []
+reverse (x:xs) = reverse xs ++ [x]
+
+concat = foldr (++) []
+
+map f []     = []
+map f (x:xs) = f x : map f xs
+
+not True  = False
+not False = True
+
+filter p (x:xs) = if p x then x : filter p xs else filter p xs
+filter p []     = []
+
+foldr f ini []     = ini
+foldr f ini (x:xs) = f x (foldr f ini xs)
+
+foldl f acc []     = acc
+foldl f acc (x:xs) = foldl f (f acc x) xs
+
+scanl f b []     = [b]
+scanl f b (x:xs) = b : scanl f (f b x) xs
+
+iterate f x = x : iterate f (f x)
+
+id x = x
+
+const x _ = x
+
+flip f x y = f y x
+
+even n = (n `mod` 2) == 0
+odd n = (n `mod` 2) == 1
+
+fix f = f (fix f)
+</div>
 
   </body>
 </html>
