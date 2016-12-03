@@ -11,8 +11,8 @@
   },
   "scripts": {
     "postinstall": "pulp --version && bower --version && bower update",
-    "build": "pulp build --to html/libs/Main.js",
-    "test": "pulp test",
+    "build": "psc \"bower_components/*/src/**/*.purs\" src/AST.purs src/IndentParser.purs src/Parser.purs test/Parser.purs test/Main.purs",
+    "test": "psc-bundle \"output/**/*.js\" -o Main.js --main Test.Main && node Main.js",
     "watch": "pulp -w test"
   }
 }

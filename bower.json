@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "clickyEvaluation",
+  "name": "clickyevaluation",
   "version": "0.2.0",
   "description": "Visual tool for stepwise evaluation of simple Haskell expressions",
   "main": "src/Main.purs",
@@ -15,7 +15,6 @@
     "html/dist/*"
   ],
   "dependencies": {
-    "purescript-ace": "^3.0.0",
     "purescript-arrays": "^3.0.0",
     "purescript-dom": "^3.0.0",
     "purescript-jquery": "^3.0.0",
