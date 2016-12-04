@@ -11,7 +11,7 @@
   },
   "scripts": {
     "postinstall": "pulp --version && bower --version && bower update",
-    "build": "psc \"bower_components/*/src/**/*.purs\" src/AST.purs src/IndentParser.purs src/Parser.purs test/Parser.purs test/Main.purs src/Evaluator.purs test/Evaluator.purs",
+    "build": "psc \"bower_components/*/src/**/*.purs\" src/AST.purs src/IndentParser.purs src/Parser.purs test/Parser.purs test/Main.purs src/Evaluator.purs test/Evaluator.purs src/Web.purs",
     "test": "psc-bundle \"output/**/*.js\" -o Main.js --main Test.Main && node Main.js",
     "watch": "pulp -w test"
   }
