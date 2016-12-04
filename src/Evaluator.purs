@@ -1,25 +1,9 @@
-<<<<<<< HEAD
-module Evaluator
-  ( eval
-  , eval1
-  , runEvalM
-  , defsToEnv
-  , EvalError(..)
-  , MatchingError(..)
-  , Env(..)
-  ) where
-
-import Prelude hiding (apply)
-import Data.List (List(Nil, Cons), singleton, concatMap, intersect, zipWith, zipWithA, length, (:), replicate, drop, concat)
-import Data.StrMap (StrMap)
-=======
 module Evaluator where
 
-import Prelude (class Show, top, bottom, class Semigroup, class Functor, class Monad, Unit, Ordering(..), (<>), ($), (||), (&&), unit, (<*>), (<$>), pure, void, (==), otherwise, (>>=), (<), negate, (>), (>=), (<=), (/=), (-), (+), mod, div, (*), (<<<), compare, id, const, bind, show, map)
-import Data.List (List(Nil, Cons), null, singleton, concatMap, intersect, zipWith, zipWithA, length, (:), drop, updateAt, (!!), concat)
+import Prelude hiding (apply)
+import Data.List (List(Nil, Cons), null, singleton, concatMap, intersect, zipWith, zipWithA, length, (:), drop, concat)
 import Data.List.Lazy (replicate)
 import Data.StrMap (StrMap, delete)
->>>>>>> master
 import Data.StrMap as Map
 import Data.Tuple (Tuple(Tuple))
 import Data.Maybe (Maybe(Nothing, Just), fromMaybe)
@@ -32,19 +16,12 @@ import Data.String (toChar)
 import Data.String (singleton) as String
 import Data.Char (fromCharCode)
 import Data.Enum (fromEnum)
-import Control.Applicative (pure)
-import Control.Apply ((*>))
-import Control.Alt ((<|>))
 import Control.Comonad (extract)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.State.Trans (StateT, get, modify, runStateT, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
-<<<<<<< HEAD
-import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..))
-=======
-import AST (Atom(..), Binding(..), Definition(Def), Expr(..), Qual(..), ExprQual, Op(..),Path(..))
->>>>>>> master
+import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), Qual(..), ExprQual)
 
 data EvalError =
     IndexError Int Int
@@ -67,12 +44,7 @@ instance monoidEvalError :: Monoid EvalError where
   mempty = NoError
 
 instance showEvalError :: Show EvalError where
-<<<<<<< HEAD
-  show (IndexError i l)           = "IndexError " ++ show i ++ " " ++ show l
-=======
-  show (PathError p e)            = "PathError " <> show p <> " " <> show e
   show (IndexError i l)           = "IndexError " <> show i <> " " <> show l
->>>>>>> master
   show DivByZero                  = "DivByZero"
   show (EvalError e)              = "EvalError " <> show e
   show (BinaryOpError o e1 e2)    = "BinaryOpError " <> show o <> " (" <> show e1 <> ") (" <> show e2 <> ")"
@@ -103,80 +75,7 @@ runEvalM = extract <<< runExceptT
 type Matcher = ExceptT MatchingError Identity
 
 runMatcherM :: forall a. Matcher a -> Either MatchingError a
-<<<<<<< HEAD
-runMatcherM = runIdentity <<< runExceptT
-=======
 runMatcherM = extract <<< runExceptT
-
-mapWithPath :: Path -> (Expr -> Evaluator Expr) -> Expr -> Evaluator Expr
-mapWithPath p f = go p
-  where
-  go End e     = f e
-  go (Fst p) e = case e of
-    Binary op e1 e2 -> Binary op <$> go p e1 <*> pure e2
-    Unary op e      -> Unary op  <$> go p e
-    SectL e op      -> SectL     <$> go p e <*> pure op
-    IfExpr ce te ee -> IfExpr    <$> go p ce <*> pure te <*> pure ee
-    ArithmSeq s b e -> ArithmSeq <$> go p s <*> pure b <*> pure e
-    Lambda bs body  -> Lambda bs <$> go p body
-    App e es        -> App       <$> go p e <*> pure es
-    ListComp e qs   -> ListComp  <$> go p e <*> pure qs
-    LetExpr (Cons (Tuple bin ex) bins) expr -> do
-      ex'   <- go p ex
-      bin'  <- pure bin
-      bins' <- pure bins
-      expr' <- pure expr
-      pure $ LetExpr (Cons (Tuple bin' ex') bins') expr'
-    _               -> throwError $ PathError (Fst p) e
-  go (Snd p) e = case e of
-    Binary op e1 e2 -> Binary op e1 <$> go p e2
-    SectR op e      -> SectR op     <$> go p e
-    IfExpr ce te ee -> IfExpr <$> pure ce <*> go p te <*> pure ee
-    ArithmSeq s b e -> ArithmSeq <$> pure s <*> (mapM' (go p) b) <*> pure e
-    _               -> throwError $ PathError (Snd p) e
-  go (Thrd p) e = case e of
-    IfExpr ce te ee -> IfExpr <$> pure ce <*> pure te <*> go p ee
-    ArithmSeq s b (Just e) -> ArithmSeq <$> pure s <*> pure b <*> (Just <$> (go p e))
-    _               -> throwError $ PathError (Thrd p) e
-  go (Nth n p) e = case e of
-    List es  -> List  <$> mapIndex n (go p) es
-    NTuple es -> NTuple <$> mapIndex n (go p) es
-    App e es -> App e <$> mapIndex n (go p) es
-    ListComp e qs -> ListComp e <$> mapIndexQual n (go p) qs
-    _        -> throwError $ PathError (Nth n p) e
-
-  evalQual :: (Expr -> Evaluator Expr) -> Qual Binding Expr -> Evaluator (Qual Binding Expr)
-  evalQual f q = case q of
-    Gen bin expr -> Gen bin <$> f expr 
-    Let bin expr -> Let bin <$> f expr
-    Guard expr   -> Guard <$> f expr
-
-  mapIndexQual :: Int -> (Expr -> Evaluator Expr) -> (List (Qual Binding Expr)) -> Evaluator (List (Qual Binding Expr))
-  mapIndexQual i f qs = do
-    case qs !! i of
-      Nothing -> throwError $ IndexError i (length qs)
-      Just q  -> do
-        q' <- evalQual f q
-        case updateAt i q' qs of
-          Nothing  -> throwError $ IndexError i (length qs)
-          Just qs' -> pure qs'
-
-mapIndex :: forall a. Int -> (a -> Evaluator a) -> (List a) -> Evaluator (List a)
-mapIndex i f as = do
-  case as !! i of
-    Nothing -> throwError $ IndexError i (length as)
-    Just a  -> do
-      a' <- f a
-      case updateAt i a' as of
-        Nothing  -> throwError $ IndexError i (length as)
-        Just as' -> pure as'
-
-evalPath1 :: Env -> Path -> Expr -> Either EvalError Expr
-evalPath1 env path expr = runEvalM $ mapWithPath path (eval1 env) expr
-
-evalPathAll :: Env -> Path -> Expr -> Either EvalError Expr
-evalPathAll env path expr = runEvalM $ mapWithPath path (pure <<< eval env) expr
->>>>>>> master
 
 type Env = StrMap (List (Tuple (List Binding) Expr))
 
@@ -197,38 +96,22 @@ insertDef env (Def name bindings body) = case Map.lookup name env of
 
 eval1 :: Env -> Expr -> Evaluator Expr
 eval1 env expr = case expr of
-<<<<<<< HEAD
   (Binary _ op e1 e2)                  -> binary env op e1 e2
   (Unary _ op e)                       -> unary env op e
   (Atom _ (Name name))                 -> apply env name Nil
-  (IfExpr _ (Atom _ (Bool true)) te _)   -> return te
-  (IfExpr _ (Atom _ (Bool false)) _ ee)  -> return ee
-  -- (List _ (Cons e es))                      -> return $ Binary unit Colon e (List unit es)
-  (App _ (Binary _ Composition f g) (Cons e Nil)) -> return $ App unit f (singleton $ App unit g (Cons e Nil))
+  (IfExpr _ (Atom _ (Bool true)) te _)   -> pure te
+  (IfExpr _ (Atom _ (Bool false)) _ ee)  -> pure ee
+  (ArithmSeq _ start step end)         -> evalArithmSeq start step end
+  -- (List _ (Cons e es))                      -> pure $ Binary unit Colon e (List unit es)
+  (App _ (Binary _ Composition f g) (Cons e Nil)) -> pure $ App unit f (singleton $ App unit g (Cons e Nil))
   (App _ (Lambda _ binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
-  (App _ (SectL _ e1 op) (Cons e2 Nil))           -> binary env op e1 e2 <|> (return $ Binary unit op e1 e2)
-  (App _ (SectR _ op e2) (Cons e1 Nil))           -> binary env op e1 e2 <|> (return $ Binary unit op e1 e2)
-  (App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))         -> binary env op e1 e2 <|> (return $ Binary unit op e1 e2)
+  (App _ (SectL _ e1 op) (Cons e2 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary unit op e1 e2)
+  (App _ (SectR _ op e2) (Cons e1 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary unit op e1 e2)
+  (App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))         -> {-binary env op e1 e2 <|>-} (pure $ Binary unit op e1 e2)
   (App _ (Atom _ (Name name)) args)      -> apply env name args
-  (App _ (App _ func es) es')            -> return $ App unit func (es ++ es')
-=======
-  (Binary op e1 e2)                  -> binary env op e1 e2
-  (Unary op e)                       -> unary env op e
-  (Atom (Name name))                 -> apply env name Nil
-  (IfExpr (Atom (Bool true)) te _)   -> pure te
-  (IfExpr (Atom (Bool false)) _ ee)  -> pure ee
-  (ArithmSeq start step end)         -> evalArithmSeq start step end  
---  (List (e:es))                      -> pure $ Binary Cons e (List es)
-  (App (Binary Composition f g) (Cons e Nil)) -> pure $ App f (singleton $ App g (Cons e Nil))
-  (App (Lambda binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
-  (App (SectL e1 op) (Cons e2 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary op e1 e2)
-  (App (SectR op e2) (Cons e1 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary op e1 e2)
-  (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))         -> {-binary env op e1 e2 <|>-} (pure $ Binary op e1 e2)
-  (App (Atom (Name name)) args)      -> apply env name args
-  (App (App func es) es')            -> pure $ App func (es <> es')
-  (ListComp e qs)                    -> evalListComp e qs
-  (LetExpr binds exp)                -> evalLetExpr binds exp
->>>>>>> master
+  (App _ (App _ func es) es')            -> pure $ App unit func (es <> es')
+  (ListComp _ e qs)                    -> evalListComp e qs
+  (LetExpr _ binds exp)                -> evalLetExpr binds exp
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> Expr -> Expr
@@ -263,7 +146,6 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
     eval1d = either (const expr') id $ runEvalM $ eval1 env expr'
     expr' :: Expr
     expr' = case expr of
-<<<<<<< HEAD
       (Binary _ op e1 e2)  ->
         Binary unit op (evalToBinding env e1 bind) (evalToBinding env e2 bind)
       (Unary _ op e)       ->
@@ -276,24 +158,10 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
         IfExpr unit (evalToBinding env c bind) t e
       (App _ f args)       -> do
         App unit (evalToBinding env f bind) args
-=======
-      (Binary op e1 e2)  ->
-        Binary op (evalToBinding env e1 bind) (evalToBinding env e2 bind)
-      (Unary op e)       ->
-        Unary op (evalToBinding env e bind)
-      (List es)          ->
-        List ((\e -> evalToBinding env e bind) <$> es)
-      (NTuple es)        ->
-        NTuple ((\e -> evalToBinding env e bind) <$> es)
-      (IfExpr c t e)     ->
-        IfExpr (evalToBinding env c bind) t e
-      (ArithmSeq c t e)     ->
-        ArithmSeq (evalToBinding env c bind) ((\x -> evalToBinding env x bind) <$> t) ((\x -> evalToBinding env x bind) <$> e)
-      (App f args)       -> do
-        App (evalToBinding env f bind) args
-      (ListComp e qs)    -> do
-        ListComp (evalToBinding env e bind) ((\x -> evalToBindingQual env x bind) <$> qs)
->>>>>>> master
+      (ArithmSeq _ c t e)     ->
+        ArithmSeq unit (evalToBinding env c bind) ((\x -> evalToBinding env x bind) <$> t) ((\x -> evalToBinding env x bind) <$> e)
+      (ListComp _ e qs)    -> do
+        ListComp unit (evalToBinding env e bind) ((\x -> evalToBindingQual env x bind) <$> qs)
       _                  ->
         expr
 
@@ -306,15 +174,9 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
 wrapLambda :: (List Binding) -> (List Expr) -> Expr -> Evaluator Expr
 wrapLambda binds args body =
   case compare (length binds) (length args) of
-<<<<<<< HEAD
-    EQ -> return body
-    GT -> return $ Lambda unit (drop (length args) binds) body
-    LT -> return $ App unit body (drop (length binds) args)
-
-=======
     EQ -> pure body
-    GT -> pure $ Lambda (drop (length args) binds) body
-    LT -> pure $ App body (drop (length binds) args)
+    GT -> pure $ Lambda unit (drop (length args) binds) body
+    LT -> pure $ App unit body (drop (length binds) args)
 
 ------------------------------------------------------------------------------------------
 -- Arithmetic Sequences
@@ -366,9 +228,9 @@ clampStep istart istep = if istep >= istart
 
 exprFromStepTo :: Expr -> Maybe Expr -> Maybe Expr -> Quat (Maybe Expr)
 exprFromStepTo start step end = case start of
-  Atom (AInt i) -> (\x -> (Atom <<< AInt) <$> x) <$> intQuat
-  Atom (Bool b) -> (\x -> (Atom <<< Bool) <$> x) <$> (intToABool intQuat)
-  Atom (Char c) -> (\x -> (Atom <<< Char <<< String.singleton) <$> x) <$> (intToAChar intQuat)
+  Atom _ (AInt i) -> (\x -> (Atom unit <<< AInt) <$> x) <$> intQuat
+  Atom _ (Bool b) -> (\x -> (Atom unit <<< Bool) <$> x) <$> (intToABool intQuat)
+  Atom _ (Char c) -> (\x -> (Atom unit <<< Char <<< String.singleton) <$> x) <$> (intToAChar intQuat)
   _             -> Quat Nothing Nothing Nothing Nothing
     where
       intQuat = intFromStepTo (unsafeExprToInt start) (unsafeExprToInt <$> step) (unsafeExprToInt <$> end)
@@ -399,61 +261,61 @@ intToAChar quat = case temp of
       where c = fromCharCode i
 
 unsafeExprToInt :: Expr -> Int
-unsafeExprToInt (Atom (AInt i))   = i
-unsafeExprToInt (Atom (Bool b))   = fromEnum b
-unsafeExprToInt (Atom (Char str)) = fromEnum $ fromMaybe 'E' (toChar str)
+unsafeExprToInt (Atom _ (AInt i))   = i
+unsafeExprToInt (Atom _ (Bool b))   = fromEnum b
+unsafeExprToInt (Atom _ (Char str)) = fromEnum $ fromMaybe 'E' (toChar str)
 unsafeExprToInt _ = top
 
 evalArithmSeq :: Expr -> Maybe Expr -> Maybe Expr -> Evaluator Expr
 evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, step, end]) of
-  false -> throwError $ CannotEvaluate $ ArithmSeq start step end
+  false -> throwError $ CannotEvaluate $ ArithmSeq unit start step end
   true  -> evalArithmSeq'
   where
     isValid :: Maybe Expr -> Boolean
     isValid Nothing = true
-    isValid (Just (Atom (Name _))) = false
-    isValid (Just (Atom _)) = true
+    isValid (Just (Atom _ (Name _))) = false
+    isValid (Just (Atom _ _)) = true
     isValid _ = false
 
     evalArithmSeq' :: Evaluator Expr
     evalArithmSeq' = case (exprFromStepTo start step end) of
-      Quat Nothing _ _ _          -> pure $ List Nil
-      Quat (Just a) Nothing _ _   -> pure $ Binary Colon a (List Nil)
-      Quat (Just a) (Just na) b c -> pure $ Binary Colon a (ArithmSeq na b c)
+      Quat Nothing _ _ _          -> pure $ List unit Nil
+      Quat (Just a) Nothing _ _   -> pure $ Binary unit Colon a (List unit Nil)
+      Quat (Just a) (Just na) b c -> pure $ Binary unit Colon a (ArithmSeq unit na b c)
 
 ------------------------------------------------------------------------------------------
 -- List Comprehensions
 ------------------------------------------------------------------------------------------
 
 evalListComp :: Expr -> List ExprQual -> Evaluator Expr
-evalListComp expr Nil         = pure $ List $ singleton expr
+evalListComp expr Nil         = pure $ List unit $ singleton expr
 evalListComp expr (Cons q qs) = case q of
-  Guard (Atom (Bool false)) -> pure $ List Nil
-  Guard (Atom (Bool true))  -> if null qs then pure (List (singleton expr)) else pure (ListComp expr qs)
-  Gen _ (List Nil)          -> pure $ List Nil
+  Guard (Atom _ (Bool false)) -> pure $ List unit Nil
+  Guard (Atom _ (Bool true))  -> if null qs then pure (List unit (singleton expr)) else pure (ListComp unit expr qs)
+  Gen _ (List _ Nil)          -> pure $ List unit Nil
   -- Gen b (List (Cons e Nil)) -> evalListComp expr (Cons (Let b e) qs)
-  Gen b (List (Cons e es))  -> do
+  Gen b (List _ (Cons e es))  -> do
     listcomp1 <- evalListComp expr (Cons (Let b e) qs)
-    listcomp2 <- pure $ ListComp expr (Cons (Gen b (List es)) qs)
+    listcomp2 <- pure $ ListComp unit expr (Cons (Gen b (List unit es)) qs)
     case listcomp1 of
-      List (Cons x Nil) -> pure $ Binary Colon x listcomp2
-      _ -> pure $ Binary Append listcomp1 listcomp2
+      List _ (Cons x Nil) -> pure $ Binary unit Colon x listcomp2
+      _ -> pure $ Binary unit Append listcomp1 listcomp2
   -- Gen b (Binary Colon e (List Nil)) -> evalListComp expr (Cons (Let b e) qs)
-  Gen b (Binary Colon e es)  -> do
+  Gen b (Binary unit Colon e es)  -> do
     listcomp1 <- evalListComp expr (Cons (Let b e) qs)
-    listcomp2 <- pure $ ListComp expr (Cons (Gen b es) qs)
+    listcomp2 <- pure $ ListComp unit expr (Cons (Gen b es) qs)
     case listcomp1 of
-      List (Cons x Nil) -> pure $ Binary Colon x listcomp2
-      _ -> pure $ Binary Append listcomp1 listcomp2
+      List _ (Cons x Nil) -> pure $ Binary unit Colon x listcomp2
+      _ -> pure $ Binary unit Append listcomp1 listcomp2
   Let b e -> case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
     Right r -> do
       Tuple qs' r' <- runStateT (replaceQualifiers qs) r
       expr'        <- replace' r' expr
       case qs' of 
-          Nil -> pure $ List $ singleton expr'
-          _   -> pure $ ListComp expr' qs'
+          Nil -> pure $ List unit $ singleton expr'
+          _   -> pure $ ListComp unit expr' qs'
     Left l  -> throwError $ BindingError $ MatchingError b e
-  _ -> throwError $ CannotEvaluate (ListComp expr (Cons q qs))
+  _ -> throwError $ CannotEvaluate (ListComp unit expr (Cons q qs))
 
 -- replaces expressions in List-Comprehension-Qualifiers and considers overlapping bindings
 replaceQualifiers :: List ExprQual -> StateT (StrMap Expr) Evaluator (List ExprQual)
@@ -491,13 +353,12 @@ evalLetExpr (Cons (Tuple b e) rest) expr = case runMatcherM $ matchls' Map.empty
       _   -> do
         Tuple rest' r' <- runStateT (replaceBindings rest) r
         expr' <- replace' r' expr
-        pure $ LetExpr rest' expr'
+        pure $ LetExpr unit rest' expr'
 
 replaceBindings :: Bindings -> StateT (StrMap Expr) Evaluator Bindings
 replaceBindings = traverse $ \(Tuple bin expr) -> scope bin expr >>= \expr' -> pure $ Tuple bin expr'
 
 ------------------------------------------------------------------------------------------
->>>>>>> master
 
 binary :: Env -> Op -> Expr -> Expr -> Evaluator Expr
 binary env op = case op of
@@ -506,19 +367,11 @@ binary env op = case op of
   Add    -> aint Add (+)
   Sub    -> aint Sub (-)
   Colon  -> \e es -> case es of
-<<<<<<< HEAD
-    (List _ ls) -> return $ List unit $ e:ls
+    (List _ ls) -> pure $ List unit $ e:ls
     _         -> throwError $ BinaryOpError Colon e es
   Append -> \es1 es2 -> case (Tuple es1 es2) of
-    (Tuple (List _ ls1) (List _ ls2)) -> return $ List unit $ ls1 ++ ls2
+    (Tuple (List _ ls1) (List _ ls2)) -> pure $ List unit $ ls1 <> ls2
     _                                 -> throwError $ BinaryOpError Append es1 es2
-=======
-    (List ls) -> pure $ List $ e:ls
-    _         -> throwError $ BinaryOpError Colon e es
-  Append -> \es1 es2 -> case (Tuple es1 es2) of
-    (Tuple (List ls1) (List ls2)) -> pure $ List $ ls1 <> ls2
-    _                             -> throwError $ BinaryOpError Append es1 es2
->>>>>>> master
   Equ    -> ord Equ (==) (==) (==)
   Neq    -> ord Neq (/=) (/=) (/=)
   Leq    -> ord Leq (<=) (<=) (<=)
@@ -526,59 +379,32 @@ binary env op = case op of
   Geq    -> ord Geq (>=) (>=) (>=)
   Gt     -> ord Gt  (>)  (>)  (>)
   And    -> \e1 e2 -> case (Tuple e1 e2) of
-<<<<<<< HEAD
-    (Tuple (Atom _ (Bool false)) _                  )   -> return $ Atom unit $ Bool false
-    (Tuple _                     (Atom _ (Bool false))) -> return $ Atom unit $ Bool false
-    (Tuple (Atom _ (Bool true))  (Atom _ (Bool true)))  -> return $ Atom unit $ Bool true
+    (Tuple (Atom _ (Bool false)) _                  )   -> pure $ Atom unit $ Bool false
+    (Tuple _                     (Atom _ (Bool false))) -> pure $ Atom unit $ Bool false
+    (Tuple (Atom _ (Bool true))  (Atom _ (Bool true)))  -> pure $ Atom unit $ Bool true
     (Tuple _                   _                     )  -> throwError $ BinaryOpError And e1 e2
   Or     -> \e1 e2 -> case (Tuple e1 e2) of
-    (Tuple (Atom _ (Bool true))  _                   )  -> return $ Atom unit $ Bool true
-    (Tuple _                     (Atom _ (Bool true)))  -> return $ Atom unit $ Bool true
-    (Tuple (Atom _ (Bool false)) (Atom _ (Bool false))) -> return $ Atom unit $ Bool false
+    (Tuple (Atom _ (Bool true))  _                   )  -> pure $ Atom unit $ Bool true
+    (Tuple _                     (Atom _ (Bool true)))  -> pure $ Atom unit $ Bool true
+    (Tuple (Atom _ (Bool false)) (Atom _ (Bool false))) -> pure $ Atom unit $ Bool false
     (Tuple _                     _                   )  -> throwError $ BinaryOpError And e1 e2
-  Dollar -> (\f e -> return $ App unit f (singleton e))
-=======
-    (Tuple (Atom (Bool false)) _                  ) -> pure $ Atom $ Bool false
-    (Tuple _                   (Atom (Bool false))) -> pure $ Atom $ Bool false
-    (Tuple (Atom (Bool true))  (Atom (Bool true)) ) -> pure $ Atom $ Bool true
-    (Tuple _                   _                  ) -> throwError $ BinaryOpError And e1 e2
-  Or     -> \e1 e2 -> case (Tuple e1 e2) of
-    (Tuple (Atom (Bool true))  _                   ) -> pure $ Atom $ Bool true
-    (Tuple _                   (Atom (Bool true))  ) -> pure $ Atom $ Bool true
-    (Tuple (Atom (Bool false))  (Atom (Bool false))) -> pure $ Atom $ Bool false
-    (Tuple _                   _                   ) -> throwError $ BinaryOpError And e1 e2
-  Dollar -> (\f e -> pure $ App f (singleton e))
->>>>>>> master
+  Dollar -> (\f e -> pure $ App unit f (singleton e))
   Composition -> \e1 e2 -> throwError $ BinaryOpError And e1 e2
   InfixFunc name -> \e1 e2 -> apply env name (e1 : e2 : Nil)
   where
     aint :: Op -> (Int -> Int -> Int) -> Expr -> Expr -> Evaluator Expr
-<<<<<<< HEAD
-    aint _   f (Atom _ (AInt i)) (Atom _ (AInt j)) = return $ Atom unit $ AInt $ f i j
+    aint _   f (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom unit $ AInt $ f i j
     aint op  _ e1                e2                = throwError $ BinaryOpError op e1 e2
 
     ord :: Op -> (Int -> Int -> Boolean) -> (String -> String -> Boolean) -> (Boolean -> Boolean -> Boolean)-> Expr -> Expr -> Evaluator Expr
-    ord _  fi _  _  (Atom _ (AInt i))  (Atom _ (AInt j))  = return $ Atom unit $ Bool $ fi i j
-    ord _  _  fs _  (Atom _ (Char s1)) (Atom _ (Char s2)) = return $ Atom unit $ Bool $ fs s1 s2
-    ord _  _  _  fb (Atom _ (Bool b1)) (Atom _ (Bool b2)) = return $ Atom unit $ Bool $ fb b1 b2
-=======
-    aint _   f (Atom (AInt i)) (Atom (AInt j)) = pure $ Atom $ AInt $ f i j
-    aint op  _ e1              e2              = throwError $ BinaryOpError op e1 e2
-
-    ord :: Op -> (Int -> Int -> Boolean) -> (String -> String -> Boolean) -> (Boolean -> Boolean -> Boolean)-> Expr -> Expr -> Evaluator Expr
-    ord _  fi _  _  (Atom (AInt i))  (Atom (AInt j))  = pure $ Atom $ Bool $ fi i j
-    ord _  _  fs _  (Atom (Char s1)) (Atom (Char s2)) = pure $ Atom $ Bool $ fs s1 s2
-    ord _  _  _  fb (Atom (Bool b1)) (Atom (Bool b2)) = pure $ Atom $ Bool $ fb b1 b2
->>>>>>> master
+    ord _  fi _  _  (Atom _ (AInt i))  (Atom _ (AInt j))  = pure $ Atom unit $ Bool $ fi i j
+    ord _  _  fs _  (Atom _ (Char s1)) (Atom _ (Char s2)) = pure $ Atom unit $ Bool $ fs s1 s2
+    ord _  _  _  fb (Atom _ (Bool b1)) (Atom _ (Bool b2)) = pure $ Atom unit $ Bool $ fb b1 b2
     ord op _  _  _  e1               e2               = throwError $ BinaryOpError op e1 e2
 
 
 unary :: Env -> Op -> Expr -> Evaluator Expr
-<<<<<<< HEAD
-unary env Sub (Atom _ (AInt i)) = return $ Atom unit $ AInt (-i)
-=======
-unary env Sub (Atom (AInt i)) = pure $ Atom $ AInt (-i)
->>>>>>> master
+unary env Sub (Atom _ (AInt i)) = pure $ Atom unit $ AInt (-i)
 unary env op e = throwError $ UnaryOpError op e
 
 apply :: Env -> String -> (List Expr) -> Evaluator Expr
@@ -590,24 +416,14 @@ apply env name args = case Map.lookup name env of
 
 -- built-in div
 division :: Expr -> Expr -> Evaluator Expr 
-<<<<<<< HEAD
 division (Atom _ (AInt i)) (Atom _ (AInt 0)) = throwError DivByZero
-division (Atom _ (AInt i)) (Atom _ (AInt j)) = return $ Atom unit $ AInt $ div i j
-=======
-division (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
-division (Atom (AInt i)) (Atom (AInt j)) = pure $ Atom $ AInt $ div i j
->>>>>>> master
+division (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom unit $ AInt $ div i j
 division e1 e2 = throwError $ BinaryOpError (InfixFunc "div") e1 e2
 
 -- built-in mod
 modulo :: Expr -> Expr -> Evaluator Expr  
-<<<<<<< HEAD
 modulo (Atom _ (AInt i)) (Atom _ (AInt 0)) = throwError DivByZero
-modulo (Atom _ (AInt i)) (Atom _ (AInt j)) = return $ Atom unit $ AInt $ mod i j
-=======
-modulo (Atom (AInt i)) (Atom (AInt 0)) = throwError DivByZero
-modulo (Atom (AInt i)) (Atom (AInt j)) = pure $ Atom $ AInt $ mod i j
->>>>>>> master
+modulo (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom unit $ AInt $ mod i j
 modulo e1 e2 = throwError $ BinaryOpError (InfixFunc "mod") e1 e2
 
 
@@ -636,15 +452,9 @@ matchls' env bs es = execStateT (zipWithA (\b e -> match' b (evalToBinding env e
 
 match' :: Binding -> Expr -> StateT (StrMap Expr) Matcher Unit
 match' (Lit (Name name)) e                   = modify (Map.insert name e)
-<<<<<<< HEAD
 match' (Lit ba)          (Atom _ ea)         = case ba == ea of
-                                                 true  -> return unit
-                                                 false -> throwError $ MatchingError (Lit ba) (Atom unit ea)
-=======
-match' (Lit ba)          (Atom ea)           = case ba == ea of
                                                  true  -> pure unit
-                                                 false -> throwError $ MatchingError (Lit ba) (Atom ea)
->>>>>>> master
+                                                 false -> throwError $ MatchingError (Lit ba) (Atom unit ea)
 match' (Lit b)           e                   = throwError $ checkStrictness (Lit b) e
 
 match' (ConsLit b bs)    (Binary _ Colon e es) = match' b e *> match' bs es
@@ -687,10 +497,9 @@ replace' :: StrMap Expr -> Expr -> Evaluator Expr
 replace' subs = go
   where
   go expr = case expr of
-<<<<<<< HEAD
     a@(Atom _ (Name name)) -> case Map.lookup name subs of
-      Just subExpr -> return subExpr
-      Nothing      -> return a
+      Just subExpr -> pure subExpr
+      Nothing      -> pure a
     (List _ exprs)         -> List unit <$> (traverse go exprs)
     (NTuple _ exprs)       -> NTuple unit <$> (traverse go exprs)
     (Binary _ op e1 e2)    -> Binary unit <$> pure op <*> go e1 <*> go e2
@@ -698,33 +507,18 @@ replace' subs = go
     (SectL _ e op)         -> SectL unit <$> go e <*> pure op
     (SectR _ op e)         -> SectR unit <$> pure op <*> go e
     (IfExpr _ ce te ee)    -> IfExpr unit <$> go ce <*> go te <*> go ee
+    (ArithmSeq _ ce te ee) -> ArithmSeq unit <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
     (Lambda _ binds body)  -> (avoidCapture subs binds) *> (Lambda unit <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
     (App _ func exprs)     -> App unit <$> go func <*> traverse go exprs
-    e                    -> return e
-=======
-    a@(Atom (Name name)) -> case Map.lookup name subs of
-      Just subExpr -> pure subExpr
-      Nothing      -> pure a
-    (List exprs)          -> List <$> (traverse go exprs)
-    (NTuple exprs)        -> NTuple <$> (traverse go exprs)
-    (Binary op e1 e2)     -> Binary <$> pure op <*> go e1 <*> go e2
-    (Unary op e)          -> Unary <$> pure op <*> go e
-    (SectL e op)          -> SectL <$> go e <*> pure op
-    (SectR op e)          -> SectR <$> pure op <*> go e
-    (IfExpr ce te ee)     -> IfExpr <$> go ce <*> go te <*> go ee
-    (ArithmSeq ce te ee)  -> ArithmSeq <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
-    (Lambda binds body)   -> (avoidCapture subs binds) *> (Lambda <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
-    (App func exprs)      -> App <$> go func <*> traverse go exprs
-    (ListComp expr quals) -> do
+    (ListComp _ expr quals) -> do
       Tuple quals' subs' <- runStateT (replaceQualifiers quals) subs
       expr'              <- replace' subs' expr
-      pure $ ListComp expr' quals'
-    (LetExpr binds expr)  -> do
+      pure $ ListComp unit expr' quals'
+    (LetExpr _ binds expr)  -> do
       Tuple binds' subs' <- runStateT (replaceBindings binds) subs
       expr'              <- replace' subs' expr
-      pure $ LetExpr binds' expr'
+      pure $ LetExpr unit binds' expr'
     e                     -> pure e
->>>>>>> master
 
 avoidCapture :: StrMap Expr -> (List Binding) -> Evaluator Unit
 avoidCapture subs binds = case intersect (concatMap freeVariables $ Map.values subs) (boundNames' binds) of

@@ -5,7 +5,7 @@ import Data.List (length)
 import Data.Traversable (for)
 
 import Test.Parser as Parser
--- import Test.Evaluator as Evaluator
+import Test.Evaluator as Evaluator
 -- import Test.TypeChecker as TypeChecker
 
 import Control.Monad.Eff (Eff)
@@ -21,14 +21,14 @@ main = do
   log $ "  ...found " <> show (length parserLog) <> " errors"
   for parserLog log
 
-  -- log $ "Running evaluator tests..."
-  -- let evaluatorLog = execWriter Evaluator.runTests
-  -- log $ "  ...found " <> show (length evaluatorLog) <> " errors"
-  -- for evaluatorLog log
+  log $ "Running evaluator tests..."
+  let evaluatorLog = execWriter Evaluator.runTests
+  log $ "  ...found " <> show (length evaluatorLog) <> " errors"
+  for evaluatorLog log
 
   -- TypeChecker.runTests
 
-  let errorCount = length parserLog -- + length evaluatorLog
+  let errorCount = length parserLog + length evaluatorLog
   if errorCount == 0
     then do
       log $ "All tests succesfull"
