@@ -4,6 +4,7 @@ import Prelude
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe)
 import Data.Tuple (Tuple)
+import Data.Bifunctor (rmap)
 
 -- | Operators
 -- |
@@ -78,42 +79,86 @@ derive instance ordAtom :: Ord Atom
 -- |
 -- | The basic expressions the `Parser` and `Evaluator` recognize.
 
-data Tree a b c = 
-    Atom      c a
-  | List      c (List (Tree a b c))
-  | NTuple    c (List (Tree a b c))
-  | Binary    c Op (Tree a b c) (Tree a b c)
-  | Unary     c Op (Tree a b c)
-  | SectL     c (Tree a b c) Op
-  | SectR     c Op (Tree a b c)
-  | PrefixOp  c Op
-  | IfExpr    c (Tree a b c) (Tree a b c) (Tree a b c)
-  | ArithmSeq c (Tree a b c) (Maybe (Tree a b c)) (Maybe (Tree a b c))
-  | LetExpr   c (List (Tuple b (Tree a b c))) (Tree a b c)
-  | Lambda    c (List b) (Tree a b c)
-  | App       c (Tree a b c) (List (Tree a b c))
-  | ListComp  c (Tree a b c) (List (Qual b (Tree a b c)))
+data Tree a b c d =
+    Atom      d a
+  | List      d (List (Tree a b c d))
+  | NTuple    d (List (Tree a b c d))
+  | Binary    d c (Tree a b c d) (Tree a b c d)
+  | Unary     d c (Tree a b c d)
+  | SectL     d (Tree a b c d) c
+  | SectR     d c (Tree a b c d)
+  | PrefixOp  d c
+  | IfExpr    d (Tree a b c d) (Tree a b c d) (Tree a b c d)
+  | ArithmSeq d (Tree a b c d) (Maybe (Tree a b c d)) (Maybe (Tree a b c d))
+  | LetExpr   d (List (Tuple b (Tree a b c d))) (Tree a b c d)
+  | Lambda    d (List b) (Tree a b c d)
+  | App       d (Tree a b c d) (List (Tree a b c d))
+  | ListComp  d (Tree a b c d) (List (QualTree b (Tree a b c d) d))
 
-derive instance eqTree :: (Eq a, Eq b, Eq c) => Eq (Tree a b c)
+data QualTree b e d = Gen d b e
+                    | Let d b e
+                    | Guard d e
 
-type Expr = Tree Atom Binding Unit
+derive instance eqTree :: (Eq a, Eq b, Eq c, Eq d) => Eq (Tree a b c d)
 
-data Qual b e = Gen b e | Let b e | Guard e
+instance functorQualTree :: Functor (QualTree b e) where
+  map f (Gen d b e) = Gen (f d) b e
+  map f (Let d b e) = Let (f d) b e
+  map f (Guard d e) = Guard (f d) e
 
-data QualTree b e t = TGen b e t
-                    | TLet b e t
-                    | TGuard e t 
+instance functorTree :: Functor (Tree a b c) where
+  map f (Atom c a) = Atom (f c) a
+  map f (List c xs) = List (f c) (map f <$> xs)
+  map f (NTuple c xs) = List (f c) (map f <$> xs)
+  map f (Binary c op t1 t2) = Binary (f c) op (map f t1) (map f t2)
+  map f (Unary c op t) = Unary (f c) op (map f t)
+  map f (SectL c t op) = SectL (f c) (map f t) op
+  map f (SectR c op t) = SectR (f c) op (map f t)
+  map f (PrefixOp c op) = PrefixOp (f c) op
+  map f (IfExpr c t1 t2 t3) = IfExpr (f c) (map f t1) (map f t2) (map f t3)
+  map f (ArithmSeq c t1 t2 t3) = ArithmSeq (f c) (map f t1) (map f <$> t2) (map f <$> t3)
+  map f (LetExpr c bs t) = LetExpr (f c) (map (rmap (map f)) bs) (map f t)
+  map f (Lambda c bs t) = Lambda (f c) bs (map f t)
+  map f (App c t ts) = App (f c) (map f t) (map f <$> ts)
+  map f (ListComp c t ts) = ListComp (f c) (map f t) (map go ts)
+    where
+    go (Gen d b e) = Gen (f d) b (map f e)
+    go (Let d b e) = Let (f d) b (map f e)
+    go (Guard d e) = Guard (f d) (map f e)
 
-type ExprQual = Qual Binding Expr
+extract :: forall a b c d. Tree a b c d -> d
+extract (Atom c _) = c
+extract (List c _) = c
+extract (NTuple c _) = c
+extract (Binary c _ _ _) = c
+extract (Unary c _ _) = c
+extract (SectL c _ _) = c
+extract (SectR c _ _) = c
+extract (PrefixOp c _) = c
+extract (IfExpr c _ _ _) = c
+extract (ArithmSeq c _ _ _) = c
+extract (LetExpr c _ _) = c
+extract (Lambda c _ _) = c
+extract (App c _ _) = c
+extract (ListComp c _ _) = c
+
+extractType :: TypeTree -> Type
+extractType = extract
+
+extractBindingType:: TypeBinding -> Type
+extractBindingType (TLit t)         = t
+extractBindingType (TConsLit _ _ t) = t
+extractBindingType (TListLit _ t)   = t
+extractBindingType (TNTupleLit _ t) = t
+
+type Expr = Tree Atom Binding Op Unit
 
 -- last type para is type of expr at this level
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
 
-type TypeTree = Tree Unit TypeBinding Type
+type TypeTree = Tree Unit TypeBinding Type Type
 
-type IndexTree = Tree Unit IBinding Int
-
-type TypeQual  = QualTree TypeBinding TypeTree Type
+type IndexTree = Tree Unit IBinding Op Int
 
 type IndexQual = QualTree IBinding IndexTree Int
 
@@ -148,7 +193,7 @@ data TypeError
   | UnknownError String
   | NoInstanceOfEnum Type
 
-derive instance eqQual :: (Eq b, Eq e) => Eq (Qual b e)
+-- derive instance eqQual :: (Eq b, Eq e) => Eq (Qual b e)
 
 derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c) 
 
@@ -175,7 +220,6 @@ type Output = {
     idTree :: IndexTree
   }
 
-
 instance showAtom :: Show Atom where
   show atom = case atom of
     AInt number -> "AInt " <> show number
@@ -183,18 +227,18 @@ instance showAtom :: Show Atom where
     Char string -> "Char " <> show string
     Name string -> "Name " <> show string
 
-instance showQual :: (Show b, Show e) => Show (Qual b e) where
-  show q = case q of
-    Gen b e -> "Gen (" <> show b <> " " <> show e <> ")"
-    Let b e -> "Let (" <> show b <> " " <> show e <> ")"
-    Guard e -> "Guard (" <> show e <> ")"
+-- instance showQual :: (Show b, Show e) => Show (Qual b e) where
+--   show q = case q of
+--     Gen b e -> "Gen (" <> show b <> " " <> show e <> ")"
+--     Let b e -> "Let (" <> show b <> " " <> show e <> ")"
+--     Guard e -> "Guard (" <> show e <> ")"
 
 instance showQualTree :: (Show a, Show b, Show c) => Show (QualTree a b c) where
-  show (TGen a b c) = "TGen (" <> show a <> " " <> show b <> " " <> show c <> ")"
-  show (TLet a b c) = "TLet (" <> show a <> " " <> show b <> " " <> show c <> ")"
-  show (TGuard a c)  = "TGuard (" <> show a <> " " <> show c <> ")"
+  show (Gen a b c) = "Gen (" <> show a <> " " <> show b <> " " <> show c <> ")"
+  show (Let a b c) = "Let (" <> show a <> " " <> show b <> " " <> show c <> ")"
+  show (Guard a c)  = "Guard (" <> show a <> " " <> show c <> ")"
 
-instance showTree :: (Show a, Show b, Show c) => Show (Tree a b c) where
+instance showTree :: (Show a, Show b, Show c, Show d) => Show (Tree a b c d) where
   show tree = case tree of
     Atom c atom         -> "(Atom " <> show c <> " "<> show atom <> ")"
     List c ls           -> "(List " <> show c <> " "<> show ls <>  ")"
