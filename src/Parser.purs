@@ -24,7 +24,7 @@ import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
 import Text.Parsing.Parser.Pos (initialPos)
 
-import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), Qual(..), ExprQual)
+import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), ExprQual)
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
@@ -319,13 +319,13 @@ listComp expr = do
           b <- indent binding
           indent $ char '='
           e <- indent expr
-          pure $ Let b e
+          pure $ Let unit b e
         parseGen = do
           b <- ilexe binding
           indent $ string "<-"
           e <- indent expr
-          pure $ Gen b e
-        parseGuard = ilexe expr >>= (pure <<< Guard)
+          pure $ Gen unit b e
+        parseGuard = ilexe expr >>= (pure <<< Guard unit)
 
 -- | Parser for strings ("example")
 charList :: forall m. (Monad m) => ParserT String m Expr

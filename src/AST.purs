@@ -152,6 +152,7 @@ extractBindingType (TListLit _ t)   = t
 extractBindingType (TNTupleLit _ t) = t
 
 type Expr = Tree Atom Binding Op Unit
+type ExprQual = QualTree Binding Expr Unit
 
 -- last type para is type of expr at this level
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)

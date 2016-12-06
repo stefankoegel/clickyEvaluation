@@ -21,7 +21,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.State.Trans (StateT, get, modify, runStateT, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
-import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), Qual(..), ExprQual)
+import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), ExprQual)
 
 data EvalError =
     IndexError Int Int
@@ -167,9 +167,9 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
 
     evalToBindingQual :: Env -> ExprQual -> Binding -> ExprQual
     evalToBindingQual env qual binding = case qual of
-      Let bin expr -> Let bin (evalToBinding env expr bind)      
-      Gen bin expr -> Gen bin (evalToBinding env expr bind)
-      Guard expr   -> Guard (evalToBinding env expr bind)
+      Let _ bin expr -> Let unit bin (evalToBinding env expr bind)      
+      Gen _ bin expr -> Gen unit bin (evalToBinding env expr bind)
+      Guard _ expr   -> Guard unit (evalToBinding env expr bind)
 
 wrapLambda :: (List Binding) -> (List Expr) -> Expr -> Evaluator Expr
 wrapLambda binds args body =
@@ -290,24 +290,24 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
 evalListComp :: Expr -> List ExprQual -> Evaluator Expr
 evalListComp expr Nil         = pure $ List unit $ singleton expr
 evalListComp expr (Cons q qs) = case q of
-  Guard (Atom _ (Bool false)) -> pure $ List unit Nil
-  Guard (Atom _ (Bool true))  -> if null qs then pure (List unit (singleton expr)) else pure (ListComp unit expr qs)
-  Gen _ (List _ Nil)          -> pure $ List unit Nil
-  -- Gen b (List (Cons e Nil)) -> evalListComp expr (Cons (Let b e) qs)
-  Gen b (List _ (Cons e es))  -> do
-    listcomp1 <- evalListComp expr (Cons (Let b e) qs)
-    listcomp2 <- pure $ ListComp unit expr (Cons (Gen b (List unit es)) qs)
+  Guard _ (Atom _ (Bool false)) -> pure $ List unit Nil
+  Guard _ (Atom _ (Bool true))  -> if null qs then pure (List unit (singleton expr)) else pure (ListComp unit expr qs)
+  Gen _ _ (List _ Nil)          -> pure $ List unit Nil
+  -- Gen _ b (List (Cons e Nil)) -> evalListComp expr (Cons (Let unit b e) qs)
+  Gen _ b (List _ (Cons e es))  -> do
+    listcomp1 <- evalListComp expr (Cons (Let unit b e) qs)
+    listcomp2 <- pure $ ListComp unit expr (Cons (Gen unit b (List unit es)) qs)
     case listcomp1 of
       List _ (Cons x Nil) -> pure $ Binary unit Colon x listcomp2
       _ -> pure $ Binary unit Append listcomp1 listcomp2
-  -- Gen b (Binary Colon e (List Nil)) -> evalListComp expr (Cons (Let b e) qs)
-  Gen b (Binary unit Colon e es)  -> do
-    listcomp1 <- evalListComp expr (Cons (Let b e) qs)
-    listcomp2 <- pure $ ListComp unit expr (Cons (Gen b es) qs)
+  -- Gen _ b (Binary Colon e (List Nil)) -> evalListComp expr (Cons (Let unit b e) qs)
+  Gen _ b (Binary unit Colon e es)  -> do
+    listcomp1 <- evalListComp expr (Cons (Let unit b e) qs)
+    listcomp2 <- pure $ ListComp unit expr (Cons (Gen unit b es) qs)
     case listcomp1 of
       List _ (Cons x Nil) -> pure $ Binary unit Colon x listcomp2
       _ -> pure $ Binary unit Append listcomp1 listcomp2
-  Let b e -> case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
+  Let _ b e -> case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
     Right r -> do
       Tuple qs' r' <- runStateT (replaceQualifiers qs) r
       expr'        <- replace' r' expr
@@ -323,12 +323,12 @@ replaceQualifiers = traverse replaceQual
   where
     replaceQual :: ExprQual -> StateT (StrMap Expr) Evaluator ExprQual
     replaceQual qual = case qual of
-      Gen b e -> scope b e >>= \e' -> pure $ Gen b e'
-      Let b e -> scope b e >>= \e' -> pure $ Let b e'
-      Guard e -> do
+      Gen _ b e -> scope b e >>= \e' -> pure $ Gen unit b e'
+      Let _ b e -> scope b e >>= \e' -> pure $ Let unit b e'
+      Guard _ e -> do
         sub <- get
         e'  <- lift $ replace' sub e
-        pure $ Guard e'
+        pure $ Guard unit e'
 
 scope :: Binding -> Expr -> StateT (StrMap Expr) Evaluator Expr
 scope b e = do
