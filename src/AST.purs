@@ -89,7 +89,7 @@ data Tree a b c =
   | PrefixOp  c Op
   | IfExpr    c (Tree a b c) (Tree a b c) (Tree a b c)
   | ArithmSeq c (Tree a b c) (Maybe (Tree a b c)) (Maybe (Tree a b c))
-  | LetExpr   c (List (Tuple Binding (Tree a b c))) (Tree a b c)
+  | LetExpr   c (List (Tuple b (Tree a b c))) (Tree a b c)
   | Lambda    c (List b) (Tree a b c)
   | App       c (Tree a b c) (List (Tree a b c))
   | ListComp  c (Tree a b c) (List (Qual b (Tree a b c)))
