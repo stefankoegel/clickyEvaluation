@@ -1,16 +1,14 @@
 module Test.AST where
 
 import Prelude
-import Data.List (List(..), singleton)
+import Data.List (List, singleton)
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 
-import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
-
 import Control.Monad.Writer (Writer, tell)
 
-import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), foldTree, idFoldTree, Expr)
+import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), idFoldTree, Expr)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
@@ -40,20 +38,20 @@ runTests = do
   test "idFoldTree_app" (idFoldTree app) app
   test "idFoldTree_listcomp" (idFoldTree listcomp) listcomp
 
-  test "fmap_atom" (fmap id atom) atom
-  test "fmap_list" (fmap id list) list
-  test "fmap_ntuple" (fmap id ntuple) ntuple
-  test "fmap_binary" (fmap id binary) binary
-  test "fmap_unary" (fmap id unary) unary
-  test "fmap_sectl" (fmap id sectl) sectl
-  test "fmap_sectr" (fmap id sectr) sectr
-  test "fmap_prefixop" (fmap id prefixop) prefixop
-  test "fmap_ifexpr" (fmap id ifexpr) ifexpr
-  test "fmap_arithmseq" (fmap id arithmseq) arithmseq
-  test "fmap_letexpr" (fmap id letexpr) letexpr
-  test "fmap_lambda" (fmap id lambda) lambda
-  test "fmap_app" (fmap id app) app
-  test "fmap_listcomp" (fmap id listcomp) listcomp
+  test "map_atom" (map id atom) atom
+  test "map_list" (map id list) list
+  test "map_ntuple" (map id ntuple) ntuple
+  test "map_binary" (map id binary) binary
+  test "map_unary" (map id unary) unary
+  test "map_sectl" (map id sectl) sectl
+  test "map_sectr" (map id sectr) sectr
+  test "map_prefixop" (map id prefixop) prefixop
+  test "map_ifexpr" (map id ifexpr) ifexpr
+  test "map_arithmseq" (map id arithmseq) arithmseq
+  test "map_letexpr" (map id letexpr) letexpr
+  test "map_lambda" (map id lambda) lambda
+  test "map_app" (map id app) app
+  test "map_listcomp" (map id listcomp) listcomp
 
 
 atom :: Expr
