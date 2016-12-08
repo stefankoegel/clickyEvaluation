@@ -1,7 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (<<<))
-
+import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (<<<), Unit, unit)
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
 import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Apply (lift2)
@@ -19,7 +18,7 @@ import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.String (toCharArray, fromCharArray)
 import Data.Char as Char
 
-import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Qual(..), ExprQual, QualTree(..), TypeQual, Op(..), TVar, Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..), extractType, extractBindingType, prettyPrintType)
+import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), QualTree(..), ExprQualTree(..), Tree(..), Op(..), TVar, Type(..), TypeBinding(..), TypeTree(..),TypeError(..), TypeQual(..), extract, extractBindingType, prettyPrintType)
 
 data Scheme = Forall (List TVar) Type
 
@@ -79,54 +78,19 @@ instance subTupTVarScheme :: Substitutable (Tuple String Scheme) where
 
   ftv (Tuple _ b) = ftv b
 
-instance subQual :: (Substitutable b, Substitutable e) => Substitutable (Qual b e) where
-  apply s (Gen b e) = Gen (apply s b) (apply s e)
-  apply s (Let b e) = Let (apply s b) (apply s e)
-  apply s (Guard e) = Guard (apply s e)
-
-  ftv (Gen _ t) = ftv t
-  ftv (Let _ t) = ftv t
-  ftv (Guard t) = ftv t
-
 instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => Substitutable (QualTree a b c) where
-  apply s (TGen a b c) = TGen (apply s a) (apply s b) (apply s c)
-  apply s (TLet a b c) = TLet (apply s a) (apply s b) (apply s c)
-  apply s (TGuard a c) = TGuard (apply s a) (apply s c)
+  apply s (Gen a b c) = Gen (apply s a) (apply s b) (apply s c)
+  apply s (Let a b c) = Let (apply s a) (apply s b) (apply s c)
+  apply s (Guard a c) = Guard (apply s a) (apply s c)
 
-  ftv (TGen a b c) = ftv c
-  ftv (TLet a b c) = ftv c
-  ftv (TGuard a c) = ftv c
+  ftv (Gen a b c) = ftv c
+  ftv (Let a b c) = ftv c
+  ftv (Guard a c) = ftv c
 
-instance subTypeTree :: Substitutable TypeTree where
-  apply s (TAtom t) = TAtom $ apply s t
-  apply s (TListTree l t) = TListTree (apply s l) (apply s t)
-  apply s (TNTuple l t) = TNTuple (apply s l) (apply s t)
-  apply s (TBinary op tt1 tt2 t) =  TBinary (apply s op) (apply s tt1) (apply s tt2) (apply s t)
-  apply s (TUnary op tt t) = TUnary (apply s op) (apply s tt) (apply s t)
-  apply s (TSectL tt op t) = TSectL (apply s tt) (apply s op) (apply s t)
-  apply s (TSectR op tt t) = TSectR (apply s op) (apply s tt) (apply s t)
-  apply s (TPrefixOp t) = TPrefixOp $ apply s t
-  apply s (TIfExpr tt1 tt2 tt3 t) = TIfExpr (apply s tt1) (apply s tt2) (apply s tt3) (apply s t)
-  apply s (TArithmSeq st by end t) = TArithmSeq (apply s st) ((apply s) <$> by) ((apply s) <$> end) (apply s t)
-  apply s (TLetExpr bin tt t) = TLetExpr ((\(Tuple x y) -> (Tuple (apply s x) (apply s y))) <$> bin) (apply s tt) (apply s t)
-  apply s (TLambda lb tt t) = TLambda (apply s lb) (apply s tt) (apply s t)
-  apply s (TApp tt1 l t) = TApp (apply s tt1) (apply s l) (apply s t)
-  apply s (TListComp tt tts t) = TListComp (apply s tt) (apply s tts) (apply s t)
-
-  ftv (TAtom t)  = ftv t
-  ftv (TListTree _ t)  = ftv t
-  ftv (TNTuple _ t)  = ftv t
-  ftv (TBinary _ _ _ t)  = ftv t
-  ftv (TUnary _ _ t)  = ftv t
-  ftv (TSectL _ _ t)  = ftv t
-  ftv (TSectR _ _ t)  = ftv t
-  ftv (TPrefixOp t)  = ftv t
-  ftv (TIfExpr _ _ _ t)  = ftv t
-  ftv (TArithmSeq _ _ _ t) = ftv t
-  ftv (TLetExpr _ _ t)  = ftv t
-  ftv (TLambda _ _ t)  = ftv t
-  ftv (TApp _ _ t)  = ftv t
-  ftv (TListComp _ _ t) = ftv t
+-- instance subTypeTree :: Substitutable TypeTree where
+instance subTypeTree :: Substitutable (Tree Unit TypeBinding Type Type) where
+  apply s = map (apply s)
+  ftv typeTree = ftv (extract typeTree)
 
 instance subTypeBinding :: Substitutable TypeBinding where
   apply s (TLit t) = TLit $ apply s t
@@ -243,7 +207,7 @@ lookupEnv (TypeEnv env) tvar = do
 inferType :: TypeEnv -> Expr -> Infer (Tuple Subst Type)
 inferType env exp = do
   Tuple s t <- infer env exp
-  let t' = extractType t
+  let t' = extract t
   pure $ Tuple s t'
 
 data InferResult a = InferResult {subst :: Subst, envi :: TypeEnv, result :: a}
@@ -252,9 +216,9 @@ inferBinding :: TypeEnv -> Binding -> Expr -> Infer (InferResult (Tuple TypeBind
 inferBinding env bin e1 = do
   Tuple s1 t1 <- infer env e1
   Tuple list typ <- extractBinding bin
-  s2 <- unify (extractBindingType typ) (extractType t1)
+  s2 <- unify (extractBindingType typ) (extract t1)
   let env' = apply (s1 `compose` s2) env
-      t'   = generalize env' (apply (s1 `compose` s2) (extractType t1))
+      t'   = generalize env' (apply (s1 `compose` s2) (extract t1))
       env'' = apply s2 (foldr (\a b -> extend b a) env' list)
   pure $ InferResult {subst: s2, envi: env'', result: (Tuple typ t1)}
 
@@ -269,76 +233,83 @@ inferBindings env (Cons (Tuple bin expr) rest) = do
   let sRes = s `compose` sr
   pure $ InferResult {subst: sRes, envi: er, result: (Cons res resr)}
 
+-- | Given a type construct a type tree atom.
+tAtom :: Type -> TypeTree
+tAtom t = Atom t unit
+
+-- tLambda :: Type -> TypeTree
+-- tLambda t xs e = Lambda t xs e
+
 infer :: TypeEnv -> Expr -> Infer (Tuple Subst TypeTree)
 infer env ex = case ex of
-  Atom (Name name) -> case name of
-    "mod" -> pure $ Tuple nullSubst (TAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
-    "div" -> pure $ Tuple nullSubst (TAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
+  Atom _ (Name name) -> case name of
+    "mod" -> pure $ Tuple nullSubst (tAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
+    "div" -> pure $ Tuple nullSubst (tAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
     _     -> do
       Tuple s t <- lookupEnv env name
-      pure (Tuple s $ TAtom t)
-  Atom (Bool _) -> pure (Tuple nullSubst $ TAtom (TypCon "Bool"))
-  Atom (Char _) -> pure (Tuple nullSubst $ TAtom (TypCon "Char"))
-  Atom (AInt _) -> pure (Tuple nullSubst $ TAtom (TypCon "Int"))
+      pure (Tuple s $ tAtom t)
+  Atom _ (Bool _) -> pure (Tuple nullSubst $ tAtom (TypCon "Bool"))
+  Atom _ (Char _) -> pure (Tuple nullSubst $ tAtom (TypCon "Char"))
+  Atom _ (AInt _) -> pure (Tuple nullSubst $ tAtom (TypCon "Int"))
 
-  Lambda (Cons bin Nil) e -> do
+  Lambda _ (Cons bin Nil) e -> do
     Tuple envL tvB <- extractBinding bin
     let env' = env `extendMultiple` envL
     Tuple s1 t1 <- infer env' e
-    pure (Tuple s1 $ apply s1 (TLambda (Cons tvB Nil) t1 $ (extractBindingType tvB) `TypArr` (extractType t1)))
+    pure (Tuple s1 $ apply s1 (Lambda (extractBindingType tvB `TypArr` extract t1) (tvB : Nil) t1))
 
-  Lambda (Cons bin xs) e -> do
+  Lambda _ (Cons bin xs) e -> do
     Tuple envL tvB <- extractBinding bin
     let env' = env `extendMultiple` envL
-    inferred <- infer env' (Lambda xs e)
+    inferred <- infer env' (Lambda unit xs e)
     case inferred of
-      (Tuple s1 (TLambda tb tt t1)) ->
-        pure (Tuple s1 $ apply s1 (TLambda (Cons tvB tb) tt ((extractBindingType tvB) `TypArr` t1)))
+      (Tuple s1 (Lambda t1 tb tt)) ->
+        pure (Tuple s1 $ apply s1 (Lambda (extractBindingType tvB `TypArr` t1) (tvB : tb) tt))
       _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
 
-  Lambda Nil e -> infer env e
+  Lambda _ Nil e -> infer env e
 
   -- one element list
-  App e1 (Cons e2 Nil) -> do
+  App _ e1 (Cons e2 Nil) -> do
     tv <- fresh
     Tuple s1 t1 <- infer env e1
     Tuple s2 t2 <- infer (apply s1 env) e2
-    s3       <- unify (apply (s1  `compose` s2) (extractType t1)) (TypArr (extractType t2) tv)
-    pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 $ TApp t1 (Cons t2 Nil) tv))
+    s3       <- unify (apply (s1  `compose` s2) (extract t1)) (TypArr (extract t2) tv)
+    pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 $ App tv t1 (Cons t2 Nil)))
 
-  App e1 (Cons e2 xs) -> do
-    inferred <- infer env  (App (App e1 (Cons e2 Nil)) xs)
+  App _ e1 (Cons e2 xs) -> do
+    inferred <- infer env (App unit (App unit e1 (Cons e2 Nil)) xs)
     case inferred of
-      Tuple s (TApp (TApp tt lt _) lt' t') -> pure $ Tuple s (TApp tt (lt<>lt') t')
+      Tuple s (App t' (App _ tt lt) lt') -> pure $ Tuple s (App t' tt (lt<>lt'))
       _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
 
-  App _ Nil -> throwError $ UnknownError "congrats you found a bug TypeChecker.infer (App Nil)"
+  App _ _ Nil -> throwError $ UnknownError "congrats you found a bug TypeChecker.infer (App Nil)"
 
-  ListComp expr quals -> do
+  ListComp _ expr quals -> do
     Tuple sq (Tuple tq env') <- inferQuals env quals
     --let env' = apply sq env
     Tuple s t <- infer env' expr
     let s' = sq `compose` s
-    pure $ Tuple s' $ apply s' $ TListComp t tq (AD (TList (extractType t)))
+    pure $ Tuple s' $ apply s' $ ListComp (AD (TList (extract t))) t tq
 
-  LetExpr bindings expr -> case overlappingBindings (fst <$> bindings) of
+  LetExpr _ bindings expr -> case overlappingBindings (fst <$> bindings) of
     Cons x _ -> throwError $ UnknownError $ "Conflicting definitions for \'" <> x <> "\'"
     Nil      -> do
       InferResult {subst: sb, envi: envb, result: resb} <- inferBindings env bindings
       Tuple se te <- infer envb expr
       let s = sb `compose` se
-      pure $ Tuple s $ apply s $ TLetExpr resb te (extractType te)
+      pure $ Tuple s $ apply s $ LetExpr (extract te) resb te
 
-  IfExpr cond tr fl -> do
+  IfExpr _ cond tr fl -> do
     tvar <- freshTVar
     let t = TypVar tvar
     let env' = env `extend` (Tuple "if" (Forall (tvar : Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
-    inferred <- infer env' (App (Atom $ Name "if") (cond : tr : fl : Nil))
+    inferred <- infer env' (App unit (Atom unit (Name "if")) (cond : tr : fl : Nil))
     case inferred of
-      Tuple s (TApp tt (Cons tcond (Cons ttr (Cons tfl Nil))) ift) -> pure (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
+      Tuple s (App ifType tt (Cons tcond (Cons ttr (Cons tfl Nil)))) -> pure (Tuple s $ apply s (IfExpr ifType tcond ttr tfl))
       _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
 
-  ArithmSeq begin jstep jend -> do
+  ArithmSeq _ begin jstep jend -> do
     Tuple s1 t1 <- infer env begin
     tup2 <- traverse (infer env) jstep
     tup3 <- traverse (infer env) jend
@@ -347,107 +318,107 @@ infer env ex = case ex of
     let s2 = maybe nullSubst fst tup2
     let s3 = maybe nullSubst fst tup3
     let s  = s1 `compose` s2 `compose` s3
-    let tt = extractType t1
+    let tt = extract t1
     let typeMissMatch m1 m2 = fromMaybe (UnknownError "congrats you found a bug TypeChecker.infer (ArithmSeq begin jstep jend)") (normalizeTypeError <$> lift2 UnificationFail m1 m2)
-    ifM (pure (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t2))))
-      (throwError (typeMissMatch (Just tt) (extractType <$> t2)))
-      (ifM (pure (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t3))))
-        (throwError (typeMissMatch (Just tt) (extractType <$> t3)))
-        (ifM (pure (fromMaybe false (lift2 (/=) (extractType <$> t2) (extractType <$> t3))))
-          (throwError (typeMissMatch (extractType <$> t2) (extractType <$> t3)))
+    ifM (pure (fromMaybe false (lift2 (/=) (Just tt) (extract <$> t2))))
+      (throwError (typeMissMatch (Just tt) (extract <$> t2)))
+      (ifM (pure (fromMaybe false (lift2 (/=) (Just tt) (extract <$> t3))))
+        (throwError (typeMissMatch (Just tt) (extract <$> t3)))
+        (ifM (pure (fromMaybe false (lift2 (/=) (extract <$> t2) (extract <$> t3))))
+          (throwError (typeMissMatch (extract <$> t2) (extract <$> t3)))
           (case tt of
-            TypCon "Int"  -> pure $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
-            TypCon "Bool" -> pure $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
-            TypCon "Char" -> pure $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
+            TypCon "Int"  -> pure $ Tuple s $ apply s $ ArithmSeq (AD (TList tt)) t1 t2 t3
+            TypCon "Bool" -> pure $ Tuple s $ apply s $ ArithmSeq (AD (TList tt)) t1 t2 t3
+            TypCon "Char" -> pure $ Tuple s $ apply s $ ArithmSeq (AD (TList tt)) t1 t2 t3
             _             -> throwError $ NoInstanceOfEnum tt)))
 
-  PrefixOp op -> do
+  PrefixOp _ op -> do
     Tuple s t <- inferOp env op
-    pure (Tuple s $ TPrefixOp t)
+    pure (Tuple s $ PrefixOp t t)
 
-  SectL e op -> do
+  SectL _ e op -> do
     tv <- fresh
     Tuple s1 t1 <- inferOp env op
     Tuple s2 t2 <- infer (apply s1 env) e
-    s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
-    pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TSectL t2 t1 tv)))
+    s3       <- unify (apply s2 t1) (TypArr (extract t2) tv)
+    pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (SectL tv t2 t1)))
 
-  SectR op e -> do
+  SectR _ op e -> do
     inferredOp <- inferOp env op
     case inferredOp of
       Tuple s1 t1@(TypArr a (TypArr b c)) -> do
         Tuple s2 t2 <- infer env e
-        s3       <- unify (apply s2 b) (extractType t2)
+        s3       <- unify (apply s2 b) (extract t2)
         let s4 = (s3 `compose` s2 `compose` s1)
-        pure (Tuple s4 (apply s4 (TSectR t1 t2 (TypArr a c))))
+        pure (Tuple s4 (apply s4 (SectR (TypArr a c) t1 t2)))
       _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
 
-  Unary (Sub) e -> do
+  Unary _ (Sub) e -> do
       tv <- fresh
       let t1 = (TypCon "Int" `TypArr` TypCon "Int")
       Tuple s2 t2 <- infer env e
-      s3 <- unify (apply s2 t1) (TypArr (extractType t2) tv)
-      pure (Tuple (s3 `compose` s2) (apply s3 (TUnary t1 t2 tv)))
+      s3 <- unify (apply s2 t1) (TypArr (extract t2) tv)
+      pure (Tuple (s3 `compose` s2) (apply s3 (Unary tv t1 t2)))
 
-  Unary op e -> do
+  Unary _ op e -> do
     tv <- fresh
     Tuple s1 t1 <- inferOp env op
     Tuple s2 t2 <- infer (apply s1 env) e
-    s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
-    pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TUnary t1 t2 tv)))
+    s3       <- unify (apply s2 t1) (TypArr (extract t2) tv)
+    pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (Unary tv t1 t2)))
 
-  Binary op e1 e2 -> do
-    inferred <- infer env (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))
+  Binary _ op e1 e2 -> do
+    inferred <- infer env (App unit (PrefixOp unit op) (Cons e1 (Cons e2 Nil)))
     case inferred of
-      (Tuple s (TApp tt (Cons tt1 (Cons tt2 Nil)) t)) -> pure $ Tuple s (TBinary (extractType tt) tt1 tt2 t)
+      (Tuple s (App t tt (Cons tt1 (Cons tt2 Nil)))) -> pure $ Tuple s (Binary t (extract tt) tt1 tt2)
       _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
 
-  List (Cons e1 xs) -> do
-    inferred1 <- infer env (List xs)
+  List _ (Cons e1 xs) -> do
+    inferred1 <- infer env (List unit xs)
     case inferred1 of
-      Tuple s1 (TListTree ltt (AD (TList t1))) -> do
+      Tuple s1 (List (AD (TList t1)) ltt) -> do
         Tuple s2 t2 <- infer (apply s1 env) e1
-        s3 <- unify (apply s2 t1) (extractType t2)
-        pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TListTree (Cons t2 ltt) (AD $ TList (extractType t2)))))
+        s3 <- unify (apply s2 t1) (extract t2)
+        pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (List (AD $ TList (extract t2)) (Cons t2 ltt))))
       _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
 
-  List Nil -> do
+  List _ Nil -> do
     tv <- fresh
-    pure (Tuple nullSubst $ TListTree Nil (AD $ TList tv))
+    pure (Tuple nullSubst $ List (AD $ TList tv) Nil)
 
-  NTuple (Cons e Nil) -> do
+  NTuple _ (Cons e Nil) -> do
     Tuple s t <- infer env e
-    pure $ Tuple s $ TNTuple (Cons t Nil) (AD $ TTuple $ Cons (extractType t) Nil)
+    pure $ Tuple s $ NTuple (AD $ TTuple $ Cons (extract t) Nil) (Cons t Nil)
 
-  NTuple (Cons e1 xs) -> do
-    inferred1 <- infer env (NTuple xs)
+  NTuple _ (Cons e1 xs) -> do
+    inferred1 <- infer env (NTuple unit xs)
     case inferred1 of
-      Tuple s1 (TNTuple lt (AD (TTuple t1))) -> do
+      Tuple s1 (NTuple (AD (TTuple t1)) lt) -> do
           Tuple s2 t2 <- infer (apply s1 env) e1
-          pure (Tuple (s2 `compose` s1) $ TNTuple (Cons t2 lt) (AD $ TTuple (Cons (extractType t2) t1)))
+          pure (Tuple (s2 `compose` s1) $ NTuple (AD $ TTuple (Cons (extract t2) t1)) (Cons t2 lt))
       _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
 
-  NTuple Nil -> throwError $ UnknownError "congrats you found a bug in TypeChecker.infer (NTuple Nil)"
+  NTuple _ Nil -> throwError $ UnknownError "congrats you found a bug in TypeChecker.infer (NTuple Nil)"
 
-inferQual :: TypeEnv -> ExprQual -> Infer (Tuple Subst (Tuple TypeQual TypeEnv))
-inferQual env (Let bin e1) = do
+inferQual :: TypeEnv -> ExprQualTree -> Infer (Tuple Subst (Tuple TypeQual TypeEnv))
+inferQual env (Let _ bin e1) = do
   Tuple s1 t1    <- infer env e1
   Tuple binding bindingType <- extractBinding bin
-  s2 <- unify (extractBindingType bindingType) (extractType t1)
+  s2 <- unify (extractBindingType bindingType) (extract t1)
   let env' = apply s2 $ env `extendMultiple` binding
   let subst = s1 `compose` s2
-  pure $ Tuple subst $ Tuple (apply subst (TLet bindingType t1 (extractType t1))) env'
-inferQual env (Gen bin expr) = do
+  pure $ Tuple subst $ Tuple (apply subst (Let (extract t1) bindingType t1)) env'
+inferQual env (Gen _ bin expr) = do
   Tuple s1 exprType <- infer env expr
   -- Think: [ bin | x <- expr], where x is found in bin
-  case extractType exprType of
+  case extract exprType of
     -- Type is: [T]
     AD (TList t) -> do
       (Tuple binding bindingType) <- extractBinding bin
       s2 <- unify (extractBindingType bindingType) t
       let env' = apply s2 $ env `extendMultiple` binding
       let subst = s1 `compose` s2
-      pure $ Tuple subst $ Tuple (apply subst (TGen bindingType exprType t)) env'
+      pure $ Tuple subst $ Tuple (apply subst (Gen t bindingType exprType)) env'
 
     -- Type is: T (a hopefully bound type variable)
     TypVar tvar -> do
@@ -457,18 +428,18 @@ inferQual env (Gen bin expr) = do
       Tuple binding bindingType <- extractBinding bin
       s2 <- unify (AD $ TList $ extractBindingType bindingType) (TypVar tvar)
       let env' = apply s2 $ env `extendMultiple` binding
-      let typeTree = TGen bindingType exprType (TypVar tvar)
+      let typeTree = Gen (TypVar tvar) bindingType exprType
       let subst = s1 `compose` s2
       pure $ Tuple subst (Tuple (apply subst typeTree) env')
 
-    _ -> fresh >>= (\t -> throwError $ normalizeTypeError $ UnificationFail (extractType exprType) (AD (TList t)))
-inferQual env (Guard expr) = do
+    _ -> fresh >>= (\t -> throwError $ normalizeTypeError $ UnificationFail (extract exprType) (AD (TList t)))
+inferQual env (Guard _ expr) = do
   Tuple s t <- infer env expr
-  case extractType t of
-    TypCon "Bool" -> pure $ Tuple s $ Tuple (apply s (TGuard t (extractType t))) env
-    _             -> throwError $ normalizeTypeError $ UnificationFail (extractType t) (TypCon "Bool")
+  case extract t of
+    TypCon "Bool" -> pure $ Tuple s $ Tuple (apply s (Guard (extract t) t)) env
+    _             -> throwError $ normalizeTypeError $ UnificationFail (extract t) (TypCon "Bool")
 
-inferQuals :: TypeEnv -> List ExprQual -> Infer (Tuple Subst (Tuple (List TypeQual) TypeEnv))
+inferQuals :: TypeEnv -> List ExprQualTree -> Infer (Tuple Subst (Tuple (List TypeQual) TypeEnv))
 inferQuals env Nil = pure $ Tuple nullSubst $ Tuple Nil emptyTyenv
 inferQuals env (Cons x rest) = do
   Tuple s  (Tuple t  env1) <- inferQual env x
@@ -499,7 +470,7 @@ inferOp env op = do
     And -> f (TypCon "Bool" `TypArr` (TypCon "Bool" `TypArr` TypCon "Bool"))
     Or -> f (TypCon "Bool" `TypArr` (TypCon "Bool" `TypArr` TypCon "Bool"))
     Dollar -> f ((a `TypArr` b) `TypArr` (a `TypArr` b))
-    InfixFunc name -> inferType env (Atom (Name name))
+    InfixFunc name -> inferType env (Atom unit (Name name))
  where
   f typ = pure (Tuple nullSubst typ)
   int3 = f (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))
@@ -509,12 +480,12 @@ inferDef :: TypeEnv -> Definition -> Infer (Tuple Subst Type)
 inferDef env (Def str bin exp) = do
     tv <- fresh
     let env' = env `extend` (Tuple str (Forall Nil tv))
-    let exp' = Lambda bin exp
+    let exp' = Lambda unit bin exp
     Tuple s1 t1' <- infer env' exp'
-    let t1 = extractType t1'
+    let t1 = extract t1'
     let env'' = env `extend` (Tuple str (Forall Nil (apply s1 t1)))
     Tuple s2 t2 <- infer env'' exp'
-    s3 <- unify (apply s1 t1) (apply s2 (extractType t2))
+    s3 <- unify (apply s1 t1) (apply s2 (extract t2))
     pure $ Tuple (s3 `compose` s1) (apply s3 (apply s1 t1))
 
 extractConsLit :: Type -> Binding -> Infer (Tuple (List (Tuple TVar Scheme)) TypeBinding)
@@ -684,28 +655,28 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
   Right tt -> tt
   Left err -> f err e
   where
-  f err (Atom _) = TAtom (TypeError err)
-  f err (List ls) = TListTree (map (buildPartiallyTypedTree env) ls) (TypeError err)
-  f err (NTuple ls) = TNTuple (map (buildPartiallyTypedTree env) ls) (TypeError err)
-  f err (Binary op e1 e2) = TBinary (typeOP op) (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (TypeError err)
-  f err (SectL e op) = TSectL (buildPartiallyTypedTree env e) (typeOP op) (TypeError err)
-  f err (SectR op e) = TSectR (typeOP op) (buildPartiallyTypedTree env e) (TypeError err)
-  f err (PrefixOp _) = TPrefixOp (TypeError err)
-  f err (IfExpr e1 e2 e3) = TIfExpr (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (buildPartiallyTypedTree env e3) (TypeError err)
-  f err (ArithmSeq e1 e2 e3) = TArithmSeq (buildPartiallyTypedTree env e1) ((buildPartiallyTypedTree env) <$> e2) ((buildPartiallyTypedTree env) <$> e3) (TypeError err)
-  f err (LetExpr bin expr) = let
+  f err (Atom _ _) = tAtom (TypeError err)
+  f err (List _ ls) = List (TypeError err) (map (buildPartiallyTypedTree env) ls)
+  f err (NTuple _ ls) = NTuple (TypeError err) (map (buildPartiallyTypedTree env) ls)
+  f err (Binary _ op e1 e2) = Binary (TypeError err) (typeOP op) (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2)
+  f err (SectL _ e op) = SectL (TypeError err) (buildPartiallyTypedTree env e) (typeOP op)
+  f err (SectR _ op e) = SectR (TypeError err) (typeOP op) (buildPartiallyTypedTree env e)
+  f err (PrefixOp _ _) = PrefixOp (TypeError err) (TypeError err)
+  f err (IfExpr _ e1 e2 e3) = IfExpr (TypeError err) (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (buildPartiallyTypedTree env e3)
+  f err (ArithmSeq _ e1 e2 e3) = ArithmSeq (TypeError err) (buildPartiallyTypedTree env e1) ((buildPartiallyTypedTree env) <$> e2) ((buildPartiallyTypedTree env) <$> e3)
+  f err (LetExpr _ bin expr) = let
     tup   = buildPartiallyTypedTreeBindings env bin
     env'  = fst tup
-    binds = snd tup in TLetExpr binds (buildPartiallyTypedTree env' expr) (TypeError err)
+    binds = snd tup in LetExpr (TypeError err) binds (buildPartiallyTypedTree env' expr)
 
-  f err (Lambda bs e) = let f' env' = TLambda (map g bs) (buildPartiallyTypedTree env' e) (TypeError err) in
+  f err (Lambda _ bs e) = let f' env' = Lambda (TypeError err) (map g bs) (buildPartiallyTypedTree env' e) in
                     case getTypEnvFromList bs env of
                           Nothing -> f' env
                           Just env' -> f' env'
-  f err (App e es) = TApp (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTree env) es) (TypeError err)
+  f err (App _ e es) = App (TypeError err) (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTree env) es)
 
-  f err (ListComp e es) = TListComp (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTreeQual err env) es) (TypeError err)
-  f err (Unary op e) = TUnary (typeOP op) (buildPartiallyTypedTree env e) (TypeError err)
+  f err (ListComp _ e es) = ListComp (TypeError err) (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTreeQual err env) es)
+  f err (Unary _ op e) = Unary (TypeError err) (typeOP op) (buildPartiallyTypedTree env e)
 
 -- Binding to BindingType
   g (Lit _) = TLit emptyType
@@ -714,18 +685,18 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
   g (NTupleLit bs) = TNTupleLit (map g bs) emptyType
 
   -- typeOp :: Op -> Type
-  typeOP op = case typeTreeProgramnEnv env (PrefixOp op) of
+  typeOP op = case typeTreeProgramnEnv env (PrefixOp unit op) of
     Left err -> TypeError err
-    Right (TPrefixOp typ) -> typ
+    Right (PrefixOp typ _) -> typ
     Right _ -> TypeError $ UnknownError "TODO: stupid error"
 
-  buildPartiallyTypedTreeQual :: TypeError -> TypeEnv -> ExprQual -> TypeQual
+  buildPartiallyTypedTreeQual :: TypeError -> TypeEnv -> ExprQualTree -> TypeQual
   buildPartiallyTypedTreeQual err env qual = case qual of
-    Let bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
-      TLet (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
-    Gen bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
-      TGen (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
-    Guard expr   -> TGuard (buildPartiallyTypedTree env expr) (TypeError err)
+    Let _ bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
+      Let (TypeError err) (g bin) (buildPartiallyTypedTree env' expr)
+    Gen _ bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
+      Gen (TypeError err) (g bin) (buildPartiallyTypedTree env' expr)
+    Guard _ expr   -> Guard (TypeError err) (buildPartiallyTypedTree env expr)
 
   buildPartiallyTypedTreeBindings :: TypeEnv -> List (Tuple Binding Expr) -> Tuple TypeEnv (List (Tuple TypeBinding TypeTree))
   buildPartiallyTypedTreeBindings env binds = case binds of
@@ -767,69 +738,69 @@ normalizeTypeTree tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
 helptxToABC :: TypeTree -> State {count :: Int, env :: Map String String} TypeTree
 helptxToABC tt = go tt
   where
-    go (TAtom t) = helpTypeToABC t >>= \t -> pure $ TAtom t
-    go (TListTree tts t) = do
-      tts' <- traverse helptxToABC tts
+    go (Atom t _) = helpTypeToABC t >>= \t -> pure $ Atom t unit
+    go (List t tts) = do
       t' <- helpTypeToABC t
-      pure $ TListTree tts' t'
-    go (TNTuple tts t) = do
       tts' <- traverse helptxToABC tts
+      pure $ List t' tts'
+    go (NTuple t tts) = do
       t' <- helpTypeToABC t
-      pure $ TNTuple tts' t'
-    go (TBinary t1 tt1 tt2 t) = do
-      t1' <- helpTypeToABC t1
+      tts' <- traverse helptxToABC tts
+      pure $ NTuple t' tts'
+    go (Binary t op tt1 tt2) = do
+      t' <- helpTypeToABC t
+      op' <- helpTypeToABC op
       tt1' <- helptxToABC tt1
       tt2' <- helptxToABC tt2
+      pure $ Binary t' op' tt1' tt2'
+    go (Unary t t1 tt) = do
       t' <- helpTypeToABC t
-      pure $ TBinary t1' tt1' tt2' t'
-    go (TUnary t1 tt t) = do
       t1' <- helpTypeToABC t1
       tt' <- helptxToABC tt
+      pure $ (Unary t' t1' tt')
+    go (SectL t tt t1) = do
       t' <- helpTypeToABC t
-      pure $ (TUnary t1' tt' t')
-    go (TSectL tt t1 t) = do
       t1' <- helpTypeToABC t1
       tt' <- helptxToABC tt
+      pure $ SectL t' tt' t1'
+    go (SectR t t1 tt) = do
       t' <- helpTypeToABC t
-      pure $ TSectL tt' t1' t'
-    go (TSectR t1 tt t) = do
       t1' <- helpTypeToABC t1
       tt' <- helptxToABC tt
+      pure $ SectR t' t1' tt'
+    go (PrefixOp op t) = helpTypeToABC op >>= \op -> pure $ PrefixOp op t
+    go (IfExpr t tt1 tt2 tt3) = do
       t' <- helpTypeToABC t
-      pure $ TSectR t1' tt' t'
-    go (TPrefixOp t) = helpTypeToABC t >>= \t -> pure $ TPrefixOp t
-    go (TIfExpr tt1 tt2 tt3 t) = do
       tt1' <- helptxToABC tt1
       tt2' <- helptxToABC tt2
       tt3' <- helptxToABC tt3
-      t' <- helpTypeToABC t
-      pure $ TIfExpr tt1' tt2' tt3' t'
-    go (TArithmSeq tt1 tt2 tt3 t) = do
+      pure $ IfExpr t' tt1' tt2' tt3'
+    go (ArithmSeq t tt1 tt2 tt3) = do
+      t'   <- helpTypeToABC t
       tt1' <- helptxToABC tt1
       tt2' <- traverse helptxToABC tt2
       tt3' <- traverse helptxToABC tt3
+      pure $ ArithmSeq t' tt1' tt2' tt3'
+    go (LetExpr t bin tt) = do
       t'   <- helpTypeToABC t
-      pure $ TArithmSeq tt1' tt2' tt3' t'
-    go (TLetExpr bin tt t) = do
       bin' <- traverse (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
       tt'  <- helptxToABC tt
-      t'   <- helpTypeToABC t
-      pure $ TLetExpr bin' tt' t'
-    go (TLambda tbs tt t) = do
+      pure $ LetExpr t' bin' tt'
+    go (Lambda t tbs tt) = do
+      t' <- helpTypeToABC t
       tbs' <- traverse helpBindingToABC tbs
       tt' <- helptxToABC tt
+      pure $ Lambda t' tbs' tt'
+    go (App t tt tts) = do
       t' <- helpTypeToABC t
-      pure $ TLambda tbs' tt' t'
-    go (TApp tt tts t) = do
       tt' <- helptxToABC tt
       tts' <- traverse helptxToABC tts
-      t' <- helpTypeToABC t
-      pure $ TApp tt' tts' t'
-    go (TListComp tt tts t) = do
+      pure $ App t' tt' tts'
+    go (ListComp t tt tts) = do
+      t'   <- helpTypeToABC t
       tt'  <- helptxToABC tt
       tts' <- traverse helptxToABCQual tts
-      t'   <- helpTypeToABC t
-      pure $ TListComp tt' tts' t'
+      pure $ ListComp t' tt' tts'
 
 normalizeType :: Type -> Type
 normalizeType t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
@@ -841,20 +812,20 @@ normalizeTypeError error = error
 
 helptxToABCQual :: TypeQual -> State {count :: Int, env :: Map String String} TypeQual
 helptxToABCQual q = case q of
-  TGen b e t -> do
+  Gen t b e -> do
+    t' <- helpTypeToABC t
     b' <- helpBindingToABC b
     e' <- helptxToABC e
+    pure $ Gen t' b' e'
+  Let t b e -> do
     t' <- helpTypeToABC t
-    pure $ TGen b' e' t'
-  TLet b e t -> do
     b' <- helpBindingToABC b
     e' <- helptxToABC e
+    pure $ Let t' b' e'
+  Guard t e -> do
     t' <- helpTypeToABC t
-    pure $ TLet b' e' t'
-  TGuard e t -> do
     e' <- helptxToABC e
-    t' <- helpTypeToABC t
-    pure $ TGuard e' t'
+    pure $ Guard t' e'
 
 helpTypeToABC :: Type  -> State {count :: Int, env :: (Map String String)} Type
 helpTypeToABC t = go t
@@ -911,58 +882,58 @@ getNthName :: Int -> String
 getNthName = fromCharArray <<< toCharArray <<< Array.reverse <<< indexList
   where toCharArray = map (Char.fromCharCode <<< ((+) 97))
 
-checkForError :: Path -> TypeTree -> Boolean
-checkForError p' tt = case p' of
-  End -> isTypeError $ extractType tt
-  Fst p -> case tt of
-      TBinary op e1 e2 _ -> checkForError p e1
-      TUnary op e      _ -> checkForError p e
-      TSectL e op      _ -> checkForError p e
-      TIfExpr ce te ee _ -> checkForError p ce
-      TArithmSeq ce te ee _ -> checkForError p ce
-      TLambda bs body  _ -> checkForError p body
-      TApp e es        _ -> checkForError p e
-      TListComp e _    _ -> checkForError p e
-      TLetExpr (Cons (Tuple _ e) _) _ _ -> checkForError p e
-      _               -> true
-  Snd p -> case tt of
-      TBinary op e1 e2 _ -> checkForError p e2
-      TSectR op e      _ -> checkForError p e
-      TIfExpr ce te ee _ -> checkForError p te
-      TArithmSeq ce (Just te) ee _ -> checkForError p te
-      _               -> true
-  Thrd p -> case tt of
-      TIfExpr ce te ee _ -> checkForError p ee
-      TArithmSeq ce te (Just ee) _ -> checkForError p ee
-      _ -> true
-  Nth n p -> case tt of
-      TListTree es  _ -> nth n es p
-      TNTuple es _ -> nth n es p
-      TApp e' es _ -> nth n es p
-      TListComp e' es _ -> nth' n es p
-      _        -> true
-  where
-    nth n es p = case (!!) es n of
-      Nothing -> true
-      Just e -> checkForError p e
+-- checkForError :: Path -> TypeTree -> Boolean
+-- checkForError p' tt = case p' of
+--   End -> isTypeError $ extract tt
+--   Fst p -> case tt of
+--       TBinary op e1 e2 _ -> checkForError p e1
+--       TUnary op e      _ -> checkForError p e
+--       TSectL e op      _ -> checkForError p e
+--       TIfExpr ce te ee _ -> checkForError p ce
+--       TArithmSeq ce te ee _ -> checkForError p ce
+--       TLambda bs body  _ -> checkForError p body
+--       TApp e es        _ -> checkForError p e
+--       TListComp e _    _ -> checkForError p e
+--       TLetExpr (Cons (Tuple _ e) _) _ _ -> checkForError p e
+--       _               -> true
+--   Snd p -> case tt of
+--       TBinary op e1 e2 _ -> checkForError p e2
+--       TSectR op e      _ -> checkForError p e
+--       TIfExpr ce te ee _ -> checkForError p te
+--       TArithmSeq ce (Just te) ee _ -> checkForError p te
+--       _               -> true
+--   Thrd p -> case tt of
+--       TIfExpr ce te ee _ -> checkForError p ee
+--       TArithmSeq ce te (Just ee) _ -> checkForError p ee
+--       _ -> true
+--   Nth n p -> case tt of
+--       TListTree es  _ -> nth n es p
+--       TNTuple es _ -> nth n es p
+--       TApp e' es _ -> nth n es p
+--       TListComp e' es _ -> nth' n es p
+--       _        -> true
+--   where
+--     nth n es p = case (!!) es n of
+--       Nothing -> true
+--       Just e -> checkForError p e
 
-    nth' n es p = case (!!) es n of
-      Nothing -> true
-      Just e -> checkForError' p e
+--     nth' n es p = case (!!) es n of
+--       Nothing -> true
+--       Just e -> checkForError' p e
 
-checkForError' :: Path -> TypeQual -> Boolean
-checkForError' p' q = case p' of
-  (End)   -> isTypeError $ extractedType q
-  (Fst p) -> case q of
-      TLet bin expr t -> checkForError p expr
-      TGen bin expr t -> checkForError p expr
-      TGuard expr t   -> checkForError p expr
-  _ -> true
-  where
-    extractedType qu = case qu of
-      TLet _ _ t -> t
-      TGen _ _ t -> t
-      TGuard _ t -> t
+-- checkForError' :: Path -> TypeQual -> Boolean
+-- checkForError' p' q = case p' of
+--   (End)   -> isTypeError $ extractedType q
+--   (Fst p) -> case q of
+--       TLet bin expr t -> checkForError p expr
+--       TGen bin expr t -> checkForError p expr
+--       TGuard expr t   -> checkForError p expr
+--   _ -> true
+--   where
+--     extractedType qu = case qu of
+--       TLet _ _ t -> t
+--       TGen _ _ t -> t
+--       TGuard _ t -> t
 
 isTypeError :: Type -> Boolean
 isTypeError t = case t of
