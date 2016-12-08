@@ -99,6 +99,18 @@ data QualTree b e d = Gen d b e
                     | Let d b e
                     | Guard d e
 
+type Expr = Tree Atom Binding Op Unit
+
+type TypeTree = Tree Unit TypeBinding Type Type
+
+type IndexTree = Tree Unit IBinding Op Int
+
+type ExprQualTree = QualTree Binding Expr Unit
+
+type IndexQual = QualTree IBinding IndexTree Int
+
+type TypeQual  = QualTree TypeBinding TypeTree Type
+
 derive instance eqTree :: (Eq a, Eq b, Eq c, Eq d) => Eq (Tree a b c d)
 
 instance functorQualTree :: Functor (QualTree b e) where
@@ -142,25 +154,14 @@ extract (Lambda c _ _) = c
 extract (App c _ _) = c
 extract (ListComp c _ _) = c
 
-extractType :: TypeTree -> Type
-extractType = extract
-
 extractBindingType:: TypeBinding -> Type
 extractBindingType (TLit t)         = t
 extractBindingType (TConsLit _ _ t) = t
 extractBindingType (TListLit _ t)   = t
 extractBindingType (TNTupleLit _ t) = t
 
-type Expr = Tree Atom Binding Op Unit
-
 -- last type para is type of expr at this level
 -- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
-
-type TypeTree = Tree Unit TypeBinding Type Type
-
-type IndexTree = Tree Unit IBinding Op Int
-
-type IndexQual = QualTree IBinding IndexTree Int
 
 data TypeBinding  = TLit                              Type
                   | TConsLit TypeBinding TypeBinding  Type
