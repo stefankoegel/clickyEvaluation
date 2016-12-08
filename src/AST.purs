@@ -79,64 +79,91 @@ derive instance ordAtom :: Ord Atom
 -- |
 -- | The basic expressions the `Parser` and `Evaluator` recognize.
 
-data Tree a b c d =
-    Atom      d a
-  | List      d (List (Tree a b c d))
-  | NTuple    d (List (Tree a b c d))
-  | Binary    d c (Tree a b c d) (Tree a b c d)
-  | Unary     d c (Tree a b c d)
-  | SectL     d (Tree a b c d) c
-  | SectR     d c (Tree a b c d)
-  | PrefixOp  d c
-  | IfExpr    d (Tree a b c d) (Tree a b c d) (Tree a b c d)
-  | ArithmSeq d (Tree a b c d) (Maybe (Tree a b c d)) (Maybe (Tree a b c d))
-  | LetExpr   d (List (Tuple b (Tree a b c d))) (Tree a b c d)
-  | Lambda    d (List b) (Tree a b c d)
-  | App       d (Tree a b c d) (List (Tree a b c d))
-  | ListComp  d (Tree a b c d) (List (QualTree b (Tree a b c d) d))
+data Tree a b o m =
+    Atom      m  a
+  | List      m (List (Tree a b o m))
+  | NTuple    m (List (Tree a b o m))
+  | Binary    m o (Tree a b o m) (Tree a b o m)
+  | Unary     m o (Tree a b o m)
+  | SectL     m (Tree a b o m) o
+  | SectR     m o (Tree a b o m)
+  | PrefixOp  m o
+  | IfExpr    m (Tree a b o m) (Tree a b o m) (Tree a b o m)
+  | ArithmSeq m (Tree a b o m) (Maybe (Tree a b o m)) (Maybe (Tree a b o m))
+  | LetExpr   m (List (Tuple b (Tree a b o m))) (Tree a b o m)
+  | Lambda    m (List b) (Tree a b o m)
+  | App       m (Tree a b o m) (List (Tree a b o m))
+  | ListComp  m (Tree a b o m) (List (QualTree b (Tree a b o m) m))
 
-data QualTree b e d = Gen d b e
-                    | Let d b e
-                    | Guard d e
+data QualTree b t m = Gen m b t
+                    | Let m b t
+                    | Guard m t
 
-type Expr = Tree Atom Binding Op Unit
+foldTree :: forall a b o m u v.
+                      (m -> a -> u)
+                   -> (m -> List u -> u)
+                   -> (m -> List u -> u)
+                   -> (m -> o -> u -> u -> u)
+                   -> (m -> o -> u -> u)
+                   -> (m -> u -> o -> u)
+                   -> (m -> o -> u -> u)
+                   -> (m -> o -> u)
+                   -> (m -> u -> u -> u -> u)
+                   -> (m -> u -> Maybe u -> Maybe u -> u)
+                   -> (m -> List (Tuple b u) -> u -> u)
+                   -> (m -> List b -> u -> u)
+                   -> (m -> u -> List u -> u)
+                   -> (m -> u -> List v -> u)
+                   -> (m -> b -> u -> v)
+                   -> (m -> b -> u -> v)
+                   -> (m -> u -> v)
+                   -> Tree a b o m -> u
+foldTree atom list ntuple binary unary sectl sectr prefixop ifexpr arithmseq letexpr lambda app listcomp gen let' guard = go
+  where
+    go (Atom m a)               = atom m a
+    go (List m us)              = list m (go <$> us)
+    go (NTuple m us)            = ntuple m (go <$> us)
+    go (Binary m o u1 u2)       = binary m o (go u1) (go u2)
+    go (Unary m o u)            = unary m o (go u)
+    go (SectL m u o)            = sectl m (go u) o
+    go (SectR m o u)            = sectr m o (go u)
+    go (PrefixOp m o)           = prefixop m o
+    go (IfExpr m u1 u2 u3)      = ifexpr m (go u1) (go u2) (go u3)
+    go (ArithmSeq m u1 mu2 mu3) = arithmseq m (go u1) (go <$> mu2) (go <$> mu3)
+    go (LetExpr m tus u)        = letexpr m (rmap go <$> tus) (go u)
+    go (Lambda m bs u)          = lambda m bs (go u)
+    go (App m u us)             = app m (go u) (go <$> us)
+    go (ListComp m u qs)        = listcomp m (go u) (qual <$> qs)
+      where
+        qual :: QualTree b (Tree a b o m) m -> v
+        qual (Gen m b u) = gen m b (go u)
+        qual (Let m b u) = let' m b (go u)
+        qual (Guard m u) = guard m (go u)
 
-type TypeTree = Tree Unit TypeBinding Type Type
-
-type IndexTree = Tree Unit IBinding Op Int
-
-type ExprQualTree = QualTree Binding Expr Unit
-
-type IndexQual = QualTree IBinding IndexTree Int
-
-type TypeQual  = QualTree TypeBinding TypeTree Type
+idFoldTree :: forall a b o m. Tree a b o m -> Tree a b o m
+idFoldTree = foldTree Atom List NTuple Binary Unary SectL SectR PrefixOp IfExpr ArithmSeq LetExpr Lambda App ListComp Gen Let Guard
 
 derive instance eqTree :: (Eq a, Eq b, Eq c, Eq d) => Eq (Tree a b c d)
 
-instance functorQualTree :: Functor (QualTree b e) where
-  map f (Gen d b e) = Gen (f d) b e
-  map f (Let d b e) = Let (f d) b e
-  map f (Guard d e) = Guard (f d) e
-
 instance functorTree :: Functor (Tree a b c) where
-  map f (Atom c a) = Atom (f c) a
-  map f (List c xs) = List (f c) (map f <$> xs)
-  map f (NTuple c xs) = List (f c) (map f <$> xs)
-  map f (Binary c op t1 t2) = Binary (f c) op (map f t1) (map f t2)
-  map f (Unary c op t) = Unary (f c) op (map f t)
-  map f (SectL c t op) = SectL (f c) (map f t) op
-  map f (SectR c op t) = SectR (f c) op (map f t)
-  map f (PrefixOp c op) = PrefixOp (f c) op
-  map f (IfExpr c t1 t2 t3) = IfExpr (f c) (map f t1) (map f t2) (map f t3)
-  map f (ArithmSeq c t1 t2 t3) = ArithmSeq (f c) (map f t1) (map f <$> t2) (map f <$> t3)
-  map f (LetExpr c bs t) = LetExpr (f c) (map (rmap (map f)) bs) (map f t)
-  map f (Lambda c bs t) = Lambda (f c) bs (map f t)
-  map f (App c t ts) = App (f c) (map f t) (map f <$> ts)
-  map f (ListComp c t ts) = ListComp (f c) (map f t) (map go ts)
-    where
-    go (Gen d b e) = Gen (f d) b (map f e)
-    go (Let d b e) = Let (f d) b (map f e)
-    go (Guard d e) = Guard (f d) (map f e)
+  map f = foldTree
+          (Atom <<< f)
+          (List <<< f)
+          (NTuple <<< f)
+          (Binary <<< f)
+          (Unary <<< f)
+          (SectL <<< f)
+          (SectR <<< f)
+          (PrefixOp <<< f)
+          (IfExpr <<< f)
+          (ArithmSeq <<< f)
+          (LetExpr <<< f)
+          (Lambda <<< f)
+          (App <<< f)
+          (ListComp <<< f)
+          (Gen <<< f)
+          (Let <<< f)
+          (Guard <<< f)
 
 extract :: forall a b c d. Tree a b c d -> d
 extract (Atom c _) = c
@@ -160,8 +187,17 @@ extractBindingType (TConsLit _ _ t) = t
 extractBindingType (TListLit _ t)   = t
 extractBindingType (TNTupleLit _ t) = t
 
--- last type para is type of expr at this level
--- e.x. Binary (Op_Type) (Exp1_TypeTree) (Exp2_TypeTree)
+type Expr = Tree Atom Binding Op Unit
+
+type TypeTree = Tree Unit TypeBinding Type Type
+
+type IndexTree = Tree Unit IBinding Op Int
+
+type ExprQualTree = QualTree Binding Expr Unit
+
+type IndexQual = QualTree IBinding IndexTree Int
+
+type TypeQual  = QualTree TypeBinding TypeTree Type
 
 data TypeBinding  = TLit                              Type
                   | TConsLit TypeBinding TypeBinding  Type

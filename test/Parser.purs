@@ -11,7 +11,7 @@ import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
 
 import Control.Monad.Writer (Writer, tell)
 
-import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), Qual(..))
+import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..))
 import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent)
 import IndentParser (IndentParser)
 
@@ -312,11 +312,12 @@ runTests = do
   test "string1" expression "\"asdf\"" (List unit $ toList [Atom unit (Char "a"), Atom unit (Char "s"), Atom unit (Char "d"), Atom unit (Char "f")])
   test "string2" expression "\"\\\\\\n\\\"\\\'\"" (List unit $ toList [Atom unit (Char "\\"), Atom unit (Char "\n"), Atom unit (Char "\""), Atom unit (Char "'")])
 
-  test "listComp1" expression "[ x | x <- [1,2,3] ]" $ ListComp unit (Atom unit (Name "x")) (toList [Gen (Lit (Name "x")) (List unit (toList [Atom unit (AInt 1), Atom unit (AInt 2), Atom unit (AInt 3)]))])
-  test "listComp2" expression "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp unit (Binary unit Add (Atom unit (Name "b")) (Atom unit (Name ("c")))) $ toList [Let (Lit (Name "b")) (Atom unit (AInt 3)),
-    Gen (Lit (Name "c")) (ArithmSeq unit (Atom unit (AInt 1)) Nothing Nothing)]
-  test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp unit (Binary unit Mul (Atom unit (Name "a")) (Atom unit (Name "b"))) $ toList [Let (Lit (Name "a")) (Atom unit (AInt 5)),
-    Let (Lit (Name "b")) (Binary unit Add (Atom unit (Name "a")) (Atom unit (AInt 1)))]
+  test "listComp1" expression "[ x | x <- [1,2,3] ]" $ ListComp unit (Atom unit (Name "x")) (toList [Gen unit (Lit (Name "x")) (List unit (toList [Atom unit (AInt 1), Atom unit (AInt 2), Atom unit (AInt 3)]))])
+  test "listComp2" expression "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp unit (Binary unit Add (Atom unit (Name "b")) (Atom unit (Name ("c")))) $ toList [Let unit (Lit (Name "b")) (Atom unit (AInt 3)),
+    Gen unit (Lit (Name "c")) (ArithmSeq unit (Atom unit (AInt 1)) Nothing Nothing)]
+  test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp unit (Binary unit Mul (Atom unit (Name "a")) (Atom unit (Name "b"))) $ toList [Let unit (Lit (Name "a")) (Atom unit (AInt 5)),
+    Let unit (Lit (Name "b")) (Binary unit Add (Atom unit (Name "a")) (Atom unit (AInt 1)))]
+  test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp unit (aname "x") $ toList [ Gen unit (Lit (Name "x")) (ArithmSeq unit (aint 1) Nothing (Just (aint 10))), Guard unit (App unit (aname "even") $ toList [aname "x"])]
 
 
 prelude :: String
