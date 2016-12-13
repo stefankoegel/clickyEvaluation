@@ -1,18 +1,12 @@
 module Web where
 
--- import Prelude
--- import Data.Traversable (for)
--- import Data.List (List(..), snoc, toList)
--- import Data.Maybe (Maybe(..))
--- import Data.Tuple (Tuple(..))
--- import Data.String as Str
-
 import Prelude
 import Data.Foldable (all, class Foldable)
+import Data.Unfoldable (fromMaybe)
 import Data.String (joinWith)
 import Data.List (List(Nil, Cons), singleton, fromFoldable, length, zip, (..), zipWithA, snoc)
 import Data.Foreign (unsafeFromForeign, isUndefined)
-import Data.Maybe (Maybe(..), isJust, fromJust)
+import Data.Maybe (Maybe(..), isJust, fromJust, maybe)
 import Data.Tuple (Tuple(..), fst, snd)
 import Data.Traversable (for, for_, traverse)
 import Data.Array as Arr
@@ -56,7 +50,7 @@ zipList zipp hole Nil = Nil
 zipList zipp hole (Cons x xs) = Cons (zipp (\x -> hole $ Cons x xs) x) (zipList zipp (hole <<< Cons x) xs)
 
 exprToDiv:: Expr -> Div
-exprToDiv expr = go id expr
+exprToDiv = go id
   where
     go :: (Expr -> Expr) -> Expr -> Div
     go hole      (Atom _ a)            = atom a
@@ -80,13 +74,13 @@ exprToDiv expr = go id expr
     go hole expr@(LetExpr _ bes body)  = letexpr ((\(Tuple b e) -> Tuple (binding b) (go hole e)) <$> bes) (go hole body) -- TODO
     go hole expr@(Lambda _ binds body) = lambda (binding <$> binds) (go (hole <<< Lambda unit binds) body) expr hole
 
-    go hole expr@(App _ (SectL _ e1 op) (Cons e2 Nil))
-                                       = go hole (Binary unit op e1 e2) -- Rewrite section application to binary
-    go hole expr@(App _ (SectR _ op e2) (Cons e1 Nil))
-                                       = go hole (Binary unit op e1 e2) -- Rewrite section application to binary
-    go hole expr@(App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))
-                                       = go hole (Binary unit op e1 e2) -- Rewrite prefix op application to binary
-    go hole      (ArithmSeq _ _ _ _)   = node "" [] [] -- TODO
+    go hole expr@(ArithmSeq _ start next end)
+                                       = arithmseq
+                                           (go (\x -> hole $ ArithmSeq unit x next end) start)
+                                           (go (\x -> hole $ ArithmSeq unit start (Just x) end) <$> next)
+                                           (go (\x -> hole $ ArithmSeq unit start next (Just x)) <$> end)
+                                           expr hole
+                                                    
     go hole      (ListComp _ _ _)      = node "" [] [] -- TODO
     go hole expr@(App _ func args)     = app (go funcHole func) argsDivs expr hole
       where
@@ -163,6 +157,16 @@ lambda params body = nodeHole "" ["lambda"] (Cons open (Cons bslash (params <> (
 app :: Div -> List Div -> DivHole
 app func args = nodeHole "" ["app"] (Cons func args)
 
+arithmseq :: Div -> Maybe Div -> Maybe Div -> DivHole
+arithmseq start mnext mend = nodeHole "" ["arithmseq", "list"] $ [open, start] <> commaNext <> [dots] <> end <> [close]
+ where
+    open      = node "[" ["brace"] []
+    comma     = node "," ["comma"] []
+    commaNext = maybe [] (\next -> [comma, next]) mnext
+    dots      = node ".." ["dots"] []
+    end       = fromMaybe mend
+    close     = node "]" ["brace"] []
+
 binding :: Binding -> Div
 binding (Lit a)         = node "" ["binding", "lit"] [atom a]
 binding (ConsLit b1 b2) = node "" ["binding", "conslit"] $ listify "(" ":" ")" (Cons (binding b1) (Cons (binding b2) Nil))
@@ -195,21 +199,6 @@ toString ls = Str.fromCharArray <$> go [] ls
     go acc Nil                         = Just acc
     go _   _                           = Nothing
 
-
--- import AST (Atom(..), Binding(..), Expr(..), Qual(..), ExprQual, TypeQual, IndexQual, QualTree(..), Op(), pPrintOp, Output(),Type(..), IndexTree(..),IBinding(..),TypeTree(..),TypeBinding(..), Path(..), extractType, prettyPrintType)
--- import JSHelpers (showTooltip, children)
-
--- data Triple a b c = Triple a b c
-
--- pathPropName :: String
--- pathPropName = "clickyEvaluation_path"
-
--- getPath :: forall eff. J.JQuery -> Eff (dom :: DOM | eff) (Maybe Path)
--- getPath j = do
---   fpath <- J.getProp pathPropName j
---   if isUndefined fpath
---     then pure Nothing
---     else pure $ Just $ unsafeFromForeign fpath
 
 -- exprToJQuery:: forall eff. Output -> Eff (dom :: DOM | eff) J.JQuery
 -- exprToJQuery output = go (output.expr)
