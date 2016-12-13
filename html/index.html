@@ -75,7 +75,8 @@
     </div>
 
     <script>
-      PS.Main.makeCEwithHistory("sum (map (^2) [1, 2, 3, 4])")(".output")(".historyBox")();
+      var input = $("#input");
+      input.on("change", PS.Main.makeCEwithHistory(input[0].value)(".output")(".historyBox")())
     </script>
     <!-- <h3>Definitions</h3> -->
 <!--     <div class="ace" id="definitions"> -->
