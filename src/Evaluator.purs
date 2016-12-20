@@ -110,7 +110,7 @@ eval1 env expr = case expr of
   (App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))         -> {-binary env op e1 e2 <|>-} (pure $ Binary unit op e1 e2)
   (App _ (Atom _ (Name name)) args)      -> apply env name args
   (App _ (App _ func es) es')            -> pure $ App unit func (es <> es')
-  (ListComp _ e qs)                    -> evalListComp e qs
+  (ListComp _ e qs)                    -> evalListComp env e qs
   (LetExpr _ binds exp)                -> evalLetExpr binds exp
   _                                  -> throwError $ CannotEvaluate expr
 
@@ -287,26 +287,27 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
 -- List Comprehensions
 ------------------------------------------------------------------------------------------
 
-evalListComp :: Expr -> List ExprQualTree -> Evaluator Expr
-evalListComp expr Nil         = pure $ List unit $ singleton expr
-evalListComp expr (Cons q qs) = case q of
+evalListComp :: Env -> Expr -> List ExprQualTree -> Evaluator Expr
+evalListComp _   expr Nil         = pure $ List unit $ singleton expr
+evalListComp env expr (Cons q qs) = case q of
   Guard _ (Atom _ (Bool false)) -> pure $ List unit Nil
   Guard _ (Atom _ (Bool true))  -> if null qs then pure (List unit (singleton expr)) else pure (ListComp unit expr qs)
   Gen _ _ (List _ Nil)          -> pure $ List unit Nil
-  -- Gen _ b (List (Cons e Nil)) -> evalListComp expr (Cons (Let unit b e) qs)
+  -- Gen _ b (List (Cons e Nil)) -> evalListComp env expr (Cons (Let unit b e) qs)
   Gen _ b (List _ (Cons e es))  -> do
-    listcomp1 <- evalListComp expr (Cons (Let unit b e) qs)
+    listcomp1 <- evalListComp env expr (Cons (Let unit b e) qs)
     listcomp2 <- pure $ ListComp unit expr (Cons (Gen unit b (List unit es)) qs)
     case listcomp1 of
       List _ (Cons x Nil) -> pure $ Binary unit Colon x listcomp2
       _ -> pure $ Binary unit Append listcomp1 listcomp2
-  -- Gen _ b (Binary Colon e (List Nil)) -> evalListComp expr (Cons (Let unit b e) qs)
+  -- Gen _ b (Binary Colon e (List Nil)) -> evalListComp env expr (Cons (Let unit b e) qs)
   Gen _ b (Binary unit Colon e es)  -> do
-    listcomp1 <- evalListComp expr (Cons (Let unit b e) qs)
+    listcomp1 <- evalListComp env expr (Cons (Let unit b e) qs)
     listcomp2 <- pure $ ListComp unit expr (Cons (Gen unit b es) qs)
     case listcomp1 of
       List _ (Cons x Nil) -> pure $ Binary unit Colon x listcomp2
       _ -> pure $ Binary unit Append listcomp1 listcomp2
+  Gen _ b e -> pure $ ListComp unit expr (Cons (Gen unit b (evalToBinding env e (ConsLit b (Lit (Name "_"))))) qs)
   Let _ b e -> case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
     Right r -> do
       Tuple qs' r' <- runStateT (replaceQualifiers qs) r
