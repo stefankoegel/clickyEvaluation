@@ -14,7 +14,7 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
-import AST (Expr, Tree(..), Binding(..), Atom(..), Op, pPrintOp)
+import AST (Expr, Tree(..), Binding(..), Atom(..), Op, pPrintOp, ExprQualTree, QualTree(..))
 
 data RoseTree a = Node a (List (RoseTree a))
 
@@ -70,7 +70,7 @@ exprToDiv = go id
     go hole expr@(LetExpr _ bes body)  = letexpr
                                            (zipList
                                               (\listHole (Tuple b e) -> Tuple (binding b) (go (\x -> listHole $ Tuple b x) e))
-                                              (\x -> hole $ LetExpr unit x body)
+                                              (\xs -> hole $ LetExpr unit xs body)
                                               bes)
                                            (go (\x -> hole $ LetExpr unit bes x) body)
                                            expr hole
@@ -82,12 +82,35 @@ exprToDiv = go id
                                            (go (\x -> hole $ ArithmSeq unit start (Just x) end) <$> next)
                                            (go (\x -> hole $ ArithmSeq unit start next (Just x)) <$> end)
                                            expr hole
-                                                    
-    go hole      (ListComp _ _ _)      = node "" [] [] -- TODO
+
+    go hole expr@(ListComp _ e qs)     = listcomp
+                                           (go (\x -> hole $ ListComp unit x qs) e)
+                                           (zipList qualToDiv (\xs -> hole $ ListComp unit e xs) qs)
+                                           expr hole
+      where
+        qualToDiv :: (ExprQualTree -> Expr) -> ExprQualTree -> Div
+        qualToDiv hole (Guard _ e) = guardQual           (go (\x -> hole $ Guard unit x) e)
+        qualToDiv hole (Let _ b e) = letQual (binding b) (go (\x -> hole $ Let unit b x) e)
+        qualToDiv hole (Gen _ b e) = genQual (binding b) (go (\x -> hole $ Gen unit b x) e)
+
     go hole expr@(App _ func args)     = app (go funcHole func) argsDivs expr hole
       where
         funcHole func = hole $ App unit func args
         argsDivs = zipList go (hole <<< App unit func) args
+
+guardQual :: Div -> Div
+guardQual guard = node "" ["guard"] [guard]
+
+letQual :: Div -> Div -> Div
+letQual bind expr = node "" ["let"] [letDiv, bind, eqDiv, expr]
+  where
+    letDiv = node "let" ["keyword"] []
+    eqDiv  = node "=" ["comma"] []
+
+genQual :: Div -> Div -> Div
+genQual bind expr = node "" ["gen"] [bind, arrow, expr]
+  where
+    arrow = node "<-" ["comma"] []
 
 atom :: Atom -> Div
 atom (AInt n) = node (show n) ["atom", "num"] []
@@ -145,6 +168,11 @@ ifexpr cd td ed = nodeHole "" ["if"] [ifDiv, cd, thenDiv, td, elseDiv, ed]
     thenDiv = node "then" ["keyword"] []
     elseDiv = node "else" ["keyword"] []
 
+intersperse :: forall a. a -> List a -> List a
+intersperse _ Nil          = Nil
+intersperse _ (Cons a Nil) = Cons a Nil
+intersperse s (Cons a as)  = Cons a $ Cons s $ intersperse s as
+
 letexpr :: List (Tuple Div Div) -> Div -> DivHole
 letexpr binds expr = nodeHole "" ["letexpr"] $ [letDiv] <> (intercalate [semi] (bind <$> binds)) <> [inDiv, expr]
   where
@@ -154,6 +182,14 @@ letexpr binds expr = nodeHole "" ["letexpr"] $ [letDiv] <> (intercalate [semi] (
     equal  = node "=" ["comma"] []
     bind :: Tuple Div Div -> Array Div
     bind (Tuple b e) = [node "" [] [b, equal, e]]
+
+listcomp :: Div -> List Div -> DivHole
+listcomp expr quals = nodeHole "" ["listcomp", "list"] $ [open, expr, pipe] <> Arr.fromFoldable (intersperse comma quals) <> [close]
+  where
+    open  = node "[" ["brace"] []
+    close = node "]" ["brace"] []
+    pipe  = node "|" ["brace"] []
+    comma = node "," ["comma"] []
 
 lambda :: List Div -> Div -> DivHole
 lambda params body = nodeHole "" ["lambda"] (Cons open (Cons bslash (params <> (Cons arrow (Cons body (Cons close Nil))))))
