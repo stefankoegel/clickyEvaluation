@@ -6,19 +6,19 @@ import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
 import Data.Either (Either(Left, Right))
-import Data.List (List(..), filter, delete, concatMap, reverse, unzip, foldM, (:), zip, singleton, length, concat, (!!))
+import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, length, concat)
 import Data.Array as Array
 import Data.Map as Map
 import Data.Map (Map, insert, lookup, empty)
 import Data.Tuple (Tuple(Tuple), snd, fst)
 import Data.Traversable (traverse)
 import Data.Set as Set
-import Data.Foldable (foldl, foldr, foldMap, elem)
+import Data.Foldable (foldr, foldMap, elem)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.String (toCharArray, fromCharArray)
+import Data.String (fromCharArray)
 import Data.Char as Char
 
-import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), QualTree(..), ExprQualTree(..), Tree(..), Op(..), TVar, Type(..), TypeBinding(..), TypeTree(..),TypeError(..), TypeQual(..), extract, extractBindingType, prettyPrintType)
+import AST
 
 data Scheme = Forall (List TVar) Type
 
