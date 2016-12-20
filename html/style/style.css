@@ -69,7 +69,7 @@ h3 {
   padding: 10px;
 }
 
-.list, .lambda, .section, .name, .top, .tuple, .unary, .binary, .app, .if {
+.list, .lambda, .section, .name, .top, .tuple, .unary, .binary, .app, .if, .letexpr {
   font-family: monospace;
   font-size: 15px;
   border: none;

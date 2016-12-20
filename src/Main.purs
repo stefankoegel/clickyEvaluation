@@ -54,7 +54,7 @@ makeCEwithDefsAndHistory  input defs selector histSelector = do
 
 parseExpr :: String -> Expr
 parseExpr input = case Parser.parseExpr input of
-  Left _     -> (Atom unit (Name "foo"))
+  Left err   -> (Atom unit (Name $ "parse error: " <> show err))
   Right expr -> expr
 
 eval1 :: Eval.Env -> Expr -> Expr
