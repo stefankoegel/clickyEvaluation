@@ -2,7 +2,7 @@ module Test.Parser where
 
 import Prelude
 import Data.Either (Either(..))
-import Data.List (List(..), singleton)
+import Data.List (List(..), singleton, (:))
 import Data.Array (toUnfoldable) as Array
 import Data.Tuple (Tuple(..))
 import Data.Maybe (Maybe(..))
@@ -182,32 +182,32 @@ runTests = do
       (List unit $ toList [Binary unit Add (aint 1) (aint 2), Binary unit Add (aint 3) (aint 4)])
       (List unit Nil))
 
-  test "binding_lit1" binding "x" (Lit (Name "x"))
-  test "binding_lit2" binding "10" (Lit (AInt 10))
-  test "lambda1" expression "(\\x -> x)" (Lambda unit (toList [Lit (Name "x")]) (aname "x"))
+  test "binding_lit1" binding "x" (Lit unit (Name "x"))
+  test "binding_lit2" binding "10" (Lit unit (AInt 10))
+  test "lambda1" expression "(\\x -> x)" (Lambda unit (toList [Lit unit (Name "x")]) (aname "x"))
   test "lambda2" expression "( \\ x y z -> ( x , y , z ) )"
-    (Lambda unit (toList [Lit (Name "x"), Lit (Name "y"), Lit (Name "z")])
+    (Lambda unit (toList [Lit unit (Name "x"), Lit unit (Name "y"), Lit unit (Name "z")])
       (NTuple unit (toList [aname "x", aname "y", aname "z"])))
   test "lambda3" expression "(  \\  x ->   (   \\    y ->    (   \\    z ->     f   x   y   z )  )  )"
-    (Lambda unit (singleton $ Lit $ Name "x")
-      (Lambda unit (singleton $ Lit $ Name "y")
-        (Lambda unit (singleton $ Lit $ Name "z")
+    (Lambda unit (singleton $ Lit unit $ Name "x")
+      (Lambda unit (singleton $ Lit unit $ Name "y")
+        (Lambda unit (singleton $ Lit unit $ Name "z")
           (App unit (aname "f") (toList [aname "x", aname "y", aname "z"])))))
   test "lambda4" expression "(\\a b -> a + b) 1 2"
     (App unit 
-      (Lambda unit (toList [Lit (Name "a"), Lit (Name "b")])
+      (Lambda unit (toList [Lit unit (Name "a"), Lit unit (Name "b")])
         (Binary unit Add (aname "a") (aname "b")))
       (toList [aint 1, aint 2]))
 
   test "lambda5" expression "(\\a -> (\\b -> (\\c -> (\\d -> (\\e -> (\\f -> (\\g -> a + b + c + d + e + f + g))))))) 1 2 3 4 5 6 7"
     (App unit 
-      (Lambda unit (Cons (Lit (Name "a")) (Nil)) 
-        (Lambda unit (Cons (Lit (Name "b")) (Nil))
-          (Lambda unit (Cons (Lit (Name "c")) (Nil))
-            (Lambda unit (Cons (Lit (Name "d")) (Nil))
-              (Lambda unit (Cons (Lit (Name "e")) (Nil))
-                (Lambda unit (Cons (Lit (Name "f")) (Nil))
-                  (Lambda unit (Cons (Lit (Name "g")) (Nil))
+      (Lambda unit (Cons (Lit unit (Name "a")) (Nil)) 
+        (Lambda unit (Cons (Lit unit (Name "b")) (Nil))
+          (Lambda unit (Cons (Lit unit (Name "c")) (Nil))
+            (Lambda unit (Cons (Lit unit (Name "d")) (Nil))
+              (Lambda unit (Cons (Lit unit (Name "e")) (Nil))
+                (Lambda unit (Cons (Lit unit (Name "f")) (Nil))
+                  (Lambda unit (Cons (Lit unit (Name "g")) (Nil))
                     (Binary unit Add
                       (Binary unit Add
                         (Binary unit Add
@@ -223,14 +223,14 @@ runTests = do
 
   test "lambda6" expression "\\x -> x + 2"
       (Lambda unit
-        (toList [Lit (Name "x")])
+        (toList [Lit unit (Name "x")])
         (Binary unit Add (aname "x") (aint 2)))
 
   test "lambda7" definition "f a = \\b -> a + b"
     (Def "f"
-      (toList [Lit (Name "a")])
+      (toList [Lit unit (Name "a")])
       (Lambda unit
-        (toList [Lit (Name "b")])
+        (toList [Lit unit (Name "b")])
         (Binary unit Add (aname "a") (aname "b"))))
 
   test "sectR1" expression "(+1)" (SectR unit Add (aint 1))
@@ -248,42 +248,42 @@ runTests = do
   test "sectL3" expression "([1] ++)" (SectL unit (List unit $ toList [aint 1]) Append)
   test "sectL4" expression "(   ( 2 +  2 )  <= )" (SectL unit (Binary unit Add (aint 2) (aint 2)) Leq)
 
-  test "let1" expression "let x = 1 in x + x" (LetExpr unit (Cons (Tuple (Lit (Name "x")) (aint 1)) Nil) (Binary unit Add (aname "x") (aname "x")))
-  test "let2" expression "letty + let x = 1 in x" (Binary unit Add (aname "letty") (LetExpr unit (Cons (Tuple (Lit (Name "x")) (aint 1)) Nil) (aname "x")))
-  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z" (LetExpr unit (Cons (Tuple (Lit (Name "x")) (LetExpr unit (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 1))) (Nil)) (Atom unit (Name "y")))) (Nil)) (LetExpr unit (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 2))) (Nil)) (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "z")))))
-  test "let4" expression "let { x = 1; y = 2; z = 3} in x + y + z"              (LetExpr unit (Cons (Tuple (Lit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
-  test "let5" expression "let x = 1; y = 2; z = 3 in x + y + z"                 (LetExpr unit (Cons (Tuple (Lit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
-  test "let6" expression "let x = 1\n    y = 2\n    z = 3 in x + y + z"         (LetExpr unit (Cons (Tuple (Lit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
-  test "let7" expression "let {\n  x = 1 ;\n  y = 2 ;\n  z = 3\n} in x + y + z" (LetExpr unit (Cons (Tuple (Lit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
+  test "let1" expression "let x = 1 in x + x" (LetExpr unit (Cons (Tuple (Lit unit (Name "x")) (aint 1)) Nil) (Binary unit Add (aname "x") (aname "x")))
+  test "let2" expression "letty + let x = 1 in x" (Binary unit Add (aname "letty") (LetExpr unit (Cons (Tuple (Lit unit (Name "x")) (aint 1)) Nil) (aname "x")))
+  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z" (LetExpr unit (Cons (Tuple (Lit unit (Name "x")) (LetExpr unit (Cons (Tuple (Lit unit (Name "y")) (Atom unit (AInt 1))) (Nil)) (Atom unit (Name "y")))) (Nil)) (LetExpr unit (Cons (Tuple (Lit unit (Name "z")) (Atom unit (AInt 2))) (Nil)) (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "z")))))
+  test "let4" expression "let { x = 1; y = 2; z = 3} in x + y + z"              (LetExpr unit (Cons (Tuple (Lit unit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit unit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit unit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
+  test "let5" expression "let x = 1; y = 2; z = 3 in x + y + z"                 (LetExpr unit (Cons (Tuple (Lit unit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit unit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit unit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
+  test "let6" expression "let x = 1\n    y = 2\n    z = 3 in x + y + z"         (LetExpr unit (Cons (Tuple (Lit unit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit unit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit unit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
+  test "let7" expression "let {\n  x = 1 ;\n  y = 2 ;\n  z = 3\n} in x + y + z" (LetExpr unit (Cons (Tuple (Lit unit (Name "x")) (Atom unit (AInt 1))) (Cons (Tuple (Lit unit (Name "y")) (Atom unit (AInt 2))) (Cons (Tuple (Lit unit (Name "z")) (Atom unit (AInt 3))) (Nil)))) (Binary unit Add (Binary unit Add (Atom unit (Name "x")) (Atom unit (Name "y"))) (Atom unit (Name "z"))))
 
-  test "consLit1" binding "(x:xs)" (ConsLit (Lit (Name "x")) (Lit (Name "xs")))
-  test "consLit2" binding "(x:(y:zs))" (ConsLit (Lit (Name "x")) (ConsLit (Lit (Name "y")) (Lit (Name "zs"))))
-  test "consLit3" binding "(  x  :  (  666  :  zs  )   )" (ConsLit (Lit (Name "x")) (ConsLit (Lit (AInt 666)) (Lit (Name "zs"))))
+  test "consLit1" binding "(x:xs)" (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs")))
+  test "consLit2" binding "(x:(y:zs))" (ConsLit unit (Lit unit (Name "x")) (ConsLit unit (Lit unit (Name "y")) (Lit unit (Name "zs"))))
+  test "consLit3" binding "(  x  :  (  666  :  zs  )   )" (ConsLit unit (Lit unit (Name "x")) (ConsLit unit (Lit unit (AInt 666)) (Lit unit (Name "zs"))))
 
-  test "listLit1" binding "[]" (ListLit Nil)
-  test "listLit2" binding "[    ]" (ListLit Nil)
-  test "listLit3" binding "[  True ]" (ListLit (Cons (Lit (Bool true)) Nil))
-  test "listLit4" binding "[  x   ,  y  ,   1337 ]" (ListLit (toList [Lit (Name "x"), Lit (Name "y"), Lit (AInt 1337)]))
+  test "listLit1" binding "[]" (ListLit unit Nil)
+  test "listLit2" binding "[    ]" (ListLit unit Nil)
+  test "listLit3" binding "[  True ]" (ListLit unit (Cons (Lit unit (Bool true)) Nil))
+  test "listLit4" binding "[  x   ,  y  ,   1337 ]" (ListLit unit (toList [Lit unit (Name "x"), Lit unit (Name "y"), Lit unit (AInt 1337)]))
 
-  test "tupleLit1" binding "(a,b)" (NTupleLit (toList [Lit (Name "a"), Lit (Name "b")]))
-  test "tupleLit2" binding "(   a   ,  b   ,   c   )" (NTupleLit (toList $ [Lit (Name "a"), Lit (Name "b"), Lit (Name "c")]))
+  test "tupleLit1" binding "(a,b)" (NTupleLit unit (toList [Lit unit (Name "a"), Lit unit (Name "b")]))
+  test "tupleLit2" binding "(   a   ,  b   ,   c   )" (NTupleLit unit (toList $ [Lit unit (Name "a"), Lit unit (Name "b"), Lit unit (Name "c")]))
   test "tupleLit3" binding "(  (  x  ,  y  )  , ( a  ,  b  )  , 10 )"
-    (NTupleLit (toList
-      [ NTupleLit (toList [Lit (Name "x"), Lit (Name "y")])
-      , NTupleLit (toList [Lit (Name "a"), Lit (Name "b")])
-      , (Lit (AInt 10))
+    (NTupleLit unit (toList
+      [ NTupleLit unit (toList [Lit unit (Name "x"), Lit unit (Name "y")])
+      , NTupleLit unit (toList [Lit unit (Name "a"), Lit unit (Name "b")])
+      , (Lit unit (AInt 10))
       ]))
 
   test "binding" binding "( ( x , y ) : [ a , b ] )"
-    (ConsLit
-      (NTupleLit (toList [Lit (Name "x"), Lit (Name "y")]))
-      (ListLit (toList [Lit (Name "a"), Lit (Name "b")])))
+    (ConsLit unit
+      (NTupleLit unit (toList [Lit unit (Name "x"), Lit unit (Name "y")]))
+      (ListLit unit (toList [Lit unit (Name "a"), Lit unit (Name "b")])))
 
   test "def1" definition "x = 10" (Def "x" Nil (aint 10))
-  test "def2" definition "double x = x + x" (Def "double" (Cons (Lit (Name "x")) Nil) (Binary unit Add (aname "x") (aname "x")))
+  test "def2" definition "double x = x + x" (Def "double" (Cons (Lit unit (Name "x")) Nil) (Binary unit Add (aname "x") (aname "x")))
   test "def3" definition "zip (x:xs) (y:ys) = (x,y) : zip xs ys"
     (Def "zip"
-      (toList [ConsLit (Lit (Name "x")) (Lit (Name "xs")), ConsLit (Lit (Name "y")) (Lit (Name "ys"))])
+      (toList [ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs")), ConsLit unit (Lit unit (Name "y")) (Lit unit (Name "ys"))])
       (Binary unit Colon
         (NTuple unit (toList  [Atom unit (Name "x"), Atom unit (Name "y")]))
         (App unit (aname "zip") (toList [Atom unit (Name "xs"), Atom unit (Name "ys")]))))
@@ -312,12 +312,12 @@ runTests = do
   test "string1" expression "\"asdf\"" (List unit $ toList [Atom unit (Char "a"), Atom unit (Char "s"), Atom unit (Char "d"), Atom unit (Char "f")])
   test "string2" expression "\"\\\\\\n\\\"\\\'\"" (List unit $ toList [Atom unit (Char "\\"), Atom unit (Char "\n"), Atom unit (Char "\""), Atom unit (Char "'")])
 
-  test "listComp1" expression "[ x | x <- [1,2,3] ]" $ ListComp unit (Atom unit (Name "x")) (toList [Gen unit (Lit (Name "x")) (List unit (toList [Atom unit (AInt 1), Atom unit (AInt 2), Atom unit (AInt 3)]))])
-  test "listComp2" expression "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp unit (Binary unit Add (Atom unit (Name "b")) (Atom unit (Name ("c")))) $ toList [Let unit (Lit (Name "b")) (Atom unit (AInt 3)),
-    Gen unit (Lit (Name "c")) (ArithmSeq unit (Atom unit (AInt 1)) Nothing Nothing)]
-  test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp unit (Binary unit Mul (Atom unit (Name "a")) (Atom unit (Name "b"))) $ toList [Let unit (Lit (Name "a")) (Atom unit (AInt 5)),
-    Let unit (Lit (Name "b")) (Binary unit Add (Atom unit (Name "a")) (Atom unit (AInt 1)))]
-  test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp unit (aname "x") $ toList [ Gen unit (Lit (Name "x")) (ArithmSeq unit (aint 1) Nothing (Just (aint 10))), Guard unit (App unit (aname "even") $ toList [aname "x"])]
+  test "listComp1" expression "[ x | x <- [1,2,3] ]" $ ListComp unit (Atom unit (Name "x")) (toList [Gen unit (Lit unit (Name "x")) (List unit (toList [Atom unit (AInt 1), Atom unit (AInt 2), Atom unit (AInt 3)]))])
+  test "listComp2" expression "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp unit (Binary unit Add (Atom unit (Name "b")) (Atom unit (Name ("c")))) $ toList [Let unit (Lit unit (Name "b")) (Atom unit (AInt 3)),
+    Gen unit (Lit unit (Name "c")) (ArithmSeq unit (Atom unit (AInt 1)) Nothing Nothing)]
+  test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp unit (Binary unit Mul (Atom unit (Name "a")) (Atom unit (Name "b"))) $ toList [Let unit (Lit unit (Name "a")) (Atom unit (AInt 5)),
+    Let unit (Lit unit (Name "b")) (Binary unit Add (Atom unit (Name "a")) (Atom unit (AInt 1)))]
+  test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp unit (aname "x") $ toList [ Gen unit (Lit unit (Name "x")) (ArithmSeq unit (aint 1) Nothing (Just (aint 10))), Guard unit (App unit (aname "even") $ toList [aname "x"])]
 
 
 prelude :: String
@@ -422,68 +422,68 @@ prelude =
 
 parsedPrelude :: List Definition
 parsedPrelude = toList [
-  (Def "and" (Cons (ConsLit (Lit (Bool true)) (Lit (Name "xs"))) (Nil)) (App unit (Atom unit (Name "and")) (Cons (Atom unit (Name "xs")) (Nil)))),
-  (Def "and" (Cons (ConsLit (Lit (Bool false)) (Lit (Name "xs"))) (Nil)) (Atom unit (Bool false))),
-  (Def "and" (Cons (ListLit (Nil)) (Nil)) (Atom unit (Bool true))),
-  (Def "or" (Cons (ConsLit (Lit (Bool false)) (Lit (Name "xs"))) (Nil)) (App unit (Atom unit (Name "or")) (Cons (Atom unit (Name "xs")) (Nil)))),
-  (Def "or" (Cons (ConsLit (Lit (Bool true)) (Lit (Name "xs"))) (Nil)) (Atom unit (Bool true))),
-  (Def "or" (Cons (ListLit (Nil)) (Nil)) (Atom unit (Bool false))),
-  (Def "all" (Cons (Lit (Name "p")) (Nil)) (Binary unit Composition (Atom unit (Name "and")) (App unit (Atom unit (Name "map")) (Cons (Atom unit (Name "p")) (Nil))))),
-  (Def "any" (Cons (Lit (Name "p")) (Nil)) (Binary unit Composition (Atom unit (Name "or")) (App unit (Atom unit (Name "map")) (Cons (Atom unit (Name "p")) (Nil))))),
-  (Def "head" (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)) (Atom unit (Name "x"))),
-  (Def "tail" (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)) (Atom unit (Name "xs"))),
-  (Def "take" (Cons (Lit (AInt 0)) (Cons (Lit (Name "xs")) (Nil))) (List unit (Nil))),
-  (Def "take" (Cons (Lit (Name "n")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil))) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "take")) (Cons (Binary unit Sub (Atom unit (Name "n")) (Atom unit (AInt 1))) (Cons (Atom unit (Name "xs")) (Nil)))))),
-  (Def "drop" (Cons (Lit (AInt 0)) (Cons (Lit (Name "xs")) (Nil))) (Atom unit (Name "xs"))),
-  (Def "drop" (Cons (Lit (Name "n")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil))) (App unit (Atom unit (Name "drop")) (Cons (Binary unit Sub (Atom unit (Name "n")) (Atom unit (AInt 1))) (Cons (Atom unit (Name "xs")) (Nil))))),
-  (Def "elem" (Cons (Lit (Name "e")) (Cons (ListLit (Nil)) (Nil))) (Atom unit (Bool false))),
-  (Def "elem" (Cons (Lit (Name "e")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil))) (IfExpr unit (Binary unit Equ (Atom unit (Name "e")) (Atom unit (Name "x"))) (Atom unit (Bool true)) (App unit (Atom unit (Name "elem")) (Cons (Atom unit (Name "e")) (Cons (Atom unit (Name "xs")) (Nil)))))),
-  (Def "max" (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil))) (IfExpr unit (Binary unit Geq (Atom unit (Name "a")) (Atom unit (Name "b"))) (Atom unit (Name "a")) (Atom unit (Name "b")))),
-  (Def "min" (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil))) (IfExpr unit (Binary unit Geq (Atom unit (Name "b")) (Atom unit (Name "a"))) (Atom unit (Name "a")) (Atom unit (Name "b")))),
-  (Def "maximum" (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)) (App unit (Atom unit (Name "foldr")) (Cons (Atom unit (Name "max")) (Cons (Atom unit (Name "x")) (Cons (Atom unit (Name "xs")) (Nil)))))),
-  (Def "minimum" (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)) (App unit (Atom unit (Name "foldr")) (Cons (Atom unit (Name "min")) (Cons (Atom unit (Name "x")) (Cons (Atom unit (Name "xs")) (Nil)))))),
-  (Def "length" (Cons (ListLit (Nil)) (Nil)) (Atom unit (AInt 0))),
-  (Def "length" (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)) (Binary unit Add (Atom unit (AInt 1)) (App unit (Atom unit (Name "length")) (Cons (Atom unit (Name "xs")) (Nil))))),
-  (Def "zip" (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Cons (ConsLit (Lit (Name "y")) (Lit (Name "ys"))) (Nil))) (Binary unit Colon (NTuple unit (Cons (Atom unit (Name "x")) (Cons (Atom unit (Name "y")) (Nil)))) (App unit (Atom unit (Name "zip")) (Cons (Atom unit (Name "xs")) (Cons (Atom unit (Name "ys")) (Nil)))))),
-  (Def "zip" (Cons (ListLit (Nil)) (Cons (Lit (Name "_")) (Nil))) (List unit (Nil))),
-  (Def "zip" (Cons (Lit (Name "_")) (Cons (ListLit (Nil)) (Nil))) (List unit (Nil))),
-  (Def "zipWith" (Cons (Lit (Name "f")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Cons (ConsLit (Lit (Name "y")) (Lit (Name "ys"))) (Nil)))) (Binary unit Colon (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "x")) (Cons (Atom unit (Name "y")) (Nil)))) (App unit (Atom unit (Name "zipWith")) (Cons (Atom unit (Name "f")) (Cons (Atom unit (Name "xs")) (Cons (Atom unit (Name "ys")) (Nil))))))),
-  (Def "zipWith" (Cons (Lit (Name "_")) (Cons (ListLit (Nil)) (Cons (Lit (Name "_")) (Nil)))) (List unit (Nil))),
-  (Def "zipWith" (Cons (Lit (Name "_")) (Cons (Lit (Name "_")) (Cons (ListLit (Nil)) (Nil)))) (List unit (Nil))),
-  (Def "unzip" (Cons (ListLit (Nil)) (Nil)) (NTuple unit (Cons (List unit (Nil)) (Cons (List unit (Nil)) (Nil))))),
-  (Def "unzip" (Cons (ConsLit (NTupleLit (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (Lit (Name "xs"))) (Nil)) (Binary unit Dollar (Lambda unit (Cons (NTupleLit (Cons (Lit (Name "as")) (Cons (Lit (Name "bs")) (Nil)))) (Nil)) (NTuple unit (Cons (Binary unit Colon (Atom unit (Name "a")) (Atom unit (Name "as"))) (Cons (Binary unit Colon (Atom unit (Name "b")) (Atom unit (Name "bs"))) (Nil))))) (App unit (aname "unzip") (Cons (aname "xs") Nil)))),
-  (Def "fst" (Cons (NTupleLit (Cons (Lit (Name "x")) (Cons (Lit (Name "_")) (Nil)))) Nil) (Atom unit (Name "x"))),
-  (Def "snd" (Cons (NTupleLit (Cons (Lit (Name "_")) (Cons (Lit (Name "x")) (Nil)))) Nil) (Atom unit (Name "x"))),
-  (Def "curry" (Cons (Lit (Name "f")) (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (App unit (Atom unit (Name "f")) (Cons (NTuple unit (Cons (Atom unit (Name "a")) (Cons (Atom unit (Name "b")) (Nil)))) (Nil)))),
-  (Def "uncurry" (Cons (Lit (Name "f")) (Cons (NTupleLit (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (Nil))) (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "a")) (Cons (Atom unit (Name "b")) (Nil))))),
-  (Def "repeat" (Cons (Lit (Name "x")) (Nil)) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "repeat")) (Cons (Atom unit (Name "x")) (Nil))))),
-  (Def "replicate" (Cons (Lit (AInt 0)) (Cons (Lit (Name "_")) (Nil))) (List unit (Nil))),
-  (Def "replicate" (Cons (Lit (Name "n")) (Cons (Lit (Name "x")) (Nil))) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "replicate")) (Cons (Binary unit Sub (Atom unit (Name "n")) (Atom unit (AInt 1))) (Cons (Atom unit (Name "x")) (Nil)))))),
-  (Def "enumFromTo" (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil))) (IfExpr unit (Binary unit Leq (Atom unit (Name "a")) (Atom unit (Name "b"))) (Binary unit Colon (Atom unit (Name "a")) (App unit (Atom unit (Name "enumFromTo")) (Cons (Binary unit Add (Atom unit (Name "a")) (Atom unit (AInt 1))) (Cons (Atom unit (Name "b")) (Nil))))) (List unit (Nil)))),
-  (Def "sum" (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)) (Binary unit Add (Atom unit (Name "x")) (App unit (Atom unit (Name "sum")) (Cons (Atom unit (Name "xs")) (Nil))))),
-  (Def "sum" (Cons (ListLit (Nil)) (Nil)) (Atom unit (AInt 0))),
-  (Def "product" (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)) (Binary unit Mul (Atom unit (Name "x")) (App unit (Atom unit (Name "product")) (Cons (Atom unit (Name "xs")) (Nil))))),
-  (Def "product" (Cons (ListLit (Nil)) (Nil)) (Atom unit (AInt 1))),
-  (Def "reverse" (Cons (ListLit (Nil)) (Nil)) (List unit (Nil))),
-  (Def "reverse" (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)) (Binary unit Append (App unit (Atom unit (Name "reverse")) (Cons (Atom unit (Name "xs")) (Nil))) (List unit (Cons (Atom unit (Name "x")) (Nil))))),
+  (Def "and" (ConsLit unit (Lit unit (Bool true)) (Lit unit (Name "xs")) : Nil) (App unit (Atom unit (Name "and")) (Cons (Atom unit (Name "xs")) (Nil)))),
+  (Def "and" (ConsLit unit (Lit unit (Bool false)) (Lit unit (Name "xs")) : Nil) (Atom unit (Bool false))),
+  (Def "and" (ListLit unit Nil : Nil) (Atom unit (Bool true))),
+  (Def "or" (ConsLit unit (Lit unit (Bool false)) (Lit unit (Name "xs")) : Nil) (App unit (Atom unit (Name "or")) (Cons (Atom unit (Name "xs")) (Nil)))),
+  (Def "or" (ConsLit unit (Lit unit (Bool true)) (Lit unit (Name "xs")) : Nil) (Atom unit (Bool true))),
+  (Def "or" (ListLit unit Nil : Nil) (Atom unit (Bool false))),
+  (Def "all" (Lit unit (Name "p") : Nil) (Binary unit Composition (Atom unit (Name "and")) (App unit (Atom unit (Name "map")) (Cons (Atom unit (Name "p")) (Nil))))),
+  (Def "any" (Lit unit (Name "p") : Nil) (Binary unit Composition (Atom unit (Name "or")) (App unit (Atom unit (Name "map")) (Cons (Atom unit (Name "p")) (Nil))))),
+  (Def "head" (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)) (Atom unit (Name "x"))),
+  (Def "tail" (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)) (Atom unit (Name "xs"))),
+  (Def "take" (Cons (Lit unit (AInt 0)) (Cons (Lit unit (Name "xs")) (Nil))) (List unit (Nil))),
+  (Def "take" (Cons (Lit unit (Name "n")) (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil))) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "take")) (Cons (Binary unit Sub (Atom unit (Name "n")) (Atom unit (AInt 1))) (Cons (Atom unit (Name "xs")) (Nil)))))),
+  (Def "drop" (Cons (Lit unit (AInt 0)) (Cons (Lit unit (Name "xs")) (Nil))) (Atom unit (Name "xs"))),
+  (Def "drop" (Cons (Lit unit (Name "n")) (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil))) (App unit (Atom unit (Name "drop")) (Cons (Binary unit Sub (Atom unit (Name "n")) (Atom unit (AInt 1))) (Cons (Atom unit (Name "xs")) (Nil))))),
+  (Def "elem" (Cons (Lit unit (Name "e")) (Cons (ListLit unit (Nil)) (Nil))) (Atom unit (Bool false))),
+  (Def "elem" (Cons (Lit unit (Name "e")) (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil))) (IfExpr unit (Binary unit Equ (Atom unit (Name "e")) (Atom unit (Name "x"))) (Atom unit (Bool true)) (App unit (Atom unit (Name "elem")) (Cons (Atom unit (Name "e")) (Cons (Atom unit (Name "xs")) (Nil)))))),
+  (Def "max" (Cons (Lit unit (Name "a")) (Cons (Lit unit (Name "b")) (Nil))) (IfExpr unit (Binary unit Geq (Atom unit (Name "a")) (Atom unit (Name "b"))) (Atom unit (Name "a")) (Atom unit (Name "b")))),
+  (Def "min" (Cons (Lit unit (Name "a")) (Cons (Lit unit (Name "b")) (Nil))) (IfExpr unit (Binary unit Geq (Atom unit (Name "b")) (Atom unit (Name "a"))) (Atom unit (Name "a")) (Atom unit (Name "b")))),
+  (Def "maximum" (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)) (App unit (Atom unit (Name "foldr")) (Cons (Atom unit (Name "max")) (Cons (Atom unit (Name "x")) (Cons (Atom unit (Name "xs")) (Nil)))))),
+  (Def "minimum" (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)) (App unit (Atom unit (Name "foldr")) (Cons (Atom unit (Name "min")) (Cons (Atom unit (Name "x")) (Cons (Atom unit (Name "xs")) (Nil)))))),
+  (Def "length" (Cons (ListLit unit (Nil)) (Nil)) (Atom unit (AInt 0))),
+  (Def "length" (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)) (Binary unit Add (Atom unit (AInt 1)) (App unit (Atom unit (Name "length")) (Cons (Atom unit (Name "xs")) (Nil))))),
+  (Def "zip" (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Cons (ConsLit unit (Lit unit (Name "y")) (Lit unit (Name "ys"))) (Nil))) (Binary unit Colon (NTuple unit (Cons (Atom unit (Name "x")) (Cons (Atom unit (Name "y")) (Nil)))) (App unit (Atom unit (Name "zip")) (Cons (Atom unit (Name "xs")) (Cons (Atom unit (Name "ys")) (Nil)))))),
+  (Def "zip" (Cons (ListLit unit (Nil)) (Cons (Lit unit (Name "_")) (Nil))) (List unit (Nil))),
+  (Def "zip" (Cons (Lit unit (Name "_")) (Cons (ListLit unit (Nil)) (Nil))) (List unit (Nil))),
+  (Def "zipWith" (Cons (Lit unit (Name "f")) (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Cons (ConsLit unit (Lit unit (Name "y")) (Lit unit (Name "ys"))) (Nil)))) (Binary unit Colon (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "x")) (Cons (Atom unit (Name "y")) (Nil)))) (App unit (Atom unit (Name "zipWith")) (Cons (Atom unit (Name "f")) (Cons (Atom unit (Name "xs")) (Cons (Atom unit (Name "ys")) (Nil))))))),
+  (Def "zipWith" (Cons (Lit unit (Name "_")) (Cons (ListLit unit (Nil)) (Cons (Lit unit (Name "_")) (Nil)))) (List unit (Nil))),
+  (Def "zipWith" (Cons (Lit unit (Name "_")) (Cons (Lit unit (Name "_")) (Cons (ListLit unit (Nil)) (Nil)))) (List unit (Nil))),
+  (Def "unzip" (Cons (ListLit unit (Nil)) (Nil)) (NTuple unit (Cons (List unit (Nil)) (Cons (List unit (Nil)) (Nil))))),
+  (Def "unzip" (Cons (ConsLit unit (NTupleLit unit (Cons (Lit unit (Name "a")) (Cons (Lit unit (Name "b")) (Nil)))) (Lit unit (Name "xs"))) (Nil)) (Binary unit Dollar (Lambda unit (Cons (NTupleLit unit (Cons (Lit unit (Name "as")) (Cons (Lit unit (Name "bs")) (Nil)))) (Nil)) (NTuple unit (Cons (Binary unit Colon (Atom unit (Name "a")) (Atom unit (Name "as"))) (Cons (Binary unit Colon (Atom unit (Name "b")) (Atom unit (Name "bs"))) (Nil))))) (App unit (aname "unzip") (Cons (aname "xs") Nil)))),
+  (Def "fst" (Cons (NTupleLit unit (Cons (Lit unit (Name "x")) (Cons (Lit unit (Name "_")) (Nil)))) Nil) (Atom unit (Name "x"))),
+  (Def "snd" (Cons (NTupleLit unit (Cons (Lit unit (Name "_")) (Cons (Lit unit (Name "x")) (Nil)))) Nil) (Atom unit (Name "x"))),
+  (Def "curry" (Cons (Lit unit (Name "f")) (Cons (Lit unit (Name "a")) (Cons (Lit unit (Name "b")) (Nil)))) (App unit (Atom unit (Name "f")) (Cons (NTuple unit (Cons (Atom unit (Name "a")) (Cons (Atom unit (Name "b")) (Nil)))) (Nil)))),
+  (Def "uncurry" (Cons (Lit unit (Name "f")) (Cons (NTupleLit unit (Cons (Lit unit (Name "a")) (Cons (Lit unit (Name "b")) (Nil)))) (Nil))) (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "a")) (Cons (Atom unit (Name "b")) (Nil))))),
+  (Def "repeat" (Cons (Lit unit (Name "x")) (Nil)) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "repeat")) (Cons (Atom unit (Name "x")) (Nil))))),
+  (Def "replicate" (Cons (Lit unit (AInt 0)) (Cons (Lit unit (Name "_")) (Nil))) (List unit (Nil))),
+  (Def "replicate" (Cons (Lit unit (Name "n")) (Cons (Lit unit (Name "x")) (Nil))) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "replicate")) (Cons (Binary unit Sub (Atom unit (Name "n")) (Atom unit (AInt 1))) (Cons (Atom unit (Name "x")) (Nil)))))),
+  (Def "enumFromTo" (Cons (Lit unit (Name "a")) (Cons (Lit unit (Name "b")) (Nil))) (IfExpr unit (Binary unit Leq (Atom unit (Name "a")) (Atom unit (Name "b"))) (Binary unit Colon (Atom unit (Name "a")) (App unit (Atom unit (Name "enumFromTo")) (Cons (Binary unit Add (Atom unit (Name "a")) (Atom unit (AInt 1))) (Cons (Atom unit (Name "b")) (Nil))))) (List unit (Nil)))),
+  (Def "sum" (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)) (Binary unit Add (Atom unit (Name "x")) (App unit (Atom unit (Name "sum")) (Cons (Atom unit (Name "xs")) (Nil))))),
+  (Def "sum" (Cons (ListLit unit (Nil)) (Nil)) (Atom unit (AInt 0))),
+  (Def "product" (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)) (Binary unit Mul (Atom unit (Name "x")) (App unit (Atom unit (Name "product")) (Cons (Atom unit (Name "xs")) (Nil))))),
+  (Def "product" (Cons (ListLit unit (Nil)) (Nil)) (Atom unit (AInt 1))),
+  (Def "reverse" (Cons (ListLit unit (Nil)) (Nil)) (List unit (Nil))),
+  (Def "reverse" (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)) (Binary unit Append (App unit (Atom unit (Name "reverse")) (Cons (Atom unit (Name "xs")) (Nil))) (List unit (Cons (Atom unit (Name "x")) (Nil))))),
   (Def "concat" (Nil) (App unit (Atom unit (Name "foldr")) (Cons (PrefixOp unit Append) (Cons (List unit (Nil)) (Nil))))),
-  (Def "map" (Cons (Lit (Name "f")) (Cons (ListLit (Nil)) (Nil))) (List unit (Nil))),
-  (Def "map" (Cons (Lit (Name "f")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil))) (Binary unit Colon (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "x")) (Nil))) (App unit (Atom unit (Name "map")) (Cons (Atom unit (Name "f")) (Cons (Atom unit (Name "xs")) (Nil)))))),
-  (Def "not" (Cons (Lit (Bool true)) (Nil)) (Atom unit (Bool false))),
-  (Def "not" (Cons (Lit (Bool false)) (Nil)) (Atom unit (Bool true))),
-  (Def "filter" (Cons (Lit (Name "p")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil))) (IfExpr unit (App unit (Atom unit (Name "p")) (Cons (Atom unit (Name "x")) (Nil))) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "filter")) (Cons (Atom unit (Name "p")) (Cons (Atom unit (Name "xs")) (Nil))))) (App unit (Atom unit (Name "filter")) (Cons (Atom unit (Name "p")) (Cons (Atom unit (Name "xs")) (Nil)))))),
-  (Def "filter" (Cons (Lit (Name "p")) (Cons (ListLit (Nil)) (Nil))) (List unit (Nil))),
-  (Def "foldr" (Cons (Lit (Name "f")) (Cons (Lit (Name "ini")) (Cons (ListLit (Nil)) (Nil)))) (Atom unit (Name "ini"))),
-  (Def "foldr" (Cons (Lit (Name "f")) (Cons (Lit (Name "ini")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "x")) (Cons (App unit (Atom unit (Name "foldr")) (Cons (Atom unit (Name "f")) (Cons (Atom unit (Name "ini")) (Cons (Atom unit (Name "xs")) (Nil))))) (Nil))))),
-  (Def "foldl" (Cons (Lit (Name "f")) (Cons (Lit (Name "acc")) (Cons (ListLit (Nil)) (Nil)))) (Atom unit (Name "acc"))),
-  (Def "foldl" (Cons (Lit (Name "f")) (Cons (Lit (Name "acc")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (App unit (Atom unit (Name "foldl")) (Cons (Atom unit (Name "f")) (Cons (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "acc")) (Cons (Atom unit (Name "x")) (Nil)))) (Cons (Atom unit (Name "xs")) (Nil)))))),
-  (Def "scanl" (Cons (Lit (Name "f")) (Cons (Lit (Name "b")) (Cons (ListLit (Nil)) (Nil)))) (List unit (Cons (Atom unit (Name "b")) (Nil)))),
-  (Def "scanl" (Cons (Lit (Name "f")) (Cons (Lit (Name "b")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (Binary unit Colon (Atom unit (Name "b")) (App unit (Atom unit (Name "scanl")) (Cons (Atom unit (Name "f")) (Cons (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "b")) (Cons (Atom unit (Name "x")) (Nil)))) (Cons (Atom unit (Name "xs")) (Nil))))))),
-  (Def "iterate" (Cons (Lit (Name "f")) (Cons (Lit (Name "x")) (Nil))) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "iterate")) (Cons (Atom unit (Name "f")) (Cons (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "x")) (Nil))) (Nil)))))),
-  (Def "id" (Cons (Lit (Name "x")) (Nil)) (Atom unit (Name "x"))),
-  (Def "const" (Cons (Lit (Name "x")) (Cons (Lit (Name "_")) (Nil))) (Atom unit (Name "x"))),
-  (Def "flip" (Cons (Lit (Name "f")) (Cons (Lit (Name "x")) (Cons (Lit (Name "y")) (Nil)))) (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "y")) (Cons (Atom unit (Name "x")) (Nil))))),
-  (Def "even" (Cons (Lit (Name "n")) (Nil)) (Binary unit Equ (Binary unit (InfixFunc "mod") (Atom unit (Name "n")) (Atom unit (AInt 2))) (Atom unit (AInt 0)))),
-  (Def "odd" (Cons (Lit (Name "n")) (Nil)) (Binary unit Equ (Binary unit (InfixFunc "mod") (Atom unit (Name "n")) (Atom unit (AInt 2))) (Atom unit (AInt 1)))),
-  (Def "fix" (Cons (Lit (Name "f")) (Nil)) (App unit (Atom unit (Name "f")) (Cons (App unit (Atom unit (Name "fix")) (Cons (Atom unit (Name "f")) (Nil))) (Nil))))
+  (Def "map" (Cons (Lit unit (Name "f")) (Cons (ListLit unit (Nil)) (Nil))) (List unit (Nil))),
+  (Def "map" (Cons (Lit unit (Name "f")) (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil))) (Binary unit Colon (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "x")) (Nil))) (App unit (Atom unit (Name "map")) (Cons (Atom unit (Name "f")) (Cons (Atom unit (Name "xs")) (Nil)))))),
+  (Def "not" (Cons (Lit unit (Bool true)) (Nil)) (Atom unit (Bool false))),
+  (Def "not" (Cons (Lit unit (Bool false)) (Nil)) (Atom unit (Bool true))),
+  (Def "filter" (Cons (Lit unit (Name "p")) (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil))) (IfExpr unit (App unit (Atom unit (Name "p")) (Cons (Atom unit (Name "x")) (Nil))) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "filter")) (Cons (Atom unit (Name "p")) (Cons (Atom unit (Name "xs")) (Nil))))) (App unit (Atom unit (Name "filter")) (Cons (Atom unit (Name "p")) (Cons (Atom unit (Name "xs")) (Nil)))))),
+  (Def "filter" (Cons (Lit unit (Name "p")) (Cons (ListLit unit (Nil)) (Nil))) (List unit (Nil))),
+  (Def "foldr" (Cons (Lit unit (Name "f")) (Cons (Lit unit (Name "ini")) (Cons (ListLit unit (Nil)) (Nil)))) (Atom unit (Name "ini"))),
+  (Def "foldr" (Cons (Lit unit (Name "f")) (Cons (Lit unit (Name "ini")) (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)))) (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "x")) (Cons (App unit (Atom unit (Name "foldr")) (Cons (Atom unit (Name "f")) (Cons (Atom unit (Name "ini")) (Cons (Atom unit (Name "xs")) (Nil))))) (Nil))))),
+  (Def "foldl" (Cons (Lit unit (Name "f")) (Cons (Lit unit (Name "acc")) (Cons (ListLit unit (Nil)) (Nil)))) (Atom unit (Name "acc"))),
+  (Def "foldl" (Cons (Lit unit (Name "f")) (Cons (Lit unit (Name "acc")) (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)))) (App unit (Atom unit (Name "foldl")) (Cons (Atom unit (Name "f")) (Cons (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "acc")) (Cons (Atom unit (Name "x")) (Nil)))) (Cons (Atom unit (Name "xs")) (Nil)))))),
+  (Def "scanl" (Cons (Lit unit (Name "f")) (Cons (Lit unit (Name "b")) (Cons (ListLit unit (Nil)) (Nil)))) (List unit (Cons (Atom unit (Name "b")) (Nil)))),
+  (Def "scanl" (Cons (Lit unit (Name "f")) (Cons (Lit unit (Name "b")) (Cons (ConsLit unit (Lit unit (Name "x")) (Lit unit (Name "xs"))) (Nil)))) (Binary unit Colon (Atom unit (Name "b")) (App unit (Atom unit (Name "scanl")) (Cons (Atom unit (Name "f")) (Cons (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "b")) (Cons (Atom unit (Name "x")) (Nil)))) (Cons (Atom unit (Name "xs")) (Nil))))))),
+  (Def "iterate" (Cons (Lit unit (Name "f")) (Cons (Lit unit (Name "x")) (Nil))) (Binary unit Colon (Atom unit (Name "x")) (App unit (Atom unit (Name "iterate")) (Cons (Atom unit (Name "f")) (Cons (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "x")) (Nil))) (Nil)))))),
+  (Def "id" (Cons (Lit unit (Name "x")) (Nil)) (Atom unit (Name "x"))),
+  (Def "const" (Cons (Lit unit (Name "x")) (Cons (Lit unit (Name "_")) (Nil))) (Atom unit (Name "x"))),
+  (Def "flip" (Cons (Lit unit (Name "f")) (Cons (Lit unit (Name "x")) (Cons (Lit unit (Name "y")) (Nil)))) (App unit (Atom unit (Name "f")) (Cons (Atom unit (Name "y")) (Cons (Atom unit (Name "x")) (Nil))))),
+  (Def "even" (Cons (Lit unit (Name "n")) (Nil)) (Binary unit Equ (Binary unit (InfixFunc "mod") (Atom unit (Name "n")) (Atom unit (AInt 2))) (Atom unit (AInt 0)))),
+  (Def "odd" (Cons (Lit unit (Name "n")) (Nil)) (Binary unit Equ (Binary unit (InfixFunc "mod") (Atom unit (Name "n")) (Atom unit (AInt 2))) (Atom unit (AInt 1)))),
+  (Def "fix" (Cons (Lit unit (Name "f")) (Nil)) (App unit (Atom unit (Name "f")) (Cons (App unit (Atom unit (Name "fix")) (Cons (Atom unit (Name "f")) (Nil))) (Nil))))
   ]

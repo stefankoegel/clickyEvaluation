@@ -58,9 +58,9 @@ instance showEvalError :: Show EvalError where
   show (MoreErrors e1 e2)         = "(MoreErrors " <> show e1 <> " " <> show e2 <> ")"
 
 data MatchingError =
-    MatchingError Binding Expr
-  | StrictnessError Binding Expr
-  | TooFewArguments (List Binding) (List Expr)
+    MatchingError (Binding Unit) Expr
+  | StrictnessError (Binding Unit) Expr
+  | TooFewArguments (List (Binding Unit)) (List Expr)
 
 instance showMatchingError :: Show MatchingError where
   show (MatchingError b e)     = "MatchingError " <> show b <> " " <> show e
@@ -77,7 +77,7 @@ type Matcher = ExceptT MatchingError Identity
 runMatcherM :: forall a. Matcher a -> Either MatchingError a
 runMatcherM = extract <<< runExceptT
 
-type Env = StrMap (List (Tuple (List Binding) Expr))
+type Env = StrMap (List (Tuple (List (Binding Unit)) Expr))
 
 defsToEnv :: (List Definition) -> Env
 defsToEnv = foldl insertDef Map.empty
@@ -115,31 +115,31 @@ eval1 env expr = case expr of
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> Expr -> Expr
-eval env expr = evalToBinding env expr (Lit (Name "_|_"))
+eval env expr = evalToBinding env expr (Lit unit (Name "_|_"))
 
-evalToBinding :: Env -> Expr -> Binding -> Expr
+evalToBinding :: Env -> Expr -> Binding Unit -> Expr
 evalToBinding env expr bind = case bind of
-  (Lit (Name "_|_")) -> recurse env expr bind
-  (Lit (Name _))     -> expr
-  (Lit _)            -> case expr of
+  (Lit _ (Name "_|_")) -> recurse env expr bind
+  (Lit _ (Name _))     -> expr
+  (Lit _ _)            -> case expr of
     (Atom _ _) -> expr
     _          -> recurse env expr bind
 
-  (ConsLit b bs)     -> case expr of
+  (ConsLit _ b bs)     -> case expr of
     (Binary _ Colon e es) -> Binary unit Colon (evalToBinding env e b) (evalToBinding env es bs)
     (List _ (Cons e es))  -> evalToBinding env (Binary unit Colon e (List unit es)) bind
     _                     -> recurse env expr bind
 
-  (ListLit bs)       -> case expr of
+  (ListLit _ bs)       -> case expr of
     (List _ es) -> if (length es == length bs) then List unit (zipWith (evalToBinding env) es bs) else expr
     _           -> recurse env expr bind
 
-  (NTupleLit bs)     -> case expr of
+  (NTupleLit _ bs)     -> case expr of
     (NTuple _ es)  -> NTuple unit (zipWith (evalToBinding env) es bs)
     _              -> recurse env expr bind
 
 
-recurse :: Env -> Expr -> Binding -> Expr
+recurse :: Env -> Expr -> Binding Unit -> Expr
 recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1d bind
   where
     eval1d :: Expr
@@ -165,13 +165,13 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
       _                  ->
         expr
 
-    evalToBindingQual :: Env -> ExprQualTree -> Binding -> ExprQualTree
+    evalToBindingQual :: Env -> ExprQualTree -> Binding Unit -> ExprQualTree
     evalToBindingQual env qual binding = case qual of
       Let _ bin expr -> Let unit bin (evalToBinding env expr bind)      
       Gen _ bin expr -> Gen unit bin (evalToBinding env expr bind)
       Guard _ expr   -> Guard unit (evalToBinding env expr bind)
 
-wrapLambda :: (List Binding) -> (List Expr) -> Expr -> Evaluator Expr
+wrapLambda :: (List (Binding Unit)) -> (List Expr) -> Expr -> Evaluator Expr
 wrapLambda binds args body =
   case compare (length binds) (length args) of
     EQ -> pure body
@@ -307,7 +307,7 @@ evalListComp env expr (Cons q qs) = case q of
     case listcomp1 of
       List _ (Cons x Nil) -> pure $ Binary unit Colon x listcomp2
       _ -> pure $ Binary unit Append listcomp1 listcomp2
-  Gen _ b e -> pure $ ListComp unit expr (Cons (Gen unit b (evalToBinding env e (ConsLit b (Lit (Name "_"))))) qs)
+  Gen _ b e -> pure $ ListComp unit expr (Cons (Gen unit b (evalToBinding env e (ConsLit unit b (Lit unit (Name "_"))))) qs)
   Let _ b e -> case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
     Right r -> do
       Tuple qs' r' <- runStateT (replaceQualifiers qs) r
@@ -331,7 +331,7 @@ replaceQualifiers = traverse replaceQual
         e'  <- lift $ replace' sub e
         pure $ Guard unit e'
 
-scope :: Binding -> Expr -> StateT (StrMap Expr) Evaluator Expr
+scope :: Binding Unit -> Expr -> StateT (StrMap Expr) Evaluator Expr
 scope b e = do
   sub <- get
   e'  <- lift $ replace' sub e
@@ -342,7 +342,7 @@ scope b e = do
 -- Let Expressions
 ------------------------------------------------------------------------------------------
 
-type Bindings = List (Tuple Binding Expr)
+type Bindings = List (Tuple (Binding Unit) Expr)
 
 evalLetExpr :: Bindings -> Expr -> Evaluator Expr
 evalLetExpr Nil e = pure e
@@ -428,7 +428,7 @@ modulo (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom unit $ AInt $ mod i j
 modulo e1 e2 = throwError $ BinaryOpError (InfixFunc "mod") e1 e2
 
 
-tryAll :: Env -> (List (Tuple (List Binding) Expr)) -> (List Expr) -> String -> (List MatchingError) -> Evaluator Expr
+tryAll :: Env -> (List (Tuple (List (Binding Unit)) Expr)) -> (List Expr) -> String -> (List MatchingError) -> Evaluator Expr
 tryAll _   Nil                        _    name errs = throwError $ NoMatchingFunction name errs
 tryAll env (Cons (Tuple binds body) cases) args name errs | (length args) < (length binds) = tryAll env cases args name (errs <> (singleton $ TooFewArguments binds args))
 tryAll env (Cons (Tuple binds body) cases) args name errs = case runMatcherM $ matchls' env binds args of
@@ -443,36 +443,36 @@ whnf (List _ _)        = true
 whnf (NTuple _ _)      = true
 whnf _                 = false
 
-checkStrictness :: Binding -> Expr -> MatchingError
+checkStrictness :: Binding Unit -> Expr -> MatchingError
 checkStrictness bs es | whnf es   = MatchingError bs es
                       | otherwise = StrictnessError bs es
 
 
-matchls' :: Env -> (List Binding) -> (List Expr) -> Matcher (StrMap Expr)
+matchls' :: Env -> (List (Binding Unit)) -> (List Expr) -> Matcher (StrMap Expr)
 matchls' env bs es = execStateT (zipWithA (\b e -> match' b (evalToBinding env e b)) bs es) Map.empty
 
-match' :: Binding -> Expr -> StateT (StrMap Expr) Matcher Unit
-match' (Lit (Name name)) e                   = modify (Map.insert name e)
-match' (Lit ba)          (Atom _ ea)         = case ba == ea of
+match' :: Binding Unit -> Expr -> StateT (StrMap Expr) Matcher Unit
+match' (Lit _ (Name name)) e                   = modify (Map.insert name e)
+match' (Lit _ ba)          (Atom _ ea)         = case ba == ea of
                                                  true  -> pure unit
-                                                 false -> throwError $ MatchingError (Lit ba) (Atom unit ea)
-match' (Lit b)           e                   = throwError $ checkStrictness (Lit b) e
+                                                 false -> throwError $ MatchingError (Lit unit ba) (Atom unit ea)
+match' (Lit _ b)           e                   = throwError $ checkStrictness (Lit unit b) e
 
-match' (ConsLit b bs)    (Binary _ Colon e es) = match' b e *> match' bs es
-match' (ConsLit b bs)    (List _ (Cons e es))  = match' (ConsLit b bs) (Binary unit Colon e (List unit es))
-match' (ConsLit b bs)    (List _ Nil)          = throwError $ MatchingError (ConsLit b bs) (List unit Nil)
-match' (ConsLit b bs)    e                     = throwError $ checkStrictness (ConsLit b bs) e
+match' (ConsLit _ b bs)    (Binary _ Colon e es) = match' b e *> match' bs es
+match' (ConsLit _ b bs)    (List _ (Cons e es))  = match' (ConsLit unit b bs) (Binary unit Colon e (List unit es))
+match' (ConsLit _ b bs)    (List _ Nil)          = throwError $ MatchingError (ConsLit unit b bs) (List unit Nil)
+match' (ConsLit _ b bs)    e                     = throwError $ checkStrictness (ConsLit unit b bs) e
 
-match' (ListLit (Cons b bs)) (Binary _ Colon e es) = match' b e *> match' (ListLit bs) es
-match' (ListLit bs)      (List _ es)               = case length bs == length es of
+match' (ListLit _ (Cons b bs)) (Binary _ Colon e es) = match' b e *> match' (ListLit unit bs) es
+match' (ListLit _ bs)      (List _ es)               = case length bs == length es of
                                                        true  -> void $ zipWithA match' bs es
-                                                       false -> throwError $ MatchingError (ListLit bs) (List unit es)
-match' (ListLit bs)      e                         = throwError $ checkStrictness (ListLit bs) e
+                                                       false -> throwError $ MatchingError (ListLit unit bs) (List unit es)
+match' (ListLit _ bs)      e                         = throwError $ checkStrictness (ListLit unit bs) e
 
-match' (NTupleLit bs)    (NTuple _ es) = case length bs == length es of
+match' (NTupleLit _ bs)    (NTuple _ es) = case length bs == length es of
                                            true  -> void $ zipWithA match' bs es
-                                           false -> throwError $ MatchingError (NTupleLit bs) (NTuple unit es)
-match' (NTupleLit bs)    e             = throwError $ checkStrictness (NTupleLit bs) e
+                                           false -> throwError $ MatchingError (NTupleLit unit bs) (NTuple unit es)
+match' (NTupleLit _ bs)    e             = throwError $ checkStrictness (NTupleLit unit bs) e
 
 --TODO: replace with purescript mapM
 mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
@@ -487,7 +487,7 @@ mapM f (Cons x xs) = do
   pure $ Cons y ys
 
 -- removes every entry in StrMap that is inside the binding
-removeOverlapping :: Binding -> StrMap Expr -> StrMap Expr
+removeOverlapping :: Binding Unit -> StrMap Expr -> StrMap Expr
 removeOverlapping bind = removeOverlapping' (boundNames bind)
   where
     removeOverlapping' :: List String -> StrMap Expr -> StrMap Expr
@@ -521,7 +521,7 @@ replace' subs = go
       pure $ LetExpr unit binds' expr'
     e                     -> pure e
 
-avoidCapture :: StrMap Expr -> (List Binding) -> Evaluator Unit
+avoidCapture :: StrMap Expr -> (List (Binding Unit)) -> Evaluator Unit
 avoidCapture subs binds = case intersect (concatMap freeVariables $ Map.values subs) (boundNames' binds) of
   Nil       -> pure unit
   captures -> throwError $ NameCaptureError captures
@@ -543,14 +543,14 @@ freeVariables _ = Nil
 --   (\bs f -> nub f \\ boundNames' bs)
 --   (\f fs -> f <> concat fs)
 
-boundNames' :: (List Binding) -> (List String)
+boundNames' :: (List (Binding Unit)) -> (List String)
 boundNames' = concatMap boundNames
 
-boundNames :: Binding -> (List String)
+boundNames :: Binding Unit -> (List String)
 boundNames = go
   where
-  go (Lit (Name name)) = singleton name
-  go (ConsLit b1 b2)   = go b1 <> go b2
-  go (ListLit bs)      = foldMap go bs
-  go (NTupleLit bs)    = foldMap go bs
+  go (Lit _  (Name name)) = singleton name
+  go (ConsLit _ b1 b2)   = go b1 <> go b2
+  go (ListLit _ bs)      = foldMap go bs
+  go (NTupleLit _ bs)    = foldMap go bs
   go _                 = Nil

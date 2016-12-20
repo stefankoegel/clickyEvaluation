@@ -181,11 +181,13 @@ extract (Lambda c _ _) = c
 extract (App c _ _) = c
 extract (ListComp c _ _) = c
 
+-- type Expr = Tree Atom (Binding Unit) Op Unit
+-- type TypeTree = Tree Atom (Binding Type) (Tuple Op Type) Type
 type Expr = Tree Atom (Binding Unit) Op Unit
 
 type MType = Maybe Type
 
-type TypeTree = Tree MType (Binding MType) (Tuple Op MType) MType 
+type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) MType
 
 type ExprQualTree = QualTree (Binding Unit) Expr Unit
 
@@ -212,8 +214,6 @@ data TypeError
   | UnknownError String
   | NoInstanceOfEnum Type
 
--- derive instance eqQual :: (Eq b, Eq e) => Eq (Qual b e)
-
 derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c) 
 
 -- | Bindings
@@ -224,7 +224,9 @@ data Binding m = Lit       m Atom
                | ListLit   m (List (Binding m))
                | NTupleLit m (List (Binding m))
 
-derive instance eqBinding :: Eq Binding
+derive instance eqBinding :: (Eq a) => Eq (Binding a)
+
+type TypedBinding = Binding (Maybe Type)
 
 -- | Definitions
 -- |
@@ -239,12 +241,6 @@ instance showAtom :: Show Atom where
     Bool bool   -> "Bool " <> show bool
     Char string -> "Char " <> show string
     Name string -> "Name " <> show string
-
--- instance showQual :: (Show b, Show e) => Show (Qual b e) where
---   show q = case q of
---     Gen b e -> "Gen (" <> show b <> " " <> show e <> ")"
---     Let b e -> "Let (" <> show b <> " " <> show e <> ")"
---     Guard e -> "Guard (" <> show e <> ")"
 
 instance showQualTree :: (Show a, Show b, Show c) => Show (QualTree a b c) where
   show (Gen a b c) = "Gen (" <> show a <> " " <> show b <> " " <> show c <> ")"
@@ -271,9 +267,9 @@ instance showTree :: (Show a, Show b, Show c, Show d) => Show (Tree a b c d) whe
 instance showBinding :: (Show a) => Show (Binding a) where
   show binding = case binding of
     Lit m atom     -> "(Lit " <> show m <> " " <> show atom <> ")"
-    ConsLit m b bs -> "(ConsLit " <> show m <> " " <> show b <> ") (" <> show bs <> ")"
+    ConsLit m b bs -> "(ConsLit " <> show m <> " " <> show b <> " " <> show bs <> ")"
     ListLit m bs   -> "(ListLit " <> show m <> " " <> show bs <> ")"
-    NTupleLit m ls -> "(NTupleLit " <> show m <> " " show ls <> ")"
+    NTupleLit m ls -> "(NTupleLit " <> show m <> " " <> show ls <> ")"
 
 instance showDefinition :: Show Definition where
   show (Def name bindings body) = "Def " <> show name <> " (" <> show bindings <> ") (" <> show body <> ")"

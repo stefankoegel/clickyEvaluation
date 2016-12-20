@@ -353,14 +353,14 @@ letExpr expr = do
   body  <- indent $ withPos expr
   pure $ LetExpr unit binds body
   where
-    bindingItem :: IndentParser String Expr -> IndentParser String (Tuple Binding Expr)
+    bindingItem :: IndentParser String Expr -> IndentParser String (Tuple (Binding Unit) Expr)
     bindingItem expr = do
       b <- ilexe binding
       indent $ char '='
       e <- indent $ withPos expr
       pure $ Tuple b e
 
-    bindingBlock :: IndentParser String Expr -> IndentParser String (List (Tuple Binding Expr))
+    bindingBlock :: IndentParser String Expr -> IndentParser String (List (Tuple (Binding Unit) Expr))
     bindingBlock expr = curly <|> (PC.try layout) <|> (PC.try iblock)
       where 
         curly  = PC.between (ilexe $ char '{') (ilexe $ char '}') iblock 
@@ -383,40 +383,40 @@ parseExpr = runParserIndent expression
 -- Parsers for Bindings
 ---------------------------------------------------------
 
-lit :: forall m. (Monad m) => ParserT String m Binding
-lit = Lit <$> atom
+lit :: forall m. (Monad m) => ParserT String m (Binding Unit)
+lit = Lit unit <$> atom
 
-consLit :: IndentParser String Binding -> IndentParser String Binding
+consLit :: IndentParser String (Binding Unit) -> IndentParser String (Binding Unit)
 consLit bnd = do
   ilexe $ char '('
   b <- indent consLit'
   indent $ char ')'
   pure b
   where
-    consLit' :: IndentParser String Binding
+    consLit' :: IndentParser String (Binding Unit)
     consLit' = do
       b <- ilexe $ bnd
       indent $ char ':'
       bs <- (PC.try $ indent consLit') <|> (indent bnd)
-      pure $ ConsLit b bs
+      pure $ ConsLit unit b bs
 
-listLit :: IndentParser String Binding -> IndentParser String Binding
+listLit :: IndentParser String (Binding Unit) -> IndentParser String (Binding Unit)
 listLit bnd = do
   ilexe $ char '['
   bs <- (indent bnd) `PC.sepBy` (PC.try $ indent $ char ',')
   indent $ char ']'
-  pure $ ListLit bs
+  pure $ ListLit unit bs
 
-tupleLit :: IndentParser String Binding -> IndentParser String Binding
+tupleLit :: IndentParser String (Binding Unit) -> IndentParser String (Binding Unit)
 tupleLit bnd = do
   ilexe $ char '('
   b <- indent bnd
   indent $ char ','
   bs <- (indent bnd) `PC.sepBy1` (PC.try $ indent $ char ',')
   indent $ char ')'
-  pure $ NTupleLit (Cons b bs)
+  pure $ NTupleLit unit (Cons b bs)
 
-binding :: IndentParser String Binding
+binding :: IndentParser String (Binding Unit)
 binding = fix $ \bnd ->
       (PC.try $ consLit bnd)
   <|> (tupleLit bnd)

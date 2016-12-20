@@ -84,8 +84,8 @@ ifexpr = IfExpr unit atom atom atom
 arithmseq :: Expr
 arithmseq = ArithmSeq unit atom (Just atom) (Just atom)
 
-binding :: Binding
-binding = Lit (Name "x")
+binding :: Binding Unit
+binding = Lit unit (Name "x")
 
 letexpr :: Expr
 letexpr = LetExpr unit (toList [Tuple binding atom]) atom
