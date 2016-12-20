@@ -75,8 +75,19 @@
     </div>
 
     <script>
-      var input = $("#input");
-      input.on("change", PS.Main.makeCEwithHistory(input[0].value)(".output")(".historyBox")())
+    (function() {
+        var timer;
+        var parseInput = function() {
+            PS.Main.makeCEwithHistory($("#input").val())(".output")(".historyBox")();
+        }
+
+        $("#input").on("keypress", function() {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(parseInput, 500);
+        });
+    })();
+
+    $(function() { PS.Main.makeCEwithHistory($("#input").val())(".output")(".historyBox")(); });
     </script>
     <!-- <h3>Definitions</h3> -->
 <!--     <div class="ace" id="definitions"> -->
