@@ -58,6 +58,11 @@ instance subType :: Substitutable Type where
    ftv (AD a) = ftv a
    ftv (TypeError err) = Set.empty
 
+instance subMaybeType :: Substitutable (Maybe Type) where
+  apply s t = apply s <$> t
+  ftv (Just t) = ftv t
+  ftv Nothing = Set.empty
+
 instance listSub :: (Substitutable a) => Substitutable (List a) where
   apply s xs = map (apply s) xs
   ftv   = foldr (\a b -> Set.union (ftv a) b) Set.empty
@@ -88,20 +93,17 @@ instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => S
   ftv (Guard a c) = ftv c
 
 -- instance subTypeTree :: Substitutable TypeTree where
-instance subTypeTree :: Substitutable (Tree Unit TypeBinding Type Type) where
+instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) (Maybe Type)) where
   apply s = map (apply s)
   ftv typeTree = ftv (extract typeTree)
 
-instance subTypeBinding :: Substitutable TypeBinding where
-  apply s (TLit t) = TLit $ apply s t
-  apply s (TConsLit b1 b2 t) = TConsLit (apply s b1) (apply s b2) (apply s t)
-  apply s (TListLit lb t) = TListLit (apply s lb) (apply s t)
-  apply s (TNTupleLit lb t) = TNTupleLit (apply s lb) (apply s t)
+instance subTypedBinding :: Substitutable (Binding (Maybe Type)) where
+  apply s (Lit t atom) = Lit (apply s t) atom
+  apply s (ConsLit t b1 b2) = ConsLit (apply s t) (apply s b1) (apply s b2)
+  apply s (ListLit t lb) = ListLit (apply s t) (apply s lb)
+  apply s (NTupleLit t lb) = NTupleLit (apply s t) (apply s lb)
 
-  ftv (TLit t) = ftv t
-  ftv (TConsLit _ _ t) = ftv t
-  ftv (TListLit _ t) = ftv t
-  ftv (TNTupleLit _ t) = ftv t
+  ftv = extractFromBinding >>> ftv
 
 initUnique :: Unique
 initUnique = Unique { count : 0 }
@@ -738,66 +740,66 @@ normalizeTypeTree tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
 helptxToABC :: TypeTree -> State {count :: Int, env :: Map String String} TypeTree
 helptxToABC tt = go tt
   where
-    go (Atom t _) = helpTypeToABC t >>= \t -> pure $ Atom t unit
+    go (Atom t atom) = helpTypeToABC' t >>= \t -> pure $ Atom t atom
     go (List t tts) = do
-      t' <- helpTypeToABC t
+      t' <- helpTypeToABC' t
       tts' <- traverse helptxToABC tts
       pure $ List t' tts'
     go (NTuple t tts) = do
-      t' <- helpTypeToABC t
+      t' <- helpTypeToABC' t
       tts' <- traverse helptxToABC tts
       pure $ NTuple t' tts'
-    go (Binary t op tt1 tt2) = do
-      t' <- helpTypeToABC t
-      op' <- helpTypeToABC op
+    go (Binary t (Tuple op opType) tt1 tt2) = do
+      t' <- helpTypeToABC' t
+      opType' <- helpTypeToABC' opType
       tt1' <- helptxToABC tt1
       tt2' <- helptxToABC tt2
-      pure $ Binary t' op' tt1' tt2'
-    go (Unary t t1 tt) = do
-      t' <- helpTypeToABC t
-      t1' <- helpTypeToABC t1
+      pure $ Binary t' (Tuple op opType') tt1' tt2'
+    go (Unary t (Tuple op opType) tt) = do
+      t' <- helpTypeToABC' t
+      opType' <- helpTypeToABC' opType
       tt' <- helptxToABC tt
-      pure $ (Unary t' t1' tt')
-    go (SectL t tt t1) = do
-      t' <- helpTypeToABC t
-      t1' <- helpTypeToABC t1
+      pure $ (Unary t' (Tuple op opType') tt')
+    go (SectL t tt (Tuple op opType)) = do
+      t' <- helpTypeToABC' t
+      opType' <- helpTypeToABC' opType
       tt' <- helptxToABC tt
-      pure $ SectL t' tt' t1'
-    go (SectR t t1 tt) = do
-      t' <- helpTypeToABC t
-      t1' <- helpTypeToABC t1
+      pure $ SectL t' tt' (Tuple op opType')
+    go (SectR t (Tuple op opType) tt) = do
+      t' <- helpTypeToABC' t
+      opType' <- helpTypeToABC' opType
       tt' <- helptxToABC tt
-      pure $ SectR t' t1' tt'
-    go (PrefixOp op t) = helpTypeToABC op >>= \op -> pure $ PrefixOp op t
+      pure $ SectR t' (Tuple op opType') tt'
+    go (PrefixOp op t) = helpTypeToABC' op >>= \op -> pure $ PrefixOp op t
     go (IfExpr t tt1 tt2 tt3) = do
-      t' <- helpTypeToABC t
+      t' <- helpTypeToABC' t
       tt1' <- helptxToABC tt1
       tt2' <- helptxToABC tt2
       tt3' <- helptxToABC tt3
       pure $ IfExpr t' tt1' tt2' tt3'
     go (ArithmSeq t tt1 tt2 tt3) = do
-      t'   <- helpTypeToABC t
+      t'   <- helpTypeToABC' t
       tt1' <- helptxToABC tt1
       tt2' <- traverse helptxToABC tt2
       tt3' <- traverse helptxToABC tt3
       pure $ ArithmSeq t' tt1' tt2' tt3'
     go (LetExpr t bin tt) = do
-      t'   <- helpTypeToABC t
+      t'   <- helpTypeToABC' t
       bin' <- traverse (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
       tt'  <- helptxToABC tt
       pure $ LetExpr t' bin' tt'
     go (Lambda t tbs tt) = do
-      t' <- helpTypeToABC t
+      t' <- helpTypeToABC' t
       tbs' <- traverse helpBindingToABC tbs
       tt' <- helptxToABC tt
       pure $ Lambda t' tbs' tt'
     go (App t tt tts) = do
-      t' <- helpTypeToABC t
+      t' <- helpTypeToABC' t
       tt' <- helptxToABC tt
       tts' <- traverse helptxToABC tts
       pure $ App t' tt' tts'
     go (ListComp t tt tts) = do
-      t'   <- helpTypeToABC t
+      t'   <- helpTypeToABC' t
       tt'  <- helptxToABC tt
       tts' <- traverse helptxToABCQual tts
       pure $ ListComp t' tt' tts'
@@ -813,17 +815,17 @@ normalizeTypeError error = error
 helptxToABCQual :: TypeQual -> State {count :: Int, env :: Map String String} TypeQual
 helptxToABCQual q = case q of
   Gen t b e -> do
-    t' <- helpTypeToABC t
+    t' <- helpTypeToABC' t
     b' <- helpBindingToABC b
     e' <- helptxToABC e
     pure $ Gen t' b' e'
   Let t b e -> do
-    t' <- helpTypeToABC t
+    t' <- helpTypeToABC' t
     b' <- helpBindingToABC b
     e' <- helptxToABC e
     pure $ Let t' b' e'
   Guard t e -> do
-    t' <- helpTypeToABC t
+    t' <- helpTypeToABC' t
     e' <- helptxToABC e
     pure $ Guard t' e'
 
@@ -847,27 +849,46 @@ helpTypeToABC t = go t
    go (AD a) = helpADTypeToABC a >>= \a -> pure $ AD a
    go a = pure a
 
+helpTypeToABC' :: Maybe Type  -> State {count :: Int, env :: (Map String String)} (Maybe Type)
+helpTypeToABC' t = go t
+  where
+   go (Just (TypVar var)) = do
+      {env: env} :: {count :: Int, env :: Map String String} <- get
+      case lookup var env of
+        Just var' -> pure $ Just $ TypVar var'
+        Nothing -> do
+          {count: count} <- get
+          let newVarName = getNthName count
+          let env' = insert var newVarName env
+          put {count: count + 1, env: env'}
+          pure $ Just $ TypVar newVarName
+   go (Just (TypArr t1 t2)) = do
+        t1' <- helpTypeToABC t1
+        t2' <- helpTypeToABC t2
+        pure $ Just $ TypArr t1' t2'
+   go (Just (AD a)) = helpADTypeToABC a >>= \a -> pure $ Just $ AD a
+   go a = pure a
 helpADTypeToABC :: AD -> State {count :: Int, env :: (Map String String)} AD
 helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> pure $ TList t
 helpADTypeToABC (TTuple ts) = traverse helpTypeToABC ts >>= \ts -> pure $ TTuple ts
 
-helpBindingToABC :: TypeBinding -> State {count :: Int, env :: (Map String String)} TypeBinding
+helpBindingToABC :: TypedBinding -> State {count :: Int, env :: Map String String} TypedBinding
 helpBindingToABC bin = go bin
   where
-    go (TLit t) = helpTypeToABC t >>= \t -> pure $ TLit t
-    go (TConsLit tb1 tb2 t) = do
-      tb1' <- helpBindingToABC tb1
-      tb2' <- helpBindingToABC tb2
-      t' <- helpTypeToABC t
-      pure $ TConsLit tb1' tb2' t'
-    go (TListLit tbs t) = do
+    go (Lit t atom) = helpTypeToABC' t >>= \t -> pure $ Lit t atom
+    go (ConsLit t b1 b2) = do
+      b1' <- helpBindingToABC b1
+      b2' <- helpBindingToABC b2
+      t' <- helpTypeToABC' t
+      pure $ ConsLit t' b1' b2'
+    go (ListLit t tbs) = do
       tbs' <- traverse helpBindingToABC tbs
-      t' <- helpTypeToABC t
-      pure $ TListLit tbs' t'
-    go (TNTupleLit tbs t) = do
+      t' <- helpTypeToABC' t
+      pure $ ListLit t' tbs'
+    go (NTupleLit t tbs) = do
       tbs' <- traverse helpBindingToABC tbs
-      t' <- helpTypeToABC t
-      pure $ TNTupleLit tbs' t'
+      t' <- helpTypeToABC' t
+      pure $ NTupleLit t' tbs'
 
 -- Given an int generate an array of integers used as indices into the alphabet in `getNthName`.
 -- Example: map indexList (700..703) => [[24,25],[25,25],[0,0,0],[1,0,0]]
