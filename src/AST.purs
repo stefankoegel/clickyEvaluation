@@ -203,6 +203,12 @@ derive instance eqBinding :: (Eq a) => Eq (Binding a)
 
 type TypedBinding = Binding (Maybe Type)
 
+extractFromBinding :: forall a. Binding a -> a
+extractFromBinding (Lit x _)       = x
+extractFromBinding (ConsLit x _ _) = x
+extractFromBinding (ListLit x _)   = x
+extractFromBinding (NTupleLit x _) = x
+
 -- | Definitions
 -- |
 -- | Definitions for functions and constants
