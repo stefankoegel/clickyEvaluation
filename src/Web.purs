@@ -1,19 +1,15 @@
 module Web where
 
 import Prelude
-import Data.Foldable (all, class Foldable)
+import Data.Foldable (class Foldable, intercalate)
 import Data.Unfoldable (fromMaybe)
-import Data.String (joinWith)
-import Data.List (List(Nil, Cons), singleton, fromFoldable, length, zip, (..), zipWithA, snoc)
-import Data.Foreign (unsafeFromForeign, isUndefined)
-import Data.Maybe (Maybe(..), isJust, fromJust, maybe)
-import Data.Tuple (Tuple(..), fst, snd)
-import Data.Traversable (for, for_, traverse)
+import Data.List (List(Nil, Cons), snoc, fromFoldable)
+import Data.Maybe (Maybe(..), maybe)
+import Data.Tuple (Tuple(..))
+import Data.Traversable (for, for_)
 import Data.Array as Arr
 import Data.String as Str
 
-import Control.Apply ((*>))
-import Control.Bind ((=<<), (>=>))
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
@@ -45,9 +41,9 @@ node content classes children =
     }
     (fromFoldable children)
 
-zipList :: ((Expr -> Expr) -> Expr -> Div) -> (List Expr -> Expr) -> List Expr -> List Div
+zipList :: forall a b z. ((a -> z) -> a -> b) -> (List a -> z) -> List a -> List b
 zipList zipp hole Nil = Nil
-zipList zipp hole (Cons x xs) = Cons (zipp (\x -> hole $ Cons x xs) x) (zipList zipp (hole <<< Cons x) xs)
+zipList zipp hole (Cons a as) = Cons (zipp (\x -> hole $ Cons x as) a) (zipList zipp (hole <<< Cons a) as)
 
 exprToDiv:: Expr -> Div
 exprToDiv = go id
@@ -71,7 +67,13 @@ exprToDiv = go id
                                            (go (\te -> hole $ IfExpr unit ce te ee) te)
                                            (go (\ee -> hole $ IfExpr unit ce te ee) ee)
                                            expr hole
-    go hole expr@(LetExpr _ bes body)  = letexpr ((\(Tuple b e) -> Tuple (binding b) (go hole e)) <$> bes) (go hole body) -- TODO
+    go hole expr@(LetExpr _ bes body)  = letexpr
+                                           (zipList
+                                              (\listHole (Tuple b e) -> Tuple (binding b) (go (\x -> listHole $ Tuple b x) e))
+                                              (\x -> hole $ LetExpr unit x body)
+                                              bes)
+                                           (go (\x -> hole $ LetExpr unit bes x) body)
+                                           expr hole
     go hole expr@(Lambda _ binds body) = lambda (binding <$> binds) (go (hole <<< Lambda unit binds) body) expr hole
 
     go hole expr@(ArithmSeq _ start next end)
@@ -143,8 +145,15 @@ ifexpr cd td ed = nodeHole "" ["if"] [ifDiv, cd, thenDiv, td, elseDiv, ed]
     thenDiv = node "then" ["keyword"] []
     elseDiv = node "else" ["keyword"] []
 
-letexpr :: List (Tuple Div Div) -> Div -> Div
-letexpr _ _ = node "" [] [] -- TODO
+letexpr :: List (Tuple Div Div) -> Div -> DivHole
+letexpr binds expr = nodeHole "" ["letexpr"] $ [letDiv] <> (intercalate [semi] (bind <$> binds)) <> [inDiv, expr]
+  where
+    letDiv = node "let" ["keyword"] []
+    inDiv  = node "in" ["keyword"] []
+    semi   = node ";" ["comma"] []
+    equal  = node "=" ["comma"] []
+    bind :: Tuple Div Div -> Array Div
+    bind (Tuple b e) = [node "" [] [b, equal, e]]
 
 lambda :: List Div -> Div -> DivHole
 lambda params body = nodeHole "" ["lambda"] (Cons open (Cons bslash (params <> (Cons arrow (Cons body (Cons close Nil))))))
