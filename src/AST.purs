@@ -181,33 +181,15 @@ extract (Lambda c _ _) = c
 extract (App c _ _) = c
 extract (ListComp c _ _) = c
 
-extractBindingType:: TypeBinding -> Type
-extractBindingType (TLit t)         = t
-extractBindingType (TConsLit _ _ t) = t
-extractBindingType (TListLit _ t)   = t
-extractBindingType (TNTupleLit _ t) = t
+type Expr = Tree Atom (Binding Unit) Op Unit
 
-type Expr = Tree Atom Binding Op Unit
+type MType = Maybe Type
 
-type TypeTree = Tree Unit TypeBinding Type Type
+type TypeTree = Tree MType (Binding MType) (Tuple Op MType) MType 
 
-type IndexTree = Tree Unit IBinding Op Int
+type ExprQualTree = QualTree (Binding Unit) Expr Unit
 
-type ExprQualTree = QualTree Binding Expr Unit
-
-type IndexQual = QualTree IBinding IndexTree Int
-
-type TypeQual  = QualTree TypeBinding TypeTree Type
-
-data TypeBinding  = TLit                              Type
-                  | TConsLit TypeBinding TypeBinding  Type
-                  | TListLit (List TypeBinding)       Type
-                  | TNTupleLit (List TypeBinding)     Type
-
-data IBinding  = ILit                       Int
-               | IConsLit IBinding IBinding  Int
-               | IListLit (List IBinding)    Int
-               | INTupleLit (List IBinding)  Int
+type TypeQual  = QualTree (Binding Type) TypeTree Type
 
 type TVar = String
 
@@ -237,25 +219,19 @@ derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c)
 -- | Bindings
 -- |
 -- | Binding forms for pattern matching on lists and tuples
-data Binding = Lit Atom
-             | ConsLit Binding Binding
-             | ListLit (List Binding)
-             | NTupleLit (List Binding)
+data Binding m = Lit       m Atom
+               | ConsLit   m (Binding m) (Binding m)
+               | ListLit   m (List (Binding m))
+               | NTupleLit m (List (Binding m))
 
 derive instance eqBinding :: Eq Binding
 
 -- | Definitions
 -- |
 -- | Definitions for functions and constants
-data Definition = Def String (List Binding) Expr
+data Definition = Def String (List (Binding Unit)) Expr
 
 derive instance eqDefintion :: Eq Definition
-
-type Output = {
-    expr :: Expr,
-    typ :: TypeTree,
-    idTree :: IndexTree
-  }
 
 instance showAtom :: Show Atom where
   show atom = case atom of
@@ -292,12 +268,12 @@ instance showTree :: (Show a, Show b, Show c, Show d) => Show (Tree a b c d) whe
     App c func args     -> "(App " <> show c <> " "<> show func <> " " <> show args <>  ")"
     ListComp c expr quals -> "(ListComp " <> show c <> "(" <> show expr <> ")" <> "(" <> show quals <> "))"
 
-instance showBinding :: Show Binding where
+instance showBinding :: (Show a) => Show (Binding a) where
   show binding = case binding of
-    Lit atom     -> "Lit (" <> show atom <> ")"
-    ConsLit b bs -> "ConsLit (" <> show b <> ") (" <> show bs <> ")"
-    ListLit bs   -> "ListLit (" <> show bs <> ")"
-    NTupleLit ls -> "NTupleLit (" <> show ls <> ")"
+    Lit m atom     -> "(Lit " <> show m <> " " <> show atom <> ")"
+    ConsLit m b bs -> "(ConsLit " <> show m <> " " <> show b <> ") (" <> show bs <> ")"
+    ListLit m bs   -> "(ListLit " <> show m <> " " <> show bs <> ")"
+    NTupleLit m ls -> "(NTupleLit " <> show m <> " " show ls <> ")"
 
 instance showDefinition :: Show Definition where
   show (Def name bindings body) = "Def " <> show name <> " (" <> show bindings <> ") (" <> show body <> ")"
@@ -326,28 +302,6 @@ instance showTypeError :: Show TypeError where
 
 derive instance eqTypeError :: Eq TypeError
 
--- instance showTypeTree :: Show TypeTree where
---   show (TAtom t) = "(TAtom " <> show t <> ")"
---   show (TListTree lt t) = "(TListTree (" <> show lt <> ") " <> show t <> ")"
---   show (TNTuple lt t) = "(TNTuple ("<> show lt <> ") " <> show t <> ")"
---   show (TBinary t1 tt1 tt2 t) = "(TBinary " <> show t1 <> " " <> show tt1 <>  " " <> show tt2 <> " " <> show t <> ")"
---   show (TUnary t1 tt t) = "(TUnary "<> show t1 <> " " <> show tt <> " " <> show t <> ")"
---   show (TSectL tt t1 t) = "(TSectL "<> show tt <> " "<> show t1 <> " " <> show t <> ")"
---   show (TSectR t1 tt t) = "(TSectR " <> show t1 <> " " <> show tt <> " " <> show t <> ")"
---   show (TPrefixOp t) = "(TPrefixOp " <> show t <> ")"
---   show (TIfExpr tt1 tt2 tt3 t) = "(TIfExpr " <> show tt1 <> " " <> show tt2 <> " " <> show tt3 <> " " <> show t <> ")"
---   show (TArithmSeq s b e t) = "(TArithmSeq " <> show s <> " " <> show b <> " " <> show e <> ".." <> show t <> ")"
---   show (TLetExpr bin tt t) = "(TLetExpr " <> show bin <> " " <> show tt <> " " <> show t <> ")"
---   show (TLambda lb tt t ) = "(TLambda " <> show lb <> " " <> show tt <> " " <> show t <> ")"
---   show (TApp tt1 tl t) = "(TApp " <> show tt1 <> " (" <> show tl <> ") " <> show t <> ")"
---   show (TListComp e qs t) = "(TListComp " <> show e <> " (" <> show qs <> ") " <> show t <> ")"
-
-instance showTypeBinding:: Show TypeBinding where
-  show (TLit t) = "(TLit "<> show t <>")"
-  show (TConsLit b1 b2 t) = "(TConsLit "<> show b1 <> " " <> show b2 <> " " <> show t <>")"
-  show (TListLit lb t) = "(TListLit " <> show lb <> " "<> show t <>")"
-  show (TNTupleLit lb t) = "(TNTupleLit " <> show lb <> " "<> show t <>")"
-
 prettyPrintType :: Type -> String
 prettyPrintType (TypVar tvar) = tvar
 prettyPrintType (TypCon str) = str
@@ -367,41 +321,3 @@ prettyPrintTypeError (InfiniteType tvar t) = "InfiniteType: cannot construct the
 prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope " <> var
 prettyPrintTypeError (NoInstanceOfEnum t) = "No instance for Enum " <> prettyPrintType t <> " defined."
 prettyPrintTypeError (UnknownError str) = "UnknownError: " <> str
-
--- extractType:: TypeTree -> Type
--- extractType (TAtom t)            = t
--- extractType (TListTree _ t)      = t
--- extractType (TNTuple _ t)        = t
--- extractType (TBinary _ _ _ t)    = t
--- extractType (TUnary _ _ t)       = t
--- extractType (TSectL _ _ t)       = t
--- extractType (TSectR _ _ t)       = t
--- extractType (TPrefixOp t)        = t
--- extractType (TIfExpr _ _ _ t)    = t
--- extractType (TArithmSeq _ _ _ t) = t
--- extractType (TLetExpr _ _ t)     = t
--- extractType (TLambda _ _ t)      = t
--- extractType (TApp _ _ t)         = t
--- extractType (TListComp _ _ t)    = t
-
--- extractIndex :: IndexTree -> Int
--- extractIndex (IAtom i)            = i
--- extractIndex (IListTree _ i)      = i
--- extractIndex (INTuple _ i)        = i
--- extractIndex (IBinary _ _ _ i)    = i
--- extractIndex (IUnary _ _ i)       = i
--- extractIndex (ISectL _ _ i)       = i
--- extractIndex (ISectR _ _ i)       = i
--- extractIndex (IPrefixOp i)        = i
--- extractIndex (IIfExpr _ _ _ i)    = i
--- extractIndex (IArithmSeq _ _ _ i) = i
--- extractIndex (ILetExpr _ _ i)     = i
--- extractIndex (ILambda _ _ i)      = i
--- extractIndex (IApp _ _ i)         = i
--- extractIndex (IListComp _ _ i)    = i
-
--- extractBindingType:: TypeBinding -> Type
--- extractBindingType (TLit t)         = t
--- extractBindingType (TConsLit _ _ t) = t
--- extractBindingType (TListLit _ t)   = t
--- extractBindingType (TNTupleLit _ t) = t
