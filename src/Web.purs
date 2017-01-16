@@ -14,15 +14,15 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
-import AST (Expr, Tree(..), Binding(..), Atom(..), Op, pPrintOp, ExprQualTree, QualTree(..))
+import AST (TypeTree, Tree(..), Binding(..), Atom(..), Op, pPrintOp, TypeQual, QualTree(..), MType)
 
 data RoseTree a = Node a (List (RoseTree a))
 
-type Div = RoseTree { content :: String, classes :: (List String), zipper :: Maybe (Tuple Expr (Expr -> Expr)) }
+type Div = RoseTree { content :: String, classes :: (List String), zipper :: Maybe (Tuple TypeTree (TypeTree -> TypeTree)) }
 
-type DivHole = Expr -> (Expr -> Expr) -> Div
+type DivHole = TypeTree -> (TypeTree -> TypeTree) -> Div
 
-nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> Expr -> (Expr -> Expr) -> Div
+nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
 nodeHole content classes children expr hole =
   Node
     { content: content
@@ -45,58 +45,58 @@ zipList :: forall a b z. ((a -> z) -> a -> b) -> (List a -> z) -> List a -> List
 zipList zipp hole Nil = Nil
 zipList zipp hole (Cons a as) = Cons (zipp (\x -> hole $ Cons x as) a) (zipList zipp (hole <<< Cons a) as)
 
-exprToDiv:: Expr -> Div
+exprToDiv:: TypeTree -> Div
 exprToDiv = go id
   where
-    go :: (Expr -> Expr) -> Expr -> Div
+    go :: (TypeTree -> TypeTree) -> TypeTree -> Div
     go hole      (Atom _ a)            = atom a
     go hole expr@(List _ ls)           = case toString ls of
-                                           Nothing  -> list (zipList go (hole <<< List unit) ls) expr hole
+                                           Nothing  -> list (zipList go (hole <<< List Nothing) ls) expr hole
                                            Just str -> node ("\"" <> str <> "\"") ["list", "string"] []
-    go hole expr@(NTuple _ ls)         = ntuple (zipList go (hole <<< NTuple unit) ls) expr hole
-    go hole expr@(Binary _ op e1 e2)   = binary op
-                                           (go (\e1 -> hole $ Binary unit op e1 e2) e1)
-                                           (go (\e2 -> hole $ Binary unit op e1 e2) e2)
+    go hole expr@(NTuple _ ls)         = ntuple (zipList go (hole <<< NTuple Nothing) ls) expr hole
+    go hole expr@(Binary _ op e1 e2)   = binary (unpackOp op)
+                                           (go (\e1 -> hole $ Binary Nothing op e1 e2) e1)
+                                           (go (\e2 -> hole $ Binary Nothing op e1 e2) e2)
                                            expr hole
-    go hole expr@(Unary _ op e)        = unary op (go (hole <<< Unary unit op) e) expr hole
-    go hole expr@(SectL _ e op)        = sectl (go (\e -> hole $ SectL unit e op) e) op expr hole
-    go hole expr@(SectR _ op e)        = sectr op (go (hole <<< SectR unit op) e) expr hole
-    go hole      (PrefixOp _ op)       = prefixOp op
+    go hole expr@(Unary _ op e)        = unary (unpackOp op) (go (hole <<< Unary Nothing op) e) expr hole
+    go hole expr@(SectL _ e op)        = sectl (go (\e -> hole $ SectL Nothing e op) e) (unpackOp op) expr hole
+    go hole expr@(SectR _ op e)        = sectr (unpackOp op) (go (hole <<< SectR Nothing op) e) expr hole
+    go hole      (PrefixOp _ op)       = prefixOp (unpackOp op)
     go hole expr@(IfExpr _ ce te ee)   = ifexpr
-                                           (go (\ce -> hole $ IfExpr unit ce te ee) ce)
-                                           (go (\te -> hole $ IfExpr unit ce te ee) te)
-                                           (go (\ee -> hole $ IfExpr unit ce te ee) ee)
+                                           (go (\ce -> hole $ IfExpr Nothing ce te ee) ce)
+                                           (go (\te -> hole $ IfExpr Nothing ce te ee) te)
+                                           (go (\ee -> hole $ IfExpr Nothing ce te ee) ee)
                                            expr hole
     go hole expr@(LetExpr _ bes body)  = letexpr
                                            (zipList
                                               (\listHole (Tuple b e) -> Tuple (binding b) (go (\x -> listHole $ Tuple b x) e))
-                                              (\xs -> hole $ LetExpr unit xs body)
+                                              (\xs -> hole $ LetExpr Nothing xs body)
                                               bes)
-                                           (go (\x -> hole $ LetExpr unit bes x) body)
+                                           (go (\x -> hole $ LetExpr Nothing bes x) body)
                                            expr hole
-    go hole expr@(Lambda _ binds body) = lambda (binding <$> binds) (go (hole <<< Lambda unit binds) body) expr hole
+    go hole expr@(Lambda _ binds body) = lambda (binding <$> binds) (go (hole <<< Lambda Nothing binds) body) expr hole
 
     go hole expr@(ArithmSeq _ start next end)
                                        = arithmseq
-                                           (go (\x -> hole $ ArithmSeq unit x next end) start)
-                                           (go (\x -> hole $ ArithmSeq unit start (Just x) end) <$> next)
-                                           (go (\x -> hole $ ArithmSeq unit start next (Just x)) <$> end)
+                                           (go (\x -> hole $ ArithmSeq Nothing x next end) start)
+                                           (go (\x -> hole $ ArithmSeq Nothing start (Just x) end) <$> next)
+                                           (go (\x -> hole $ ArithmSeq Nothing start next (Just x)) <$> end)
                                            expr hole
 
     go hole expr@(ListComp _ e qs)     = listcomp
-                                           (go (\x -> hole $ ListComp unit x qs) e)
-                                           (zipList qualToDiv (\xs -> hole $ ListComp unit e xs) qs)
+                                           (go (\x -> hole $ ListComp Nothing x qs) e)
+                                           (zipList qualToDiv (\xs -> hole $ ListComp Nothing e xs) qs)
                                            expr hole
       where
-        qualToDiv :: (ExprQualTree -> Expr) -> ExprQualTree -> Div
-        qualToDiv hole (Guard _ e) = guardQual           (go (\x -> hole $ Guard unit x) e)
-        qualToDiv hole (Let _ b e) = letQual (binding b) (go (\x -> hole $ Let unit b x) e)
-        qualToDiv hole (Gen _ b e) = genQual (binding b) (go (\x -> hole $ Gen unit b x) e)
+        qualToDiv :: (TypeQual -> TypeTree) -> TypeQual -> Div
+        qualToDiv hole (Guard _ e) = guardQual           (go (\x -> hole $ Guard Nothing x) e)
+        qualToDiv hole (Let _ b e) = letQual (binding b) (go (\x -> hole $ Let Nothing b x) e)
+        qualToDiv hole (Gen _ b e) = genQual (binding b) (go (\x -> hole $ Gen Nothing b x) e)
 
     go hole expr@(App _ func args)     = app (go funcHole func) argsDivs expr hole
       where
-        funcHole func = hole $ App unit func args
-        argsDivs = zipList go (hole <<< App unit func) args
+        funcHole func = hole $ App Nothing func args
+        argsDivs = zipList go (hole <<< App Nothing func) args
 
 guardQual :: Div -> Div
 guardQual guard = node "" ["guard"] [guard]
@@ -136,6 +136,9 @@ list ls  = nodeHole "" ["list"] $ listify "[" "," "]" ls
 
 ntuple :: List Div -> DivHole
 ntuple ls = nodeHole "" ["tuple"] $ listify "(" "," ")" ls
+
+unpackOp :: Tuple Op MType -> Op
+unpackOp (Tuple op _) = op
 
 opToDiv :: Op -> Div
 opToDiv op = node (pPrintOp op) ["op"] []
@@ -218,7 +221,7 @@ binding (ConsLit _ b1 b2) = node "" ["binding", "conslit"] $ listify "(" ":" ")"
 binding (ListLit _ ls)    = node "" ["binding", "listlit"] $ listify "[" "," "]" (binding <$> ls)
 binding (NTupleLit _ ls)   = node "" ["binding", "tuplelit"] $ listify "(" "," ")" (binding <$> ls)
 
-type Callback = forall eff. Expr -> (Expr -> Expr) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM | eff) Unit)
+type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM | eff) Unit)
 
 divToJQuery :: forall eff. Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
 divToJQuery callback (Node { content: content, classes: classes, zipper: zipper } children) = do
@@ -233,10 +236,10 @@ divToJQuery callback (Node { content: content, classes: classes, zipper: zipper 
       pure unit
   pure div
 
-toString :: List Expr -> Maybe String
+toString :: List TypeTree -> Maybe String
 toString ls = Str.fromCharArray <$> go [] ls
   where
-    go :: Array Char -> List Expr -> Maybe (Array Char)
+    go :: Array Char -> List TypeTree -> Maybe (Array Char)
     go acc (Cons (Atom _ (Char c)) rs) = case Str.toChar c of
                                            Just char -> go (Arr.snoc acc char) rs
                                            Nothing   -> Nothing
