@@ -155,7 +155,7 @@ instance functorQualTree :: Functor (QualTree b e) where
 instance functorTree :: Functor (Tree a b c) where
   map f (Atom c a) = Atom (f c) a
   map f (List c xs) = List (f c) (map f <$> xs)
-  map f (NTuple c xs) = List (f c) (map f <$> xs)
+  map f (NTuple c xs) = NTuple (f c) (map f <$> xs)
   map f (Binary c op t1 t2) = Binary (f c) op (map f t1) (map f t2)
   map f (Unary c op t) = Unary (f c) op (map f t)
   map f (SectL c t op) = SectL (f c) (map f t) op
