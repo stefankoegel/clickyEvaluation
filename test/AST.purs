@@ -8,7 +8,7 @@ import Data.Tuple (Tuple(..))
 
 import Control.Monad.Writer (Writer, tell)
 
-import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), idFoldTree, Expr)
+import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), Expr)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
@@ -23,20 +23,20 @@ test name input expected = case input == expected of
 
 runTests :: Writer (List String) Unit
 runTests = do
-  test "idFoldTree_atom" (idFoldTree atom) atom
-  test "idFoldTree_list" (idFoldTree list) list
-  test "idFoldTree_ntuple" (idFoldTree ntuple) ntuple
-  test "idFoldTree_binary" (idFoldTree binary) binary
-  test "idFoldTree_unary" (idFoldTree unary) unary
-  test "idFoldTree_sectl" (idFoldTree sectl) sectl
-  test "idFoldTree_sectr" (idFoldTree sectr) sectr
-  test "idFoldTree_prefixop" (idFoldTree prefixop) prefixop
-  test "idFoldTree_ifexpr" (idFoldTree ifexpr) ifexpr
-  test "idFoldTree_arithmseq" (idFoldTree arithmseq) arithmseq
-  test "idFoldTree_letexpr" (idFoldTree letexpr) letexpr
-  test "idFoldTree_lambda" (idFoldTree lambda) lambda
-  test "idFoldTree_app" (idFoldTree app) app
-  test "idFoldTree_listcomp" (idFoldTree listcomp) listcomp
+--   test "idFoldTree_atom" (idFoldTree atom) atom
+--   test "idFoldTree_list" (idFoldTree list) list
+--   test "idFoldTree_ntuple" (idFoldTree ntuple) ntuple
+--   test "idFoldTree_binary" (idFoldTree binary) binary
+--   test "idFoldTree_unary" (idFoldTree unary) unary
+--   test "idFoldTree_sectl" (idFoldTree sectl) sectl
+--   test "idFoldTree_sectr" (idFoldTree sectr) sectr
+--   test "idFoldTree_prefixop" (idFoldTree prefixop) prefixop
+--   test "idFoldTree_ifexpr" (idFoldTree ifexpr) ifexpr
+--   test "idFoldTree_arithmseq" (idFoldTree arithmseq) arithmseq
+--   test "idFoldTree_letexpr" (idFoldTree letexpr) letexpr
+--   test "idFoldTree_lambda" (idFoldTree lambda) lambda
+--   test "idFoldTree_app" (idFoldTree app) app
+--   test "idFoldTree_listcomp" (idFoldTree listcomp) listcomp
 
   test "map_atom" (map id atom) atom
   test "map_list" (map id list) list
