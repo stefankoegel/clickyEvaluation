@@ -101,10 +101,42 @@ data Tree a b o m =
 
 -- type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) MType
 
+toOpTuple :: Op -> Tuple Op MType
+toOpTuple op = Tuple op Nothing
+
 exprToTypeTree :: Expr -> TypeTree
-exprToTypeTree expr = case expr of
-  (Atom m a) -> Atom Nothing a
-  _ -> PrefixOp Nothing (Tuple Add Nothing)
+exprToTypeTree (Atom _ atom) = Atom Nothing atom
+exprToTypeTree (List _ exprs) = List Nothing (map exprToTypeTree exprs)
+exprToTypeTree (NTuple _ exprs) = NTuple Nothing (map exprToTypeTree exprs)
+exprToTypeTree (Binary _ op t1 t2) = Binary Nothing (toOpTuple op)
+  (exprToTypeTree t1)
+  (exprToTypeTree t2)
+exprToTypeTree (Unary _ op t) = Unary Nothing (toOpTuple op) (exprToTypeTree t)
+exprToTypeTree (SectL _ t op) = SectL Nothing (exprToTypeTree t) (toOpTuple op)
+exprToTypeTree (SectR _ op t) = SectR Nothing (toOpTuple op) (exprToTypeTree t)
+exprToTypeTree (PrefixOp _ op) = PrefixOp Nothing (toOpTuple op)
+exprToTypeTree (IfExpr _ t1 t2 t3) = IfExpr Nothing
+  (exprToTypeTree t1)
+  (exprToTypeTree t2)
+  (exprToTypeTree t3)
+exprToTypeTree (ArithmSeq _ t1 mt2 mt3) = ArithmSeq Nothing
+  (exprToTypeTree t1)
+  (map exprToTypeTree mt2)
+  (map exprToTypeTree mt3)
+exprToTypeTree (LetExpr _ bs t) = LetExpr Nothing
+  (map (\(Tuple b bt) -> Tuple (map (const Nothing) b) (exprToTypeTree bt)) bs)
+  (exprToTypeTree t)
+exprToTypeTree (Lambda _ bindings t) = Lambda Nothing
+  (map (map (const Nothing)) bindings)
+  (exprToTypeTree t)
+exprToTypeTree (App _ t ts) = App Nothing (exprToTypeTree t) (map exprToTypeTree ts)
+exprToTypeTree (ListComp _ t qualTrees) = ListComp Nothing
+  (exprToTypeTree t)
+  (map go qualTrees)
+    where
+    go (Gen _ b t) = Gen Nothing (map (const Nothing) b) (exprToTypeTree t)
+    go (Let _ b t) = Let Nothing (map (const Nothing) b) (exprToTypeTree t)
+    go (Guard _ t) = Guard Nothing (exprToTypeTree t)
 
 binary :: Op -> TypeTree -> TypeTree -> TypeTree
 binary op left right = Binary Nothing (Tuple op Nothing) left right
