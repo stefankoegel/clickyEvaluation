@@ -8,7 +8,7 @@ import Test.Parser (parsedPrelude)
 import Prelude (Unit, bind, pure, show, unit, ($), (==), (<>), (<<<))
 import Control.Monad.Writer (Writer, tell)
 import Data.Array (toUnfoldable) as Array
-import Data.Either (Either(..), either)
+import Data.Either (Either(..))
 import Data.List (List(..), (:), singleton)
 import Text.Parsing.Parser (ParseError, parseErrorMessage)
 

@@ -606,7 +606,7 @@ extractBinding (NTupleLit _ typedBindings) = do
   bs <- extractListLit typedBindings
   let tup = unzip bs
   tupleTypes <- traverse extractBindingType (snd tup)
-  pure $ Tuple (concat $ fst tup) (NTupleLit (Just $ AD $ TTuple $ Nil) (snd tup))
+  pure $ Tuple (concat $ fst tup) (NTupleLit (Just $ AD $ TTuple $ tupleTypes) (snd tup))
 
 getTypEnv :: TypedBinding -> TypeEnv -> Maybe TypeEnv
 getTypEnv b env = case evalState (runExceptT (extractBinding b)) initUnique of
