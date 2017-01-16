@@ -523,41 +523,67 @@ inferDef env (Def str bin exp) = do
     s3 <- unify (apply s1 extractedType1) (apply s2 extractedType2)
     pure $ Tuple (s3 `compose` s1) (apply s3 (apply s1 extractedType1))
 
--- TODO: Refactor.
-extractConsLit :: Type -> TypedBinding -> Infer (Tuple (List (Tuple TVar Scheme)) TypedBinding)
-extractConsLit tv (ConsLit _ a b@(ConsLit _ _ _)) = do
-  Tuple list1 typ1 <- extractBinding a
-  secondBinding <- extractBinding b
-  case secondBinding of
-    Tuple list2 t2@(ConsLit (Just (AD (TList typ2))) b1 b2) -> do
-      extractedType <- extractBindingType typ1
-      s1 <- unify tv extractedType
-      s2 <- unify (apply s1 tv) (typ2)
-      pure $ Tuple (apply s2 (apply s1 (list1 <> list2))) (apply s2 (apply s1 (ConsLit (Just $ AD $ TList typ2) typ1 t2)))
-    _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+-- | Determine if the given binding represents a lit pattern.
+isLit :: forall a. Binding a -> Boolean
+isLit (Lit _ _) = true
+isLit _ = false
 
-extractConsLit tv (ConsLit _ a (Lit _ (Name name))) = do
-  Tuple list typ <- extractBinding a
-  extractedType <- extractBindingType typ
-  s1 <- unify tv extractedType
-  let list' = apply s1 list
-  let ltyp = AD $ TList (apply s1 tv)
-  pure $ Tuple (Cons (Tuple name $ Forall Nil ltyp) list') $ (apply s1 (ConsLit (Just ltyp) typ (Lit (Just ltyp) (Name name))))
+-- | Determine if the given binding represents a cons pattern.
+isConsLit :: forall a. Binding a -> Boolean
+isConsLit (ConsLit _ _ _) = true
+isConsLit _ = false
 
-extractConsLit tv (ConsLit _ a b@(ListLit _ _)) = do
-  Tuple list1 typ1 <- extractBinding a
-  secondBinding <- extractBinding b
-  case secondBinding of
-    Tuple list2 t2@(ListLit (Just (AD (TList typ2))) b1) -> do
-      extractedType <- extractBindingType typ1
-      s1 <- unify tv extractedType
-      s2 <- unify (apply s1 tv) (typ2)
-      pure $ Tuple (apply s2 (apply s1 (list1 <> list2))) (apply s2 (apply s1 (ConsLit (Just $ AD $ TList typ2) typ1 t2)))
-    _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+-- | Determine if the given binding represents a list pattern.
+isListLit :: forall a. Binding a -> Boolean
+isListLit (ListLit _ _) = true
+isListLit _ = false
 
-extractConsLit _ _ = throwError $ UnknownError "congrats you found a bug in TypeChecker.extractConsLit"
+-- | Determine if the given binding represents a tuple pattern.
+isTupleLit :: forall a. Binding a -> Boolean
+isTupleLit (NTupleLit _ _) = true
+isTupleLit _ = false
 
-extractListLit :: List TypedBinding -> Infer (List (Tuple (List (Tuple TVar Scheme)) TypedBinding))
+-- | Return the name of the given binding (a lit pattern of the type)
+getLitName :: forall a. Binding a -> String
+getLitName (Lit _ (Name name)) = name
+getLitName _ = ""
+
+-- TODO: Write test.
+
+-- | This function expects a cons pattern (e.g. `(x:xs)`) as well as the type of the first
+-- | sub-pattern (`x` in the example), infer the type of the sub-patterns.
+-- | Conceptual example: Calling the function with Int and (x:xs) results in x :: Int, xs :: [Int].
+-- | The resulting mapping holds x :: Int and xs :: Int, while the updated binding holds the
+-- | additional type informations (x :: Int : xs :: [Int]).
+extractConsLit :: Type -> TypedBinding -> Infer (Tuple TVarMappings TypedBinding)
+extractConsLit t (ConsLit _ fst snd) = do
+  Tuple mapping1 typedBinding1 <- extractBinding fst
+  type1 <- extractBindingType typedBinding1
+  s1 <- unify t type1
+  if isLit snd
+    then do
+      -- The second pattern is a literal pattern, therefore it has the type [t].
+      let listType = AD $ TList (apply s1 t)
+      let name = getLitName snd
+      -- Update the mapping and the binding.
+      let mapping = (Tuple name $ Forall Nil listType) : apply s1 mapping1
+      let updatedBinding = apply s1 (ConsLit (Just listType) typedBinding1 (Lit (Just listType) (Name name)))
+      pure $ Tuple mapping updatedBinding
+    else do
+      -- The second pattern is a list, cons or tuple pattern with type t2. The given type t has to
+      -- be a list of types => [t] ~ t2.
+      Tuple mapping2 typedBinding2 <- extractBinding snd
+      type2 <- extractBindingType typedBinding2
+      s2 <- unify (AD $ TList $ apply s1 t) type2
+      -- Update the mapping and the binding.
+      let mapping = apply s2 (apply s1 (mapping1 <> mapping2))
+      let updatedBinding = apply s2 (apply s1 (ConsLit (Just $ AD $ TList type2) typedBinding1 typedBinding2))
+      pure $ Tuple mapping updatedBinding
+
+-- The given binding should be a `ConsLit`, this case should not occur.
+extractConsLit _ binding = pure $ Tuple Nil binding
+
+extractListLit :: List TypedBinding -> Infer (List (Tuple TVarMappings TypedBinding))
 extractListLit (Cons a Nil) = do
   b1 <- extractBinding a
   pure (Cons b1 Nil)
