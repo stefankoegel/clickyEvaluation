@@ -24,7 +24,7 @@ import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
 import Text.Parsing.Parser.Pos (initialPos)
 
-import AST (Expr, MType, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), ExprQualTree, exprToTypeTree, TypeTree)
+import AST (TypeTree, MType, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, exprToTypeTree, TypeTree, toOpTuple)
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
@@ -169,32 +169,32 @@ infixOperators =
   ]
 
 -- | Table of operators (math, boolean, ...)
-operatorTable :: forall m. (Monad m) => OperatorTable m String Expr
+operatorTable :: forall m. (Monad m) => OperatorTable m String TypeTree
 operatorTable = infixTable2 
   where
     infixTable2 = maybe [] id (modifyAt 2 (flip snoc infixOperator) infixTable1)
     infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
 
-    infixTable :: OperatorTable m String Expr
-    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> pure (Binary unit op)) assoc)) <$> x) <$> infixOperators
+    infixTable :: OperatorTable m String TypeTree
+    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> pure (Binary Nothing (toOpTuple op))) assoc)) <$> x) <$> infixOperators
 
-    unaryMinus :: Operator m String Expr
+    unaryMinus :: Operator m String TypeTree
     unaryMinus = Prefix $ spaced minusParse
       where 
         minusParse = do
           string "-"
           pure $ \e -> case e of
-            Atom _ (AInt ai) -> (Atom unit (AInt (-ai)))
-            _                -> Unary unit Sub e
+            Atom _ (AInt ai) -> (Atom Nothing (AInt (-ai)))
+            _                -> Unary Nothing (toOpTuple Sub) e
 
-    infixOperator :: Operator m String Expr
+    infixOperator :: Operator m String TypeTree
     infixOperator = Infix (spaced infixParse) AssocLeft
       where 
         infixParse = do
           char '`'
           n <- name
           char '`'
-          pure $ \e1 e2 -> Binary unit (InfixFunc n) e1 e2
+          pure $ \e1 e2 -> Binary Nothing (toOpTuple $ InfixFunc n) e1 e2
 
     -- | Parse an expression between spaces (backtracks)
     spaced :: forall a. ParserT String m a -> ParserT String m a
@@ -210,7 +210,7 @@ opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> pure op)) <$> x) $ con
       pure $ InfixFunc n
 
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
-base :: IndentParser String Expr -> IndentParser String Expr
+base :: IndentParser String TypeTree -> IndentParser String TypeTree
 base expr =
       PC.try (tuplesOrBrackets expr)
   <|> PC.try (lambda expr)
@@ -219,26 +219,26 @@ base expr =
   <|> PC.try (arithmeticSequence expr)
   <|> list expr
   <|> charList
-  <|> (Atom unit <$> atom)
+  <|> (Atom Nothing <$> atom)
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
-syntax :: IndentParser String Expr -> IndentParser String Expr
+syntax :: IndentParser String TypeTree -> IndentParser String TypeTree
 syntax expr =
       PC.try (ifThenElse expr)
   <|> PC.try (letExpr expr)
   <|> applicationOrSingleExpression expr
 
 -- | Parser for function application or single expressions
-applicationOrSingleExpression :: IndentParser String Expr -> IndentParser String Expr
+applicationOrSingleExpression :: IndentParser String TypeTree -> IndentParser String TypeTree
 applicationOrSingleExpression expr = do
   e     <- ilexe $ base expr
   mArgs <- PC.optionMaybe (PC.try $ ((PC.try (indent (base expr))) `PC.sepEndBy1` skipWhite))
   case mArgs of
     Nothing   -> pure e
-    Just args -> pure $ App unit e args
+    Just args -> pure $ App Nothing e args
 
 -- | Parse an if_then_else construct - layout sensitive
-ifThenElse :: IndentParser String Expr -> IndentParser String Expr
+ifThenElse :: IndentParser String TypeTree -> IndentParser String TypeTree
 ifThenElse expr = do
   ilexe $ string "if" *> PC.lookAhead (oneOf [' ', '\t', '\n', '('])
   testExpr <- indent expr
@@ -246,10 +246,10 @@ ifThenElse expr = do
   thenExpr <- indent expr
   indent $ string "else"
   elseExpr <- indent expr
-  pure $ IfExpr unit testExpr thenExpr elseExpr
+  pure $ IfExpr Nothing testExpr thenExpr elseExpr
 
 -- | Parser for tuples or bracketed expressions - layout sensitive
-tuplesOrBrackets :: IndentParser String Expr -> IndentParser String Expr
+tuplesOrBrackets :: IndentParser String TypeTree -> IndentParser String TypeTree
 tuplesOrBrackets expr = do
   ilexe $ char '('
   e <- indent expr
@@ -259,37 +259,37 @@ tuplesOrBrackets expr = do
   indent $ char ')'
   case mes of
     Nothing -> pure e
-    Just es -> pure $ NTuple unit (Cons e es)
+    Just es -> pure $ NTuple Nothing (Cons e es)
 
 -- | Parser for operator sections - layout sensitive
-section :: IndentParser String Expr -> IndentParser String Expr
+section :: IndentParser String TypeTree -> IndentParser String TypeTree
 section expr = do
   ilexe $ char '('
   me1 <- PC.optionMaybe (indent $ syntax expr)
-  op <- opParser
+  op <- toOpTuple <$> opParser
   skipWhite
   me2 <- PC.optionMaybe (indent $ syntax expr)
   indent $ char ')'
   case me1 of
     Nothing ->
       case me2 of
-        Nothing -> pure $ PrefixOp unit op
-        Just e2 -> pure $ SectR unit op e2
+        Nothing -> pure $ PrefixOp Nothing op
+        Just e2 -> pure $ SectR Nothing op e2
     Just e1 ->
       case me2 of
-        Nothing -> pure $ SectL unit e1 op
+        Nothing -> pure $ SectL Nothing e1 op
         Just _ -> fail "Cannot have a section with two expressions!"
 
 -- | Parser for lists - layout sensitive
-list :: IndentParser String Expr -> IndentParser String Expr
+list :: IndentParser String TypeTree -> IndentParser String TypeTree
 list expr = do
   ilexe $ char '['
   exprs <- (indent expr) `PC.sepBy` (PC.try $ indent $ char ',')
   indent $ char ']'
-  pure $ List unit exprs
+  pure $ List Nothing exprs
 
 -- | Parser for Arithmetic Sequences - layout sensitive
-arithmeticSequence :: IndentParser String Expr -> IndentParser String Expr
+arithmeticSequence :: IndentParser String TypeTree -> IndentParser String TypeTree
 arithmeticSequence expr = do
   ilexe $ char '['
   start <- indent expr
@@ -297,10 +297,10 @@ arithmeticSequence expr = do
   indent $ string ".."
   end   <- PC.optionMaybe $ indent expr
   indent $ char ']'
-  pure $ ArithmSeq unit start step end
+  pure $ ArithmSeq Nothing start step end
 
 -- | Parser for list comprehensions - layout sensitive
-listComp :: IndentParser String Expr -> IndentParser String Expr
+listComp :: IndentParser String TypeTree -> IndentParser String TypeTree
 listComp expr = do
   ilexe $ char '['
   start <- indent expr
@@ -308,10 +308,10 @@ listComp expr = do
   skipWhite
   quals <- (indent $ qual expr) `PC.sepBy1` (PC.try $ indent $ char ',')
   indent $ char ']'
-  pure $ ListComp unit start quals
+  pure $ ListComp Nothing start quals
   where
     -- | Parser for list comprehension qualifiers
-    qual :: IndentParser String Expr -> IndentParser String ExprQualTree
+    qual :: IndentParser String TypeTree -> IndentParser String TypeQual
     qual expr = (PC.try parseLet) <|> (PC.try parseGen) <|> parseGuard
       where
         parseLet = do
@@ -319,48 +319,48 @@ listComp expr = do
           b <- indent binding
           indent $ char '='
           e <- indent expr
-          pure $ Let unit b e
+          pure $ Let Nothing b e
         parseGen = do
           b <- ilexe binding
           indent $ string "<-"
           e <- indent expr
-          pure $ Gen unit b e
-        parseGuard = ilexe expr >>= (pure <<< Guard unit)
+          pure $ Gen Nothing b e
+        parseGuard = ilexe expr >>= (pure <<< Guard Nothing)
 
 -- | Parser for strings ("example")
-charList :: forall m. (Monad m) => ParserT String m Expr
+charList :: forall m. (Monad m) => ParserT String m TypeTree
 charList = do
   char '"'
   strs <- many character'
   char '"'
-  pure (List unit ((Atom unit <<< Char <<< String.singleton) <$> strs))
+  pure (List Nothing ((Atom Nothing <<< Char <<< String.singleton) <$> strs))
 
 -- | Parse a lambda expression - layout sensitive
-lambda :: IndentParser String Expr -> IndentParser String Expr
+lambda :: IndentParser String TypeTree -> IndentParser String TypeTree
 lambda expr = do
   ilexe $ char '\\'
   binds <- many1 $ indent binding
   indent $ string "->"
   body <- indent expr
-  pure $ Lambda unit binds body
+  pure $ Lambda Nothing binds body
 
 -- Parser for let expressions - layout sensitive
-letExpr :: IndentParser String Expr -> IndentParser String Expr
+letExpr :: IndentParser String TypeTree -> IndentParser String TypeTree
 letExpr expr = do
   ilexe $ string "let"
   binds <- indent $ bindingBlock expr
   indent $ string "in"
   body  <- indent $ withPos expr
-  pure $ LetExpr unit binds body
+  pure $ LetExpr Nothing binds body
   where
-    bindingItem :: IndentParser String Expr -> IndentParser String (Tuple (Binding Unit) Expr)
+    bindingItem :: IndentParser String TypeTree -> IndentParser String (Tuple (Binding MType) TypeTree)
     bindingItem expr = do
       b <- ilexe binding
       indent $ char '='
       e <- indent $ withPos expr
       pure $ Tuple b e
 
-    bindingBlock :: IndentParser String Expr -> IndentParser String (List (Tuple (Binding Unit) Expr))
+    bindingBlock :: IndentParser String TypeTree -> IndentParser String (List (Tuple (Binding MType) TypeTree))
     bindingBlock expr = curly <|> (PC.try layout) <|> (PC.try iblock)
       where 
         curly  = PC.between (ilexe $ char '{') (ilexe $ char '}') iblock 
@@ -368,7 +368,7 @@ letExpr expr = do
         layout = block1 (PC.try $ bindingItem expr >>= \x -> PC.notFollowedBy (ilexe $ char ';') *> pure x)
 
 -- | Parse an arbitrary expression
-expression :: IndentParser String Expr
+expression :: IndentParser String TypeTree
 expression = do
   whiteSpace
   fix $ \expr -> buildExprParser operatorTable (syntax expr)
@@ -377,46 +377,46 @@ runParserIndent :: forall a. IndentParser String a -> String -> Either ParseErro
 runParserIndent p src = fst $ flip runState initialPos $ runParserT src p
 
 parseExpr :: String -> Either ParseError TypeTree
-parseExpr = runParserIndent (toTypeTreeParser expression)
+parseExpr = runParserIndent expression
 
 ---------------------------------------------------------
 -- Parsers for Bindings
 ---------------------------------------------------------
 
-lit :: forall m. (Monad m) => ParserT String m (Binding Unit)
-lit = Lit unit <$> atom
+lit :: forall m. (Monad m) => ParserT String m (Binding MType)
+lit = Lit Nothing <$> atom
 
-consLit :: IndentParser String (Binding Unit) -> IndentParser String (Binding Unit)
+consLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
 consLit bnd = do
   ilexe $ char '('
   b <- indent consLit'
   indent $ char ')'
   pure b
   where
-    consLit' :: IndentParser String (Binding Unit)
+    consLit' :: IndentParser String (Binding MType)
     consLit' = do
       b <- ilexe $ bnd
       indent $ char ':'
       bs <- (PC.try $ indent consLit') <|> (indent bnd)
-      pure $ ConsLit unit b bs
+      pure $ ConsLit Nothing b bs
 
-listLit :: IndentParser String (Binding Unit) -> IndentParser String (Binding Unit)
+listLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
 listLit bnd = do
   ilexe $ char '['
   bs <- (indent bnd) `PC.sepBy` (PC.try $ indent $ char ',')
   indent $ char ']'
-  pure $ ListLit unit bs
+  pure $ ListLit Nothing bs
 
-tupleLit :: IndentParser String (Binding Unit) -> IndentParser String (Binding Unit)
+tupleLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
 tupleLit bnd = do
   ilexe $ char '('
   b <- indent bnd
   indent $ char ','
   bs <- (indent bnd) `PC.sepBy1` (PC.try $ indent $ char ',')
   indent $ char ')'
-  pure $ NTupleLit unit (Cons b bs)
+  pure $ NTupleLit Nothing (Cons b bs)
 
-binding :: IndentParser String (Binding Unit)
+binding :: IndentParser String (Binding MType)
 binding = fix $ \bnd ->
       (PC.try $ consLit bnd)
   <|> (tupleLit bnd)
@@ -427,19 +427,12 @@ binding = fix $ \bnd ->
 -- Parsers for Definitions
 ---------------------------------------------------------
 
--- | Convert a given expression parser into a type tree parser.
-toTypeTreeParser :: IndentParser String Expr -> IndentParser String TypeTree
-toTypeTreeParser parser = exprToTypeTree <$> parser
-
-toBindingMTypeParser  :: IndentParser String (Binding Unit) -> IndentParser String (Binding MType)
-toBindingMTypeParser parser = map (const Nothing) <$> parser
-
 definition :: IndentParser String Definition
 definition = do
   defName <- ilexe name
-  binds   <- many $ indent (toBindingMTypeParser binding)
+  binds   <- many $ indent binding
   indent $ char '='
-  body    <- indent (toTypeTreeParser expression)
+  body    <- indent expression
   pure $ Def defName binds body
 
 definitions :: IndentParser String (List Definition)

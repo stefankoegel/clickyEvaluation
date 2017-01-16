@@ -12,7 +12,7 @@ import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
 import Control.Monad.Writer (Writer, tell)
 
 import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), toOpTuple)
-import Parser (toTypeTreeParser, toBindingMTypeParser, expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent)
+import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent)
 import IndentParser (IndentParser)
 
 toList :: forall a. Array a -> List a
@@ -55,48 +55,48 @@ runTests = do
   test "special" variable "_____''''" (Name "_____''''")
   test "with_numbers1" variable "a1" (Name "a1")
 
-  test "composition" (toTypeTreeParser expression) "f . g" (Binary Nothing (toOpTuple Composition) (aname "f") (aname "g"))
-  test "power" (toTypeTreeParser expression) "2 ^ 10" (Binary Nothing (toOpTuple Power) (aint 2) (aint 10))
-  test "mul" (toTypeTreeParser expression) "2 * 2" (Binary Nothing (toOpTuple Mul) (aint 2) (aint 2))
-  test "div" (toTypeTreeParser expression) "13 `div` 3" (Binary Nothing (toOpTuple (InfixFunc "div")) (aint 13) (aint 3))
-  test "mod" (toTypeTreeParser expression) "13 `mod` 3" (Binary Nothing (toOpTuple (InfixFunc "mod")) (aint 13) (aint 3))
-  test "add1" (toTypeTreeParser expression) "1 + 1"  (Binary Nothing (toOpTuple Add) (aint 1) (aint 1))
-  test "add2" (toTypeTreeParser expression) "2+2" (Binary Nothing (toOpTuple Add) (aint 2) (aint 2))
-  test "sub" (toTypeTreeParser expression) "5 - 3" (Binary Nothing (toOpTuple Sub) (aint 5) (aint 3))
-  test "colon" (toTypeTreeParser expression) "x:xs" (Binary Nothing (toOpTuple Colon) (aname "x") (aname "xs"))
-  test "append1" (toTypeTreeParser expression) "xs ++ ys" (Binary Nothing (toOpTuple Append) (aname "xs") (aname "ys"))
-  test "append2" (toTypeTreeParser expression) "xs++ys"  (Binary Nothing (toOpTuple Append) (aname "xs") (aname "ys"))
-  test "equ" (toTypeTreeParser expression) "5 == 5" (Binary Nothing (toOpTuple Equ) (aint 5) (aint 5))
-  test "neq" (toTypeTreeParser expression) "1 /= 2" (Binary Nothing (toOpTuple Neq) (aint 1) (aint 2))
-  test "lt1" (toTypeTreeParser expression) "1 < 234" (Binary Nothing (toOpTuple Lt) (aint 1) (aint 234))
-  test "lt2" (toTypeTreeParser expression) "x<y" (Binary Nothing (toOpTuple Lt) (aname "x") (aname "y"))
-  test "leq" (toTypeTreeParser expression) "1 <= 234" (Binary Nothing (toOpTuple Leq) (aint 1) (aint 234))
-  test "gt1" (toTypeTreeParser expression) "567 > 1" (Binary Nothing (toOpTuple Gt) (aint 567) (aint 1))
-  test "gt2" (toTypeTreeParser expression) "x>y" (Binary Nothing (toOpTuple Gt) (aname "x") (aname "y"))
-  test "geq" (toTypeTreeParser expression) "567 >= 1" (Binary Nothing (toOpTuple Geq) (aint 567) (aint 1))
-  test "and" (toTypeTreeParser expression) "hot && cold" (Binary Nothing (toOpTuple And) (aname "hot") (aname "cold"))
-  test "or" (toTypeTreeParser expression) "be || notBe" (Binary Nothing (toOpTuple Or) (aname "be") (aname "notBe"))
-  test "dollar" (toTypeTreeParser expression) "f $ 1 + 2"  (Binary Nothing (toOpTuple Dollar) (aname "f") (Binary Nothing (toOpTuple Add) (aint 1) (aint 2)))
+  test "composition" expression "f . g" (Binary Nothing (toOpTuple Composition) (aname "f") (aname "g"))
+  test "power" expression "2 ^ 10" (Binary Nothing (toOpTuple Power) (aint 2) (aint 10))
+  test "mul" expression "2 * 2" (Binary Nothing (toOpTuple Mul) (aint 2) (aint 2))
+  test "div" expression "13 `div` 3" (Binary Nothing (toOpTuple (InfixFunc "div")) (aint 13) (aint 3))
+  test "mod" expression "13 `mod` 3" (Binary Nothing (toOpTuple (InfixFunc "mod")) (aint 13) (aint 3))
+  test "add1" expression "1 + 1"  (Binary Nothing (toOpTuple Add) (aint 1) (aint 1))
+  test "add2" expression "2+2" (Binary Nothing (toOpTuple Add) (aint 2) (aint 2))
+  test "sub" expression "5 - 3" (Binary Nothing (toOpTuple Sub) (aint 5) (aint 3))
+  test "colon" expression "x:xs" (Binary Nothing (toOpTuple Colon) (aname "x") (aname "xs"))
+  test "append1" expression "xs ++ ys" (Binary Nothing (toOpTuple Append) (aname "xs") (aname "ys"))
+  test "append2" expression "xs++ys"  (Binary Nothing (toOpTuple Append) (aname "xs") (aname "ys"))
+  test "equ" expression "5 == 5" (Binary Nothing (toOpTuple Equ) (aint 5) (aint 5))
+  test "neq" expression "1 /= 2" (Binary Nothing (toOpTuple Neq) (aint 1) (aint 2))
+  test "lt1" expression "1 < 234" (Binary Nothing (toOpTuple Lt) (aint 1) (aint 234))
+  test "lt2" expression "x<y" (Binary Nothing (toOpTuple Lt) (aname "x") (aname "y"))
+  test "leq" expression "1 <= 234" (Binary Nothing (toOpTuple Leq) (aint 1) (aint 234))
+  test "gt1" expression "567 > 1" (Binary Nothing (toOpTuple Gt) (aint 567) (aint 1))
+  test "gt2" expression "x>y" (Binary Nothing (toOpTuple Gt) (aname "x") (aname "y"))
+  test "geq" expression "567 >= 1" (Binary Nothing (toOpTuple Geq) (aint 567) (aint 1))
+  test "and" expression "hot && cold" (Binary Nothing (toOpTuple And) (aname "hot") (aname "cold"))
+  test "or" expression "be || notBe" (Binary Nothing (toOpTuple Or) (aname "be") (aname "notBe"))
+  test "dollar" expression "f $ 1 + 2"  (Binary Nothing (toOpTuple Dollar) (aname "f") (Binary Nothing (toOpTuple Add) (aint 1) (aint 2)))
 
-  test "unary_minus1" (toTypeTreeParser expression) "- 10"  (aint (-10))
-  test "unary_minus2" (toTypeTreeParser expression) "- x"  (Unary Nothing (toOpTuple Sub) (aname "x"))
-  test "unary_minus3" (toTypeTreeParser expression) "-10"  (aint (-10))
-  test "unary_minus4" (toTypeTreeParser expression) "-x"  (Unary Nothing (toOpTuple Sub) (aname "x"))
+  test "unary_minus1" expression "- 10"  (aint (-10))
+  test "unary_minus2" expression "- x"  (Unary Nothing (toOpTuple Sub) (aname "x"))
+  test "unary_minus3" expression "-10"  (aint (-10))
+  test "unary_minus4" expression "-x"  (Unary Nothing (toOpTuple Sub) (aname "x"))
 
-  test "infix_operator1" (toTypeTreeParser expression) "1 `max` 3" (Binary Nothing (toOpTuple (InfixFunc "max")) (aint 1) (aint 3))
-  test "infix_operator2" (toTypeTreeParser expression) "5 `max` 2 `min` 1" (Binary Nothing (toOpTuple (InfixFunc "min")) (Binary Nothing (toOpTuple (InfixFunc "max")) (aint 5) (aint 2)) (aint 1))
-  test "infix_operator3" (toTypeTreeParser expression) "True`tight`False" (Binary Nothing (toOpTuple (InfixFunc "tight")) (abool true) (abool false))
+  test "infix_operator1" expression "1 `max` 3" (Binary Nothing (toOpTuple (InfixFunc "max")) (aint 1) (aint 3))
+  test "infix_operator2" expression "5 `max` 2 `min` 1" (Binary Nothing (toOpTuple (InfixFunc "min")) (Binary Nothing (toOpTuple (InfixFunc "max")) (aint 5) (aint 2)) (aint 1))
+  test "infix_operator3" expression "True`tight`False" (Binary Nothing (toOpTuple (InfixFunc "tight")) (abool true) (abool false))
 
-  test "1" (toTypeTreeParser expression) "1" (aint 1)
-  test "add" (toTypeTreeParser expression) "1 + 2" (Binary Nothing (toOpTuple Add) (aint 1) (aint 2))
-  test "precedence" (toTypeTreeParser expression) "1 * 2 + 3 * 4" (Binary Nothing (toOpTuple Add)
+  test "1" expression "1" (aint 1)
+  test "add" expression "1 + 2" (Binary Nothing (toOpTuple Add) (aint 1) (aint 2))
+  test "precedence" expression "1 * 2 + 3 * 4" (Binary Nothing (toOpTuple Add)
                                     (Binary Nothing (toOpTuple Mul) (aint 1) (aint 2))
                                     (Binary Nothing (toOpTuple Mul) (aint 3) (aint 4)))
-  test "whitespaces" (toTypeTreeParser expression)
+  test "whitespaces" expression
     "1   \t   -    \t   ( f   )    \t\t\t\t                                                                \t\t\t\t             `div`     _ignore"
     (Binary Nothing (toOpTuple Sub) (aint 1) (Binary Nothing (toOpTuple (InfixFunc "div")) (aname "f") (aname "_ignore")))
-  test "brackets" (toTypeTreeParser expression) "(  1  +  2  )  *  3" (Binary Nothing (toOpTuple Mul) (Binary Nothing (toOpTuple Add) (aint 1) (aint 2)) (aint 3))
-  test "brackets2" (toTypeTreeParser expression) "( (  1  +  2  - 3  )  *  4 * 5 * 6)"
+  test "brackets" expression "(  1  +  2  )  *  3" (Binary Nothing (toOpTuple Mul) (Binary Nothing (toOpTuple Add) (aint 1) (aint 2)) (aint 3))
+  test "brackets2" expression "( (  1  +  2  - 3  )  *  4 * 5 * 6)"
     (Binary Nothing (toOpTuple Mul)
       (Binary Nothing (toOpTuple Mul)
         (Binary Nothing (toOpTuple Mul)
@@ -106,50 +106,50 @@ runTests = do
           (aint 4))
         (aint 5))
       (aint 6))
-  test "brackets3" (toTypeTreeParser expression) "( ( ( 1 ) ) )" (aint 1)
-  test "many brackets" (toTypeTreeParser expression) "(   (( ((  f )) *  ( (17   )) ) ))" (Binary Nothing (toOpTuple Mul) (aname "f") (aint 17))
+  test "brackets3" expression "( ( ( 1 ) ) )" (aint 1)
+  test "many brackets" expression "(   (( ((  f )) *  ( (17   )) ) ))" (Binary Nothing (toOpTuple Mul) (aname "f") (aint 17))
 
-  test "if_then_else" (toTypeTreeParser expression) "if x then y else z" (IfExpr Nothing (aname "x") (aname "y") (aname "z"))
-  test "nested if" (toTypeTreeParser expression) "if(if 1 then 2 else 3)then y else z" (IfExpr Nothing (IfExpr Nothing (aint 1) (aint 2) (aint 3)) (aname "y") (aname "z"))
-  test "iffy1" (toTypeTreeParser expression) "iffy" (aname "iffy")
-  test "iffy2" (toTypeTreeParser expression) "if 10 + 20 then iffy * iffy else ((7))"
+  test "if_then_else" expression "if x then y else z" (IfExpr Nothing (aname "x") (aname "y") (aname "z"))
+  test "nested if" expression "if(if 1 then 2 else 3)then y else z" (IfExpr Nothing (IfExpr Nothing (aint 1) (aint 2) (aint 3)) (aname "y") (aname "z"))
+  test "iffy1" expression "iffy" (aname "iffy")
+  test "iffy2" expression "if 10 + 20 then iffy * iffy else ((7))"
     (IfExpr Nothing
       (Binary Nothing (toOpTuple Add) (aint 10) (aint 20))
       (Binary Nothing (toOpTuple Mul) (aname "iffy") (aname "iffy"))
       (aint 7))
-  test "iffy3" (toTypeTreeParser expression) "iffy + if iffy then iffy else iffy"
+  test "iffy3" expression "iffy + if iffy then iffy else iffy"
     (Binary Nothing (toOpTuple Add) (aname "iffy") (IfExpr Nothing (aname "iffy") (aname "iffy") (aname "iffy")))
-  test "nested if 2" (toTypeTreeParser expression) "if if x then y else z then if a then b else c else if i then j else k"
+  test "nested if 2" expression "if if x then y else z then if a then b else c else if i then j else k"
     (IfExpr Nothing
       (IfExpr Nothing (aname "x") (aname "y") (aname "z"))
       (IfExpr Nothing (aname "a") (aname "b") (aname "c"))
       (IfExpr Nothing (aname "i") (aname "j") (aname "k")))
-  test "if2" (toTypeTreeParser expression) "if bool then False else True" (IfExpr Nothing (aname "bool") (Atom Nothing (Bool false)) (Atom Nothing (Bool true)))
+  test "if2" expression "if bool then False else True" (IfExpr Nothing (aname "bool") (Atom Nothing (Bool false)) (Atom Nothing (Bool true)))
 
-  test "apply1" (toTypeTreeParser expression) "f 1" (App Nothing (aname "f") (singleton (aint 1)))
-  test "apply2" (toTypeTreeParser expression) "f x y z 12 (3 + 7)"
+  test "apply1" expression "f 1" (App Nothing (aname "f") (singleton (aint 1)))
+  test "apply2" expression "f x y z 12 (3 + 7)"
     (App Nothing (aname "f") (toList [aname "x", aname "y", aname "z", aint 12, Binary Nothing (toOpTuple Add) (aint 3) (aint 7)]))
-  test "fibonacci" (toTypeTreeParser expression) "fib (n - 1) + fib (n - 2)"
+  test "fibonacci" expression "fib (n - 1) + fib (n - 2)"
     (Binary Nothing (toOpTuple Add)
       (App Nothing (aname "fib") (toList [Binary Nothing (toOpTuple Sub) (aname "n") (aint 1)]))
       (App Nothing (aname "fib") (toList [Binary Nothing (toOpTuple Sub) (aname "n") (aint 2)])))
-  test "predicate" (toTypeTreeParser expression) "if p 10 then 10 else 20"
+  test "predicate" expression "if p 10 then 10 else 20"
     (IfExpr Nothing
       (App Nothing (aname "p") (singleton (aint 10)))
       (aint 10)
       (aint 20))
-  test "stuff" (toTypeTreeParser expression) "f a (1 * 2) * 3"
+  test "stuff" expression "f a (1 * 2) * 3"
     (Binary Nothing (toOpTuple Mul)
       (App Nothing (aname "f") (toList [aname "a", Binary Nothing (toOpTuple Mul) (aint 1) (aint 2)]))
       (aint 3))
 
-  test "tuple" (toTypeTreeParser expression) "(1, 2)" (NTuple Nothing (toList [aint 1, aint 2]))
-  test "3tuple" (toTypeTreeParser expression) "(1, 2, 3)" (NTuple Nothing (toList [aint 1, aint 2, aint 3]))
-  test "4tuple" (toTypeTreeParser expression) "(1, 2, 3, 4)" (NTuple Nothing (toList [aint 1, aint 2, aint 3, aint 4]))
-  test "tuple_spaces" (toTypeTreeParser expression) "(   1   , 2   )" (NTuple Nothing (toList [aint 1, aint 2]))
-  test "3tuple_spaces" (toTypeTreeParser expression) "(  1   , 2    , 3     )" (NTuple Nothing (toList [aint 1, aint 2, aint 3]))
-  test "tuple_arith" (toTypeTreeParser expression) "((1 + 2, (3)))" (NTuple Nothing (toList [Binary Nothing (toOpTuple Add) (aint 1) (aint 2), aint 3]))
-  test "tuple_apply" (toTypeTreeParser expression) "fmap f (snd (1,2), fst ( 1 , 2 ))"
+  test "tuple" expression "(1, 2)" (NTuple Nothing (toList [aint 1, aint 2]))
+  test "3tuple" expression "(1, 2, 3)" (NTuple Nothing (toList [aint 1, aint 2, aint 3]))
+  test "4tuple" expression "(1, 2, 3, 4)" (NTuple Nothing (toList [aint 1, aint 2, aint 3, aint 4]))
+  test "tuple_spaces" expression "(   1   , 2   )" (NTuple Nothing (toList [aint 1, aint 2]))
+  test "3tuple_spaces" expression "(  1   , 2    , 3     )" (NTuple Nothing (toList [aint 1, aint 2, aint 3]))
+  test "tuple_arith" expression "((1 + 2, (3)))" (NTuple Nothing (toList [Binary Nothing (toOpTuple Add) (aint 1) (aint 2), aint 3]))
+  test "tuple_apply" expression "fmap f (snd (1,2), fst ( 1 , 2 ))"
     (App Nothing (aname "fmap") (toList
       [ (aname "f")
       , NTuple Nothing (toList
@@ -158,7 +158,7 @@ runTests = do
         ])
       ]
     ))
-  test "tuple_deep" (toTypeTreeParser expression) "((((( ((((((1)),((2))),(3,((((4)))))),((5,6),(7,8))),(((9,(10)),(((11,12)))),((((13,14),(14,15)))))) )))))"
+  test "tuple_deep" expression "((((( ((((((1)),((2))),(3,((((4)))))),((5,6),(7,8))),(((9,(10)),(((11,12)))),((((13,14),(14,15)))))) )))))"
     (NTuple Nothing (Cons
       (NTuple Nothing (Cons
         (NTuple Nothing (Cons
@@ -172,34 +172,34 @@ runTests = do
       (Cons (NTuple Nothing (Cons (NTuple Nothing (Cons (Atom Nothing (AInt 13)) (Cons (Atom Nothing (AInt 14)) (Nil))))
         (Cons (NTuple Nothing (Cons (Atom Nothing (AInt 14)) (Cons (Atom Nothing (AInt 15)) (Nil)))) (Nil)))) (Nil)))) (Nil))))
 
-  test "list_empty" (toTypeTreeParser expression) "[]" (List Nothing Nil)
-  test "list1" (toTypeTreeParser expression) "[1]" (List Nothing (toList [aint 1]))
-  test "list2" (toTypeTreeParser expression) "[  1  ]" (List Nothing (toList [aint 1]))
-  test "list3" (toTypeTreeParser expression) "[  1  ,2,3,     4    ,  5  ]" (List Nothing (toList [aint 1, aint 2, aint 3, aint 4, aint 5]))
-  test "list_nested" (toTypeTreeParser expression) "[ [1,2] , [ 3 , 4 ] ]" (List Nothing $ toList [(List Nothing $ toList [aint 1, aint 2]), (List Nothing $ toList [aint 3, aint 4])])
-  test "list_complex" (toTypeTreeParser expression) "[ 1 + 2 , 3 + 4 ] ++ []"
+  test "list_empty" expression "[]" (List Nothing Nil)
+  test "list1" expression "[1]" (List Nothing (toList [aint 1]))
+  test "list2" expression "[  1  ]" (List Nothing (toList [aint 1]))
+  test "list3" expression "[  1  ,2,3,     4    ,  5  ]" (List Nothing (toList [aint 1, aint 2, aint 3, aint 4, aint 5]))
+  test "list_nested" expression "[ [1,2] , [ 3 , 4 ] ]" (List Nothing $ toList [(List Nothing $ toList [aint 1, aint 2]), (List Nothing $ toList [aint 3, aint 4])])
+  test "list_complex" expression "[ 1 + 2 , 3 + 4 ] ++ []"
     (Binary Nothing (toOpTuple Append)
       (List Nothing $ toList [Binary Nothing (toOpTuple Add) (aint 1) (aint 2), Binary Nothing (toOpTuple Add) (aint 3) (aint 4)])
       (List Nothing Nil))
 
-  test "binding_lit1" (toBindingMTypeParser binding) "x" (Lit Nothing (Name "x"))
-  test "binding_lit2" (toBindingMTypeParser binding) "10" (Lit Nothing (AInt 10))
-  test "lambda1" (toTypeTreeParser expression) "(\\x -> x)" (Lambda Nothing (toList [Lit Nothing (Name "x")]) (aname "x"))
-  test "lambda2" (toTypeTreeParser expression) "( \\ x y z -> ( x , y , z ) )"
+  test "binding_lit1" binding "x" (Lit Nothing (Name "x"))
+  test "binding_lit2" binding "10" (Lit Nothing (AInt 10))
+  test "lambda1" expression "(\\x -> x)" (Lambda Nothing (toList [Lit Nothing (Name "x")]) (aname "x"))
+  test "lambda2" expression "( \\ x y z -> ( x , y , z ) )"
     (Lambda Nothing (toList [Lit Nothing (Name "x"), Lit Nothing (Name "y"), Lit Nothing (Name "z")])
       (NTuple Nothing (toList [aname "x", aname "y", aname "z"])))
-  test "lambda3" (toTypeTreeParser expression) "(  \\  x ->   (   \\    y ->    (   \\    z ->     f   x   y   z )  )  )"
+  test "lambda3" expression "(  \\  x ->   (   \\    y ->    (   \\    z ->     f   x   y   z )  )  )"
     (Lambda Nothing (singleton $ Lit Nothing $ Name "x")
       (Lambda Nothing (singleton $ Lit Nothing $ Name "y")
         (Lambda Nothing (singleton $ Lit Nothing $ Name "z")
           (App Nothing (aname "f") (toList [aname "x", aname "y", aname "z"])))))
-  test "lambda4" (toTypeTreeParser expression) "(\\a b -> a + b) 1 2"
+  test "lambda4" expression "(\\a b -> a + b) 1 2"
     (App Nothing
       (Lambda Nothing (toList [Lit Nothing (Name "a"), Lit Nothing (Name "b")])
         (Binary Nothing (toOpTuple Add) (aname "a") (aname "b")))
       (toList [aint 1, aint 2]))
 
-  test "lambda5" (toTypeTreeParser expression) "(\\a -> (\\b -> (\\c -> (\\d -> (\\e -> (\\f -> (\\g -> a + b + c + d + e + f + g))))))) 1 2 3 4 5 6 7"
+  test "lambda5" expression "(\\a -> (\\b -> (\\c -> (\\d -> (\\e -> (\\f -> (\\g -> a + b + c + d + e + f + g))))))) 1 2 3 4 5 6 7"
     (App Nothing
       (Lambda Nothing (Cons (Lit Nothing (Name "a")) (Nil))
         (Lambda Nothing (Cons (Lit Nothing (Name "b")) (Nil))
@@ -221,7 +221,7 @@ runTests = do
                       (Atom Nothing (Name "g"))))))))))
       (Cons (Atom Nothing (AInt 1)) (Cons (Atom Nothing (AInt 2)) (Cons (Atom Nothing (AInt 3)) (Cons (Atom Nothing (AInt 4)) (Cons (Atom Nothing (AInt 5)) (Cons (Atom Nothing (AInt 6)) (Cons (Atom Nothing (AInt 7)) (Nil)))))))))
 
-  test "lambda6" (toTypeTreeParser expression) "\\x -> x + 2"
+  test "lambda6" expression "\\x -> x + 2"
       (Lambda Nothing
         (toList [Lit Nothing (Name "x")])
         (Binary Nothing (toOpTuple Add) (aname "x") (aint 2)))
@@ -233,48 +233,48 @@ runTests = do
         (toList [Lit Nothing (Name "b")])
         (Binary Nothing (toOpTuple Add) (aname "a") (aname "b"))))
 
-  test "sectR1" (toTypeTreeParser expression) "(+1)" (SectR Nothing (toOpTuple Add) (aint 1))
-  test "sectR2" (toTypeTreeParser expression) "( ^ 2 )" (SectR Nothing (toOpTuple Power) (aint 2))
-  test "sectR3" (toTypeTreeParser expression) "(++ [1])" (SectR Nothing (toOpTuple Append) (List Nothing (toList [aint 1])))
-  test "sectR4" (toTypeTreeParser expression) "(<= (2 + 2))" (SectR Nothing (toOpTuple Leq) (Binary Nothing (toOpTuple Add) (aint 2) (aint 2)))
-  test "sectR5" (toTypeTreeParser expression) "(   >=  (  2 + 2  )  )" (SectR Nothing (toOpTuple Geq) (Binary Nothing (toOpTuple Add) (aint 2) (aint 2)))
+  test "sectR1" expression "(+1)" (SectR Nothing (toOpTuple Add) (aint 1))
+  test "sectR2" expression "( ^ 2 )" (SectR Nothing (toOpTuple Power) (aint 2))
+  test "sectR3" expression "(++ [1])" (SectR Nothing (toOpTuple Append) (List Nothing (toList [aint 1])))
+  test "sectR4" expression "(<= (2 + 2))" (SectR Nothing (toOpTuple Leq) (Binary Nothing (toOpTuple Add) (aint 2) (aint 2)))
+  test "sectR5" expression "(   >=  (  2 + 2  )  )" (SectR Nothing (toOpTuple Geq) (Binary Nothing (toOpTuple Add) (aint 2) (aint 2)))
 
-  test "prefixOp1" (toTypeTreeParser expression) "(+)" (PrefixOp Nothing (toOpTuple Add))
-  test "prefixOp2" (toTypeTreeParser expression) "( ++ )" (PrefixOp Nothing (toOpTuple Append))
-  test "prefixOp3" (toTypeTreeParser expression) "((^) 2 10)" (App Nothing (PrefixOp Nothing (toOpTuple Power)) (toList [aint 2, aint 10]))
+  test "prefixOp1" expression "(+)" (PrefixOp Nothing (toOpTuple Add))
+  test "prefixOp2" expression "( ++ )" (PrefixOp Nothing (toOpTuple Append))
+  test "prefixOp3" expression "((^) 2 10)" (App Nothing (PrefixOp Nothing (toOpTuple Power)) (toList [aint 2, aint 10]))
 
-  test "sectL1" (toTypeTreeParser expression) "(1+)" (SectL Nothing (aint 1) (toOpTuple Add))
-  test "sectL2" (toTypeTreeParser expression) "( n `mod` )" (SectL Nothing (aname "n") (toOpTuple (InfixFunc "mod")))
-  test "sectL3" (toTypeTreeParser expression) "([1] ++)" (SectL Nothing (List Nothing $ toList [aint 1]) (toOpTuple Append))
-  test "sectL4" (toTypeTreeParser expression) "(   ( 2 +  2 )  <= )" (SectL Nothing (Binary Nothing (toOpTuple Add) (aint 2) (aint 2)) (toOpTuple Leq))
+  test "sectL1" expression "(1+)" (SectL Nothing (aint 1) (toOpTuple Add))
+  test "sectL2" expression "( n `mod` )" (SectL Nothing (aname "n") (toOpTuple (InfixFunc "mod")))
+  test "sectL3" expression "([1] ++)" (SectL Nothing (List Nothing $ toList [aint 1]) (toOpTuple Append))
+  test "sectL4" expression "(   ( 2 +  2 )  <= )" (SectL Nothing (Binary Nothing (toOpTuple Add) (aint 2) (aint 2)) (toOpTuple Leq))
 
-  test "let1" (toTypeTreeParser expression) "let x = 1 in x + x" (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (aint 1)) Nil) (Binary Nothing (toOpTuple Add) (aname "x") (aname "x")))
-  test "let2" (toTypeTreeParser expression) "letty + let x = 1 in x" (Binary Nothing (toOpTuple Add) (aname "letty") (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (aint 1)) Nil) (aname "x")))
-  test "let3" (toTypeTreeParser expression) "let x = let y = 1 in y in let z = 2 in x + z" (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 1))) (Nil)) (Atom Nothing (Name "y")))) (Nil)) (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 2))) (Nil)) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "z")))))
-  test "let4" (toTypeTreeParser expression) "let { x = 1; y = 2; z = 3} in x + y + z"              (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (Atom Nothing (AInt 1))) (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 2))) (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 3))) (Nil)))) (Binary Nothing (toOpTuple Add) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "y"))) (Atom Nothing (Name "z"))))
-  test "let5" (toTypeTreeParser expression) "let x = 1; y = 2; z = 3 in x + y + z"                 (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (Atom Nothing (AInt 1))) (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 2))) (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 3))) (Nil)))) (Binary Nothing (toOpTuple Add) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "y"))) (Atom Nothing (Name "z"))))
-  test "let6" (toTypeTreeParser expression) "let x = 1\n    y = 2\n    z = 3 in x + y + z"         (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (Atom Nothing (AInt 1))) (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 2))) (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 3))) (Nil)))) (Binary Nothing (toOpTuple Add) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "y"))) (Atom Nothing (Name "z"))))
-  test "let7" (toTypeTreeParser expression) "let {\n  x = 1 ;\n  y = 2 ;\n  z = 3\n} in x + y + z" (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (Atom Nothing (AInt 1))) (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 2))) (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 3))) (Nil)))) (Binary Nothing (toOpTuple Add) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "y"))) (Atom Nothing (Name "z"))))
+  test "let1" expression "let x = 1 in x + x" (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (aint 1)) Nil) (Binary Nothing (toOpTuple Add) (aname "x") (aname "x")))
+  test "let2" expression "letty + let x = 1 in x" (Binary Nothing (toOpTuple Add) (aname "letty") (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (aint 1)) Nil) (aname "x")))
+  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z" (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 1))) (Nil)) (Atom Nothing (Name "y")))) (Nil)) (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 2))) (Nil)) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "z")))))
+  test "let4" expression "let { x = 1; y = 2; z = 3} in x + y + z"              (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (Atom Nothing (AInt 1))) (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 2))) (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 3))) (Nil)))) (Binary Nothing (toOpTuple Add) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "y"))) (Atom Nothing (Name "z"))))
+  test "let5" expression "let x = 1; y = 2; z = 3 in x + y + z"                 (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (Atom Nothing (AInt 1))) (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 2))) (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 3))) (Nil)))) (Binary Nothing (toOpTuple Add) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "y"))) (Atom Nothing (Name "z"))))
+  test "let6" expression "let x = 1\n    y = 2\n    z = 3 in x + y + z"         (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (Atom Nothing (AInt 1))) (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 2))) (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 3))) (Nil)))) (Binary Nothing (toOpTuple Add) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "y"))) (Atom Nothing (Name "z"))))
+  test "let7" expression "let {\n  x = 1 ;\n  y = 2 ;\n  z = 3\n} in x + y + z" (LetExpr Nothing (Cons (Tuple (Lit Nothing (Name "x")) (Atom Nothing (AInt 1))) (Cons (Tuple (Lit Nothing (Name "y")) (Atom Nothing (AInt 2))) (Cons (Tuple (Lit Nothing (Name "z")) (Atom Nothing (AInt 3))) (Nil)))) (Binary Nothing (toOpTuple Add) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "x")) (Atom Nothing (Name "y"))) (Atom Nothing (Name "z"))))
 
-  test "consLit1" (toBindingMTypeParser binding) "(x:xs)" (ConsLit Nothing (Lit Nothing (Name "x")) (Lit Nothing (Name "xs")))
-  test "consLit2" (toBindingMTypeParser binding) "(x:(y:zs))" (ConsLit Nothing (Lit Nothing (Name "x")) (ConsLit Nothing (Lit Nothing (Name "y")) (Lit Nothing (Name "zs"))))
-  test "consLit3" (toBindingMTypeParser binding) "(  x  :  (  666  :  zs  )   )" (ConsLit Nothing (Lit Nothing (Name "x")) (ConsLit Nothing (Lit Nothing (AInt 666)) (Lit Nothing (Name "zs"))))
+  test "consLit1" binding "(x:xs)" (ConsLit Nothing (Lit Nothing (Name "x")) (Lit Nothing (Name "xs")))
+  test "consLit2" binding "(x:(y:zs))" (ConsLit Nothing (Lit Nothing (Name "x")) (ConsLit Nothing (Lit Nothing (Name "y")) (Lit Nothing (Name "zs"))))
+  test "consLit3" binding "(  x  :  (  666  :  zs  )   )" (ConsLit Nothing (Lit Nothing (Name "x")) (ConsLit Nothing (Lit Nothing (AInt 666)) (Lit Nothing (Name "zs"))))
 
-  test "listLit1" (toBindingMTypeParser binding) "[]" (ListLit Nothing Nil)
-  test "listLit2" (toBindingMTypeParser binding) "[    ]" (ListLit Nothing Nil)
-  test "listLit3" (toBindingMTypeParser binding) "[  True ]" (ListLit Nothing (Cons (Lit Nothing (Bool true)) Nil))
-  test "listLit4" (toBindingMTypeParser binding) "[  x   ,  y  ,   1337 ]" (ListLit Nothing (toList [Lit Nothing (Name "x"), Lit Nothing (Name "y"), Lit Nothing (AInt 1337)]))
+  test "listLit1" binding "[]" (ListLit Nothing Nil)
+  test "listLit2" binding "[    ]" (ListLit Nothing Nil)
+  test "listLit3" binding "[  True ]" (ListLit Nothing (Cons (Lit Nothing (Bool true)) Nil))
+  test "listLit4" binding "[  x   ,  y  ,   1337 ]" (ListLit Nothing (toList [Lit Nothing (Name "x"), Lit Nothing (Name "y"), Lit Nothing (AInt 1337)]))
 
-  test "tupleLit1" (toBindingMTypeParser binding) "(a,b)" (NTupleLit Nothing (toList [Lit Nothing (Name "a"), Lit Nothing (Name "b")]))
-  test "tupleLit2" (toBindingMTypeParser binding) "(   a   ,  b   ,   c   )" (NTupleLit Nothing (toList $ [Lit Nothing (Name "a"), Lit Nothing (Name "b"), Lit Nothing (Name "c")]))
-  test "tupleLit3" (toBindingMTypeParser binding) "(  (  x  ,  y  )  , ( a  ,  b  )  , 10 )"
+  test "tupleLit1" binding "(a,b)" (NTupleLit Nothing (toList [Lit Nothing (Name "a"), Lit Nothing (Name "b")]))
+  test "tupleLit2" binding "(   a   ,  b   ,   c   )" (NTupleLit Nothing (toList $ [Lit Nothing (Name "a"), Lit Nothing (Name "b"), Lit Nothing (Name "c")]))
+  test "tupleLit3" binding "(  (  x  ,  y  )  , ( a  ,  b  )  , 10 )"
     (NTupleLit Nothing (toList
       [ NTupleLit Nothing (toList [Lit Nothing (Name "x"), Lit Nothing (Name "y")])
       , NTupleLit Nothing (toList [Lit Nothing (Name "a"), Lit Nothing (Name "b")])
       , (Lit Nothing (AInt 10))
       ]))
 
-  test "binding" (toBindingMTypeParser binding) "( ( x , y ) : [ a , b ] )"
+  test "binding" binding "( ( x , y ) : [ a , b ] )"
     (ConsLit Nothing
       (NTupleLit Nothing (toList [Lit Nothing (Name "x"), Lit Nothing (Name "y")]))
       (ListLit Nothing (toList [Lit Nothing (Name "a"), Lit Nothing (Name "b")])))
@@ -292,7 +292,7 @@ runTests = do
     (toList [Def "a" Nil (aint 10), Def "b" Nil (aint 20)])
 
   test "prelude" definitions prelude parsedPrelude
-  test "expression" (toTypeTreeParser expression) "sum (map (^2) [1, 2, 3, 4])"
+  test "expression" expression "sum (map (^2) [1, 2, 3, 4])"
     (App Nothing
       (Atom Nothing (Name "sum"))
       (Cons
@@ -306,18 +306,18 @@ runTests = do
   test "char_atom1" atom "'a'" (Char "a")
   test "char_atom2" atom "'\\\\'" (Char "\\")
   test "char_atom3" atom "'\\n'" (Char "\n")
-  test "char_expr1" (toTypeTreeParser expression) "'\\r'" (Atom Nothing (Char "\r"))
-  test "char_expr2" (toTypeTreeParser expression) "['\\\\', '\\'', '\\\"']" (List Nothing $ toList [Atom Nothing (Char "\\"), Atom Nothing (Char "'"), Atom Nothing (Char "\"")])
+  test "char_expr1" expression "'\\r'" (Atom Nothing (Char "\r"))
+  test "char_expr2" expression "['\\\\', '\\'', '\\\"']" (List Nothing $ toList [Atom Nothing (Char "\\"), Atom Nothing (Char "'"), Atom Nothing (Char "\"")])
 
-  test "string1" (toTypeTreeParser expression) "\"asdf\"" (List Nothing $ toList [Atom Nothing (Char "a"), Atom Nothing (Char "s"), Atom Nothing (Char "d"), Atom Nothing (Char "f")])
-  test "string2" (toTypeTreeParser expression) "\"\\\\\\n\\\"\\\'\"" (List Nothing $ toList [Atom Nothing (Char "\\"), Atom Nothing (Char "\n"), Atom Nothing (Char "\""), Atom Nothing (Char "'")])
+  test "string1" expression "\"asdf\"" (List Nothing $ toList [Atom Nothing (Char "a"), Atom Nothing (Char "s"), Atom Nothing (Char "d"), Atom Nothing (Char "f")])
+  test "string2" expression "\"\\\\\\n\\\"\\\'\"" (List Nothing $ toList [Atom Nothing (Char "\\"), Atom Nothing (Char "\n"), Atom Nothing (Char "\""), Atom Nothing (Char "'")])
 
-  test "listComp1" (toTypeTreeParser expression) "[ x | x <- [1,2,3] ]" $ ListComp Nothing (Atom Nothing (Name "x")) (toList [Gen Nothing (Lit Nothing (Name "x")) (List Nothing (toList [Atom Nothing (AInt 1), Atom Nothing (AInt 2), Atom Nothing (AInt 3)]))])
-  test "listComp2" (toTypeTreeParser expression) "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp Nothing (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "b")) (Atom Nothing (Name ("c")))) $ toList [Let Nothing (Lit Nothing (Name "b")) (Atom Nothing (AInt 3)),
+  test "listComp1" expression "[ x | x <- [1,2,3] ]" $ ListComp Nothing (Atom Nothing (Name "x")) (toList [Gen Nothing (Lit Nothing (Name "x")) (List Nothing (toList [Atom Nothing (AInt 1), Atom Nothing (AInt 2), Atom Nothing (AInt 3)]))])
+  test "listComp2" expression "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp Nothing (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "b")) (Atom Nothing (Name ("c")))) $ toList [Let Nothing (Lit Nothing (Name "b")) (Atom Nothing (AInt 3)),
     Gen Nothing (Lit Nothing (Name "c")) (ArithmSeq Nothing (Atom Nothing (AInt 1)) Nothing Nothing)]
-  test "listComp3" (toTypeTreeParser expression) "[a*b|let a=5,let b=a+1]" $ ListComp Nothing (Binary Nothing (toOpTuple Mul) (Atom Nothing (Name "a")) (Atom Nothing (Name "b"))) $ toList [Let Nothing (Lit Nothing (Name "a")) (Atom Nothing (AInt 5)),
+  test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp Nothing (Binary Nothing (toOpTuple Mul) (Atom Nothing (Name "a")) (Atom Nothing (Name "b"))) $ toList [Let Nothing (Lit Nothing (Name "a")) (Atom Nothing (AInt 5)),
     Let Nothing (Lit Nothing (Name "b")) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "a")) (Atom Nothing (AInt 1)))]
-  test "listComp4" (toTypeTreeParser expression) "[ x | x <- [1..10], even x ]" $ ListComp Nothing (aname "x") $ toList [ Gen Nothing (Lit Nothing (Name "x")) (ArithmSeq Nothing (aint 1) Nothing (Just (aint 10))), Guard Nothing (App Nothing (aname "even") $ toList [aname "x"])]
+  test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp Nothing (aname "x") $ toList [ Gen Nothing (Lit Nothing (Name "x")) (ArithmSeq Nothing (aint 1) Nothing (Just (aint 10))), Guard Nothing (App Nothing (aname "even") $ toList [aname "x"])]
 
 
 prelude :: String

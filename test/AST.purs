@@ -8,7 +8,7 @@ import Data.Tuple (Tuple(..))
 
 import Control.Monad.Writer (Writer, tell)
 
-import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), Expr)
+import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, MType, toOpTuple)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
@@ -54,47 +54,47 @@ runTests = do
   test "map_listcomp" (map id listcomp) listcomp
 
 
-atom :: Expr
-atom = Atom unit (Name "x")
+atom :: TypeTree
+atom = Atom Nothing (Name "x")
 
-list :: Expr
-list = List unit $ toList [atom, atom]
+list :: TypeTree
+list = List Nothing $ toList [atom, atom]
 
-ntuple :: Expr
-ntuple = NTuple unit $ toList [atom, atom]
+ntuple :: TypeTree
+ntuple = NTuple Nothing $ toList [atom, atom]
 
-binary :: Expr
-binary = Binary unit Add atom atom
+binary :: TypeTree
+binary = Binary Nothing (toOpTuple Add) atom atom
 
-unary :: Expr
-unary = Unary unit Sub atom
+unary :: TypeTree
+unary = Unary Nothing (toOpTuple Sub) atom
 
-sectl :: Expr
-sectl = SectL unit atom Add
+sectl :: TypeTree
+sectl = SectL Nothing atom (toOpTuple Add)
 
-sectr :: Expr
-sectr = SectR unit Add atom
+sectr :: TypeTree
+sectr = SectR Nothing (toOpTuple Add) atom
 
-prefixop :: Expr
-prefixop = PrefixOp unit Add
+prefixop :: TypeTree
+prefixop = PrefixOp Nothing (toOpTuple Add)
 
-ifexpr :: Expr
-ifexpr = IfExpr unit atom atom atom
+ifexpr :: TypeTree
+ifexpr = IfExpr Nothing atom atom atom
 
-arithmseq :: Expr
-arithmseq = ArithmSeq unit atom (Just atom) (Just atom)
+arithmseq :: TypeTree
+arithmseq = ArithmSeq Nothing atom (Just atom) (Just atom)
 
-binding :: Binding Unit
-binding = Lit unit (Name "x")
+binding :: Binding MType
+binding = Lit Nothing (Name "x")
 
-letexpr :: Expr
-letexpr = LetExpr unit (toList [Tuple binding atom]) atom
+letexpr :: TypeTree
+letexpr = LetExpr Nothing (toList [Tuple binding atom]) atom
 
-lambda :: Expr
-lambda = Lambda unit (toList [binding]) atom
+lambda :: TypeTree
+lambda = Lambda Nothing (toList [binding]) atom
 
-app :: Expr
-app = App unit atom (toList [atom, atom])
+app :: TypeTree
+app = App Nothing atom (toList [atom, atom])
 
-listcomp :: Expr
-listcomp = ListComp unit atom (toList [Gen unit binding atom, Let unit binding atom, Guard unit atom])
+listcomp :: TypeTree
+listcomp = ListComp Nothing atom (toList [Gen Nothing binding atom, Let Nothing binding atom, Guard Nothing atom])

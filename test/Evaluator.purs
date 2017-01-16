@@ -8,7 +8,7 @@ import Data.List (List, singleton)
 
 import Control.Monad.Writer (Writer, tell)
 
-import Parser (definitions, expression, runParserIndent, toTypeTreeParser)
+import Parser (definitions, expression, runParserIndent)
 import Evaluator (eval, eval1, runEvalM, defsToEnv)
 import Test.Parser (prelude)
 
@@ -16,7 +16,7 @@ tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton
 
 eval1test :: String -> String -> String -> Writer (List String) Unit
-eval1test name input expected = case (Tuple (runParserIndent (toTypeTreeParser expression) input) (runParserIndent (toTypeTreeParser expression) expected)) of
+eval1test name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
   (Tuple (Right inExp) (Right expExp)) ->
     case runEvalM (eval1 M.empty inExp) of
       (Right eval1Exp) -> 
@@ -27,7 +27,7 @@ eval1test name input expected = case (Tuple (runParserIndent (toTypeTreeParser e
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
 eval1EnvTest :: String -> String -> String -> String -> Writer (List String) Unit
-eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent (toTypeTreeParser expression) input) (runParserIndent (toTypeTreeParser expression) expected)) (runParserIndent definitions env)) of
+eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
     case runEvalM (eval1 (defsToEnv defs) inExp) of
       (Right eval1Exp) -> 
@@ -38,7 +38,7 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent (toTy
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
 evalEnvTest :: String -> String -> String -> String -> Writer (List String) Unit
-evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent (toTypeTreeParser expression) input) (runParserIndent (toTypeTreeParser expression) expected)) (runParserIndent definitions env)) of
+evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
     let evalExp = eval (defsToEnv defs) inExp in
       if evalExp == expExp
