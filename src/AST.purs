@@ -201,6 +201,12 @@ data Binding m = Lit       m Atom
 
 derive instance eqBinding :: (Eq a) => Eq (Binding a)
 
+instance functorBinding :: Functor Binding where
+  map f (Lit x atom) = Lit (f x) atom
+  map f (ConsLit x binding1 binding2) = ConsLit (f x) (f <$> binding1) (f <$> binding2)
+  map f (ListLit x bindings) = ListLit (f x) (map f <$> bindings)
+  map f (NTupleLit x bindings) = NTupleLit (f x) (map f <$> bindings)
+
 type TypedBinding = Binding (Maybe Type)
 
 extractFromBinding :: forall a. Binding a -> a
