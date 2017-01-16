@@ -543,10 +543,15 @@ isTupleLit :: forall a. Binding a -> Boolean
 isTupleLit (NTupleLit _ _) = true
 isTupleLit _ = false
 
--- | Return the name of the given binding (a lit pattern of the type)
+-- | Return the name of the given binding (a lit pattern of the type).
 getLitName :: forall a. Binding a -> String
 getLitName (Lit _ (Name name)) = name
 getLitName _ = ""
+
+-- | Given a list type return the type of the list elements.
+extractListType :: Type -> Type
+extractListType (AD (TList t)) = t
+extractListType t = t
 
 -- TODO: Write test.
 
@@ -570,11 +575,10 @@ extractConsLit t (ConsLit _ fst snd) = do
       let updatedBinding = apply s1 (ConsLit (Just listType) typedBinding1 (Lit (Just listType) (Name name)))
       pure $ Tuple mapping updatedBinding
     else do
-      -- The second pattern is a list, cons or tuple pattern with type t2. The given type t has to
-      -- be a list of types => [t] ~ t2.
+      -- The second pattern is a list, cons or tuple pattern of type t2. [t3] ~ t2 => t3 ~ t.
       Tuple mapping2 typedBinding2 <- extractBinding snd
-      type2 <- extractBindingType typedBinding2
-      s2 <- unify (AD $ TList $ apply s1 t) type2
+      type2 <- extractListType <$> extractBindingType typedBinding2
+      s2 <- unify (apply s1 t) type2
       -- Update the mapping and the binding.
       let mapping = apply s2 (apply s1 (mapping1 <> mapping2))
       let updatedBinding = apply s2 (apply s1 (ConsLit (Just $ AD $ TList type2) typedBinding1 typedBinding2))
