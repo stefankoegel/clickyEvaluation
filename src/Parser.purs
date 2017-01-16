@@ -24,7 +24,7 @@ import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
 import Text.Parsing.Parser.Pos (initialPos)
 
-import AST (Expr, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), ExprQualTree)
+import AST (Expr, MType, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), ExprQualTree, exprToTypeTree, TypeTree)
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
@@ -376,8 +376,8 @@ expression = do
 runParserIndent :: forall a. IndentParser String a -> String -> Either ParseError a
 runParserIndent p src = fst $ flip runState initialPos $ runParserT src p
 
-parseExpr :: String -> Either ParseError Expr
-parseExpr = runParserIndent expression
+parseExpr :: String -> Either ParseError TypeTree
+parseExpr = runParserIndent (toTypeTreeParser expression)
 
 ---------------------------------------------------------
 -- Parsers for Bindings
@@ -427,12 +427,19 @@ binding = fix $ \bnd ->
 -- Parsers for Definitions
 ---------------------------------------------------------
 
+-- | Convert a given expression parser into a type tree parser.
+toTypeTreeParser :: IndentParser String Expr -> IndentParser String TypeTree
+toTypeTreeParser parser = exprToTypeTree <$> parser
+
+toBindingMTypeParser  :: IndentParser String (Binding Unit) -> IndentParser String (Binding MType)
+toBindingMTypeParser parser = map (const Nothing) <$> parser
+
 definition :: IndentParser String Definition
 definition = do
   defName <- ilexe name
-  binds   <- many $ indent binding
+  binds   <- many $ indent (toBindingMTypeParser binding)
   indent $ char '='
-  body    <- indent expression
+  body    <- indent (toTypeTreeParser expression)
   pure $ Def defName binds body
 
 definitions :: IndentParser String (List Definition)
