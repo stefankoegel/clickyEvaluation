@@ -1,6 +1,6 @@
 module Main where
 
-import AST (Expr, Atom(Name), Tree(Atom))
+import AST (Expr, Atom(Name), Tree(Atom), TypeTree)
 import Parser as Parser
 import Evaluator as Eval
 import Web as Web
@@ -52,17 +52,17 @@ makeCEwithDefsAndHistory  input defs selector histSelector = do
   let env = stringToEnv defs
   showExprIn expr env [] container (Just histContainer)
 
-parseExpr :: String -> Expr
+parseExpr :: String -> TypeTree
 parseExpr input = case Parser.parseExpr input of
-  Left err   -> (Atom unit (Name $ "parse error: " <> show err))
+  Left err   -> (Atom Nothing (Name $ "parse error: " <> show err))
   Right expr -> expr
 
-eval1 :: Eval.Env -> Expr -> Expr
+eval1 :: Eval.Env -> TypeTree -> TypeTree
 eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
   Left _      -> expr
   Right expr' -> expr'
 
-makeCallback :: Eval.Env -> Array Expr -> J.JQuery -> Maybe J.JQuery-> Web.Callback
+makeCallback :: Eval.Env -> Array TypeTree -> J.JQuery -> Maybe J.JQuery-> Web.Callback
 makeCallback env history container histContainer expr hole event jq = do
   J.stopImmediatePropagation event
   let evalFunc = if ctrlKeyPressed event then Eval.eval else eval1
@@ -77,10 +77,10 @@ makeCallback env history container histContainer expr hole event jq = do
     _           -> pure unit
   pure unit
 
-exprToJQuery :: forall eff. Web.Callback -> Expr -> Eff (dom :: DOM | eff) J.JQuery
+exprToJQuery :: forall eff. Web.Callback -> TypeTree -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery callback = Web.exprToDiv >>> Web.divToJQuery callback
 
-showExprIn :: forall eff. Expr -> Eval.Env -> Array Expr -> J.JQuery -> Maybe J.JQuery-> Eff (dom :: DOM | eff) Unit
+showExprIn :: forall eff. TypeTree -> Eval.Env -> Array TypeTree -> J.JQuery -> Maybe J.JQuery-> Eff (dom :: DOM | eff) Unit
 showExprIn expr env history container histContainer = do
   content <- exprToJQuery (makeCallback env history container histContainer) expr
   J.clear container
