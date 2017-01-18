@@ -6,7 +6,7 @@ import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
 import Data.Either (Either(Left, Right))
-import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, length, concat)
+import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, length, concat, (!!))
 import Data.Array as Array
 import Data.Map as Map
 import Data.Map (Map, insert, lookup, empty)
@@ -15,7 +15,7 @@ import Data.Traversable (traverse)
 import Data.Set as Set
 import Data.Foldable (foldr, foldMap, elem)
 import Data.Maybe (Maybe(..), fromMaybe, fromJust, maybe)
-import Partial.Unsafe (unsafePartial)
+import Partial.Unsafe (unsafePartial, unsafeCrashWith)
 import Data.String (fromCharArray)
 import Data.Char as Char
 
@@ -247,6 +247,32 @@ inferBindings env (Cons (Tuple bin expr) rest) = do
   let sRes = s `compose` sr
   pure $ InferResult {subst: sRes, envi: er, result: (Cons res resr)}
 
+-- | From a given lambda type tree return a tuple containing the bindings and the body type tree.
+-- | This function has to be called with a lambda tree.
+getLambdaBindingsAndBody :: TypeTree -> Tuple (List TypedBinding) TypeTree
+getLambdaBindingsAndBody (Lambda t bindings body) = Tuple bindings body
+getLambdaBindingsAndBody _ = unsafeCrashWith "Bad argument: expected lambda type tree."
+
+-- | From a given app type tree return a tuple containing the first argument and the rest of the
+-- | arguments. This function has to be called with an app tree or it will crash.
+getAppArguments :: TypeTree -> Tuple TypeTree (List TypeTree)
+getAppArguments (App t firstArg rest) = Tuple firstArg rest
+getAppArguments _ = unsafeCrashWith "Bad argument: expected app type tree."
+
+-- | Return the child trees of a given list type tree. The given type tree has to be a list tree.
+-- | Otherwise report an error.
+getListTreeChildren :: TypeTree -> List TypeTree
+getListTreeChildren (List t children) = children
+getListTreeChildren _ = unsafeCrashWith "Bad argument: expected list type tree."
+
+-- | Return the child trees of a given tuple type tree. The given type tree has to be a tuple tree.
+-- | Otherwise report an error.
+getTupleTreeChildren :: TypeTree -> List TypeTree
+getTupleTreeChildren (NTuple t children) = children
+getTupleTreeChildren _ = unsafeCrashWith "Bad argument: expected tuple type tree."
+
+-- | Given a type environment as well as an untyped expression tree, infer the type of the given
+-- | tree and return a typed tree as well as the map of substitutions.
 infer :: TypeEnv -> TypeTree -> Infer (Tuple Subst TypeTree)
 infer env ex = case ex of
   Atom _ atom@(Name name) -> case name of
@@ -259,29 +285,27 @@ infer env ex = case ex of
   Atom _ atom@(Char _) -> pure (Tuple nullSubst $ Atom (Just $ TypCon "Char") atom)
   Atom _ atom@(AInt _) -> pure (Tuple nullSubst $ Atom (Just $ TypCon "Int") atom)
 
-  Lambda _ (Cons bin Nil) e -> do
-    Tuple envL tvB <- extractBinding bin
+  Lambda _ (bin : Nil) e -> do
+    Tuple envL typedBinding <- extractBinding bin
     let env' = env `extendMultiple` envL
-    Tuple s1 tt <- infer env' e
-    bindingType <- extractBindingType tvB
-    let extractedType = unsafePartial $ fromJust $ extract tt
-    pure (Tuple s1 $ apply s1 (Lambda (Just $ bindingType `TypArr` extractedType) (tvB : Nil) tt))
+    Tuple subst tree <- infer env' e
+    bindingType <- extractBindingType typedBinding
+    let extractedType = unsafePartial $ fromJust $ extract tree
+    pure $ Tuple subst $ apply subst (Lambda (Just $ bindingType `TypArr` extractedType) (typedBinding : Nil) tree)
 
-  Lambda _ (Cons bin xs) e -> do
-    Tuple envL tvB <- extractBinding bin
+  Lambda _ (bin : bins) e -> do
+    Tuple envL typedBinding <- extractBinding bin
     let env' = env `extendMultiple` envL
-    inferred <- infer env' (Lambda Nothing xs e)
-    case inferred of
-      (Tuple s1 (Lambda t1 tb tt)) -> do
-        bindingType <- extractBindingType tvB
-        let lambdaType = unsafePartial $ fromJust t1
-        pure (Tuple s1 $ apply s1 (Lambda (Just $ bindingType `TypArr` lambdaType) (tvB : tb) tt))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+    Tuple subst lambda <- infer env' (Lambda Nothing bins e)
+    Tuple bindings body <- pure $ getLambdaBindingsAndBody lambda
+    bindingType <- extractBindingType typedBinding
+    let lambdaType = unsafePartial $ fromJust $ extract lambda
+    let inferredType = bindingType `TypArr` lambdaType
+    pure $ Tuple subst (apply subst $ Lambda (Just inferredType) (typedBinding : bindings) body)
 
   Lambda _ Nil e -> infer env e
 
-  -- one element list
-  App _ e1 (Cons e2 Nil) -> do
+  App _ e1 (e2 : Nil) -> do
     tv <- fresh
     Tuple s1 tt1 <- infer env e1
     Tuple s2 tt2 <- infer (apply s1 env) e2
@@ -290,17 +314,15 @@ infer env ex = case ex of
     s3       <- unify (apply (s1  `compose` s2) extractedType1) (TypArr extractedType2 tv)
     pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (App (Just tv) tt1 (Cons tt2 Nil))))
 
-  App _ e1 (Cons e2 xs) -> do
-    inferred <- infer env (App Nothing (App Nothing e1 (Cons e2 Nil)) xs)
-    case inferred of
-      Tuple s (App t' (App _ tt lt) lt') -> pure $ Tuple s (App t' tt (lt<>lt'))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
-
-  App _ _ Nil -> throwError $ UnknownError "congrats you found a bug TypeChecker.infer (App Nil)"
+  App _ e1 (e2 : es) -> do
+    Tuple subst appTree <- infer env (App Nothing (App Nothing e1 (e2 : Nil)) es)
+    Tuple firstArg rest <- pure $ getAppArguments appTree
+    Tuple firstArgOfFirstArg restOfFirstArg <- pure $ getAppArguments firstArg
+    let appType = extract appTree
+    pure $ Tuple subst (App appType firstArgOfFirstArg (restOfFirstArg <> rest))
 
   ListComp _ expr quals -> do
     Tuple sq (Tuple tq env') <- inferQuals env quals
-    --let env' = apply sq env
     Tuple s tt <- infer env' expr
     let s' = sq `compose` s
     let extractedType = unsafePartial $ fromJust $ extract tt
@@ -314,14 +336,17 @@ infer env ex = case ex of
       let s = sb `compose` se
       pure $ Tuple s $ apply s $ LetExpr (extract te) resb te
 
-  IfExpr _ cond tr fl -> do
+  IfExpr _ cond e1 e2 -> do
     tvar <- freshTVar
     let t = TypVar tvar
-    let env' = env `extend` (Tuple "if" (Forall (tvar : Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
-    inferred <- infer env' (App Nothing (Atom Nothing (Name "if")) (cond : tr : fl : Nil))
-    case inferred of
-      Tuple s (App ifType tt (Cons tcond (Cons ttr (Cons tfl Nil)))) -> pure (Tuple s $ apply s (IfExpr ifType tcond ttr tfl))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+    let ifType = TypArr (TypCon "Bool") (TypArr t (TypArr t  t))
+    let env' = env `extend` (Tuple "if" (Forall (tvar : Nil) ifType))
+    Tuple subst tree <- infer env' (App Nothing (Atom Nothing (Name "if")) (cond : e1 : e2 : Nil))
+    Tuple firstArg rest <- pure $ getAppArguments tree
+    let typedCond = unsafePartial $ fromJust $ rest !! 0
+    let typedE1 = unsafePartial $ fromJust $ rest !! 1
+    let typedE2 = unsafePartial $ fromJust $ rest !! 2
+    pure $ Tuple subst (apply subst $ IfExpr (extract tree) typedCond typedE1 typedE2)
 
   ArithmSeq _ begin jstep jend -> do
     Tuple s1 t1 <- infer env begin
@@ -335,7 +360,7 @@ infer env ex = case ex of
     let extractedType1 = unsafePartial $ fromJust $ extract t1
     let extractedType2 = unsafePartial $ fromJust $ extract <$> t2
     let extractedType3 = unsafePartial $ fromJust $ extract <$> t3
-    let typeMisMatch m1 m2 = fromMaybe (UnknownError "congrats you found a bug TypeChecker.infer (ArithmSeq begin jstep jend)") (normalizeTypeError <$> lift2 UnificationFail m1 m2)
+    let typeMisMatch m1 m2 = unsafePartial $ fromJust $ normalizeTypeError <$> lift2 UnificationFail m1 m2
     ifM (pure (fromMaybe false (lift2 (/=) (Just extractedType1) extractedType2)))
       (throwError (typeMisMatch (Just extractedType1) extractedType2))
       (ifM (pure (fromMaybe false (lift2 (/=) (Just extractedType1) extractedType3)))
@@ -361,48 +386,39 @@ infer env ex = case ex of
     pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (SectL (Just tv) t2 (Tuple op (Just t1)))))
 
   SectR _ (Tuple op _) e -> do
-    inferredOp <- inferOp env op
-    case inferredOp of
-      Tuple s1 t1@(TypArr a (TypArr b c)) -> do
-        Tuple s2 t2 <- infer env e
-        let extractedType = unsafePartial $ fromJust $ extract t2
-        s3       <- unify (apply s2 b) extractedType
-        let s4 = (s3 `compose` s2 `compose` s1)
-        pure (Tuple s4 (apply s4 (SectR (Just $ TypArr a c) (Tuple op (Just t1)) t2)))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
-
-  -- TODO: Remove.
-  -- Unary _ (Sub) e -> do
-  --     tv <- fresh
-  --     let t1 = (TypCon "Int" `TypArr` TypCon "Int")
-  --     Tuple s2 t2 <- infer env e
-  --     s3 <- unify (apply s2 t1) (TypArr (extract t2) tv)
-  --     pure (Tuple (s3 `compose` s2) (apply s3 (Unary tv t1 t2)))
+    Tuple s1 opType <- inferOp env op
+    Tuple a arr <- pure $ getArrowTypes opType
+    Tuple b c <- pure $ getArrowTypes arr
+    Tuple s2 tree <- infer env e
+    let extractedType = unsafePartial $ fromJust $ extract tree
+    s3 <- unify (apply s1 b) extractedType
+    let s4 = (s3 `compose` s1 `compose` s1)
+    pure $ Tuple s4 (apply s4 (SectR (Just $ TypArr a c) (Tuple op (Just opType)) tree))
 
   Unary _ (Tuple op _) e -> do
     tv <- fresh
     Tuple s1 opType <- inferOp env op
     Tuple s2 t2 <- infer (apply s1 env) e
     let extractedType = unsafePartial $ fromJust $ extract t2
-    s3       <- unify (apply s2 opType) (TypArr extractedType tv)
+    s3 <- unify (apply s2 opType) (TypArr extractedType tv)
     pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (Unary (Just tv) (Tuple op (Just opType)) t2)))
 
   Binary _ (Tuple op mtype) e1 e2 -> do
-    inferred <- infer env (App Nothing (PrefixOp Nothing (Tuple op mtype)) (e1 : e2 : Nil))
-    case inferred of
-      (Tuple s (App t tt (Cons tt1 (Cons tt2 Nil)))) ->
-        pure $ Tuple s (Binary t (Tuple op (extract tt)) tt1 tt2)
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+    Tuple subst tree <- infer env (App Nothing (PrefixOp Nothing (Tuple op mtype)) (e1 : e2 : Nil))
+    Tuple firstTree rest <- pure $ getAppArguments tree
+    let tt1 = unsafePartial $ fromJust $ (rest !! 0)
+    let tt2 = unsafePartial $ fromJust $ (rest !! 1)
+    pure $ Tuple subst (Binary (extract tree) (Tuple op (extract firstTree)) tt1 tt2)
 
-  List _ (e1 : xs) -> do
-    inferred1 <- infer env (List Nothing xs)
-    case inferred1 of
-      Tuple s1 (List (Just (AD (TList t1))) ltt) -> do
-        Tuple s2 t2 <- infer (apply s1 env) e1
-        let extractedType = unsafePartial $ fromJust $ extract t2
-        s3 <- unify (apply s2 t1) extractedType
-        pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (List (Just $ AD $ TList extractedType) (Cons t2 ltt))))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+  List _ (e : es) -> do
+    Tuple s1 listTree <- infer env (List Nothing es)
+    Tuple s2 tree2 <- infer (apply s1 env) e
+    let listChildren = getListTreeChildren listTree
+    let listElement = unsafePartial $ fromJust (getListElementType <$> extract listTree)
+    let otherElementType = unsafePartial $ fromJust $ extract tree2
+    s3 <- unify (apply s2 listElement) otherElementType
+    let updatedListTree = List (Just $ AD $ TList otherElementType) (tree2 : listChildren)
+    pure $ Tuple (s3 `compose` s2 `compose` s1) (apply s3 updatedListTree)
 
   List _ Nil -> do
     tv <- fresh
@@ -413,16 +429,22 @@ infer env ex = case ex of
     let extractedType = unsafePartial $ fromJust $ extract t
     pure $ Tuple s $ NTuple (Just $ AD $ TTuple $ extractedType : Nil) (t : Nil)
 
-  NTuple _ (e1 : xs) -> do
-    inferred1 <- infer env (NTuple Nothing xs)
-    case inferred1 of
-      Tuple s1 (NTuple (Just (AD (TTuple t1))) lt) -> do
-          Tuple s2 t2 <- infer (apply s1 env) e1
-          let extractedType = unsafePartial $ fromJust $ extract t2 
-          pure (Tuple (s2 `compose` s1) $ NTuple (Just $ AD $ TTuple $ extractedType : t1) (t2 : lt))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+  NTuple _ (e : es) -> do
+    -- Given a tuple (a, b, c, ...) infer the type of (b, c, ...) and get the typed tree of
+    -- (b, c, ...). Also extract the type of (b, c, ...) as well as the types of the individual
+    -- elements.
+    Tuple s1 tupleTree <- infer env (NTuple Nothing es)
+    let inferredType = unsafePartial $ fromJust $ extract tupleTree
+    let types = getTupleElementTypes inferredType
+    let tupleChildren = getTupleTreeChildren tupleTree
 
-  NTuple _ Nil -> throwError $ UnknownError "congrats you found a bug in TypeChecker.infer (NTuple Nil)"
+    -- Infer the type of the first tuple element and add it to the already typed rest of the tuple.
+    Tuple s2 first <- infer (apply s1 env) e
+    let extractedType = unsafePartial $ fromJust $ extract first
+    let updeatedTupleTree = NTuple (Just $ AD $ TTuple $ extractedType : types) (first : tupleChildren)
+    pure $ Tuple (s2 `compose` s2) updeatedTupleTree
+
+  tree -> unsafeCrashWith $ "Bad argument: `infer` didn't expect the input " <> show tree <> "."
 
 inferQual :: TypeEnv -> TypeQual -> Infer (Tuple Subst (Tuple TypeQual TypeEnv))
 inferQual env (Let _ bin e1) = do
@@ -549,9 +571,18 @@ getLitName (Lit _ (Name name)) = name
 getLitName _ = ""
 
 -- | Given a list type return the type of the list elements.
-extractListType :: Type -> Type
-extractListType (AD (TList t)) = t
-extractListType t = t
+getListElementType :: Type -> Type
+getListElementType (AD (TList t)) = t
+getListElementType _ = unsafeCrashWith "Bad argument: expected list type."
+
+-- | Given a tuple type return the types of the tuple elements.
+getTupleElementTypes :: Type -> List Type
+getTupleElementTypes (AD (TTuple ts)) = ts
+getTupleElementTypes _ = unsafeCrashWith "Bad argument: expected list type."
+
+getArrowTypes :: Type -> Tuple Type Type
+getArrowTypes (TypArr t1 t2) = Tuple t1 t2
+getArrowTypes _ = unsafeCrashWith "Bad argument: expected arrow type."
 
 -- | Given a list pattern return the binding list.
 getListLitBindings :: forall a. Binding a -> List (Binding a)
@@ -595,7 +626,7 @@ extractBinding (ConsLit _ fst snd) = do
     else do
       -- The second pattern is a list, cons or tuple pattern of type t2. [t3] ~ t2 => t3 ~ t.
       Tuple mapping2 typedBinding2 <- extractBinding snd
-      type2 <- extractListType <$> extractBindingType typedBinding2
+      type2 <- getListElementType <$> extractBindingType typedBinding2
       subst2 <- unify (apply subst1 t) type2
       -- Update the mapping and the binding.
       let mapping = apply subst2 $ apply subst1 $ mapping1 <> mapping2
