@@ -102,7 +102,7 @@ instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple O
   apply s = map (apply s)
   ftv typeTree = ftv (extract typeTree)
 
-instance subTypedBinding :: Substitutable (Binding (Maybe Type)) where
+instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (Lit t atom) = Lit (apply s t) atom
   apply s (ConsLit t b1 b2) = ConsLit (apply s t) (apply s b1) (apply s b2)
   apply s (ListLit t lb) = ListLit (apply s t) (apply s lb)
@@ -553,87 +553,78 @@ extractListType :: Type -> Type
 extractListType (AD (TList t)) = t
 extractListType t = t
 
--- TODO: Write test.
+-- | Given a list pattern return the binding list.
+getListLitBindings :: forall a. Binding a -> List (Binding a)
+getListLitBindings (ListLit _ bindings) = bindings
+getListLitBindings _ = Nil
 
--- | This function expects a cons pattern (e.g. `(x:xs)`) as well as the type of the first
--- | sub-pattern (`x` in the example), infer the type of the sub-patterns.
--- | Conceptual example: Calling the function with Int and (x:xs) results in x :: Int, xs :: [Int].
--- | The resulting mapping holds x :: Int and xs :: Int, while the updated binding holds the
--- | additional type informations (x :: Int : xs :: [Int]).
-extractConsLit :: Type -> TypedBinding -> Infer (Tuple TVarMappings TypedBinding)
-extractConsLit t (ConsLit _ fst snd) = do
+-- TODO: Write test.
+-- | Given a list of untyped bindings infer the types into a list of mappings and typed bindings.
+extractListLit :: List TypedBinding -> Infer (List (Tuple TVarMappings TypedBinding))
+extractListLit bs = traverse extractBinding bs
+
+-- | Given a binding (which is not yet typed) infer the type of the binding and accumulate the
+-- | generated type variables into a map.
+extractBinding :: TypedBinding -> Infer (Tuple TVarMappings TypedBinding)
+extractBinding (Lit _ (Name name)) = do
+  tv <- fresh
+  pure $ Tuple (Tuple name (Forall Nil tv) : Nil) $ Lit (Just tv) (Name name)
+extractBinding (Lit _ (Bool x)) = pure $ Tuple Nil $ Lit (Just $ TypCon "Bool") (Bool x)
+extractBinding (Lit _ (Char x)) = pure $ Tuple Nil $ Lit (Just $ TypCon "Char") (Char x)
+extractBinding (Lit _ (AInt x)) = pure $ Tuple Nil $ Lit (Just $ TypCon "Int") (AInt x)
+
+-- We function expects a cons pattern (e.g. `(x:xs)`) and infers the type of the sub-patterns.
+-- Conceptual example: Calling the function (x:xs) results in x :: a, xs :: [a] (where a is a newly
+-- chosen type variable). The resulting mapping holds x :: a and xs :: [a], while the updated
+-- binding holds the additional type informations (x :: a : xs :: [a]).
+extractBinding (ConsLit _ fst snd) = do
+  t <- fresh
   Tuple mapping1 typedBinding1 <- extractBinding fst
   type1 <- extractBindingType typedBinding1
-  s1 <- unify t type1
+  subst1 <- unify t type1
   if isLit snd
     then do
       -- The second pattern is a literal pattern, therefore it has the type [t].
-      let listType = AD $ TList (apply s1 t)
+      let listType = AD $ TList (apply subst1 t)
       let name = getLitName snd
       -- Update the mapping and the binding.
-      let mapping = (Tuple name $ Forall Nil listType) : apply s1 mapping1
-      let updatedBinding = apply s1 (ConsLit (Just listType) typedBinding1 (Lit (Just listType) (Name name)))
+      let mapping = (Tuple name $ Forall Nil listType) : apply subst1 mapping1
+      let updatedBinding = apply subst1 $
+        ConsLit (Just listType) typedBinding1 (Lit (Just listType) (Name name))
       pure $ Tuple mapping updatedBinding
     else do
       -- The second pattern is a list, cons or tuple pattern of type t2. [t3] ~ t2 => t3 ~ t.
       Tuple mapping2 typedBinding2 <- extractBinding snd
       type2 <- extractListType <$> extractBindingType typedBinding2
-      s2 <- unify (apply s1 t) type2
+      subst2 <- unify (apply subst1 t) type2
       -- Update the mapping and the binding.
-      let mapping = apply s2 (apply s1 (mapping1 <> mapping2))
-      let updatedBinding = apply s2 (apply s1 (ConsLit (Just $ AD $ TList type2) typedBinding1 typedBinding2))
+      let mapping = apply subst2 $ apply subst1 $ mapping1 <> mapping2
+      let updatedBinding = apply subst2 $ apply subst1 $
+        ConsLit (Just $ AD $ TList type2) typedBinding1 typedBinding2
       pure $ Tuple mapping updatedBinding
 
--- The given binding should be a `ConsLit`, this case should not occur.
-extractConsLit _ binding = pure $ Tuple Nil binding
-
-extractListLit :: List TypedBinding -> Infer (List (Tuple TVarMappings TypedBinding))
-extractListLit (Cons a Nil) = do
-  b1 <- extractBinding a
-  pure (Cons b1 Nil)
-
-extractListLit (Cons a b) = do
-  b1 <- extractBinding a
-  bs <- extractListLit b
-  pure (Cons b1 bs)
-
-extractListLit Nil = pure Nil
-
--- TODO: Refactor.
-extractBinding :: TypedBinding -> Infer (Tuple TVarMappings TypedBinding)
-extractBinding (Lit _ (Name name)) = do
-  tv <- fresh
-  pure $ Tuple (Array.toUnfoldable [(Tuple name (Forall Nil tv))]) (Lit (Just tv) (Name name))
-extractBinding (Lit _ (Bool x)) = pure $ Tuple Nil $ Lit (Just $ TypCon "Bool") (Bool x)
-extractBinding (Lit _ (Char x)) = pure $ Tuple Nil $ Lit (Just $ TypCon "Char") (Char x)
-extractBinding (Lit _ (AInt x)) = pure $ Tuple Nil $ Lit (Just $ TypCon "Int") (AInt x)
-
-extractBinding a@(ConsLit _ _ _) = do
-  tv <- fresh
-  extractConsLit tv a
-
-extractBinding (ListLit _ bindings) = do -- Tuple TypEnv  (TListLit (List TypedBinding) Type)
-  bs <- extractListLit bindings
+extractBinding (ListLit _ bindings) = do
   tv <- fresh
   let ini = Tuple Nil (ListLit (Just tv) Nil) :: Tuple TVarMappings TypedBinding
-
-  binding <- foldM f ini bs
-  case binding of
-    Tuple list (ListLit (Just typ) lb) -> pure $ Tuple list (ListLit (Just $ AD $ TList typ) lb)
-    _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+  bs <- extractListLit bindings
+  Tuple mapping typedBinding <- foldM f ini bs
+  extractedType <- extractBindingType typedBinding
+  let updatedListLit = ListLit (Just $ AD $ TList extractedType) (getListLitBindings typedBinding)
+  pure $ Tuple mapping updatedListLit
   where
-    f (Tuple m1 (ListLit t1 typedBindings)) (Tuple m2 typedBinding) = do
-      let mappings = m1 <> m2
-      bindingType <- extractBindingType typedBinding
-      case t1 of
-        Just t -> do
-            s1 <- unify t bindingType
-            pure $ Tuple (apply s1 mappings) (apply s1 (ListLit t1 (typedBinding : typedBindings)))
-        _ -> throwError $ UnknownError "congrats you found a bug in TypeChecker.extractBinding"
-    f _ _ = throwError $ UnknownError "congrats you found a bug in TypeChecker.extractBinding"
+    f :: Tuple TVarMappings TypedBinding -> Tuple TVarMappings TypedBinding ->
+         Infer (Tuple TVarMappings TypedBinding)
+    f (Tuple mapping1 listLit1) (Tuple mapping2 listLit2) = do
+      bindingType <- extractBindingType listLit2
+      let typedBindings = getListLitBindings listLit1
+      listLitType <- extractBindingType listLit1
+      subst <- unify listLitType bindingType
+      pure $ Tuple
+        (apply subst (mapping1 <> mapping2))
+        (apply subst (ListLit (Just listLitType) (listLit2 : typedBindings)))
 
-extractBinding (NTupleLit _ typedBindings) = do
-  bs <- extractListLit typedBindings
+extractBinding (NTupleLit _ bindings) = do
+  bs <- extractListLit bindings
   let tup = unzip bs
   tupleTypes <- traverse extractBindingType (snd tup)
   pure $ Tuple (concat $ fst tup) (NTupleLit (Just $ AD $ TTuple $ tupleTypes) (snd tup))
