@@ -837,76 +837,6 @@ eqTypeList map (Cons a as) (Cons b bs) = let tup1 = eqType map a b in if (fst tu
 eqTypeList map Nil Nil = Tuple true map
 eqTypeList map _ _ = Tuple false map
 
-normalizeTypeTree :: TypeTree -> TypeTree
-normalizeTypeTree tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
-
-helptxToABC :: TypeTree -> State {count :: Int, env :: Map String String} TypeTree
-helptxToABC tt = go tt
-  where
-    go (Atom t atom) = helpTypeToABC' t >>= \t -> pure $ Atom t atom
-    go (List t tts) = do
-      t' <- helpTypeToABC' t
-      tts' <- traverse helptxToABC tts
-      pure $ List t' tts'
-    go (NTuple t tts) = do
-      t' <- helpTypeToABC' t
-      tts' <- traverse helptxToABC tts
-      pure $ NTuple t' tts'
-    go (Binary t (Tuple op opType) tt1 tt2) = do
-      t' <- helpTypeToABC' t
-      opType' <- helpTypeToABC' opType
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      pure $ Binary t' (Tuple op opType') tt1' tt2'
-    go (Unary t (Tuple op opType) tt) = do
-      t' <- helpTypeToABC' t
-      opType' <- helpTypeToABC' opType
-      tt' <- helptxToABC tt
-      pure $ (Unary t' (Tuple op opType') tt')
-    go (SectL t tt (Tuple op opType)) = do
-      t' <- helpTypeToABC' t
-      opType' <- helpTypeToABC' opType
-      tt' <- helptxToABC tt
-      pure $ SectL t' tt' (Tuple op opType')
-    go (SectR t (Tuple op opType) tt) = do
-      t' <- helpTypeToABC' t
-      opType' <- helpTypeToABC' opType
-      tt' <- helptxToABC tt
-      pure $ SectR t' (Tuple op opType') tt'
-    go (PrefixOp op t) = helpTypeToABC' op >>= \op -> pure $ PrefixOp op t
-    go (IfExpr t tt1 tt2 tt3) = do
-      t' <- helpTypeToABC' t
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      tt3' <- helptxToABC tt3
-      pure $ IfExpr t' tt1' tt2' tt3'
-    go (ArithmSeq t tt1 tt2 tt3) = do
-      t'   <- helpTypeToABC' t
-      tt1' <- helptxToABC tt1
-      tt2' <- traverse helptxToABC tt2
-      tt3' <- traverse helptxToABC tt3
-      pure $ ArithmSeq t' tt1' tt2' tt3'
-    go (LetExpr t bin tt) = do
-      t'   <- helpTypeToABC' t
-      bin' <- traverse (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
-      tt'  <- helptxToABC tt
-      pure $ LetExpr t' bin' tt'
-    go (Lambda t tbs tt) = do
-      t' <- helpTypeToABC' t
-      tbs' <- traverse helpBindingToABC tbs
-      tt' <- helptxToABC tt
-      pure $ Lambda t' tbs' tt'
-    go (App t tt tts) = do
-      t' <- helpTypeToABC' t
-      tt' <- helptxToABC tt
-      tts' <- traverse helptxToABC tts
-      pure $ App t' tt' tts'
-    go (ListComp t tt tts) = do
-      t'   <- helpTypeToABC' t
-      tt'  <- helptxToABC tt
-      tts' <- traverse helptxToABCQual tts
-      pure $ ListComp t' tt' tts'
-
 normalizeType :: Type -> Type
 normalizeType t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
 
@@ -915,62 +845,119 @@ normalizeTypeError (UnificationFail t1 t2) = UnificationFail (normalizeType t1) 
 normalizeTypeError (InfiniteType tvar t) = InfiniteType (prettyPrintType $ normalizeType $ TypVar tvar) (normalizeType t)
 normalizeTypeError error = error
 
+normalizeTypeTree :: TypeTree -> TypeTree
+normalizeTypeTree tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
+
+helptxToABC :: TypeTree -> State {count :: Int, env :: Map String String} TypeTree
+helptxToABC tt = go tt
+  where
+    go (Atom t atom) = helpMTypeToABC t >>= \t -> pure $ Atom t atom
+    go (List t tts) = do
+      t' <- helpMTypeToABC t
+      tts' <- traverse helptxToABC tts
+      pure $ List t' tts'
+    go (NTuple t tts) = do
+      t' <- helpMTypeToABC t
+      tts' <- traverse helptxToABC tts
+      pure $ NTuple t' tts'
+    go (Binary t (Tuple op opType) tt1 tt2) = do
+      t' <- helpMTypeToABC t
+      opType' <- helpMTypeToABC opType
+      tt1' <- helptxToABC tt1
+      tt2' <- helptxToABC tt2
+      pure $ Binary t' (Tuple op opType') tt1' tt2'
+    go (Unary t (Tuple op opType) tt) = do
+      t' <- helpMTypeToABC t
+      opType' <- helpMTypeToABC opType
+      tt' <- helptxToABC tt
+      pure $ (Unary t' (Tuple op opType') tt')
+    go (SectL t tt (Tuple op opType)) = do
+      t' <- helpMTypeToABC t
+      opType' <- helpMTypeToABC opType
+      tt' <- helptxToABC tt
+      pure $ SectL t' tt' (Tuple op opType')
+    go (SectR t (Tuple op opType) tt) = do
+      t' <- helpMTypeToABC t
+      opType' <- helpMTypeToABC opType
+      tt' <- helptxToABC tt
+      pure $ SectR t' (Tuple op opType') tt'
+    go (PrefixOp op t) = helpMTypeToABC op >>= \op -> pure $ PrefixOp op t
+    go (IfExpr t tt1 tt2 tt3) = do
+      t' <- helpMTypeToABC t
+      tt1' <- helptxToABC tt1
+      tt2' <- helptxToABC tt2
+      tt3' <- helptxToABC tt3
+      pure $ IfExpr t' tt1' tt2' tt3'
+    go (ArithmSeq t tt1 tt2 tt3) = do
+      t'   <- helpMTypeToABC t
+      tt1' <- helptxToABC tt1
+      tt2' <- traverse helptxToABC tt2
+      tt3' <- traverse helptxToABC tt3
+      pure $ ArithmSeq t' tt1' tt2' tt3'
+    go (LetExpr t bin tt) = do
+      t'   <- helpMTypeToABC t
+      bin' <- traverse (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
+      tt'  <- helptxToABC tt
+      pure $ LetExpr t' bin' tt'
+    go (Lambda t tbs tt) = do
+      t' <- helpMTypeToABC t
+      tbs' <- traverse helpBindingToABC tbs
+      tt' <- helptxToABC tt
+      pure $ Lambda t' tbs' tt'
+    go (App t tt tts) = do
+      t' <- helpMTypeToABC t
+      tt' <- helptxToABC tt
+      tts' <- traverse helptxToABC tts
+      pure $ App t' tt' tts'
+    go (ListComp t tt tts) = do
+      t'   <- helpMTypeToABC t
+      tt'  <- helptxToABC tt
+      tts' <- traverse helptxToABCQual tts
+      pure $ ListComp t' tt' tts'
+
 helptxToABCQual :: TypeQual -> State {count :: Int, env :: Map String String} TypeQual
 helptxToABCQual q = case q of
   Gen t b e -> do
-    t' <- helpTypeToABC' t
+    t' <- helpMTypeToABC t
     b' <- helpBindingToABC b
     e' <- helptxToABC e
     pure $ Gen t' b' e'
   Let t b e -> do
-    t' <- helpTypeToABC' t
+    t' <- helpMTypeToABC t
     b' <- helpBindingToABC b
     e' <- helptxToABC e
     pure $ Let t' b' e'
   Guard t e -> do
-    t' <- helpTypeToABC' t
+    t' <- helpMTypeToABC t
     e' <- helptxToABC e
     pure $ Guard t' e'
 
-helpTypeToABC :: Type  -> State {count :: Int, env :: (Map String String)} Type
+helpTypeToABC :: Type -> State {count :: Int, env :: (Map String String)} Type
 helpTypeToABC t = go t
   where
-   go (TypVar var) = do
-      {env: env} :: {count :: Int, env :: Map String String} <- get
-      case lookup var env of
-        Just var' -> pure $ TypVar var'
-        Nothing -> do
-          {count: count} <- get
-          let newVarName = getNthName count
-          let env' = insert var newVarName env
-          put {count: count + 1, env: env'}
-          pure $ TypVar newVarName
-   go (TypArr t1 t2) = do
-        t1' <- helpTypeToABC t1
-        t2' <- helpTypeToABC t2
-        pure $ TypArr t1' t2'
-   go (AD a) = helpADTypeToABC a >>= \a -> pure $ AD a
-   go a = pure a
+    go (TypVar var) = do
+       {env: env} :: {count :: Int, env :: Map String String} <- get
+       case lookup var env of
+         Just var' -> pure $ TypVar var'
+         Nothing -> do
+           {count: count} <- get
+           let newVarName = getNthName count
+           let env' = insert var newVarName env
+           put {count: count + 1, env: env'}
+           pure $ TypVar newVarName
+    go (TypArr t1 t2) = do
+         t1' <- helpTypeToABC t1
+         t2' <- helpTypeToABC t2
+         pure $ TypArr t1' t2'
+    go (AD a) = helpADTypeToABC a >>= \a -> pure $ AD a
+    go a = pure a
 
-helpTypeToABC' :: Maybe Type  -> State {count :: Int, env :: (Map String String)} (Maybe Type)
-helpTypeToABC' t = go t
-  where
-   go (Just (TypVar var)) = do
-      {env: env} :: {count :: Int, env :: Map String String} <- get
-      case lookup var env of
-        Just var' -> pure $ Just $ TypVar var'
-        Nothing -> do
-          {count: count} <- get
-          let newVarName = getNthName count
-          let env' = insert var newVarName env
-          put {count: count + 1, env: env'}
-          pure $ Just $ TypVar newVarName
-   go (Just (TypArr t1 t2)) = do
-        t1' <- helpTypeToABC t1
-        t2' <- helpTypeToABC t2
-        pure $ Just $ TypArr t1' t2'
-   go (Just (AD a)) = helpADTypeToABC a >>= \a -> pure $ Just $ AD a
-   go a = pure a
+helpMTypeToABC :: Maybe Type  -> State {count :: Int, env :: (Map String String)} (Maybe Type)
+helpMTypeToABC Nothing = unsafeCrashWith "Bad argument: The given type is `Nothing`."
+helpMTypeToABC mt = do
+  t <- helpTypeToABC (unsafePartial $ fromJust $ mt)
+  pure (Just t)
+
 helpADTypeToABC :: AD -> State {count :: Int, env :: (Map String String)} AD
 helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> pure $ TList t
 helpADTypeToABC (TTuple ts) = traverse helpTypeToABC ts >>= \ts -> pure $ TTuple ts
@@ -978,19 +965,21 @@ helpADTypeToABC (TTuple ts) = traverse helpTypeToABC ts >>= \ts -> pure $ TTuple
 helpBindingToABC :: TypedBinding -> State {count :: Int, env :: Map String String} TypedBinding
 helpBindingToABC bin = go bin
   where
-    go (Lit t atom) = helpTypeToABC' t >>= \t -> pure $ Lit t atom
+    go (Lit t atom) = do
+      t' <- helpMTypeToABC t
+      pure $ Lit t' atom
     go (ConsLit t b1 b2) = do
       b1' <- helpBindingToABC b1
       b2' <- helpBindingToABC b2
-      t' <- helpTypeToABC' t
+      t' <- helpMTypeToABC t
       pure $ ConsLit t' b1' b2'
     go (ListLit t tbs) = do
       tbs' <- traverse helpBindingToABC tbs
-      t' <- helpTypeToABC' t
+      t' <- helpMTypeToABC t
       pure $ ListLit t' tbs'
     go (NTupleLit t tbs) = do
       tbs' <- traverse helpBindingToABC tbs
-      t' <- helpTypeToABC' t
+      t' <- helpMTypeToABC t
       pure $ NTupleLit t' tbs'
 
 -- Given an int generate an array of integers used as indices into the alphabet in `getNthName`.
