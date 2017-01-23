@@ -239,8 +239,7 @@ lookupEnv (TypeEnv env) tvar = do
 inferType :: TypeEnv -> TypeTree -> Infer (Tuple Subst Type)
 inferType env exp = do
   Tuple s t <- infer env exp
-  let extractedType = unsafePartial $ fromJust $ extractFromTree t
-  pure $ Tuple s extractedType
+  pure $ Tuple s (extractType t)
 
 extractBindingType :: TypedBinding -> Infer Type
 extractBindingType typeBinding = case extractFromBinding typeBinding of
@@ -254,7 +253,7 @@ inferBinding env bin e1 = do
   Tuple s1 tt <- infer env e1
   Tuple list typ <- extractBinding bin
   bindingType <- extractBindingType typ
-  let extractedType = unsafePartial $ fromJust $ extractFromTree tt
+  let extractedType = extractType tt
   s2 <- unify bindingType extractedType
   let env' = apply (s1 `compose` s2) env
       t'   = generalize env' (apply (s1 `compose` s2) extractedType)
@@ -314,18 +313,15 @@ infer env ex = case ex of
     Tuple envL typedBinding <- extractBinding bin
     let env' = env `extendMultiple` envL
     Tuple subst tree <- infer env' e
-    bindingType <- extractBindingType typedBinding
-    let extractedType = unsafePartial $ fromJust $ extractFromTree tree
-    pure $ Tuple subst $ apply subst (Lambda (Just $ bindingType `TypArr` extractedType) (typedBinding : Nil) tree)
+    pure $ Tuple subst $ apply subst (Lambda (Just $ (extractType typedBinding) `TypArr` (extractType tree)) (typedBinding : Nil) tree)
 
   Lambda _ (bin : bins) e -> do
     Tuple envL typedBinding <- extractBinding bin
     let env' = env `extendMultiple` envL
     Tuple subst lambda <- infer env' (Lambda Nothing bins e)
     Tuple bindings body <- pure $ getLambdaBindingsAndBody lambda
-    bindingType <- extractBindingType typedBinding
-    let lambdaType = unsafePartial $ fromJust $ extractFromTree lambda
-    let inferredType = bindingType `TypArr` lambdaType
+    let lambdaType = extractType lambda
+    let inferredType = (extractType typedBinding) `TypArr` lambdaType
     pure $ Tuple subst (apply subst $ Lambda (Just inferredType) (typedBinding : bindings) body)
 
   Lambda _ Nil e -> infer env e
@@ -334,24 +330,20 @@ infer env ex = case ex of
     tv <- fresh
     Tuple s1 tt1 <- infer env e1
     Tuple s2 tt2 <- infer (apply s1 env) e2
-    let extractedType1 = unsafePartial $ fromJust $ extractFromTree tt1
-    let extractedType2 = unsafePartial $ fromJust $ extractFromTree tt2
-    s3       <- unify (apply (s1  `compose` s2) extractedType1) (TypArr extractedType2 tv)
+    s3       <- unify (apply (s1  `compose` s2) (extractType tt1)) (TypArr (extractType tt2) tv)
     pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (App (Just tv) tt1 (Cons tt2 Nil))))
 
   App _ e1 (e2 : es) -> do
     Tuple subst appTree <- infer env (App Nothing (App Nothing e1 (e2 : Nil)) es)
     Tuple firstArg rest <- pure $ getAppArguments appTree
     Tuple firstArgOfFirstArg restOfFirstArg <- pure $ getAppArguments firstArg
-    let appType = extractFromTree appTree
-    pure $ Tuple subst (App appType firstArgOfFirstArg (restOfFirstArg <> rest))
+    pure $ Tuple subst (App (extractFromTree appTree) firstArgOfFirstArg (restOfFirstArg <> rest))
 
   ListComp _ expr quals -> do
     Tuple sq (Tuple tq env') <- inferQuals env quals
     Tuple s tt <- infer env' expr
     let s' = sq `compose` s
-    let extractedType = unsafePartial $ fromJust $ extractFromTree tt
-    pure $ Tuple s' $ apply s' $ ListComp (Just $ AD $ TList $ extractedType) tt tq
+    pure $ Tuple s' $ apply s' $ ListComp (Just $ AD $ TList $ extractType tt) tt tq
 
   LetExpr _ bindings expr -> case overlappingBindings (fst <$> bindings) of
     Cons x _ -> throwError $ UnknownError $ "Conflicting definitions for \'" <> x <> "\'"
@@ -382,9 +374,9 @@ infer env ex = case ex of
     let s2 = maybe nullSubst fst tup2
     let s3 = maybe nullSubst fst tup3
     let s  = s1 `compose` s2 `compose` s3
-    let extractedType1 = unsafePartial $ fromJust $ extractFromTree t1
-    let extractedType2 = unsafePartial $ fromJust $ extractFromTree <$> t2
-    let extractedType3 = unsafePartial $ fromJust $ extractFromTree <$> t3
+    let extractedType1 = extractType t1
+    let extractedType2 = extractType <$> t2
+    let extractedType3 = extractType <$> t3
     let typeMisMatch m1 m2 = unsafePartial $ fromJust $ normalizeTypeError <$> lift2 UnificationFail m1 m2
     ifM (pure (fromMaybe false (lift2 (/=) (Just extractedType1) extractedType2)))
       (throwError (typeMisMatch (Just extractedType1) extractedType2))
@@ -406,8 +398,7 @@ infer env ex = case ex of
     tv <- fresh
     Tuple s1 t1 <- inferOp env op
     Tuple s2 t2 <- infer (apply s1 env) e
-    let extractedType = unsafePartial $ fromJust $ extractFromTree t2
-    s3       <- unify (apply s2 t1) (TypArr extractedType tv)
+    s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
     pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (SectL (Just tv) t2 (Tuple op (Just t1)))))
 
   SectR _ (Tuple op _) e -> do
@@ -415,8 +406,7 @@ infer env ex = case ex of
     Tuple a arr <- pure $ getArrowTypes opType
     Tuple b c <- pure $ getArrowTypes arr
     Tuple s2 tree <- infer env e
-    let extractedType = unsafePartial $ fromJust $ extractFromTree tree
-    s3 <- unify (apply s1 b) extractedType
+    s3 <- unify (apply s1 b) (extractType tree)
     let s4 = (s3 `compose` s1 `compose` s1)
     pure $ Tuple s4 (apply s4 (SectR (Just $ TypArr a c) (Tuple op (Just opType)) tree))
 
@@ -424,8 +414,7 @@ infer env ex = case ex of
     tv <- fresh
     Tuple s1 opType <- inferOp env op
     Tuple s2 t2 <- infer (apply s1 env) e
-    let extractedType = unsafePartial $ fromJust $ extractFromTree t2
-    s3 <- unify (apply s2 opType) (TypArr extractedType tv)
+    s3 <- unify (apply s2 opType) (TypArr (extractType t2) tv)
     pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (Unary (Just tv) (Tuple op (Just opType)) t2)))
 
   Binary _ (Tuple op mtype) e1 e2 -> do
@@ -439,8 +428,8 @@ infer env ex = case ex of
     Tuple s1 listTree <- infer env (List Nothing es)
     Tuple s2 tree2 <- infer (apply s1 env) e
     let listChildren = getListTreeChildren listTree
-    let listElement = unsafePartial $ fromJust (getListElementType <$> extractFromTree listTree)
-    let otherElementType = unsafePartial $ fromJust $ extractFromTree tree2
+    let listElement = getListElementType $ extractType listTree
+    let otherElementType = extractType tree2
     s3 <- unify (apply s2 listElement) otherElementType
     let updatedListTree = List (Just $ AD $ TList otherElementType) (tree2 : listChildren)
     pure $ Tuple (s3 `compose` s2 `compose` s1) (apply s3 updatedListTree)
@@ -451,22 +440,20 @@ infer env ex = case ex of
 
   NTuple _ (e : Nil) -> do
     Tuple s t <- infer env e
-    let extractedType = unsafePartial $ fromJust $ extractFromTree t
-    pure $ Tuple s $ NTuple (Just $ AD $ TTuple $ extractedType : Nil) (t : Nil)
+    pure $ Tuple s $ NTuple (Just $ AD $ TTuple $ (extractType t) : Nil) (t : Nil)
 
   NTuple _ (e : es) -> do
     -- Given a tuple (a, b, c, ...) infer the type of (b, c, ...) and get the typed tree of
     -- (b, c, ...). Also extractFromTree the type of (b, c, ...) as well as the types of the individual
     -- elements.
     Tuple s1 tupleTree <- infer env (NTuple Nothing es)
-    let inferredType = unsafePartial $ fromJust $ extractFromTree tupleTree
+    let inferredType = extractType tupleTree
     let types = getTupleElementTypes inferredType
     let tupleChildren = getTupleTreeChildren tupleTree
 
     -- Infer the type of the first tuple element and add it to the already typed rest of the tuple.
     Tuple s2 first <- infer (apply s1 env) e
-    let extractedType = unsafePartial $ fromJust $ extractFromTree first
-    let updeatedTupleTree = NTuple (Just $ AD $ TTuple $ extractedType : types) (first : tupleChildren)
+    let updeatedTupleTree = NTuple (Just $ AD $ TTuple $ (extractType first) : types) (first : tupleChildren)
     pure $ Tuple (s2 `compose` s2) updeatedTupleTree
 
   tree -> unsafeCrashWith $ "Bad argument: `infer` didn't expect the input " <> show tree <> "."
@@ -476,7 +463,7 @@ inferQual env (Let _ bin e1) = do
   Tuple s1 tt <- infer env e1
   Tuple mappings typedBinding <- extractBinding bin
   bindingType <- extractBindingType typedBinding
-  let extractedType = unsafePartial (fromJust (extractFromTree tt))
+  let extractedType = extractType tt
   s2 <- unify bindingType extractedType
   let env' = apply s2 $ env `extendMultiple` mappings
   let subst = s1 `compose` s2
@@ -485,13 +472,12 @@ inferQual env (Let _ bin e1) = do
 inferQual env (Gen _ bin expr) = do
   Tuple s1 tt <- infer env expr
   -- Think: [ bin | x <- expr], where x is found in bin
-  let extractedType = unsafePartial (fromJust (extractFromTree tt))
+  let extractedType = extractType tt
   case extractedType of
     -- Type is: [T]
     AD (TList t) -> do
       (Tuple binding typedBinding) <- extractBinding bin
-      bindingType <- extractBindingType typedBinding
-      s2 <- unify bindingType t
+      s2 <- unify (extractType typedBinding) t
       let env' = apply s2 $ env `extendMultiple` binding
       let subst = s1 `compose` s2
       pure $ Tuple subst $ Tuple (apply subst (Gen (Just t) typedBinding tt)) env'
@@ -502,8 +488,7 @@ inferQual env (Gen _ bin expr) = do
       -- Then unify [t0] with the type variable tvar ([t0] ~ tvar).
       -- Apply the resulting substitution to the environment extended by the binding.
       Tuple binding typedBinding <- extractBinding bin
-      bindingType <- extractBindingType typedBinding
-      s2 <- unify (AD $ TList $ bindingType) (TypVar tvar)
+      s2 <- unify (AD $ TList $ extractType typedBinding) (TypVar tvar)
       let env' = apply s2 $ env `extendMultiple` binding
       let typeTree = Gen (Just $ TypVar tvar) typedBinding tt
       let subst = s1 `compose` s2
@@ -515,7 +500,7 @@ inferQual env (Gen _ bin expr) = do
 
 inferQual env (Guard _ expr) = do
   Tuple s tt <- infer env expr
-  let extractedType = unsafePartial (fromJust (extractFromTree tt))
+  let extractedType = extractType tt
   case extractedType of
     TypCon "Bool" -> pure $ Tuple s $ Tuple (apply s (Guard (Just extractedType) tt)) env
     _             -> throwError $ normalizeTypeError $ UnificationFail extractedType (TypCon "Bool")
@@ -563,10 +548,10 @@ inferDef env (Def str bin exp) = do
     let env' = env `extend` (Tuple str (Forall Nil tv))
     let exp' = Lambda Nothing bin exp
     Tuple s1 tt <- infer env' exp'
-    let extractedType1 = unsafePartial $ fromJust $ extractFromTree tt
+    let extractedType1 = extractType tt
     let env'' = env `extend` (Tuple str (Forall Nil (apply s1 extractedType1)))
     Tuple s2 tt2 <- infer env'' exp'
-    let extractedType2 = unsafePartial $ fromJust $ extractFromTree tt2
+    let extractedType2 = extractType tt2
     s3 <- unify (apply s1 extractedType1) (apply s2 extractedType2)
     pure $ Tuple (s3 `compose` s1) (apply s3 (apply s1 extractedType1))
 
@@ -636,7 +621,7 @@ extractBinding (Lit _ (AInt x)) = pure $ Tuple Nil $ Lit (Just $ TypCon "Int") (
 extractBinding (ConsLit _ fst snd) = do
   t <- fresh
   Tuple mapping1 typedBinding1 <- extractBinding fst
-  type1 <- extractBindingType typedBinding1
+  let type1 = extractType typedBinding1
   subst1 <- unify t type1
   if isLit snd
     then do
@@ -651,7 +636,7 @@ extractBinding (ConsLit _ fst snd) = do
     else do
       -- The second pattern is a list, cons or tuple pattern of type t2. [t3] ~ t2 => t3 ~ t.
       Tuple mapping2 typedBinding2 <- extractBinding snd
-      type2 <- getListElementType <$> extractBindingType typedBinding2
+      let type2 = getListElementType $ extractType typedBinding2
       subst2 <- unify (apply subst1 t) type2
       -- Update the mapping and the binding.
       let mapping = apply subst2 $ apply subst1 $ mapping1 <> mapping2
@@ -664,16 +649,15 @@ extractBinding (ListLit _ bindings) = do
   let ini = Tuple Nil (ListLit (Just tv) Nil) :: Tuple TVarMappings TypedBinding
   bs <- extractListLit bindings
   Tuple mapping typedBinding <- foldM f ini bs
-  extractedType <- extractBindingType typedBinding
-  let updatedListLit = ListLit (Just $ AD $ TList extractedType) (getListLitBindings typedBinding)
+  let updatedListLit = ListLit (Just $ AD $ TList $ extractType typedBinding) (getListLitBindings typedBinding)
   pure $ Tuple mapping updatedListLit
   where
     f :: Tuple TVarMappings TypedBinding -> Tuple TVarMappings TypedBinding ->
          Infer (Tuple TVarMappings TypedBinding)
     f (Tuple mapping1 listLit1) (Tuple mapping2 listLit2) = do
-      bindingType <- extractBindingType listLit2
+      let bindingType = extractType listLit2
       let typedBindings = getListLitBindings listLit1
-      listLitType <- extractBindingType listLit1
+      let listLitType = extractType listLit1
       subst <- unify listLitType bindingType
       pure $ Tuple
         (apply subst (mapping1 <> mapping2))
@@ -682,7 +666,7 @@ extractBinding (ListLit _ bindings) = do
 extractBinding (NTupleLit _ bindings) = do
   bs <- extractListLit bindings
   let tup = unzip bs
-  tupleTypes <- traverse extractBindingType (snd tup)
+  let tupleTypes = map extractType (snd tup)
   pure $ Tuple (concat $ fst tup) (NTupleLit (Just $ AD $ TTuple $ tupleTypes) (snd tup))
 
 getTypEnv :: TypedBinding -> TypeEnv -> Maybe TypeEnv
@@ -726,7 +710,7 @@ buildGroups (Cons def@(Def str bin exp) defs) =
   where
     defMap = buildGroups defs
     binList = Map.lookup str defMap
---                         old -> grouped Definitions -> keys -> new
+
 buildTypeEnvFromGroups :: TypeEnv -> Map.Map String (List Definition)
   -> List String -> Either TypeError TypeEnv
 buildTypeEnvFromGroups env _ Nil = Right env
