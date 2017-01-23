@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
+import Prelude (class Show, class Monad, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
 import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Apply (lift2)
@@ -100,7 +100,7 @@ instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => S
 -- instance subTypeTree :: Substitutable TypeTree where
 instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) (Maybe Type)) where
   apply s = map (apply s)
-  ftv typeTree = ftv (extract typeTree)
+  ftv typeTree = ftv (extractFromTree typeTree)
 
 instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (Lit t atom) = Lit (apply s t) atom
@@ -109,6 +109,31 @@ instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (NTupleLit t lb) = NTupleLit (apply s t) (apply s lb)
 
   ftv = extractFromBinding >>> ftv
+
+-- | A `TypeExtractable` represents a data structure holding a type which can be extracted.
+class TypeExtractable a where
+  extractType :: a -> Type
+
+-- | Convenience functions for extracting types out of typed trees, typed bindings and typed quals.
+-- | Note, that these functions will crash if a `Nothing` is encountered instead of a type.
+
+instance typeExtractableTypeTree :: TypeExtractable (Tree a b o (Maybe Type)) where
+  extractType tree = case extractFromTree tree of
+    Just t -> t
+    Nothing -> unsafeCrashWith $
+      "You found a bug: the given tree should be typed (type field contains `Nothing`)."
+
+instance typeExtractableTypeBinding :: TypeExtractable (Binding (Maybe Type)) where
+  extractType binding = case extractFromBinding binding of
+    Just t -> t
+    Nothing -> unsafeCrashWith $
+      "You found a bug: the given binding should be typed (type field contains `Nothing`)."
+
+instance typeExtractableTypeQual :: TypeExtractable (QualTree b t (Maybe Type)) where
+  extractType qual = case extractFromQualTree qual of
+    Just t -> t
+    Nothing -> unsafeCrashWith $
+      "You found a bug: the given qual should be typed (type field contains `Nothing`)."
 
 initUnique :: Unique
 initUnique = Unique { count : 0 }
@@ -214,7 +239,7 @@ lookupEnv (TypeEnv env) tvar = do
 inferType :: TypeEnv -> TypeTree -> Infer (Tuple Subst Type)
 inferType env exp = do
   Tuple s t <- infer env exp
-  let extractedType = unsafePartial $ fromJust $ extract t
+  let extractedType = unsafePartial $ fromJust $ extractFromTree t
   pure $ Tuple s extractedType
 
 extractBindingType :: TypedBinding -> Infer Type
@@ -229,7 +254,7 @@ inferBinding env bin e1 = do
   Tuple s1 tt <- infer env e1
   Tuple list typ <- extractBinding bin
   bindingType <- extractBindingType typ
-  let extractedType = unsafePartial $ fromJust $ extract tt
+  let extractedType = unsafePartial $ fromJust $ extractFromTree tt
   s2 <- unify bindingType extractedType
   let env' = apply (s1 `compose` s2) env
       t'   = generalize env' (apply (s1 `compose` s2) extractedType)
@@ -290,7 +315,7 @@ infer env ex = case ex of
     let env' = env `extendMultiple` envL
     Tuple subst tree <- infer env' e
     bindingType <- extractBindingType typedBinding
-    let extractedType = unsafePartial $ fromJust $ extract tree
+    let extractedType = unsafePartial $ fromJust $ extractFromTree tree
     pure $ Tuple subst $ apply subst (Lambda (Just $ bindingType `TypArr` extractedType) (typedBinding : Nil) tree)
 
   Lambda _ (bin : bins) e -> do
@@ -299,7 +324,7 @@ infer env ex = case ex of
     Tuple subst lambda <- infer env' (Lambda Nothing bins e)
     Tuple bindings body <- pure $ getLambdaBindingsAndBody lambda
     bindingType <- extractBindingType typedBinding
-    let lambdaType = unsafePartial $ fromJust $ extract lambda
+    let lambdaType = unsafePartial $ fromJust $ extractFromTree lambda
     let inferredType = bindingType `TypArr` lambdaType
     pure $ Tuple subst (apply subst $ Lambda (Just inferredType) (typedBinding : bindings) body)
 
@@ -309,8 +334,8 @@ infer env ex = case ex of
     tv <- fresh
     Tuple s1 tt1 <- infer env e1
     Tuple s2 tt2 <- infer (apply s1 env) e2
-    let extractedType1 = unsafePartial $ fromJust $ extract tt1
-    let extractedType2 = unsafePartial $ fromJust $ extract tt2
+    let extractedType1 = unsafePartial $ fromJust $ extractFromTree tt1
+    let extractedType2 = unsafePartial $ fromJust $ extractFromTree tt2
     s3       <- unify (apply (s1  `compose` s2) extractedType1) (TypArr extractedType2 tv)
     pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (App (Just tv) tt1 (Cons tt2 Nil))))
 
@@ -318,14 +343,14 @@ infer env ex = case ex of
     Tuple subst appTree <- infer env (App Nothing (App Nothing e1 (e2 : Nil)) es)
     Tuple firstArg rest <- pure $ getAppArguments appTree
     Tuple firstArgOfFirstArg restOfFirstArg <- pure $ getAppArguments firstArg
-    let appType = extract appTree
+    let appType = extractFromTree appTree
     pure $ Tuple subst (App appType firstArgOfFirstArg (restOfFirstArg <> rest))
 
   ListComp _ expr quals -> do
     Tuple sq (Tuple tq env') <- inferQuals env quals
     Tuple s tt <- infer env' expr
     let s' = sq `compose` s
-    let extractedType = unsafePartial $ fromJust $ extract tt
+    let extractedType = unsafePartial $ fromJust $ extractFromTree tt
     pure $ Tuple s' $ apply s' $ ListComp (Just $ AD $ TList $ extractedType) tt tq
 
   LetExpr _ bindings expr -> case overlappingBindings (fst <$> bindings) of
@@ -334,7 +359,7 @@ infer env ex = case ex of
       InferResult {subst: sb, envi: envb, result: resb} <- inferBindings env bindings
       Tuple se te <- infer envb expr
       let s = sb `compose` se
-      pure $ Tuple s $ apply s $ LetExpr (extract te) resb te
+      pure $ Tuple s $ apply s $ LetExpr (extractFromTree te) resb te
 
   IfExpr _ cond e1 e2 -> do
     tvar <- freshTVar
@@ -346,7 +371,7 @@ infer env ex = case ex of
     let typedCond = unsafePartial $ fromJust $ rest !! 0
     let typedE1 = unsafePartial $ fromJust $ rest !! 1
     let typedE2 = unsafePartial $ fromJust $ rest !! 2
-    pure $ Tuple subst (apply subst $ IfExpr (extract tree) typedCond typedE1 typedE2)
+    pure $ Tuple subst (apply subst $ IfExpr (extractFromTree tree) typedCond typedE1 typedE2)
 
   ArithmSeq _ begin jstep jend -> do
     Tuple s1 t1 <- infer env begin
@@ -357,9 +382,9 @@ infer env ex = case ex of
     let s2 = maybe nullSubst fst tup2
     let s3 = maybe nullSubst fst tup3
     let s  = s1 `compose` s2 `compose` s3
-    let extractedType1 = unsafePartial $ fromJust $ extract t1
-    let extractedType2 = unsafePartial $ fromJust $ extract <$> t2
-    let extractedType3 = unsafePartial $ fromJust $ extract <$> t3
+    let extractedType1 = unsafePartial $ fromJust $ extractFromTree t1
+    let extractedType2 = unsafePartial $ fromJust $ extractFromTree <$> t2
+    let extractedType3 = unsafePartial $ fromJust $ extractFromTree <$> t3
     let typeMisMatch m1 m2 = unsafePartial $ fromJust $ normalizeTypeError <$> lift2 UnificationFail m1 m2
     ifM (pure (fromMaybe false (lift2 (/=) (Just extractedType1) extractedType2)))
       (throwError (typeMisMatch (Just extractedType1) extractedType2))
@@ -381,7 +406,7 @@ infer env ex = case ex of
     tv <- fresh
     Tuple s1 t1 <- inferOp env op
     Tuple s2 t2 <- infer (apply s1 env) e
-    let extractedType = unsafePartial $ fromJust $ extract t2
+    let extractedType = unsafePartial $ fromJust $ extractFromTree t2
     s3       <- unify (apply s2 t1) (TypArr extractedType tv)
     pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (SectL (Just tv) t2 (Tuple op (Just t1)))))
 
@@ -390,7 +415,7 @@ infer env ex = case ex of
     Tuple a arr <- pure $ getArrowTypes opType
     Tuple b c <- pure $ getArrowTypes arr
     Tuple s2 tree <- infer env e
-    let extractedType = unsafePartial $ fromJust $ extract tree
+    let extractedType = unsafePartial $ fromJust $ extractFromTree tree
     s3 <- unify (apply s1 b) extractedType
     let s4 = (s3 `compose` s1 `compose` s1)
     pure $ Tuple s4 (apply s4 (SectR (Just $ TypArr a c) (Tuple op (Just opType)) tree))
@@ -399,7 +424,7 @@ infer env ex = case ex of
     tv <- fresh
     Tuple s1 opType <- inferOp env op
     Tuple s2 t2 <- infer (apply s1 env) e
-    let extractedType = unsafePartial $ fromJust $ extract t2
+    let extractedType = unsafePartial $ fromJust $ extractFromTree t2
     s3 <- unify (apply s2 opType) (TypArr extractedType tv)
     pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (Unary (Just tv) (Tuple op (Just opType)) t2)))
 
@@ -408,14 +433,14 @@ infer env ex = case ex of
     Tuple firstTree rest <- pure $ getAppArguments tree
     let tt1 = unsafePartial $ fromJust $ (rest !! 0)
     let tt2 = unsafePartial $ fromJust $ (rest !! 1)
-    pure $ Tuple subst (Binary (extract tree) (Tuple op (extract firstTree)) tt1 tt2)
+    pure $ Tuple subst (Binary (extractFromTree tree) (Tuple op (extractFromTree firstTree)) tt1 tt2)
 
   List _ (e : es) -> do
     Tuple s1 listTree <- infer env (List Nothing es)
     Tuple s2 tree2 <- infer (apply s1 env) e
     let listChildren = getListTreeChildren listTree
-    let listElement = unsafePartial $ fromJust (getListElementType <$> extract listTree)
-    let otherElementType = unsafePartial $ fromJust $ extract tree2
+    let listElement = unsafePartial $ fromJust (getListElementType <$> extractFromTree listTree)
+    let otherElementType = unsafePartial $ fromJust $ extractFromTree tree2
     s3 <- unify (apply s2 listElement) otherElementType
     let updatedListTree = List (Just $ AD $ TList otherElementType) (tree2 : listChildren)
     pure $ Tuple (s3 `compose` s2 `compose` s1) (apply s3 updatedListTree)
@@ -426,21 +451,21 @@ infer env ex = case ex of
 
   NTuple _ (e : Nil) -> do
     Tuple s t <- infer env e
-    let extractedType = unsafePartial $ fromJust $ extract t
+    let extractedType = unsafePartial $ fromJust $ extractFromTree t
     pure $ Tuple s $ NTuple (Just $ AD $ TTuple $ extractedType : Nil) (t : Nil)
 
   NTuple _ (e : es) -> do
     -- Given a tuple (a, b, c, ...) infer the type of (b, c, ...) and get the typed tree of
-    -- (b, c, ...). Also extract the type of (b, c, ...) as well as the types of the individual
+    -- (b, c, ...). Also extractFromTree the type of (b, c, ...) as well as the types of the individual
     -- elements.
     Tuple s1 tupleTree <- infer env (NTuple Nothing es)
-    let inferredType = unsafePartial $ fromJust $ extract tupleTree
+    let inferredType = unsafePartial $ fromJust $ extractFromTree tupleTree
     let types = getTupleElementTypes inferredType
     let tupleChildren = getTupleTreeChildren tupleTree
 
     -- Infer the type of the first tuple element and add it to the already typed rest of the tuple.
     Tuple s2 first <- infer (apply s1 env) e
-    let extractedType = unsafePartial $ fromJust $ extract first
+    let extractedType = unsafePartial $ fromJust $ extractFromTree first
     let updeatedTupleTree = NTuple (Just $ AD $ TTuple $ extractedType : types) (first : tupleChildren)
     pure $ Tuple (s2 `compose` s2) updeatedTupleTree
 
@@ -451,7 +476,7 @@ inferQual env (Let _ bin e1) = do
   Tuple s1 tt <- infer env e1
   Tuple mappings typedBinding <- extractBinding bin
   bindingType <- extractBindingType typedBinding
-  let extractedType = unsafePartial (fromJust (extract tt))
+  let extractedType = unsafePartial (fromJust (extractFromTree tt))
   s2 <- unify bindingType extractedType
   let env' = apply s2 $ env `extendMultiple` mappings
   let subst = s1 `compose` s2
@@ -460,7 +485,7 @@ inferQual env (Let _ bin e1) = do
 inferQual env (Gen _ bin expr) = do
   Tuple s1 tt <- infer env expr
   -- Think: [ bin | x <- expr], where x is found in bin
-  let extractedType = unsafePartial (fromJust (extract tt))
+  let extractedType = unsafePartial (fromJust (extractFromTree tt))
   case extractedType of
     -- Type is: [T]
     AD (TList t) -> do
@@ -473,7 +498,7 @@ inferQual env (Gen _ bin expr) = do
 
     -- Type is: T (a hopefully bound type variable)
     TypVar tvar -> do
-      -- First extract the binding and the corresponding type t0.
+      -- First extractFromTree the binding and the corresponding type t0.
       -- Then unify [t0] with the type variable tvar ([t0] ~ tvar).
       -- Apply the resulting substitution to the environment extended by the binding.
       Tuple binding typedBinding <- extractBinding bin
@@ -490,7 +515,7 @@ inferQual env (Gen _ bin expr) = do
 
 inferQual env (Guard _ expr) = do
   Tuple s tt <- infer env expr
-  let extractedType = unsafePartial (fromJust (extract tt))
+  let extractedType = unsafePartial (fromJust (extractFromTree tt))
   case extractedType of
     TypCon "Bool" -> pure $ Tuple s $ Tuple (apply s (Guard (Just extractedType) tt)) env
     _             -> throwError $ normalizeTypeError $ UnificationFail extractedType (TypCon "Bool")
@@ -538,10 +563,10 @@ inferDef env (Def str bin exp) = do
     let env' = env `extend` (Tuple str (Forall Nil tv))
     let exp' = Lambda Nothing bin exp
     Tuple s1 tt <- infer env' exp'
-    let extractedType1 = unsafePartial $ fromJust $ extract tt
+    let extractedType1 = unsafePartial $ fromJust $ extractFromTree tt
     let env'' = env `extend` (Tuple str (Forall Nil (apply s1 extractedType1)))
     Tuple s2 tt2 <- infer env'' exp'
-    let extractedType2 = unsafePartial $ fromJust $ extract tt2
+    let extractedType2 = unsafePartial $ fromJust $ extractFromTree tt2
     s3 <- unify (apply s1 extractedType1) (apply s2 extractedType2)
     pure $ Tuple (s3 `compose` s1) (apply s3 (apply s1 extractedType1))
 
@@ -999,7 +1024,7 @@ getNthName = fromCharArray <<< toCharArray <<< Array.reverse <<< indexList
 
 -- checkForError :: Path -> TypeTree -> Boolean
 -- checkForError p' tt = case p' of
---   End -> isTypeError $ extract tt
+--   End -> isTypeError $ extractFromTree tt
 --   Fst p -> case tt of
 --       TBinary op e1 e2 _ -> checkForError p e1
 --       TUnary op e      _ -> checkForError p e
@@ -1050,6 +1075,7 @@ getNthName = fromCharArray <<< toCharArray <<< Array.reverse <<< indexList
 --       TGen _ _ t -> t
 --       TGuard _ t -> t
 
+-- TODO: to AST.purs
 isTypeError :: Type -> Boolean
 isTypeError t = case t of
   (TypeError _) -> true

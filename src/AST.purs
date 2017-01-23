@@ -141,6 +141,7 @@ exprToTypeTree (ListComp _ t qualTrees) = ListComp Nothing
 binary :: Op -> TypeTree -> TypeTree -> TypeTree
 binary op left right = Binary Nothing (Tuple op Nothing) left right
 
+-- TODO: Find better name.
 data QualTree b t m = Gen m b t
                     | Let m b t
                     | Guard m t
@@ -172,24 +173,33 @@ instance functorTree :: Functor (Tree a b c) where
     go (Let d b e) = Let (f d) b (map f e)
     go (Guard d e) = Guard (f d) (map f e)
 
-extract :: forall a b c d. Tree a b c d -> d
-extract (Atom c _) = c
-extract (List c _) = c
-extract (NTuple c _) = c
-extract (Binary c _ _ _) = c
-extract (Unary c _ _) = c
-extract (SectL c _ _) = c
-extract (SectR c _ _) = c
-extract (PrefixOp c _) = c
-extract (IfExpr c _ _ _) = c
-extract (ArithmSeq c _ _ _) = c
-extract (LetExpr c _ _) = c
-extract (Lambda c _ _) = c
-extract (App c _ _) = c
-extract (ListComp c _ _) = c
+extractFromTree :: forall a b c d. Tree a b c d -> d
+extractFromTree (Atom c _) = c
+extractFromTree (List c _) = c
+extractFromTree (NTuple c _) = c
+extractFromTree (Binary c _ _ _) = c
+extractFromTree (Unary c _ _) = c
+extractFromTree (SectL c _ _) = c
+extractFromTree (SectR c _ _) = c
+extractFromTree (PrefixOp c _) = c
+extractFromTree (IfExpr c _ _ _) = c
+extractFromTree (ArithmSeq c _ _ _) = c
+extractFromTree (LetExpr c _ _) = c
+extractFromTree (Lambda c _ _) = c
+extractFromTree (App c _ _) = c
+extractFromTree (ListComp c _ _) = c
 
--- type Expr = Tree Atom (Binding Unit) Op Unit
--- type TypeTree = Tree Atom (Binding Type) (Tuple Op Type) Type
+extractFromBinding :: forall a. Binding a -> a
+extractFromBinding (Lit x _)       = x
+extractFromBinding (ConsLit x _ _) = x
+extractFromBinding (ListLit x _)   = x
+extractFromBinding (NTupleLit x _) = x
+
+extractFromQualTree :: forall b t m. QualTree b t m -> m
+extractFromQualTree (Gen x _ _) = x
+extractFromQualTree (Let x _ _) = x
+extractFromQualTree (Guard x _) = x
+
 type Expr = Tree Atom (Binding Unit) Op Unit
 
 type MType = Maybe Type
@@ -203,7 +213,7 @@ type TypeQual  = QualTree (Binding MType) TypeTree MType
 type TVar = String
 
 data Type
-    = TypVar TVar -- Typ Variables e.x. a
+    = TypVar TVar -- Typ Variables x.x. a
     | TypCon String -- Typ Constants e.x Int
     | TypArr Type Type -- e.x Int -> Int
     | AD AD
@@ -240,12 +250,6 @@ instance functorBinding :: Functor Binding where
   map f (NTupleLit x bindings) = NTupleLit (f x) (map f <$> bindings)
 
 type TypedBinding = Binding (Maybe Type)
-
-extractFromBinding :: forall a. Binding a -> a
-extractFromBinding (Lit x _)       = x
-extractFromBinding (ConsLit x _ _) = x
-extractFromBinding (ListLit x _)   = x
-extractFromBinding (NTupleLit x _) = x
 
 -- | Definitions
 -- |
