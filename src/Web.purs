@@ -3,7 +3,7 @@ module Web where
 import Prelude
 import Data.Foldable (class Foldable, intercalate)
 import Data.Unfoldable (fromMaybe)
-import Data.List (List(Nil, Cons), snoc, fromFoldable)
+import Data.List (List(Nil, Cons), snoc, fromFoldable, (:))
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..))
 import Data.Traversable (for, for_)
@@ -14,11 +14,11 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
-import AST (TypeTree, Tree(..), Binding(..), Atom(..), Op, pPrintOp, TypeQual, QualTree(..), MType)
+import AST (TypeTree, Tree(..), Binding(..), TypedBinding(..), Atom(..), Op, pPrintOp, TypeQual, QualTree(..), MType, Type, prettyPrintType, prettyPrintTypeError)
 
 data RoseTree a = Node a (List (RoseTree a))
 
-type Div = RoseTree { content :: String, classes :: (List String), zipper :: Maybe (Tuple TypeTree (TypeTree -> TypeTree)) }
+type Div = RoseTree { content :: String, classes :: (List String), zipper :: Maybe (Tuple TypeTree (TypeTree -> TypeTree)), exprType :: MType }
 
 type DivHole = TypeTree -> (TypeTree -> TypeTree) -> Div
 
@@ -28,9 +28,19 @@ nodeHole content classes children expr hole =
     { content: content
     , classes: (fromFoldable classes)
     , zipper: (Just (Tuple expr hole))
+    , exprType: Nothing
     }
     (fromFoldable children)
 
+typedNodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> MType -> TypeTree -> (TypeTree -> TypeTree) -> Div
+typedNodeHole content classes children exprType expr hole =
+  Node
+    { content: content
+    , classes: (fromFoldable classes)
+    , zipper: (Just (Tuple expr hole))
+    , exprType: exprType
+    }
+    (fromFoldable children)
 
 node :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> Div
 node content classes children =
@@ -38,6 +48,17 @@ node content classes children =
     { content: content
     , classes: (fromFoldable classes)
     , zipper: Nothing
+    , exprType: Nothing
+    }
+    (fromFoldable children)
+
+typedNode :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> MType -> Div
+typedNode content classes children exprType =
+  Node
+    { content: content
+    , classes: (fromFoldable classes)
+    , zipper: Nothing
+    , exprType: exprType
     }
     (fromFoldable children)
 
@@ -49,74 +70,74 @@ exprToDiv:: TypeTree -> Div
 exprToDiv = go id
   where
     go :: (TypeTree -> TypeTree) -> TypeTree -> Div
-    go hole      (Atom _ a)            = atom a
-    go hole expr@(List _ ls)           = case toString ls of
-                                           Nothing  -> list (zipList go (hole <<< List Nothing) ls) expr hole
-                                           Just str -> node ("\"" <> str <> "\"") ["list", "string"] []
-    go hole expr@(NTuple _ ls)         = ntuple (zipList go (hole <<< NTuple Nothing) ls) expr hole
-    go hole expr@(Binary _ op e1 e2)   = binary (unpackOp op)
-                                           (go (\e1 -> hole $ Binary Nothing op e1 e2) e1)
-                                           (go (\e2 -> hole $ Binary Nothing op e1 e2) e2)
+    go hole      (Atom t a)            = atom t a
+    go hole expr@(List t ls)           = case toString ls of
+                                           Nothing  -> list t (zipList go (hole <<< List Nothing) ls) expr hole
+                                           Just str -> typedNode ("\"" <> str <> "\"") ["list", "string"] [] t
+    go hole expr@(NTuple t ls)         = ntuple t (zipList go (hole <<< NTuple Nothing) ls) expr hole
+    go hole expr@(Binary _ op_tup@(Tuple op t) e1 e2)   = binary t op
+                                           (go (\e1 -> hole $ Binary Nothing op_tup e1 e2) e1)
+                                           (go (\e2 -> hole $ Binary Nothing op_tup e1 e2) e2)
                                            expr hole
-    go hole expr@(Unary _ op e)        = unary (unpackOp op) (go (hole <<< Unary Nothing op) e) expr hole
-    go hole expr@(SectL _ e op)        = sectl (go (\e -> hole $ SectL Nothing e op) e) (unpackOp op) expr hole
-    go hole expr@(SectR _ op e)        = sectr (unpackOp op) (go (hole <<< SectR Nothing op) e) expr hole
-    go hole      (PrefixOp _ op)       = prefixOp (unpackOp op)
-    go hole expr@(IfExpr _ ce te ee)   = ifexpr
+    go hole expr@(Unary t op e)        = unary t (unpackOp op) (go (hole <<< Unary Nothing op) e) expr hole
+    go hole expr@(SectL t e op)        = sectl t (go (\e -> hole $ SectL Nothing e op) e) (unpackOp op) expr hole
+    go hole expr@(SectR t op e)        = sectr t (unpackOp op) (go (hole <<< SectR Nothing op) e) expr hole
+    go hole      (PrefixOp t op)       = prefixOp t (unpackOp op)
+    go hole expr@(IfExpr t ce te ee)   = ifexpr t
                                            (go (\ce -> hole $ IfExpr Nothing ce te ee) ce)
                                            (go (\te -> hole $ IfExpr Nothing ce te ee) te)
                                            (go (\ee -> hole $ IfExpr Nothing ce te ee) ee)
                                            expr hole
-    go hole expr@(LetExpr _ bes body)  = letexpr
+    go hole expr@(LetExpr t bes body)  = letexpr t
                                            (zipList
                                               (\listHole (Tuple b e) -> Tuple (binding b) (go (\x -> listHole $ Tuple b x) e))
                                               (\xs -> hole $ LetExpr Nothing xs body)
                                               bes)
                                            (go (\x -> hole $ LetExpr Nothing bes x) body)
                                            expr hole
-    go hole expr@(Lambda _ binds body) = lambda (binding <$> binds) (go (hole <<< Lambda Nothing binds) body) expr hole
+    go hole expr@(Lambda t binds body) = lambda t (binding <$> binds) (go (hole <<< Lambda Nothing binds) body) expr hole
 
-    go hole expr@(ArithmSeq _ start next end)
-                                       = arithmseq
+    go hole expr@(ArithmSeq t start next end)
+                                       = arithmseq t
                                            (go (\x -> hole $ ArithmSeq Nothing x next end) start)
                                            (go (\x -> hole $ ArithmSeq Nothing start (Just x) end) <$> next)
                                            (go (\x -> hole $ ArithmSeq Nothing start next (Just x)) <$> end)
                                            expr hole
 
-    go hole expr@(ListComp _ e qs)     = listcomp
+    go hole expr@(ListComp t e qs)     = listcomp t
                                            (go (\x -> hole $ ListComp Nothing x qs) e)
                                            (zipList qualToDiv (\xs -> hole $ ListComp Nothing e xs) qs)
                                            expr hole
       where
         qualToDiv :: (TypeQual -> TypeTree) -> TypeQual -> Div
-        qualToDiv hole (Guard _ e) = guardQual           (go (\x -> hole $ Guard Nothing x) e)
-        qualToDiv hole (Let _ b e) = letQual (binding b) (go (\x -> hole $ Let Nothing b x) e)
-        qualToDiv hole (Gen _ b e) = genQual (binding b) (go (\x -> hole $ Gen Nothing b x) e)
+        qualToDiv hole (Guard t e) = guardQual t           (go (\x -> hole $ Guard Nothing x) e)
+        qualToDiv hole (Let t b e) = letQual t (binding b) (go (\x -> hole $ Let Nothing b x) e)
+        qualToDiv hole (Gen t b e) = genQual t (binding b) (go (\x -> hole $ Gen Nothing b x) e)
 
-    go hole expr@(App _ func args)     = app (go funcHole func) argsDivs expr hole
+    go hole expr@(App t func args) = app t (go funcHole func) argsDivs expr hole
       where
         funcHole func = hole $ App Nothing func args
         argsDivs = zipList go (hole <<< App Nothing func) args
 
-guardQual :: Div -> Div
-guardQual guard = node "" ["guard"] [guard]
+guardQual :: MType -> Div -> Div
+guardQual t guard = typedNode "" ["guard"] [guard] t
 
-letQual :: Div -> Div -> Div
-letQual bind expr = node "" ["let"] [letDiv, bind, eqDiv, expr]
+letQual :: MType -> Div -> Div -> Div
+letQual t bind expr = typedNode "" ["let"] [letDiv, bind, eqDiv, expr] t
   where
     letDiv = node "let" ["keyword"] []
     eqDiv  = node "=" ["comma"] []
 
-genQual :: Div -> Div -> Div
-genQual bind expr = node "" ["gen"] [bind, arrow, expr]
+genQual :: MType -> Div -> Div -> Div
+genQual t bind expr = typedNode "" ["gen"] [bind, arrow, expr] t
   where
     arrow = node "<-" ["comma"] []
 
-atom :: Atom -> Div
-atom (AInt n) = node (show n) ["atom", "num"] []
-atom (Bool b) = node (if b then "True" else "False") ["atom", "bool"] []
-atom (Char c) = node ("'" <> c <> "'") ["atom", "char"] []
-atom (Name n) = node n ["atom", "name"] []
+atom :: MType -> Atom -> Div
+atom t (AInt n) = typedNode (show n) ["atom", "num"] [] t
+atom t (Bool b) = typedNode (if b then "True" else "False") ["atom", "bool"] [] t
+atom t (Char c) = typedNode ("'" <> c <> "'") ["atom", "char"] [] t
+atom t (Name n) = typedNode n ["atom", "name"] [] t
 
 interleave :: forall a. a -> List a -> List a
 interleave _ Nil          = Nil
@@ -130,21 +151,21 @@ listify b s e ls = (Cons begin (snoc (interleave sep ls) end))
     sep = node s ["separator", "comma"] []
     end = node e ["brace", "right"] []
 
-list :: List Div -> DivHole
-list Nil = nodeHole "[]" ["list empty"] []
-list ls  = nodeHole "" ["list"] $ listify "[" "," "]" ls
+list :: MType -> List Div -> DivHole
+list t Nil = typedNodeHole "[]" ["list empty"] [] t
+list t ls  = typedNodeHole "" ["list"] (listify "[" "," "]" ls) t
 
-ntuple :: List Div -> DivHole
-ntuple ls = nodeHole "" ["tuple"] $ listify "(" "," ")" ls
+ntuple :: MType -> List Div -> DivHole
+ntuple t ls = typedNodeHole "" ["tuple"] (listify "(" "," ")" ls) t
 
 unpackOp :: Tuple Op MType -> Op
 unpackOp (Tuple op _) = op
 
-opToDiv :: Op -> Div
-opToDiv op = node (pPrintOp op) ["op"] []
+opToDiv :: MType -> Op -> Div
+opToDiv t op = typedNode (pPrintOp op) ["op"] [] t
 
-binary :: Op -> Div -> Div -> DivHole
-binary op d1 d2 = nodeHole "" ["binary"] [d1, opToDiv op, d2]
+binary :: MType -> Op -> Div -> Div -> DivHole
+binary t op d1 d2 = typedNodeHole "" ["binary"] [d1, opToDiv t op, d2] t
 
 openBrace :: Div
 openBrace = node "(" ["brace", "left"] []
@@ -152,20 +173,20 @@ openBrace = node "(" ["brace", "left"] []
 closeBrace :: Div
 closeBrace = node ")" ["brace", "right"] []
 
-unary :: Op -> Div -> DivHole
-unary op div = nodeHole "" ["unary"] [openBrace, opToDiv op, div, closeBrace]
+unary :: MType -> Op -> Div -> DivHole
+unary t op div = nodeHole "" ["unary"] [openBrace, opToDiv t op, div, closeBrace]
 
-sectl :: Div -> Op -> DivHole
-sectl div op = nodeHole "" ["section"] [openBrace, div, opToDiv op, closeBrace]
+sectl :: MType -> Div -> Op -> DivHole
+sectl t div op = nodeHole "" ["section"] [openBrace, div, opToDiv t op, closeBrace]
 
-sectr :: Op -> Div -> DivHole
-sectr op div = nodeHole "" ["section"] [openBrace, opToDiv op, div, closeBrace]
+sectr :: MType -> Op -> Div -> DivHole
+sectr t op div = nodeHole "" ["section"] [openBrace, opToDiv t op, div, closeBrace]
 
-prefixOp :: Op -> Div
-prefixOp op = node "" ["prefixOp"] [openBrace, opToDiv op, closeBrace]
+prefixOp :: MType -> Op -> Div
+prefixOp t op = node "" ["prefixOp"] [openBrace, opToDiv t op, closeBrace]
 
-ifexpr :: Div -> Div -> Div -> DivHole
-ifexpr cd td ed = nodeHole "" ["if"] [ifDiv, cd, thenDiv, td, elseDiv, ed]
+ifexpr :: MType -> Div -> Div -> Div -> DivHole
+ifexpr t cd td ed = typedNodeHole "" ["if"] [ifDiv, cd, thenDiv, td, elseDiv, ed] t
   where
     ifDiv = node "if" ["keyword"] []
     thenDiv = node "then" ["keyword"] []
@@ -176,8 +197,8 @@ intersperse _ Nil          = Nil
 intersperse _ (Cons a Nil) = Cons a Nil
 intersperse s (Cons a as)  = Cons a $ Cons s $ intersperse s as
 
-letexpr :: List (Tuple Div Div) -> Div -> DivHole
-letexpr binds expr = nodeHole "" ["letexpr"] $ [letDiv] <> (intercalate [semi] (bind <$> binds)) <> [inDiv, expr]
+letexpr :: MType -> List (Tuple Div Div) -> Div -> DivHole
+letexpr t binds expr = typedNodeHole "" ["letexpr"] ([letDiv] <> (intercalate [semi] (bind <$> binds)) <> [inDiv, expr]) t
   where
     letDiv = node "let" ["keyword"] []
     inDiv  = node "in" ["keyword"] []
@@ -186,27 +207,27 @@ letexpr binds expr = nodeHole "" ["letexpr"] $ [letDiv] <> (intercalate [semi] (
     bind :: Tuple Div Div -> Array Div
     bind (Tuple b e) = [node "" [] [b, equal, e]]
 
-listcomp :: Div -> List Div -> DivHole
-listcomp expr quals = nodeHole "" ["listcomp", "list"] $ [open, expr, pipe] <> Arr.fromFoldable (intersperse comma quals) <> [close]
+listcomp :: MType -> Div -> List Div -> DivHole
+listcomp t expr quals = typedNodeHole "" ["listcomp", "list"] ([open, expr, pipe] <> Arr.fromFoldable (intersperse comma quals) <> [close]) t
   where
     open  = node "[" ["brace"] []
     close = node "]" ["brace"] []
     pipe  = node "|" ["brace"] []
     comma = node "," ["comma"] []
 
-lambda :: List Div -> Div -> DivHole
-lambda params body = nodeHole "" ["lambda"] (Cons open (Cons bslash (params <> (Cons arrow (Cons body (Cons close Nil))))))
+lambda :: MType -> List Div -> Div -> DivHole
+lambda t params body = typedNodeHole "" ["lambda"] (open : bslash : params <> (arrow : body : close : Nil)) t
   where
     open = node "(" ["brace", "left"] []
     bslash = node "\\" ["backslash", "separator"] []
     arrow = node "->" ["arrow", "separator"] []
     close = node ")" ["brace", "right"] []
 
-app :: Div -> List Div -> DivHole
-app func args = nodeHole "" ["app"] (Cons func args)
+app :: MType -> Div -> List Div -> DivHole
+app t func args = typedNodeHole "" ["app"] (Cons func args) t
 
-arithmseq :: Div -> Maybe Div -> Maybe Div -> DivHole
-arithmseq start mnext mend = nodeHole "" ["arithmseq", "list"] $ [open, start] <> commaNext <> [dots] <> end <> [close]
+arithmseq :: MType -> Div -> Maybe Div -> Maybe Div -> DivHole
+arithmseq t start mnext mend = typedNodeHole "" ["arithmseq", "list"] ([open, start] <> commaNext <> [dots] <> end <> [close]) t
  where
     open      = node "[" ["brace"] []
     comma     = node "," ["comma"] []
@@ -215,8 +236,8 @@ arithmseq start mnext mend = nodeHole "" ["arithmseq", "list"] $ [open, start] <
     end       = fromMaybe mend
     close     = node "]" ["brace"] []
 
-binding :: forall a. Binding a -> Div
-binding (Lit _ a)         = node "" ["binding", "lit"] [atom a]
+binding :: TypedBinding -> Div
+binding (Lit t a)         = node "" ["binding", "lit"] [atom t a]
 binding (ConsLit _ b1 b2) = node "" ["binding", "conslit"] $ listify "(" ":" ")" (Cons (binding b1) (Cons (binding b2) Nil))
 binding (ListLit _ ls)    = node "" ["binding", "listlit"] $ listify "[" "," "]" (binding <$> ls)
 binding (NTupleLit _ ls)   = node "" ["binding", "tuplelit"] $ listify "(" "," ")" (binding <$> ls)
@@ -224,7 +245,7 @@ binding (NTupleLit _ ls)   = node "" ["binding", "tuplelit"] $ listify "(" "," "
 type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM | eff) Unit)
 
 divToJQuery :: forall eff. Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
-divToJQuery callback (Node { content: content, classes: classes, zipper: zipper } children) = do
+divToJQuery callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
   div <- makeDiv content classes
   for children (divToJQuery callback >=> flip J.append div)
   case zipper of
