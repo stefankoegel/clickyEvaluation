@@ -237,16 +237,18 @@ arithmseq t start mnext mend = typedNodeHole "" ["arithmseq", "list"] ([open, st
     close     = node "]" ["brace"] []
 
 binding :: TypedBinding -> Div
-binding (Lit t a)         = node "" ["binding", "lit"] [atom t a]
-binding (ConsLit _ b1 b2) = node "" ["binding", "conslit"] $ listify "(" ":" ")" (Cons (binding b1) (Cons (binding b2) Nil))
-binding (ListLit _ ls)    = node "" ["binding", "listlit"] $ listify "[" "," "]" (binding <$> ls)
-binding (NTupleLit _ ls)   = node "" ["binding", "tuplelit"] $ listify "(" "," ")" (binding <$> ls)
+binding (Lit t a)         = typedNode "" ["binding", "lit"] [atom t a] t
+binding (ConsLit t b1 b2) = typedNode "" ["binding", "conslit"] (listify "(" ":" ")" (binding b1 : binding b2 : Nil)) t
+binding (ListLit t ls)    = typedNode "" ["binding", "listlit"] (listify "[" "," "]" (binding <$> ls)) t
+binding (NTupleLit t ls)   = typedNode "" ["binding", "tuplelit"] (listify "(" "," ")" (binding <$> ls)) t
 
 type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM | eff) Unit)
 
 divToJQuery :: forall eff. Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
 divToJQuery callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
-  div <- makeDiv content classes
+  -- div <- makeDiv content ((maybe "untyped" prettyPrintType exprType) : classes)
+  div <- makeDiv (maybe "_" (\t -> content <> " :: " <> prettyPrintType t)exprType) classes
+  -- div <- makeDiv content classes
   for children (divToJQuery callback >=> flip J.append div)
   case zipper of
     Nothing                -> pure unit
