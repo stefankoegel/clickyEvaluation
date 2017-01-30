@@ -69,7 +69,7 @@ h3 {
   padding: 10px;
 }
 
-.list, .lambda, .section, .name, .top, .tuple, .unary, .binary, .app, .if, .letexpr {
+.list, .lambda, .section, .name, .top, .tuple, .unary, .binary, .app, .if, .letexpr, .output > .atom {
   font-family: monospace;
   font-size: 15px;
   border: none;
@@ -171,7 +171,7 @@ div.historyBox {
   display: block;
 }
 
-.binary, .app, .if, .output > .top > .atom {
+.binary, .app, .if, .output > .atom {
   padding: 10px;
   border-radius: 5px;
   box-shadow: 2px 2px 5px 0 #333;
