@@ -1,9 +1,10 @@
 module Main where
 
-import AST (Expr, Atom(Name), Tree(Atom), TypeTree)
+import AST as AST
 import Parser as Parser
 import Evaluator as Eval
 import Web as Web
+import TypeChecker as TypeChecker
 import JSHelpers (ctrlKeyPressed, getType)
 
 import Prelude
@@ -23,46 +24,53 @@ main = log "hello"
 
 makeCE :: forall eff. String -> String -> Eff (dom :: DOM | eff) Unit
 makeCE input selector = do
+  clearInfo
   container <- J.select selector
-  let expr = parseExpr input
-  let env = preludeEnv
-  showExprIn expr env [] container Nothing
-  pure unit
+  doWithJust (parseExpr input) \expr -> do
+    let env = preludeEnv
+    showExprIn expr env [] container Nothing
+    pure unit
 
 makeCEwithDefs :: forall eff. String -> String -> String -> Eff (dom :: DOM | eff) Unit
 makeCEwithDefs input defs selector = do
+  clearInfo
   container <- J.select selector
-  let expr = parseExpr input
-  let env = stringToEnv defs
-  showExprIn expr env [] container Nothing
+  doWithJust (parseExpr input) \expr -> do
+    let env = stringToEnv defs
+    showExprIn expr env [] container Nothing
 
 makeCEwithHistory :: forall eff. String -> String -> String -> Eff (dom :: DOM | eff) Unit
 makeCEwithHistory input selector histSelector = do
+  clearInfo
   container <- J.select selector
   histContainer <- J.select histSelector
-  let expr = parseExpr input
-  let env = preludeEnv
-  showExprIn expr env [] container (Just histContainer)
+  doWithJust (parseExpr input) \expr -> do
+    let env = preludeEnv
+    showExprIn expr env [] container (Just histContainer)
 
 makeCEwithDefsAndHistory :: forall eff. String -> String -> String -> String -> Eff (dom :: DOM | eff) Unit
 makeCEwithDefsAndHistory  input defs selector histSelector = do
+  clearInfo
   container <- J.select selector
   histContainer <- J.select histSelector
-  let expr = parseExpr input
-  let env = stringToEnv defs
-  showExprIn expr env [] container (Just histContainer)
+  doWithJust (parseExpr input) \expr -> do
+    let env = stringToEnv defs
+    showExprIn expr env [] container (Just histContainer)
 
-parseExpr :: String -> TypeTree
+-- | Try to parse the given expression and report parser errors.
+parseExpr :: forall eff. String -> Eff (dom :: DOM | eff) (Maybe AST.TypeTree)
 parseExpr input = case Parser.parseExpr input of
-  Left err   -> (Atom Nothing (Name $ "parse error: " <> show err))
-  Right expr -> expr
+  Left error -> do
+    showError "Parser" (show error)
+    pure Nothing
+  Right expr -> pure $ Just expr
 
-eval1 :: Eval.Env -> TypeTree -> TypeTree
+eval1 :: Eval.Env -> AST.TypeTree -> AST.TypeTree
 eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
   Left _      -> expr
   Right expr' -> expr'
 
-makeCallback :: Eval.Env -> Array TypeTree -> J.JQuery -> Maybe J.JQuery-> Web.Callback
+makeCallback :: Eval.Env -> Array AST.TypeTree -> J.JQuery -> Maybe J.JQuery-> Web.Callback
 makeCallback env history container histContainer expr hole event jq = do
   J.stopImmediatePropagation event
   let evalFunc = if ctrlKeyPressed event then Eval.eval else eval1
@@ -77,26 +85,86 @@ makeCallback env history container histContainer expr hole event jq = do
     _           -> pure unit
   pure unit
 
-exprToJQuery :: forall eff. Web.Callback -> TypeTree -> Eff (dom :: DOM | eff) J.JQuery
+exprToJQuery :: forall eff. Web.Callback -> AST.TypeTree -> Eff (dom :: DOM | eff) J.JQuery
 exprToJQuery callback = Web.exprToDiv >>> Web.divToJQuery callback
 
-showExprIn :: forall eff. TypeTree -> Eval.Env -> Array TypeTree -> J.JQuery -> Maybe J.JQuery-> Eff (dom :: DOM | eff) Unit
-showExprIn expr env history container histContainer = do
-  content <- exprToJQuery (makeCallback env history container histContainer) expr
-  J.clear container
-  J.append content container
-  case histContainer of
+-- | Clear the contents of info div.
+clearInfo :: forall eff. Eff (dom :: DOM | eff) Unit
+clearInfo = void $ J.select "#info" >>= J.clear
+
+-- | Create an info div and display an error inside.
+showError :: forall eff. String -> String -> Eff (dom :: DOM | eff) Unit
+showError origin msg = do
+  info <- do
+    paragraph <- J.create "<p></p>"
+    J.addClass "info" paragraph
+    J.setText ("Error in " <> origin <> " => " <> msg) paragraph
+    pure paragraph
+  clearInfo
+  infoDiv <- J.select "#info"
+  J.append info infoDiv
+
+-- | Execute the given function if the given maybe (wrapped inside an effect) is a `Just x` value
+-- | using `x` as the argument. If the maybe is `Nothing` don't do anything.
+doWithJust :: forall a eff. Eff (dom :: DOM | eff) (Maybe a)
+         -> (a -> Eff (dom :: DOM | eff) Unit)
+         -> Eff (dom :: DOM | eff) Unit
+doWithJust mMaybe f = do
+  mValue <- mMaybe
+  case mValue of
     Nothing -> pure unit
-    Just histContainer -> do
-      J.clear histContainer
-      for history $ \expr -> do
-        histExpr <- exprToJQuery (\_ _ _ _ -> pure unit) expr
-        histDiv <- J.create "<div></div>"
-        J.addClass "history-element" histDiv
-        J.append histExpr histDiv
-        J.append histDiv histContainer
-      pure unit
-  pure unit
+    Just x  -> f x
+
+-- | Given a type tree and an evaluation environment, try to infere the types inside the given
+-- | environment.
+buildTypeEnvironment :: forall eff. AST.TypeTree -> Eval.Env
+                     -> Eff (dom :: DOM | eff) (Maybe TypeChecker.TypeEnv)
+buildTypeEnvironment expr env = case TypeChecker.buildTypeEnv (Eval.envToDefs env) of
+  Left error -> do
+    showError "Definitions" (AST.prettyPrintTypeError error)
+    pure Nothing
+  Right typedEnv -> pure $ Just typedEnv
+
+-- TODO: Add support for partially typed trees.
+-- | Type check an expression using a given typed environment.
+typeCheckExpression :: forall eff. TypeChecker.TypeEnv -> AST.TypeTree
+                 -> Eff (dom :: DOM | eff) (Maybe AST.TypeTree)
+typeCheckExpression typedEnv expr = case TypeChecker.typeTreeProgramnEnv typedEnv expr of
+  Left error -> do
+    showError "Expression" (AST.prettyPrintTypeError error)
+    pure Nothing
+  Right typedExpression -> pure $ Just typedExpression
+
+-- | Construct a div tree from the given typed expression.
+buildDivTreeFromExpression :: forall eff. AST.TypeTree -> Eval.Env -> Array AST.TypeTree
+                           -> J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM | eff) Unit
+buildDivTreeFromExpression typedExpr env history container histContainer = do
+    content <- exprToJQuery (makeCallback env history container histContainer) typedExpr
+    J.clear container
+    J.append content container
+    case histContainer of
+      Nothing -> pure unit
+      Just histContainer -> do
+        J.clear histContainer
+        for history $ \typedExpr -> do
+          histExpr <- exprToJQuery (\_ _ _ _ -> pure unit) typedExpr
+          histDiv <- J.create "<div></div>"
+          J.addClass "history-element" histDiv
+          J.append histExpr histDiv
+          J.append histDiv histContainer
+        pure unit
+    pure unit
+
+-- | Show the given expression inside a given environment after the types of the environment as
+-- | well as the expression have been inferred.
+showExprIn :: forall eff. AST.TypeTree -> Eval.Env -> Array AST.TypeTree -> J.JQuery
+           -> Maybe J.JQuery -> Eff (dom :: DOM | eff) Unit
+showExprIn expr env history container histContainer = do
+  -- Try to infer the types of the environment.
+  doWithJust (buildTypeEnvironment expr env) \typedEnv -> do
+    -- Try to infer the type of the given expression.
+    doWithJust (typeCheckExpression typedEnv expr) \typedExpr ->
+      buildDivTreeFromExpression typedExpr env history container histContainer
 
 stringToEnv :: String -> Eval.Env
 stringToEnv str = case Parser.parseDefs str of
