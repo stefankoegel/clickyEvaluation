@@ -374,21 +374,21 @@ infer env ex = case ex of
     let s2 = maybe nullSubst fst tup2
     let s3 = maybe nullSubst fst tup3
     let s  = s1 `compose` s2 `compose` s3
-    let extractedType1 = extractType t1
-    let extractedType2 = extractType <$> t2
-    let extractedType3 = extractType <$> t3
-    let typeMisMatch m1 m2 = unsafePartial $ fromJust $ normalizeTypeError <$> lift2 UnificationFail m1 m2
-    ifM (pure (fromMaybe false (lift2 (/=) (Just extractedType1) extractedType2)))
-      (throwError (typeMisMatch (Just extractedType1) extractedType2))
-      (ifM (pure (fromMaybe false (lift2 (/=) (Just extractedType1) extractedType3)))
-        (throwError (typeMisMatch (Just extractedType1) extractedType3))
-        (ifM (pure (fromMaybe false (lift2 (/=) extractedType2 extractedType3)))
-          (throwError (typeMisMatch extractedType2 extractedType3))
-          (case extractedType1 of
-            TypCon "Int"  -> pure $ Tuple s $ apply s $ ArithmSeq (Just $ AD $ TList extractedType1) t1 t2 t3
-            TypCon "Bool" -> pure $ Tuple s $ apply s $ ArithmSeq (Just $ AD $ TList extractedType1) t1 t2 t3
-            TypCon "Char" -> pure $ Tuple s $ apply s $ ArithmSeq (Just $ AD $ TList extractedType1) t1 t2 t3
-            _             -> throwError $ NoInstanceOfEnum extractedType1)))
+    let tt = extractType t1
+    let stepTree = extractType <$> t2
+    let endTree = extractType <$> t3
+    let typeMissMatch m1 m2 = fromMaybe (UnknownError "congrats you found a bug TypeChecker.infer (ArithmSeq begin jstep jend)") (normalizeTypeError <$> lift2 UnificationFail m1 m2)
+    ifM (pure (fromMaybe false (lift2 (/=) (Just tt) stepTree)))
+      (throwError (typeMissMatch (Just tt) stepTree))
+      (ifM (pure (fromMaybe false (lift2 (/=) (Just tt) endTree)))
+        (throwError (typeMissMatch (Just tt) endTree))
+        (ifM (pure (fromMaybe false (lift2 (/=) stepTree endTree)))
+          (throwError (typeMissMatch stepTree endTree))
+          (case tt of
+            TypCon "Int"  -> pure $ Tuple s $ apply s $ ArithmSeq (Just $ AD (TList tt)) t1 t2 t3
+            TypCon "Bool" -> pure $ Tuple s $ apply s $ ArithmSeq (Just $ AD (TList tt)) t1 t2 t3
+            TypCon "Char" -> pure $ Tuple s $ apply s $ ArithmSeq (Just $ AD (TList tt)) t1 t2 t3
+            _             -> throwError $ NoInstanceOfEnum tt)))
 
   PrefixOp _ (Tuple op _) -> do
     Tuple s t <- inferOp env op
