@@ -174,16 +174,16 @@ closeBrace :: Div
 closeBrace = node ")" ["brace", "right"] []
 
 unary :: MType -> Op -> Div -> DivHole
-unary t op div = nodeHole "" ["unary"] [openBrace, opToDiv t op, div, closeBrace]
+unary t op div = typedNodeHole "" ["unary"] [openBrace, opToDiv t op, div, closeBrace] t
 
 sectl :: MType -> Div -> Op -> DivHole
-sectl t div op = nodeHole "" ["section"] [openBrace, div, opToDiv t op, closeBrace]
+sectl t div op = typedNodeHole "" ["section"] [openBrace, div, opToDiv t op, closeBrace] t
 
 sectr :: MType -> Op -> Div -> DivHole
-sectr t op div = nodeHole "" ["section"] [openBrace, opToDiv t op, div, closeBrace]
+sectr t op div = typedNodeHole "" ["section"] [openBrace, opToDiv t op, div, closeBrace] t
 
 prefixOp :: MType -> Op -> Div
-prefixOp t op = node "" ["prefixOp"] [openBrace, opToDiv t op, closeBrace]
+prefixOp t op = typedNode "" ["prefixOp"] [openBrace, opToDiv t op, closeBrace] t
 
 ifexpr :: MType -> Div -> Div -> Div -> DivHole
 ifexpr t cd td ed = typedNodeHole "" ["if"] [ifDiv, cd, thenDiv, td, elseDiv, ed] t
