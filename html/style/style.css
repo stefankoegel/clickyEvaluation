@@ -69,15 +69,18 @@ h3 {
   padding: 10px;
 }
 
+.container {
+}
+
 .list, .lambda, .section, .name, .top, .tuple, .unary, .binary, .app, .if, .letexpr, .output > .atom {
   font-family: monospace;
   font-size: 15px;
   border: none;
   background: #ceefff;
   padding: 4px;
-  margin: 5px;
   border-radius: 4px;
-  box-shadow: 1.5px 1.5px 5px 0 #333;
+  box-shadow: 0px 1.5px 5px 0 #333;
+  width: auto;
 }
 
 .highlight {
@@ -173,8 +176,7 @@ div.historyBox {
 
 .binary, .app, .if, .output > .atom {
   padding: 10px;
-  border-radius: 5px;
-  box-shadow: 2px 2px 5px 0 #333;
+  margin: 0 !important;
 }
 
 .output div, .historyBox div {
@@ -279,6 +281,8 @@ div.keyword {
 
 
 .expand {
+  font-family: monospace;
+  font-size: 0.6em;
   color: rgb(68, 68, 68);
   min-height: 5px;
   width: auto;
@@ -287,16 +291,17 @@ div.keyword {
   text-align: left;
   border-top-right-radius: 4px;
   border-top-left-radius: 4px;
-  margin: 0px !important;
-  font-size: 0.6em;
-}
-
-.type-arr{
-  font-family: "Courier New Bold", "Courier New", monospace;
+  box-shadow: 0px 2px 5px 0 #333;
+  margin-bottom: -4px !important;
+  padding: 4px 4px 8px 4px;
 }
 
 .expand:hover {
   background-color: rgba(51,51,51,0.2);
+}
+
+.type-arr{
+  font-family: "Courier New Bold", "Courier New", monospace;
 }
 
 .type {
@@ -312,9 +317,9 @@ div.keyword {
   padding: 0px !important;
 }
 
-.expr {
-  margin-left: 0px !important;
-  margin-right: 0px !important;
+.hasTypeContainer {
+  margin-left: 5px !important;
+  margin-right: 5px !important;
   width: auto;
   display: block !important;
 }

@@ -4,7 +4,9 @@ import Prelude
 import Data.Foldable (class Foldable, intercalate)
 import Data.Unfoldable (fromMaybe)
 import Data.List (List(Nil, Cons), snoc, fromFoldable, (:))
-import Data.Maybe (Maybe(..), maybe)
+import Data.Set (intersection, size)
+import Data.Set as Set
+import Data.Maybe (Maybe(..), maybe, isJust)
 import Data.Tuple (Tuple(..))
 import Data.Traversable (for, for_)
 import Data.Array as Arr
@@ -14,7 +16,7 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
-import AST (TypeTree, Tree(..), Binding(..), TypedBinding(..), Atom(..), Op, pPrintOp, TypeQual, QualTree(..), MType, Type, prettyPrintType, prettyPrintTypeError)
+import AST (TypeTree, Tree(..), Binding(..), TypedBinding, Type(..), Atom(..), Op, pPrintOp, TypeQual, QualTree(..), MType, prettyPrintType)
 
 data RoseTree a = Node a (List (RoseTree a))
 
@@ -244,11 +246,51 @@ binding (NTupleLit t ls)   = typedNode "" ["binding", "tuplelit"] (listify "(" "
 
 type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM | eff) Unit)
 
+-- | Create a type div with the pretty printed type as content.
+createTypeDiv :: forall eff. MType -> Eff (dom :: DOM | eff) J.JQuery
+createTypeDiv mType = makeDiv (" :: " <> maybe "" prettyPrintType mType) ["expand"]
+
+-- | Add a type tooltip to the given div.
+addTypeTooltip :: forall eff. MType -> J.JQuery -> Eff (dom :: DOM | eff) Unit
+addTypeTooltip mType div = J.setAttr "title" (" :: " <> maybe "" prettyPrintType mType) div
+
+-- | Return true, if the first list of classes contains a class from the second list.
+oneOfClasses :: forall f1 f2. (Foldable f1, Foldable f2) => f1 String -> f2 String -> Boolean
+oneOfClasses cs1 cs2 = size (set1 `intersection` set2) > 0
+  where
+  set1 = Set.fromFoldable cs1
+  set2 = Set.fromFoldable cs2
+
+-- | Given a list of classes as well as the expression type determine if the expression should have
+-- | a type div.
+showTypeForNode :: forall f. Foldable f => f String -> MType -> Boolean
+showTypeForNode _ Nothing = false
+showTypeForNode classes (Just t) = decideByClass classes && decideByType t
+    where
+    decideByType (TypCon _) = false
+    decideByType _ = true
+    decideByClass classes = if oneOfClasses ["op", "binding"] classes then false else true
+
 divToJQuery :: forall eff. Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
 divToJQuery callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
-  -- div <- makeDiv content ((maybe "untyped" prettyPrintType exprType) : classes)
-  div <- makeDiv (maybe "_" (\t -> content <> " :: " <> prettyPrintType t)exprType) classes
-  -- div <- makeDiv content classes
+  let needsContainer = showTypeForNode classes exprType
+  let isTyped = isJust exprType
+
+  container <- makeDiv "" ["container"]
+  div <- makeDiv content classes
+
+  if needsContainer
+    then do
+      typeDiv <- createTypeDiv exprType
+      J.append typeDiv container
+      J.append div container
+      J.addClass "hasTypeContainer" div
+    else pure unit
+
+  if isTyped
+    then addTypeTooltip exprType div
+    else pure unit
+
   for children (divToJQuery callback >=> flip J.append div)
   case zipper of
     Nothing                -> pure unit
@@ -257,7 +299,10 @@ divToJQuery callback (Node { content: content, classes: classes, zipper: zipper,
       J.on "mouseover" (callback expr hole) div
       J.on "mouseout" (callback expr hole) div
       pure unit
-  pure div
+
+  if needsContainer
+    then pure container
+    else pure div
 
 toString :: List TypeTree -> Maybe String
 toString ls = Str.fromCharArray <$> go [] ls
@@ -272,7 +317,7 @@ toString ls = Str.fromCharArray <$> go [] ls
 
 type Class = String
 
-makeDiv :: forall eff. String -> List Class -> Eff (dom :: DOM | eff) J.JQuery
+makeDiv :: forall f eff. Foldable f => String -> f Class -> Eff (dom :: DOM | eff) J.JQuery
 makeDiv text classes = do
   d <- J.create "<div></div>"
   J.setText text d
