@@ -72,7 +72,7 @@ h3 {
 .container {
 }
 
-.list, .lambda, .section, .name, .top, .tuple, .unary, .binary, .app, .if, .letexpr, .output > .atom {
+.list, .lambda, .section, .name, .top, .tuple, .unary, .binary, .app, .if, .letexpr, .output > .container > .atom {
   font-family: monospace;
   font-size: 15px;
   border: none;

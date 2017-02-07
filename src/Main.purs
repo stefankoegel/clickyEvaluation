@@ -86,7 +86,7 @@ makeCallback env history container histContainer expr hole event jq = do
   pure unit
 
 exprToJQuery :: forall eff. Web.Callback -> AST.TypeTree -> Eff (dom :: DOM | eff) J.JQuery
-exprToJQuery callback = Web.exprToDiv >>> Web.divToJQuery callback
+exprToJQuery callback = Web.exprToDiv >>> Web.divToJQuery true callback
 
 -- | Clear the contents of info div.
 clearInfo :: forall eff. Eff (dom :: DOM | eff) Unit

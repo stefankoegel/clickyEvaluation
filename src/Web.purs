@@ -263,17 +263,17 @@ oneOfClasses cs1 cs2 = size (set1 `intersection` set2) > 0
 
 -- | Given a list of classes as well as the expression type determine if the expression should have
 -- | a type div.
-showTypeForNode :: forall f. Foldable f => f String -> MType -> Boolean
-showTypeForNode _ Nothing = false
-showTypeForNode classes (Just t) = decideByClass classes && decideByType t
+needsTypeContainer :: forall f. Foldable f => f String -> MType -> Boolean
+needsTypeContainer _ Nothing = false
+needsTypeContainer classes (Just t) = decideByClass classes && decideByType t
     where
     decideByType (TypCon _) = false
     decideByType _ = true
     decideByClass classes = if oneOfClasses ["op", "binding"] classes then false else true
 
-divToJQuery :: forall eff. Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
-divToJQuery callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
-  let needsContainer = showTypeForNode classes exprType
+divToJQuery :: forall eff. Boolean -> Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
+divToJQuery isTopLevelDiv callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
+  let needsContainer = needsTypeContainer classes exprType || isTopLevelDiv
   let isTyped = isJust exprType
 
   container <- makeDiv "" ["container"]
@@ -291,7 +291,7 @@ divToJQuery callback (Node { content: content, classes: classes, zipper: zipper,
     then addTypeTooltip exprType div
     else pure unit
 
-  for children (divToJQuery callback >=> flip J.append div)
+  for children (divToJQuery false callback >=> flip J.append div)
   case zipper of
     Nothing                -> pure unit
     Just (Tuple expr hole) -> do
