@@ -16,7 +16,8 @@ import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
-import AST (TypeTree, Tree(..), Binding(..), TypedBinding, Type(..), Atom(..), Op, pPrintOp, TypeQual, QualTree(..), MType, prettyPrintType)
+import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding,
+            Type(..), TypeQual, pPrintOp, prettyPrintType, prettyPrintTypeError)
 
 data RoseTree a = Node a (List (RoseTree a))
 
@@ -250,10 +251,12 @@ type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent
 
 -- | Create a type div with the pretty printed type as content.
 createTypeDiv :: forall eff. MType -> Eff (dom :: DOM | eff) J.JQuery
-createTypeDiv mType = makeDiv (" :: " <> maybe "" prettyPrintType mType) ["expand"]
+createTypeDiv (Just (TypeError typeError)) = makeDiv (prettyPrintTypeError typeError) ["typeContainer", "hasTypeError"]
+createTypeDiv mType = makeDiv (" :: " <> maybe "" prettyPrintType mType) ["typeContainer"]
 
 -- | Add a type tooltip to the given div.
 addTypeTooltip :: forall eff. MType -> J.JQuery -> Eff (dom :: DOM | eff) Unit
+addTypeTooltip (Just (TypeError typeError)) div = J.setAttr "title" (prettyPrintTypeError typeError) div
 addTypeTooltip mType div = J.setAttr "title" (" :: " <> maybe "" prettyPrintType mType) div
 
 -- | Return true, if the first list of classes contains a class from the second list.
