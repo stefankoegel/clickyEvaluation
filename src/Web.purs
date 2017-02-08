@@ -24,6 +24,8 @@ type Div = RoseTree { content :: String, classes :: (List String), zipper :: May
 
 type DivHole = TypeTree -> (TypeTree -> TypeTree) -> Div
 
+type OpTuple = Tuple Op MType
+
 nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
 nodeHole content classes children expr hole =
   Node
@@ -77,14 +79,14 @@ exprToDiv = go id
                                            Nothing  -> list t (zipList go (hole <<< List Nothing) ls) expr hole
                                            Just str -> typedNode ("\"" <> str <> "\"") ["list", "string"] [] t
     go hole expr@(NTuple t ls)         = ntuple t (zipList go (hole <<< NTuple Nothing) ls) expr hole
-    go hole expr@(Binary _ op_tup@(Tuple op t) e1 e2)   = binary t op
-                                           (go (\e1 -> hole $ Binary Nothing op_tup e1 e2) e1)
-                                           (go (\e2 -> hole $ Binary Nothing op_tup e1 e2) e2)
+    go hole expr@(Binary binType opTuple e1 e2) = binary binType opTuple
+                                           (go (\e1 -> hole $ Binary Nothing opTuple e1 e2) e1)
+                                           (go (\e2 -> hole $ Binary Nothing opTuple e1 e2) e2)
                                            expr hole
-    go hole expr@(Unary t op e)        = unary t (unpackOp op) (go (hole <<< Unary Nothing op) e) expr hole
-    go hole expr@(SectL t e op)        = sectl t (go (\e -> hole $ SectL Nothing e op) e) (unpackOp op) expr hole
-    go hole expr@(SectR t op e)        = sectr t (unpackOp op) (go (hole <<< SectR Nothing op) e) expr hole
-    go hole      (PrefixOp t op)       = prefixOp t (unpackOp op)
+    go hole expr@(Unary t opTuple e)   = unary t opTuple (go (hole <<< Unary Nothing opTuple) e) expr hole
+    go hole expr@(SectL t e opTuple)   = sectl t (go (\e -> hole $ SectL Nothing e opTuple) e) opTuple expr hole
+    go hole expr@(SectR t opTuple e)   = sectr t opTuple (go (hole <<< SectR Nothing opTuple) e) expr hole
+    go hole      (PrefixOp t opTuple)  = prefixOp t opTuple
     go hole expr@(IfExpr t ce te ee)   = ifexpr t
                                            (go (\ce -> hole $ IfExpr Nothing ce te ee) ce)
                                            (go (\te -> hole $ IfExpr Nothing ce te ee) te)
@@ -160,14 +162,14 @@ list t ls  = typedNodeHole "" ["list"] (listify "[" "," "]" ls) t
 ntuple :: MType -> List Div -> DivHole
 ntuple t ls = typedNodeHole "" ["tuple"] (listify "(" "," ")" ls) t
 
-unpackOp :: Tuple Op MType -> Op
+unpackOp :: OpTuple -> Op
 unpackOp (Tuple op _) = op
 
-opToDiv :: MType -> Op -> Div
-opToDiv t op = typedNode (pPrintOp op) ["op"] [] t
+opToDiv :: OpTuple -> Div
+opToDiv (Tuple op t) = typedNode (pPrintOp op) ["op"] [] t
 
-binary :: MType -> Op -> Div -> Div -> DivHole
-binary t op d1 d2 = typedNodeHole "" ["binary"] [d1, opToDiv t op, d2] t
+binary :: MType -> OpTuple -> Div -> Div -> DivHole
+binary binType op d1 d2 = typedNodeHole "" ["binary"] [d1, opToDiv op, d2] binType
 
 openBrace :: Div
 openBrace = node "(" ["brace", "left"] []
@@ -175,17 +177,17 @@ openBrace = node "(" ["brace", "left"] []
 closeBrace :: Div
 closeBrace = node ")" ["brace", "right"] []
 
-unary :: MType -> Op -> Div -> DivHole
-unary t op div = typedNodeHole "" ["unary"] [openBrace, opToDiv t op, div, closeBrace] t
+unary :: MType -> OpTuple -> Div -> DivHole
+unary t op div = typedNodeHole "" ["unary"] [openBrace, opToDiv op, div, closeBrace] t
 
-sectl :: MType -> Div -> Op -> DivHole
-sectl t div op = typedNodeHole "" ["section"] [openBrace, div, opToDiv t op, closeBrace] t
+sectl :: MType -> Div -> OpTuple -> DivHole
+sectl t div op = typedNodeHole "" ["section"] [openBrace, div, opToDiv op, closeBrace] t
 
-sectr :: MType -> Op -> Div -> DivHole
-sectr t op div = typedNodeHole "" ["section"] [openBrace, opToDiv t op, div, closeBrace] t
+sectr :: MType -> OpTuple -> Div -> DivHole
+sectr t op div = typedNodeHole "" ["section"] [openBrace, opToDiv op, div, closeBrace] t
 
-prefixOp :: MType -> Op -> Div
-prefixOp t op = typedNode "" ["prefixOp"] [openBrace, opToDiv t op, closeBrace] t
+prefixOp :: MType -> OpTuple -> Div
+prefixOp binType op = typedNode "" ["prefixOp"] [openBrace, opToDiv op, closeBrace] binType
 
 ifexpr :: MType -> Div -> Div -> Div -> DivHole
 ifexpr t cd td ed = typedNodeHole "" ["if"] [ifDiv, cd, thenDiv, td, elseDiv, ed] t
@@ -267,9 +269,8 @@ needsTypeContainer :: forall f. Foldable f => f String -> MType -> Boolean
 needsTypeContainer _ Nothing = false
 needsTypeContainer classes (Just t) = decideByClass classes && decideByType t
     where
-    decideByType (TypCon _) = false
     decideByType _ = true
-    decideByClass classes = if oneOfClasses ["op", "binding"] classes then false else true
+    decideByClass classes = if oneOfClasses ["op", "binding", "num", "char", "bool"] classes then false else true
 
 divToJQuery :: forall eff. Boolean -> Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
 divToJQuery isTopLevelDiv callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
