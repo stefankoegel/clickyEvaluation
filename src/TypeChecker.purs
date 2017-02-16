@@ -97,10 +97,28 @@ instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => S
   ftv (Let a b c) = ftv c
   ftv (Guard a c) = ftv c
 
--- instance subTypeTree :: Substitutable TypeTree where
+-- | Substitutable instance for the type tree.
 instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) (Maybe Type)) where
-  apply s = map (apply s)
+  apply s (Atom t a) = Atom (apply s t) a
+  apply s (List t es) = List (apply s t) (apply s es)
+  apply s (NTuple t es) = NTuple (apply s t) (apply s es)
+  apply s (Binary t op l r) = Binary (apply s t) (apply s op) (apply s l) (apply s r)
+  apply s (Unary t op e) = Unary (apply s t) (apply s op) (apply s e)
+  apply s (SectL t e op) = SectL (apply s t) (apply s e) (apply s op)
+  apply s (SectR t op e) = SectR (apply s t) (apply s op) (apply s e)
+  apply s (PrefixOp t op) = PrefixOp (apply s t) (apply s op)
+  apply s (IfExpr t c l r) = IfExpr (apply s t) (apply s c) (apply s l) (apply s r)
+  apply s (ArithmSeq t begin step end) = ArithmSeq (apply s t) (apply s begin) (apply s <$> step) (apply s <$> end)
+  apply s (LetExpr t bs e) = LetExpr (apply s t) ((\(Tuple x y) -> Tuple (apply s x) (apply s y)) <$> bs) (apply s e)
+  apply s (Lambda t bs body) = Lambda (apply s t) (apply s bs) (apply s body)
+  apply s (App t e es) = App (apply s t) (apply s e) (apply s es)
+  apply s (ListComp t e qs) = ListComp (apply s t) (apply s e) (apply s qs)
   ftv typeTree = ftv (extractFromTree typeTree)
+
+-- | Substitutable instance for operator tuples used in the type tree.
+instance subOpTuple :: Substitutable (Tuple Op (Maybe Type)) where
+  apply s (Tuple op t) = Tuple op (apply s t)
+  ftv (Tuple op t) = ftv t
 
 instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (Lit t atom) = Lit (apply s t) atom
