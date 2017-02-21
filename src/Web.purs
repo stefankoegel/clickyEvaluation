@@ -273,7 +273,7 @@ needsTypeContainer _ Nothing = false
 needsTypeContainer classes (Just t) = decideByClass classes && decideByType t
     where
     decideByType _ = true
-    decideByClass classes = if oneOfClasses ["op", "binding", "num", "char", "bool"] classes then false else true
+    decideByClass classes = if oneOfClasses ["op", "binding", "num", "char", "bool", "gen", "guard", "let"] classes then false else true
 
 divToJQuery :: forall eff. Boolean -> Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
 divToJQuery isTopLevelDiv callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
