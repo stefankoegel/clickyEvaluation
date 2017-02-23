@@ -173,6 +173,22 @@ instance functorTree :: Functor (Tree a b c) where
     go (Let d b e) = Let (f d) b (map f e)
     go (Guard d e) = Guard (f d) (map f e)
 
+insertIntoTree :: forall a b c d. d -> Tree a b c d -> Tree a b c d
+insertIntoTree x (Atom _ atom) = Atom x atom
+insertIntoTree x (List _ ts) = List x ts
+insertIntoTree x (NTuple _ ts) = NTuple x ts
+insertIntoTree x (Binary _ op t1 t2) = Binary x op t1 t2
+insertIntoTree x (Unary _ op t) = Unary x op t
+insertIntoTree x (SectL _ t op) = SectL x t op
+insertIntoTree x (SectR _ op t) = SectR x op t
+insertIntoTree x (PrefixOp _ op) = PrefixOp x op
+insertIntoTree x (IfExpr _ t1 t2 t3) = IfExpr x t1 t2 t3
+insertIntoTree x (ArithmSeq _ t1 t2 t3) = ArithmSeq x t1 t2 t3
+insertIntoTree x (LetExpr _ bs t) = LetExpr x bs t
+insertIntoTree x (Lambda _ b t) = Lambda x b t
+insertIntoTree x (App _ t ts) = App x t ts
+insertIntoTree x (ListComp _ t ts) = ListComp x t ts
+
 extractFromTree :: forall a b c d. Tree a b c d -> d
 extractFromTree (Atom c _) = c
 extractFromTree (List c _) = c

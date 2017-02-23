@@ -1,7 +1,7 @@
 module TypeChecker where
 
 import Prelude (class Show, class Monad, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
-import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
+import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError, catchError)
 import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
@@ -55,7 +55,7 @@ instance subType :: Substitutable Type where
    apply s t@(TypVar a) = fromMaybe t $ Map.lookup a s
    apply s (TypArr t1 t2) =  TypArr (apply s t1) (apply s t2)
    apply s (AD a) = AD (apply s a)
-   apply _ (TypeError err) = TypeError err  --TODO make typeError Substitutable
+   apply _ (TypeError err) = TypeError err
 
    ftv (TypCon  _)         = Set.empty
    ftv (TypVar a)       = Set.singleton a
@@ -312,6 +312,13 @@ getListTreeChildren _ = unsafeCrashWith "Bad argument: expected list type tree."
 getTupleTreeChildren :: TypeTree -> List TypeTree
 getTupleTreeChildren (NTuple t children) = children
 getTupleTreeChildren _ = unsafeCrashWith "Bad argument: expected tuple type tree."
+
+-- | Perform type inference on an untyped type tree given a type environment. If a type error
+-- | occurs during the inference, catch the error and put it into the top level tree node.
+inferAndCatchErrors :: TypeEnv -> TypeTree -> Infer (Tuple Subst TypeTree)
+inferAndCatchErrors env expr = catchError
+  (infer env expr)
+  (\typeError -> pure $ Tuple nullSubst (insertIntoTree (Just $ TypeError typeError) expr))
 
 -- | Given a type environment as well as an untyped expression tree, infer the type of the given
 -- | tree and return a typed tree as well as the map of substitutions.
@@ -757,12 +764,12 @@ typeTreeProgramn defs tt = case m of
     Left err -> Left err
     Right res -> Right $ closeOverTypeTree res
   where
-    m = (infer <$> (buildTypeEnv defs) <*> pure tt)
+    m = (inferAndCatchErrors <$> (buildTypeEnv defs) <*> pure tt)
 
 typeTreeProgramnEnv :: TypeEnv -> TypeTree -> Either TypeError TypeTree
-typeTreeProgramnEnv env tt = case evalState (runExceptT (infer env tt)) initUnique of
+typeTreeProgramnEnv env tt = case evalState (runExceptT (inferAndCatchErrors env tt)) initUnique of
       Left err -> Left err
-      Right res -> Right $ closeOverTypeTree res
+      Right result@(Tuple subst tree) -> Right $ tree -- TODO: Add type normalization.
 
 closeOverTypeTree :: (Tuple Subst TypeTree) -> TypeTree
 closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
