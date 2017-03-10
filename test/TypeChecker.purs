@@ -5,7 +5,7 @@ import TypeChecker (Scheme(Forall), inferGroup, inferType, inferDef, emptyTyenv,
 import Parser (parseExpr, parseDefs)
 import Test.Parser (parsedPrelude)
 
-import Prelude (Unit, bind, pure, show, unit, ($), (==), (<>), (<<<))
+import Prelude (Unit, bind, map, pure, show, unit, ($), (==), (<>), (<<<))
 import Control.Monad.Writer (Writer, tell)
 import Data.Array (toUnfoldable) as Array
 import Data.Either (Either(..))
@@ -26,6 +26,10 @@ tell' = tell <<< singleton
 -- | Construct a list of type [typCon] given the name of the type constants.
 typConList :: String -> Type
 typConList name = AD $ TList (TypCon name)
+
+-- | Construct a tuple type given a list of type constant names.
+typConNTuple:: List String -> Type
+typConNTuple names = AD $ TTuple (map TypCon names)
 
 -- | Construct a list of type [a] given the type variable name a.
 typVarList :: TVar -> Type
@@ -99,6 +103,20 @@ eqInferResult _ _ = false
 prettyPrint :: InferResult -> String
 prettyPrint error@(Left _) = show error
 prettyPrint (Right (Forall xs t)) = show xs <> " " <> prettyPrintType t
+
+-- | Typed type tree representing `[1]`.
+listOne :: TypeTree
+listOne = List (Just $ typConList "Int") (Atom (Just $ TypCon "Int") (AInt 1) : Nil)
+
+-- | Untyped type tree representing `[1]`.
+untypedListOne :: TypeTree
+untypedListOne = List Nothing (Atom Nothing (AInt 1) : Nil)
+
+intType :: Type
+intType = TypCon "Int"
+
+charType :: Type
+charType = TypCon "Char"
 
 runTests :: Writer (List String) Unit
 runTests = do
@@ -187,9 +205,7 @@ runTests = do
           (Atom
             Nothing
             (Name "length"))
-          ((List
-            Nothing
-            ((Atom Nothing (AInt 1)) : Nil)) : Nil)) :
+          (untypedListOne : Nil)) :
         Nil
       )
     )
@@ -207,12 +223,96 @@ runTests = do
           (Atom
             (Just (typConList "Int" `TypArr` TypCon "Int"))
             (Name "length"))
-          ((List
-            (Just (typConList "Int"))
-            ((Atom (Just (TypCon "Int")) (AInt 1)) : Nil)) : Nil)) :
+          (listOne : Nil)) :
         Nil
       )
     )
+
+  -- Check that (\(x:xs) -> x) [1] and all the subexpressions are typed correctly.
+  testInferTT "ConsLit"
+    (App
+      Nothing
+      (Lambda
+        Nothing
+        ((ConsLit
+          Nothing
+          (Lit Nothing (Name "x"))
+          (Lit Nothing (Name "xs"))) : Nil)
+        (Atom Nothing (Name "x")))
+      (untypedListOne : Nil))
+    (App
+      (Just $ TypCon "Int")
+      (Lambda
+        (Just $ typConList "Int" `TypArr` TypCon "Int")
+        ((ConsLit
+          (Just $ typConList "Int")
+          (Lit (Just $ TypCon "Int") (Name "x"))
+          (Lit (Just $ typConList "Int") (Name "xs"))) : Nil)
+        (Atom (Just $ TypCon "Int") (Name "x")))
+      (listOne : Nil))
+
+  -- Check that let x = [1] in [x] :: [[Int]] and all the subexpressions are typed correctly.
+  testInferTT "Let"
+    (LetExpr
+      Nothing
+      (Tuple (Lit Nothing (Name "x")) untypedListOne : Nil)
+      (List Nothing (Atom Nothing (Name "x") : Nil)))
+    (LetExpr
+      (Just $ AD $ TList $ typConList "Int")
+      (Tuple (Lit (Just $ typConList "Int") (Name "x")) listOne : Nil)
+      (List
+        (Just $ AD $ TList $ typConList "Int")
+        (Atom (Just $ typConList "Int") (Name "x") : Nil)))
+
+-- lit "a"
+-- intLit "a"
+
+  -- The type (Char, Int, Int)
+  let charIntTupleType = typConNTuple ("Char" : "Int" : "Int" : Nil)
+  -- The type (Int, Int)
+  let intTupleType = typConNTuple ("Int" : "Int" : Nil)
+
+  -- Check that (\(a,b) -> ('1',b,a)) (1,2) :: (Char, Int, Int) and all the subexpressions are
+  -- typed correctly.
+  testInferTT "Tuple and NTupleLit"
+    (App
+      Nothing
+      (Lambda
+        Nothing
+        ((NTupleLit Nothing (
+            Lit Nothing (Name "a") :
+            Lit Nothing (Name "b") :
+            Nil)) :
+          Nil)
+        (NTuple Nothing (
+          Atom Nothing (Char "1") :
+          Atom Nothing (Name "b") :
+          Atom Nothing (Name "a") :
+          Nil)))
+      (NTuple Nothing (
+          Atom Nothing (AInt 1) :
+          Atom Nothing (AInt 2) :
+          Nil) :
+        Nil))
+    (App
+      (Just $ charIntTupleType)
+      (Lambda
+        (Just $ intTupleType `TypArr` charIntTupleType)
+        ((NTupleLit (Just intTupleType) (
+            Lit (Just intType) (Name "a") :
+            Lit (Just intType) (Name "b") :
+            Nil)) :
+          Nil)
+        (NTuple (Just charIntTupleType) (
+          Atom (Just charType) (Char "1") :
+          Atom (Just intType) (Name "b") :
+          Atom (Just intType) (Name "a") :
+          Nil)))
+      (NTuple (Just intTupleType) (
+          Atom (Just intType) (AInt 1) :
+          Atom (Just intType) (AInt 2) :
+          Nil) :
+        Nil))
 
   -- Check that x :: t_42 == x :: a.
   testNormalizeTT "Atom"
