@@ -757,8 +757,8 @@ typeProgramn defs tt = case runInfer <$>
   Left err -> Left err
   Right a -> a
 
-typeTreeProgramn :: List Definition -> TypeTree -> Either TypeError TypeTree
-typeTreeProgramn defs tt = case m of
+typeTreeProgram :: List Definition -> TypeTree -> Either TypeError TypeTree
+typeTreeProgram defs tt = case m of
   Left e -> Left e
   Right m' -> case evalState (runExceptT m') initUnique of
     Left err -> Left err
@@ -766,10 +766,14 @@ typeTreeProgramn defs tt = case m of
   where
     m = (inferAndCatchErrors <$> (buildTypeEnv defs) <*> pure tt)
 
-typeTreeProgramnEnv :: TypeEnv -> TypeTree -> Either TypeError TypeTree
-typeTreeProgramnEnv env tt = case evalState (runExceptT (inferAndCatchErrors env tt)) initUnique of
+-- | Given a type environment as well as a type tree call infer and return the (partially) typed
+-- | tree. The resulting tree is not completely typed whenever a type error occurred. In this case
+-- | the type error will appear as type of the top level tree node, while all other nodes remain
+-- | untyped.
+typeTreeProgramEnv :: TypeEnv -> TypeTree -> Either TypeError TypeTree
+typeTreeProgramEnv env tt = case evalState (runExceptT (inferAndCatchErrors env tt)) initUnique of
       Left err -> Left err
-      Right result@(Tuple subst tree) -> Right $ tree -- TODO: Add type normalization.
+      Right result@(Tuple subst tree) -> Right (closeOverTypeTree result)
 
 closeOverTypeTree :: (Tuple Subst TypeTree) -> TypeTree
 closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
@@ -777,10 +781,10 @@ closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
 emptyType :: Type
 emptyType = TypCon ""
 
--- typeTreeProgramnEnv env expr
+-- typeTreeProgramEnv env expr
 -- types subtree if typ correct
 buildPartiallyTypedTree :: TypeEnv -> TypeTree -> TypeTree
-buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
+buildPartiallyTypedTree env e = case typeTreeProgramEnv env e of
   Right tt -> tt
   Left err -> f err e
   where
@@ -815,7 +819,7 @@ buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
   g (NTupleLit _ bs) = NTupleLit (Just emptyType) (map g bs)
 
   typeOp :: Tuple Op MType -> Tuple Op MType
-  typeOp (Tuple op mtype) = case typeTreeProgramnEnv env (PrefixOp Nothing (Tuple op mtype)) of
+  typeOp (Tuple op mtype) = case typeTreeProgramEnv env (PrefixOp Nothing (Tuple op mtype)) of
     Left err -> Tuple op (Just $ TypeError err)
     Right (PrefixOp (Just typ) _) -> Tuple op (Just typ)
     Right _ -> Tuple op (Just $ TypeError $ UnknownError "TODO: stupid error")

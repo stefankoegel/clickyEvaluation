@@ -129,7 +129,7 @@ buildTypeEnvironment expr env = case TypeChecker.buildTypeEnv (Eval.envToDefs en
 -- | Type check an expression using a given typed environment.
 typeCheckExpression :: forall eff. TypeChecker.TypeEnv -> AST.TypeTree
                  -> Eff (dom :: DOM | eff) (Maybe AST.TypeTree)
-typeCheckExpression typedEnv expr = case TypeChecker.typeTreeProgramnEnv typedEnv expr of
+typeCheckExpression typedEnv expr = case TypeChecker.typeTreeProgramEnv typedEnv expr of
   Left error -> do
     showError "Expression" (AST.prettyPrintTypeError error)
     pure Nothing

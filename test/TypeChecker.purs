@@ -1,7 +1,7 @@
 module Test.TypeChecker where
 
 import AST
-import TypeChecker (Scheme(Forall), inferGroup, inferType, inferDef, emptyTyenv, runInfer, typeProgramn, eqScheme, normalizeTypeTree)
+import TypeChecker (Scheme(Forall), inferGroup, inferType, inferDef, emptyTyenv, runInfer, typeProgramn, eqScheme, normalizeTypeTree, typeTreeProgram)
 import Parser (parseExpr, parseDefs)
 import Test.Parser (parsedPrelude)
 
@@ -11,6 +11,7 @@ import Data.Array (toUnfoldable) as Array
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.List (List(..), (:), singleton)
+import Data.Tuple (Tuple(..))
 import Text.Parsing.Parser (ParseError, parseErrorMessage)
 
 -- | The result of the type inference procedure.
@@ -21,6 +22,10 @@ toList = Array.toUnfoldable
 
 tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton
+
+-- | Construct a list of type [typCon] given the name of the type constants.
+typConList :: String -> Type
+typConList name = AD $ TList (TypCon name)
 
 -- | Construct a list of type [a] given the type variable name a.
 typVarList :: TVar -> Type
@@ -58,6 +63,18 @@ testInferExprWithPrelude :: String -> String -> InferResult -> Writer (List Stri
 testInferExprWithPrelude name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
   Right expression -> compareSchemes name expected (typeProgramn parsedPrelude expression)
+
+-- | Test type inference on expression trees. Here not only the expected type of the whole
+-- | expression is checked, but also the type of every subexpression.
+testInferTT :: String -> TypeTree -> TypeTree -> Writer (List String) Unit
+testInferTT name untypedTree expectedTypedTree = case typeTreeProgram parsedPrelude untypedTree of
+  Left typeError -> tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+                            "Encountered type error: " <> prettyPrintTypeError typeError
+  Right typedTree -> if expectedTypedTree == typedTree
+    then pure unit
+    else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+                 "Expected type tree: " <> show expectedTypedTree <> "\n" <>
+                 "Actual type tree: " <> show typedTree <> "\n"
 
 -- | Test type tree normalization.
 testNormalizeTT :: String -> TypeTree -> TypeTree -> Writer (List String) Unit
@@ -133,6 +150,69 @@ runTests = do
     (Right (Forall ("t_39" : "t_48" : Nil) (TypArr (TypArr (TypVar "t_48") (TypArr (TypVar "t_39") (TypVar "t_48"))) (TypArr (TypVar "t_48") (TypArr (AD (TList (TypVar "t_39"))) (AD (TList (TypVar "t_48"))))))))
 
   testInferExprWithPrelude "Prelude with exp" "sum (map (^2) [1, 2, 3, 4])" (Right (Forall (Nil) (TypCon "Int")))
+
+  -- Check that \f x -> f x and all the subexpressions are typed correctly.
+  testInferTT "Apply function"
+    (Lambda Nothing
+      ((Lit Nothing (Name "f")) : (Lit Nothing (Name "x")) : Nil)
+      (App
+        Nothing
+        (Atom Nothing (Name "f"))
+        ((Atom Nothing (Name "x")) : Nil)))
+    (Lambda
+      (Just (typVarArrow "a" "b" `TypArr` typVarArrow "a" "b"))
+      (
+        (Lit (Just (typVarArrow "a" "b")) (Name "f")) :
+        (Lit (Just (TypVar  "a")) (Name "x")) :
+        Nil
+      )
+      (App
+        (Just (TypVar  "b"))
+        (Atom (Just (typVarArrow "a" "b")) (Name "f"))
+        ((Atom (Just (TypVar  "a")) (Name "x")) : Nil)))
+
+  -- Check that [1, 1 + 1, length [1]] and all the subexpressions are typed correctly.
+  testInferTT "List"
+    (List
+      Nothing
+      (
+        (Atom Nothing (AInt 1)) :
+        (Binary
+          Nothing
+          (Tuple Add Nothing)
+          (Atom Nothing (AInt 1))
+          (Atom Nothing (AInt 1))) :
+        (App
+          Nothing
+          (Atom
+            Nothing
+            (Name "length"))
+          ((List
+            Nothing
+            ((Atom Nothing (AInt 1)) : Nil)) : Nil)) :
+        Nil
+      )
+    )
+    (List
+      (Just (typConList "Int"))
+      (
+        (Atom (Just (TypCon "Int")) (AInt 1)) :
+        (Binary
+          (Just (TypCon "Int"))
+          (Tuple Add (Just (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
+          (Atom (Just (TypCon "Int")) (AInt 1))
+          (Atom (Just (TypCon "Int")) (AInt 1))) :
+        (App
+          (Just (TypCon "Int"))
+          (Atom
+            (Just (typConList "Int" `TypArr` TypCon "Int"))
+            (Name "length"))
+          ((List
+            (Just (typConList "Int"))
+            ((Atom (Just (TypCon "Int")) (AInt 1)) : Nil)) : Nil)) :
+        Nil
+      )
+    )
 
   -- Check that x :: t_42 == x :: a.
   testNormalizeTT "Atom"
