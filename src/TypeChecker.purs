@@ -51,12 +51,14 @@ instance subScheme :: Substitutable Scheme where
     ftv (Forall as t) = (ftv t) `Set.difference` Set.fromFoldable as
 
 instance subType :: Substitutable Type where
+   apply _ UnknownType = UnknownType
    apply _ (TypCon a) = TypCon a
    apply s t@(TypVar a) = fromMaybe t $ Map.lookup a s
    apply s (TypArr t1 t2) =  TypArr (apply s t1) (apply s t2)
    apply s (AD a) = AD (apply s a)
    apply _ (TypeError err) = TypeError err
 
+   ftv UnknownType = Set.empty
    ftv (TypCon  _)         = Set.empty
    ftv (TypVar a)       = Set.singleton a
    ftv (TypArr t1 t2) =  Set.union (ftv t1) (ftv t2)
@@ -165,7 +167,7 @@ extendMultiple = foldr (flip extend)
 nullSubst :: Subst
 nullSubst = Map.empty
 
-freshTVar :: Infer String
+freshTVar :: Infer TVar
 freshTVar = do
     Unique s <- get
     put (Unique { count: (s.count + 1) })
@@ -175,6 +177,8 @@ fresh :: Infer Type
 fresh = TypVar <$> freshTVar
 
 unify :: Type -> Type -> Infer Subst
+unify UnknownType t = pure nullSubst
+unify t UnknownType = pure nullSubst
 unify (TypArr l r) (TypArr l' r')  = do
     s1 <- unify l l'
     s2 <- unify (apply s1 r) (apply s1 r')
@@ -607,6 +611,9 @@ getLitName _ = ""
 
 -- | Given a list type return the type of the list elements.
 getListElementType :: Type -> Type
+-- Element type of [?] is ?.
+getListElementType UnknownType = UnknownType
+-- Element type of [T] is T.
 getListElementType (AD (TList t)) = t
 getListElementType _ = unsafeCrashWith "Bad argument: expected list type."
 
@@ -1022,62 +1029,3 @@ indexList n = [n `mod` 26]
 getNthName :: Int -> String
 getNthName = fromCharArray <<< toCharArray <<< Array.reverse <<< indexList
   where toCharArray = map (Char.fromCharCode <<< ((+) 97))
-
--- checkForError :: Path -> TypeTree -> Boolean
--- checkForError p' tt = case p' of
---   End -> isTypeError $ extractFromTree tt
---   Fst p -> case tt of
---       TBinary op e1 e2 _ -> checkForError p e1
---       TUnary op e      _ -> checkForError p e
---       TSectL e op      _ -> checkForError p e
---       TIfExpr ce te ee _ -> checkForError p ce
---       TArithmSeq ce te ee _ -> checkForError p ce
---       TLambda bs body  _ -> checkForError p body
---       TApp e es        _ -> checkForError p e
---       TListComp e _    _ -> checkForError p e
---       TLetExpr (Cons (Tuple _ e) _) _ _ -> checkForError p e
---       _               -> true
---   Snd p -> case tt of
---       TBinary op e1 e2 _ -> checkForError p e2
---       TSectR op e      _ -> checkForError p e
---       TIfExpr ce te ee _ -> checkForError p te
---       TArithmSeq ce (Just te) ee _ -> checkForError p te
---       _               -> true
---   Thrd p -> case tt of
---       TIfExpr ce te ee _ -> checkForError p ee
---       TArithmSeq ce te (Just ee) _ -> checkForError p ee
---       _ -> true
---   Nth n p -> case tt of
---       TListTree es  _ -> nth n es p
---       TNTuple es _ -> nth n es p
---       TApp e' es _ -> nth n es p
---       TListComp e' es _ -> nth' n es p
---       _        -> true
---   where
---     nth n es p = case (!!) es n of
---       Nothing -> true
---       Just e -> checkForError p e
-
---     nth' n es p = case (!!) es n of
---       Nothing -> true
---       Just e -> checkForError' p e
-
--- checkForError' :: Path -> TypeQual -> Boolean
--- checkForError' p' q = case p' of
---   (End)   -> isTypeError $ extractedType q
---   (Fst p) -> case q of
---       TLet bin expr t -> checkForError p expr
---       TGen bin expr t -> checkForError p expr
---       TGuard expr t   -> checkForError p expr
---   _ -> true
---   where
---     extractedType qu = case qu of
---       TLet _ _ t -> t
---       TGen _ _ t -> t
---       TGuard _ t -> t
-
--- TODO: to AST.purs
-isTypeError :: Type -> Boolean
-isTypeError t = case t of
-  (TypeError _) -> true
-  _ -> false

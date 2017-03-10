@@ -234,6 +234,7 @@ data Type
     | TypArr Type Type -- e.x Int -> Int
     | AD AD
     | TypeError TypeError
+    | UnknownType
 
 data AD
     = TList Type
@@ -314,6 +315,7 @@ instance showDefinition :: Show Definition where
   show (Def name bindings body) = "Def " <> show name <> " (" <> show bindings <> ") (" <> show body <> ")"
 
 instance showType :: Show Type where
+  show (UnknownType) = "(UnknownType)"
   show (TypVar var) = "(TypVar  " <> show var <> ")"
   show (TypCon con) = "(TypCon " <> show con <> ")"
   show (TypArr t1 t2) = "(TypArr "<> show t1 <>" " <> show t2 <> ")"
@@ -338,6 +340,7 @@ instance showTypeError :: Show TypeError where
 derive instance eqTypeError :: Eq TypeError
 
 prettyPrintType :: Type -> String
+prettyPrintType (UnknownType) = "?"
 prettyPrintType (TypVar tvar) = tvar
 prettyPrintType (TypCon str) = str
 prettyPrintType (TypeError err) = prettyPrintTypeError err
