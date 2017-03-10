@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Show, class Monad, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
+import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError, catchError)
 import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Apply (lift2)
@@ -957,7 +957,7 @@ helptxToABCQual q = case q of
     e' <- helptxToABC e
     pure $ Guard t' e'
 
-helpTypeToABC :: Type -> State {count :: Int, env :: (Map String String)} Type
+helpTypeToABC :: Type -> State {count :: Int, env :: Map String String} Type
 helpTypeToABC t = go t
   where
     go (TypVar var) = do
@@ -977,11 +977,10 @@ helpTypeToABC t = go t
     go (AD a) = helpADTypeToABC a >>= \a -> pure $ AD a
     go a = pure a
 
-helpMTypeToABC :: Maybe Type  -> State {count :: Int, env :: (Map String String)} (Maybe Type)
-helpMTypeToABC Nothing = unsafeCrashWith "Bad argument: The given type is `Nothing`."
-helpMTypeToABC mt = do
-  t <- helpTypeToABC (unsafePartial $ fromJust $ mt)
-  pure (Just t)
+helpMTypeToABC :: Maybe Type -> State {count :: Int, env :: Map String String} (Maybe Type)
+helpMTypeToABC mt = case mt of
+    Nothing -> pure Nothing
+    Just t -> helpTypeToABC t >>= pure <<< Just
 
 helpADTypeToABC :: AD -> State {count :: Int, env :: (Map String String)} AD
 helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> pure $ TList t
