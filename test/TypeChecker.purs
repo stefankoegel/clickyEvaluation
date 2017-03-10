@@ -1,7 +1,7 @@
 module Test.TypeChecker where
 
 import AST
-import TypeChecker (Scheme(Forall), inferGroup, inferType, inferDef, emptyTyenv, runInfer, typeProgramn, eqScheme)
+import TypeChecker (Scheme(Forall), inferGroup, inferType, inferDef, emptyTyenv, runInfer, typeProgramn, eqScheme, normalizeTypeTree)
 import Parser (parseExpr, parseDefs)
 import Test.Parser (parsedPrelude)
 
@@ -9,6 +9,7 @@ import Prelude (Unit, bind, pure, show, unit, ($), (==), (<>), (<<<))
 import Control.Monad.Writer (Writer, tell)
 import Data.Array (toUnfoldable) as Array
 import Data.Either (Either(..))
+import Data.Maybe (Maybe(..))
 import Data.List (List(..), (:), singleton)
 import Text.Parsing.Parser (ParseError, parseErrorMessage)
 
@@ -20,6 +21,14 @@ toList = Array.toUnfoldable
 
 tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton
+
+-- | Construct a list of type [a] given the type variable name a.
+typVarList :: TVar -> Type
+typVarList tv = AD $ TList (TypVar tv)
+
+-- | Generate an arrow type from two given type variable names.
+typVarArrow :: TVar -> TVar -> Type
+typVarArrow tv1 tv2 = TypVar tv1 `TypArr` TypVar tv2
 
 -- | Report a parse error.
 reportParseError :: String -> ParseError -> Writer (List String) Unit
@@ -49,6 +58,14 @@ testInferExprWithPrelude :: String -> String -> InferResult -> Writer (List Stri
 testInferExprWithPrelude name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
   Right expression -> compareSchemes name expected (typeProgramn parsedPrelude expression)
+
+-- | Test type tree normalization.
+testNormalizeTT :: String -> TypeTree -> TypeTree -> Writer (List String) Unit
+testNormalizeTT name tt normalizedTT = if (normalizeTypeTree tt) == normalizedTT
+  then pure unit
+  else tell' $ "Type tree normalization failed in test case `" <> name <> "`:\n" <>
+               "Expected type tree: " <> show normalizedTT <> "\n" <>
+               "Actual type tree: " <> show tt <> "\n"
 
 compareSchemes :: String -> InferResult -> InferResult -> Writer (List String) Unit
 compareSchemes name expected actual = if eqInferResult expected actual
@@ -116,3 +133,50 @@ runTests = do
     (Right (Forall ("t_39" : "t_48" : Nil) (TypArr (TypArr (TypVar "t_48") (TypArr (TypVar "t_39") (TypVar "t_48"))) (TypArr (TypVar "t_48") (TypArr (AD (TList (TypVar "t_39"))) (AD (TList (TypVar "t_48"))))))))
 
   testInferExprWithPrelude "Prelude with exp" "sum (map (^2) [1, 2, 3, 4])" (Right (Forall (Nil) (TypCon "Int")))
+
+  -- Check that x :: t_42 == x :: a.
+  testNormalizeTT "Atom"
+    (Atom (Just $ TypVar "t_42") (Name "x"))
+    (Atom (Just $ TypVar "a") (Name "x"))
+
+  -- Check that an untyped atom stays untyped.
+  testNormalizeTT "Untyped atom"
+    (Atom Nothing (Name "x"))
+    (Atom Nothing (Name "x"))
+
+  -- Check that (\x -> x) :: t_2 -> t_2 == (\x -> x) :: a -> a.
+  testNormalizeTT "Identity function"
+    (Lambda
+      (Just $ typVarArrow "t_2" "t_2")
+      ((Lit (Just $ TypVar "t_2") (Name "x")) : Nil)
+      (Atom (Just $ TypVar "t_2") (Name "x")))
+    (Lambda
+      (Just $ typVarArrow "a" "a")
+      ((Lit (Just $ TypVar "a") (Name "x")) : Nil)
+      (Atom (Just $ TypVar "a") (Name "x")))
+
+  -- Check that (\f x -> f x) :: (t_4 -> t_45) -> t_4 -> t_45
+  --         == (\f x -> f x) :: (a -> b) -> a -> b
+  testNormalizeTT "Apply function"
+    (Lambda
+      (Just (typVarArrow "t_4" "t_45" `TypArr` typVarArrow "t_4" "t_45"))
+      (
+        (Lit (Just (typVarArrow "t_4" "t_45")) (Name "f")) :
+        (Lit (Just (TypVar  "t_4")) (Name "x")) :
+        Nil
+      )
+      (App
+        (Just (TypVar  "t_45"))
+        (Atom (Just (typVarArrow "t_4" "t_45")) (Name "f"))
+        ((Atom (Just (TypVar  "t_4")) (Name "x")) : Nil)))
+    (Lambda
+      (Just (typVarArrow "a" "b" `TypArr` typVarArrow "a" "b"))
+      (
+        (Lit (Just (typVarArrow "a" "b")) (Name "f")) :
+        (Lit (Just (TypVar  "a")) (Name "x")) :
+        Nil
+      )
+      (App
+        (Just (TypVar  "b"))
+        (Atom (Just (typVarArrow "a" "b")) (Name "f"))
+        ((Atom (Just (TypVar  "a")) (Name "x")) : Nil)))
