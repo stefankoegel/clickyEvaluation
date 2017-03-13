@@ -13,7 +13,7 @@ import Data.Map (Map, insert, lookup, empty)
 import Data.Tuple (Tuple(Tuple), snd, fst)
 import Data.Traversable (traverse)
 import Data.Set as Set
-import Data.Foldable (foldr, foldMap, elem)
+import Data.Foldable (intercalate, foldr, foldMap, elem)
 import Data.Maybe (Maybe(..), fromMaybe, fromJust, maybe)
 import Partial.Unsafe (unsafePartial, unsafeCrashWith)
 import Data.String (fromCharArray)
@@ -26,11 +26,32 @@ data Scheme = Forall (List TVar) Type
 instance showScheme :: Show Scheme where
   show (Forall a b) = "Forall (" <> show a <> ") " <> show b
 
+-- | Pretty print a type scheme.
+ppScheme :: Scheme -> String
+ppScheme (Forall Nil t) = prettyPrintType t
+ppScheme (Forall tvars t) = "forall "
+                         <> intercalate " " tvars
+                         <> ". "
+                         <> prettyPrintType t
+
 type TVarMapping = Tuple TVar Scheme
 
 type TVarMappings = List TVarMapping
 
 data TypeEnv = TypeEnv (Map.Map TVar Scheme)
+
+-- | Pretty print a type environment.
+-- | Example output:
+-- | ```
+-- | Type environment:
+-- |    not : Bool -> Bool,
+-- |    id : forall t_2. t_2 -> t_2
+-- | ```
+ppTypeEnv :: TypeEnv -> String
+ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
+    (map ppTVAndScheme >>> intercalate ",\n")
+    (Map.toList env)
+    where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " : " <> ppScheme scheme
 
 instance showTypeEnv :: Show TypeEnv where
   show (TypeEnv a) = show a
@@ -40,6 +61,19 @@ data Unique = Unique { count :: Int }
 type Infer a = ExceptT TypeError (State Unique) a
 
 type Subst = Map.Map TVar Type
+
+-- | Pretty print a substitution.
+-- | Example output:
+-- | ```
+-- | Substitution:
+-- |    t0 ~ Int,
+-- |    t1 ~ Int -> Int
+-- | ```
+ppSubst :: Subst -> String
+ppSubst subst = "Substitutions:\n" <>
+  (map ppTVAndType >>> intercalate ",\n")
+  (Map.toList subst)
+  where ppTVAndType (Tuple tv t) = "\t" <> tv <> " ~ " <> prettyPrintType t
 
 class Substitutable a where
   apply :: Subst -> a -> a
@@ -232,10 +266,10 @@ runInfer m = case evalState (runExceptT m) initUnique of
   Right res -> Right $ closeOverType res
 
 closeOverType :: (Tuple Subst Type) -> Scheme
-closeOverType (Tuple sub ty) = generalize emptyTyenv (apply sub ty)
+closeOverType (Tuple sub ty) = generalize emptyTypeEnv (apply sub ty)
 
-emptyTyenv :: TypeEnv
-emptyTyenv = TypeEnv Map.empty
+emptyTypeEnv :: TypeEnv
+emptyTypeEnv = TypeEnv Map.empty
 
 overlappingBindings :: List TypedBinding -> List String
 overlappingBindings Nil = Nil
@@ -535,7 +569,7 @@ inferQual env (Guard _ expr) = do
     _             -> throwError $ normalizeTypeError $ UnificationFail extractedType (TypCon "Bool")
 
 inferQuals :: TypeEnv -> List TypeQual -> Infer (Tuple Subst (Tuple (List TypeQual) TypeEnv))
-inferQuals env Nil = pure $ Tuple nullSubst $ Tuple Nil emptyTyenv
+inferQuals env Nil = pure $ Tuple nullSubst $ Tuple Nil emptyTypeEnv
 inferQuals env (Cons x rest) = do
   Tuple s  (Tuple t  env1) <- inferQual env x
   Tuple sr (Tuple tr env2) <- inferQuals (apply s env1) rest
@@ -708,7 +742,7 @@ getTypEnv b env = case evalState (runExceptT (extractBinding b)) initUnique of
 
 getTypEnvFromList :: List TypedBinding -> TypeEnv -> Maybe TypeEnv
 getTypEnvFromList bs env = do
-                  mTypList <- traverse (flip getTypEnv emptyTyenv) bs
+                  mTypList <- traverse (flip getTypEnv emptyTypeEnv) bs
                   pure $ foldr (\a b -> unionTypeEnv a b) env mTypList
 
 unionTypeEnv :: TypeEnv -> TypeEnv -> TypeEnv
@@ -724,8 +758,8 @@ inferGroup env (Cons def1 defs) = do
   pure $ Tuple s3 (apply s3 t1)
 
 buildTypeEnv :: List Definition -> Either TypeError TypeEnv
-buildTypeEnv Nil = Right emptyTyenv
-buildTypeEnv defs = buildTypeEnvFromGroups emptyTyenv groupMap keys
+buildTypeEnv Nil = Right emptyTypeEnv
+buildTypeEnv defs = buildTypeEnvFromGroups emptyTypeEnv groupMap keys
   where
     groupMap = buildGroups defs
     keys = Map.keys groupMap
