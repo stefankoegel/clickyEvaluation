@@ -149,15 +149,24 @@ lookupEnvNew tvar = do
 runInferNew :: TypeEnv -> InferNew TypeTree -> Either TypeError (Tuple TypeTree (List Constraint))
 runInferNew env m = Ex.runExcept $ evalRWST m env initUnique
 
+-- | Return the given expression decorated with a fresh type variable and add a type constraint
+-- | using the given type.
+returnWithConstraint :: TypeTree -> Type -> InferNew TypeTree
+returnWithConstraint expr t = do
+    tv <- freshNew
+    tv ~ t
+    pure $ insertIntoTree (Just tv) expr
+
+-- | Traverse the given type tree and collect type constraints.
 inferNew :: TypeTree -> InferNew TypeTree
 inferNew ex = case ex of
-  Atom _ atom@(Bool _) -> pure $ Atom (Just boolType) atom
-  Atom _ atom@(Char _) -> pure $ Atom (Just charType) atom
-  Atom _ atom@(AInt _) -> pure $ Atom (Just intType) atom
+  Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
+  Atom _ atom@(Char _) -> returnWithConstraint ex charType
+  Atom _ atom@(AInt _) -> returnWithConstraint ex intType
   Atom _ atom@(Name name) -> case name of
     -- Built-in functions.
-    "mod" -> pure $ Atom (Just intToIntToIntType) atom
-    "div" -> pure $ Atom (Just intToIntToIntType) atom
+    "mod" -> returnWithConstraint ex intToIntToIntType
+    "div" -> returnWithConstraint ex intToIntToIntType
     -- Try to find the variable name in the type environment.
     _     -> do t <- lookupEnvNew name
                 pure $ Atom (Just t) atom
