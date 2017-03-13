@@ -1,10 +1,12 @@
 module AST where
 
 import Prelude
+import Control.Monad.State (State, evalState, get, put)
+import Data.Bifunctor (rmap)
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple(..))
-import Data.Bifunctor (rmap)
+import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..), snd)
 
 -- | Operators
 -- |
@@ -94,12 +96,6 @@ data Tree a b o m =
   | Lambda    m (List b) (Tree a b o m)
   | App       m (Tree a b o m) (List (Tree a b o m))
   | ListComp  m (Tree a b o m) (List (QualTree b (Tree a b o m) m))
-
--- type Expr = Tree Atom (Binding Unit) Op Unit
-
--- type MType = Maybe Type
-
--- type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) MType
 
 toOpTuple :: Op -> Tuple Op MType
 toOpTuple op = Tuple op Nothing
@@ -221,6 +217,104 @@ type Expr = Tree Atom (Binding Unit) Op Unit
 type MType = Maybe Type
 
 type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) MType
+
+type Index = Int
+type MIType = Tuple MType Index
+-- TODO: Change to
+-- type IndexedTypeTree = Tree Atom (Binding MIType) (Tuple Op MIType) MIType
+type IndexedTypeTree = Tree Atom (Binding MType) (Tuple Op MType) MIType
+
+makeIndexedTree :: TypeTree -> IndexedTypeTree
+makeIndexedTree expr = evalState (makeIndexedTree' (makeIndexed expr)) 0
+  where
+    -- Change the type field to a index field.
+    makeIndexed = map (\mt -> Tuple mt 0)
+    -- Traverse the tree and assign indices in ascending order.
+    makeIndexedTree' :: IndexedTypeTree -> State Index IndexedTypeTree
+    makeIndexedTree' expr = flip traverseTree expr \(Tuple mt _) -> do
+      idx <- get
+      let new = Tuple mt idx
+      put (idx + 1)
+      pure new
+
+insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
+insertIntoIndexedTree t expr = insertIntoTree (Tuple t index) expr
+  where index = snd $ extractFromTree expr
+
+getIndex :: IndexedTypeTree -> Index
+getIndex = extractFromTree >>> snd
+
+traverseTree :: forall b c d m. Monad m => (d -> m d)
+                                        -> Tree Atom b c d
+                                        -> m (Tree Atom b c d)
+traverseTree f expr@(Atom t atom) = do
+  t' <- f t
+  pure $ Atom t' atom
+traverseTree f expr@(List t es) = do
+  t' <- f t
+  es' <- traverse (traverseTree f) es
+  pure $ List t' es'
+traverseTree f expr@(NTuple t es) = do
+  t' <- f t
+  es' <- traverse (traverseTree f) es
+  pure $ NTuple t' es'
+traverseTree f expr@(Binary t o e1 e2) = do
+  t' <- f t
+  -- TODO: Traverse over o.
+  e1' <- traverseTree f e1
+  e2' <- traverseTree f e2
+  pure $ Binary t' o e1' e2'
+traverseTree f expr@(Unary t o e) = do
+  t' <- f t
+  -- TODO: Traverse over o.
+  e' <- traverseTree f e
+  pure $ Unary t' o e'
+traverseTree f expr@(SectL t e o) = do
+  t' <- f t
+  -- TODO: Traverse over o.
+  e' <- traverseTree f e
+  pure $ SectL t' e' o
+traverseTree f expr@(SectR t o e) = do
+  t' <- f t
+  -- TODO: Traverse over o.
+  e' <- traverseTree f e
+  pure $ SectR t' o e'
+traverseTree f expr@(PrefixOp t o) = do
+  t' <- f t
+  -- TODO: Traverse over o.
+  pure $ PrefixOp t' o
+traverseTree f expr@(IfExpr t e1 e2 e3) = do
+  t' <- f t
+  e1' <- traverseTree f e1
+  e2' <- traverseTree f e2
+  e3' <- traverseTree f e3
+  pure $ IfExpr t' e1' e2' e3'
+traverseTree f expr@(ArithmSeq t e me1 me2) = do
+  t' <- f t
+  e' <- traverseTree f e
+  me1' <- traverse (traverseTree f) me1
+  me2' <- traverse (traverseTree f) me2
+  pure $ ArithmSeq t' e' me1' me2'
+traverseTree f expr@(LetExpr t defs e) = do
+  t' <- f t
+  -- TODO: Traverse over defs.
+  e' <- traverseTree f e
+  pure $ LetExpr t' defs e'
+traverseTree f expr@(Lambda t bs e) = do
+  t' <- f t
+  -- TODO: Traverse over bs.
+  e' <- traverseTree f e
+  pure $ Lambda t' bs e'
+traverseTree f expr@(App t e es) = do
+  t' <- f t
+  e' <- traverseTree f e
+  es' <- traverse (traverseTree f) es
+  pure $ App t' e' es'
+traverseTree f expr@(ListComp t e quals) = do
+  t' <- f t
+  e' <- traverseTree f e
+  -- TODO: Traverse over quals.
+  pure $ ListComp t' e' quals
 
 type ExprQualTree = QualTree (Binding Unit) Expr Unit
 
