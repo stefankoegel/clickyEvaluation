@@ -1,8 +1,11 @@
 module TypeChecker where
 
-import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
+import Prelude (class Show, Unit, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError, catchError)
+import Control.Monad.Except as Ex
 import Control.Monad.State (State, evalState, runState, put, get)
+import Control.Monad.RWS.Trans (RWST)
+import Control.Monad.RWS (ask, tell, evalRWST)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
 import Data.Either (Either(Left, Right))
@@ -40,18 +43,22 @@ type TVarMappings = List TVarMapping
 
 data TypeEnv = TypeEnv (Map.Map TVar Scheme)
 
+-- | Create an empty type environment.
+emptyTypeEnv :: TypeEnv
+emptyTypeEnv = TypeEnv Map.empty
+
 -- | Pretty print a type environment.
 -- | Example output:
 -- | ```
 -- | Type environment:
--- |    not : Bool -> Bool,
--- |    id : forall t_2. t_2 -> t_2
+-- |   not : Bool -> Bool,
+-- |   id : forall t_2. t_2 -> t_2
 -- | ```
 ppTypeEnv :: TypeEnv -> String
 ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
-    (map ppTVAndScheme >>> intercalate ",\n")
-    (Map.toList env)
-    where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " : " <> ppScheme scheme
+  (map ppTVAndScheme >>> intercalate ",\n")
+  (Map.toList env)
+  where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " : " <> ppScheme scheme
 
 instance showTypeEnv :: Show TypeEnv where
   show (TypeEnv a) = show a
@@ -60,14 +67,112 @@ data Unique = Unique { count :: Int }
 
 type Infer a = ExceptT TypeError (State Unique) a
 
+---------------------------------------------------------------------------------------------------
+-- | Refactoring into 2-phase type process                                                       --
+---------------------------------------------------------------------------------------------------
+
+-- | The type `Bool`.
+boolType :: Type
+boolType = TypCon "Bool"
+
+-- | The type `Char`.
+charType :: Type
+charType = TypCon "Char"
+
+-- | The type `Int`.
+intType :: Type
+intType = TypCon "Int"
+
+-- | The type `Int -> Int`.
+intToIntType :: Type
+intToIntType = intType `TypArr` intType
+
+-- | The type `Int -> Int -> Int`.
+intToIntToIntType :: Type
+intToIntToIntType = intType `TypArr` intToIntType
+
+-- | Type constraints.
+type Constraint = Tuple Type Type
+type Constraints = List Constraint
+
+ppConstraints :: Constraints -> String
+ppConstraints constraints = "Constraints:\n" <> (map ppConstraint >>> intercalate ",\n") constraints
+  where ppConstraint (Tuple t1 t2) = "\t"
+                                  <> prettyPrintType t1
+                                  <> " is "
+                                  <> prettyPrintType t2
+
+type InferNew a = (RWST
+  TypeEnv               -- ^ Read from the type environment.
+  Constraints           -- ^ Write a list of constraints.
+  Unique                -- ^ The infer state.
+  (Ex.Except TypeError) -- ^ Catch type errors.
+  a)
+
+-- | Collect a new type constraint.
+unifyNew :: Type -> Type -> InferNew Unit
+unifyNew t1 t2 = tell (singleton $ Tuple t1 t2)
+
+infixl 9 unifyNew as ~
+
+-- | Choose a fresh type variable name.
+freshTVarNew :: InferNew TVar
+freshTVarNew = do
+    Unique s <- get
+    put (Unique { count: (s.count + 1) })
+    pure $ "t_" <> show s.count
+
+-- | Choose a fresh type variable.
+freshNew :: InferNew Type
+freshNew = TypVar <$> freshTVarNew
+
+-- | Create a monotype from the given type scheme.
+instantiateNew :: Scheme -> InferNew Type
+instantiateNew (Forall as t) = do
+  as' <- traverse (const freshNew) as
+  let s = Map.fromFoldable $ zip as as'
+  pure $ apply s t
+
+-- | Lookup a type in the type environment.
+lookupEnvNew :: TVar -> InferNew Type
+lookupEnvNew tvar = do
+  TypeEnv env <- ask
+  case Map.lookup tvar env of
+    Nothing -> Ex.throwError $ UnboundVariable tvar
+    Just scheme  -> instantiateNew scheme >>= pure
+
+-- | Run the type inference and catch type errors. Note that the only possible errors are:
+-- |   * `UnboundVariable`
+-- |   * `NoInstanceOfEnum`
+-- |   * `UnknownError`
+-- | All other errors can only be encountered during the constraint solving phase.
+runInferNew :: TypeEnv -> InferNew TypeTree -> Either TypeError (Tuple TypeTree (List Constraint))
+runInferNew env m = Ex.runExcept $ evalRWST m env initUnique
+
+inferNew :: TypeTree -> InferNew TypeTree
+inferNew ex = case ex of
+  Atom _ atom@(Bool _) -> pure $ Atom (Just boolType) atom
+  Atom _ atom@(Char _) -> pure $ Atom (Just charType) atom
+  Atom _ atom@(AInt _) -> pure $ Atom (Just intType) atom
+  Atom _ atom@(Name name) -> case name of
+    -- Built-in functions.
+    "mod" -> pure $ Atom (Just intToIntToIntType) atom
+    "div" -> pure $ Atom (Just intToIntToIntType) atom
+    -- Try to find the variable name in the type environment.
+    _     -> do t <- lookupEnvNew name
+                pure $ Atom (Just t) atom
+  _ -> pure $ Atom (Just $ TypeError $ UnknownError "not yet implemented") (AInt 42)
+
+---------------------------------------------------------------------------------------------------
+
 type Subst = Map.Map TVar Type
 
 -- | Pretty print a substitution.
 -- | Example output:
 -- | ```
 -- | Substitution:
--- |    t0 ~ Int,
--- |    t1 ~ Int -> Int
+-- |   t0 ~ Int,
+-- |   t1 ~ Int -> Int
 -- | ```
 ppSubst :: Subst -> String
 ppSubst subst = "Substitutions:\n" <>
@@ -267,9 +372,6 @@ runInfer m = case evalState (runExceptT m) initUnique of
 
 closeOverType :: (Tuple Subst Type) -> Scheme
 closeOverType (Tuple sub ty) = generalize emptyTypeEnv (apply sub ty)
-
-emptyTypeEnv :: TypeEnv
-emptyTypeEnv = TypeEnv Map.empty
 
 overlappingBindings :: List TypedBinding -> List String
 overlappingBindings Nil = Nil
