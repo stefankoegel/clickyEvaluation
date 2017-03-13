@@ -5,7 +5,8 @@ import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError, catchError)
 import Control.Monad.Except as Ex
 import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Monad.RWS.Trans (RWST)
-import Control.Monad.RWS (ask, tell, evalRWST)
+import Control.Monad.RWS (ask, evalRWST)
+import Data.Bifunctor (rmap)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
 import Data.Either (Either(Left, Right))
@@ -92,28 +93,24 @@ intToIntToIntType :: Type
 intToIntToIntType = intType `TypArr` intToIntType
 
 -- | Type constraints.
-type Constraint = Tuple Type Type
+data Constraint = Constraint Type Type Index
 type Constraints = List Constraint
 
 ppConstraints :: Constraints -> String
 ppConstraints constraints = "Constraints:\n" <> (map ppConstraint >>> intercalate ",\n") constraints
-  where ppConstraint (Tuple t1 t2) = "\t"
+  where ppConstraint (Constraint t1 t2 idx) = "\t"
                                   <> prettyPrintType t1
                                   <> " is "
                                   <> prettyPrintType t2
+                                  <> " for node "
+                                  <> show idx
 
 type InferNew a = (RWST
   TypeEnv               -- ^ Read from the type environment.
-  Constraints           -- ^ Write a list of constraints.
+  Unit
   Unique                -- ^ The infer state.
   (Ex.Except TypeError) -- ^ Catch type errors.
   a)
-
--- | Collect a new type constraint.
-unifyNew :: Type -> Type -> InferNew Unit
-unifyNew t1 t2 = tell (singleton $ Tuple t1 t2)
-
-infixl 9 unifyNew as ~
 
 -- | Choose a fresh type variable name.
 freshTVarNew :: InferNew TVar
@@ -146,19 +143,17 @@ lookupEnvNew tvar = do
 -- |   * `NoInstanceOfEnum`
 -- |   * `UnknownError`
 -- | All other errors can only be encountered during the constraint solving phase.
-runInferNew :: TypeEnv -> InferNew TypeTree -> Either TypeError (Tuple TypeTree (List Constraint))
-runInferNew env m = Ex.runExcept $ evalRWST m env initUnique
+runInferNew :: TypeEnv -> InferNew Constraints -> Either TypeError Constraints
+runInferNew env m = rmap fst (Ex.runExcept $ evalRWST m env initUnique)
 
--- | Return the given expression decorated with a fresh type variable and add a type constraint
--- | using the given type.
-returnWithConstraint :: TypeTree -> Type -> InferNew TypeTree
+-- | Given an indexed expression, add a type constraint using the given type and expression index.
+returnWithConstraint :: IndexedTypeTree -> Type -> InferNew Constraints
 returnWithConstraint expr t = do
     tv <- freshNew
-    tv ~ t
-    pure $ insertIntoTree (Just tv) expr
+    pure (singleton $ Constraint tv t (getIndex expr))
 
 -- | Traverse the given type tree and collect type constraints.
-inferNew :: TypeTree -> InferNew TypeTree
+inferNew :: IndexedTypeTree -> InferNew Constraints
 inferNew ex = case ex of
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
@@ -169,8 +164,10 @@ inferNew ex = case ex of
     "div" -> returnWithConstraint ex intToIntToIntType
     -- Try to find the variable name in the type environment.
     _     -> do t <- lookupEnvNew name
-                pure $ Atom (Just t) atom
-  _ -> pure $ Atom (Just $ TypeError $ UnknownError "not yet implemented") (AInt 42)
+                pure Nil
+  _ -> do
+    Ex.throwError $ UnknownError "Not yet implemented."
+    pure Nil
 
 ---------------------------------------------------------------------------------------------------
 
