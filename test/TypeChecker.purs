@@ -1,7 +1,7 @@
 module Test.TypeChecker where
 
 import AST
-import TypeChecker (Scheme(Forall), inferGroup, inferType, inferDef, emptyTyenv, runInfer, typeProgramn, eqScheme, normalizeTypeTree, typeTreeProgram)
+import TypeChecker (Scheme(Forall), inferGroup, inferType, inferDef, emptyTypeEnv, runInfer, typeProgramn, eqScheme, normalizeTypeTree, typeTreeProgram)
 import Parser (parseExpr, parseDefs)
 import Test.Parser (parsedPrelude)
 
@@ -49,19 +49,19 @@ reportParseError testName parseError = tell' $ "Parse error for test case "
 testInferExpr :: String -> String -> InferResult -> Writer (List String) Unit
 testInferExpr name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
-  Right expression -> compareSchemes name expected $ runInfer $ inferType emptyTyenv expression
+  Right expression -> compareSchemes name expected $ runInfer $ inferType emptyTypeEnv expression
 
 testInferDef :: String -> String -> InferResult -> Writer (List String) Unit
 testInferDef name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
-  Right (definition:_) -> compareSchemes name expected $ runInfer $ inferDef emptyTyenv definition
+  Right (definition:_) -> compareSchemes name expected $ runInfer $ inferDef emptyTypeEnv definition
   _ -> tell' $ "Parse error for test case " <> name <> ": Expected only a single definition case"
     <> "\nNote that this is not a failing test but rather an error in the test definition."
 
 testInferDefs :: String -> String -> InferResult -> Writer (List String) Unit
 testInferDefs name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
-  Right definitions -> compareSchemes name expected $ runInfer $ inferGroup emptyTyenv definitions
+  Right definitions -> compareSchemes name expected $ runInfer $ inferGroup emptyTypeEnv definitions
 
 testInferExprWithPrelude :: String -> String -> InferResult -> Writer (List String) Unit
 testInferExprWithPrelude name expressionString expected = case parseExpr expressionString of
