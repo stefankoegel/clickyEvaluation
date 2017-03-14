@@ -95,21 +95,30 @@ intToIntToIntType = intType `TypArr` intToIntType
 
 -- | Type constraints.
 data Constraint = Constraint Type Type Index
+                | ConstraintError Type Index
 type Constraints = List Constraint
 
 -- | Constraints are substitutable.
 instance substitutableConstraint :: Substitutable Constraint where
     apply s (Constraint t1 t2 idx) = Constraint (apply s t1) (apply s t2) idx
+    apply s (ConstraintError typeError idx) = ConstraintError (apply s typeError) idx
     ftv (Constraint t1 t2 idx) = ftv t1 `Set.union` ftv t2
+    ftv (ConstraintError typeError idx) = Set.empty
 
+-- | Pretty print the given constraints.
 ppConstraints :: Constraints -> String
 ppConstraints constraints = "Constraints:\n" <> (map ppConstraint >>> intercalate ",\n") constraints
-  where ppConstraint (Constraint t1 t2 idx) = "\t"
-                                  <> prettyPrintType t1
-                                  <> " is "
-                                  <> prettyPrintType t2
-                                  <> " for node "
-                                  <> show idx
+  where
+  ppConstraint (Constraint t1 t2 idx) = "\t"
+    <> prettyPrintType t1
+    <> " is "
+    <> prettyPrintType t2
+    <> " for node "
+    <> show idx
+  ppConstraint (ConstraintError typeError idx) = "\t"
+    <> prettyPrintType typeError
+    <> " for node "
+    <> show idx
 
 type InferNew a = (RWST
   TypeEnv               -- ^ Read from the type environment.
@@ -137,12 +146,12 @@ instantiateNew (Forall as t) = do
   pure $ apply s t
 
 -- | Lookup a type in the type environment.
-lookupEnvNew :: TVar -> InferNew Type
+lookupEnvNew :: TVar -> InferNew MType
 lookupEnvNew tvar = do
   TypeEnv env <- ask
   case Map.lookup tvar env of
-    Nothing -> Ex.throwError $ UnboundVariable tvar
-    Just scheme  -> instantiateNew scheme >>= pure
+    Nothing -> pure Nothing
+    Just scheme  -> instantiateNew scheme >>= (pure <<< Just)
 
 -- | Run the type inference and catch type errors. Note that the only possible errors are:
 -- |   * `UnboundVariable`
@@ -157,6 +166,11 @@ returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constrai
 returnWithConstraint expr t = do
     tv <- freshNew
     pure $ Tuple tv (singleton $ Constraint tv t (getIndex expr))
+
+returnWithTypeError :: IndexedTypeTree -> TypeError -> InferNew (Tuple Type Constraints)
+returnWithTypeError expr typeError = do
+  let error = ConstraintError (TypeError typeError)
+  pure $ Tuple UnknownType (singleton $ error (getIndex expr))
 
 -- | Setup a new type constraint for a given expression node.
 setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
@@ -173,8 +187,11 @@ inferNew ex = case ex of
     "mod" -> returnWithConstraint ex intToIntToIntType
     "div" -> returnWithConstraint ex intToIntToIntType
     -- Try to find the variable name in the type environment.
-    _     -> do t <- lookupEnvNew name
-                pure $ Tuple t Nil
+    _     -> do
+      mt <- lookupEnvNew name
+      case mt of
+        Nothing -> returnWithTypeError ex (UnboundVariable name)
+        Just t -> pure $ Tuple t Nil
   IfExpr _ cond l r -> do
     Tuple t1 c1 <- inferNew cond
     Tuple t2 c2 <- inferNew l
@@ -211,6 +228,8 @@ unifies (TypArr l1 r1) (TypArr l2 r2) = do
 unifies (TypVar tv) t = tv `bindTVar` t
 unifies t (TypVar tv) = tv `bindTVar` t
 unifies (TypCon c1) (TypCon c2) | c1 == c2 = pure nullSubst
+unifies UnknownType t = pure nullSubst
+unifies t UnknownType = pure nullSubst
 unifies t1 t2 = Ex.throwError $ normalizeTypeError $ UnificationFail t1 t2
 
 -- | Try to unify the given AD types and return the resulting substitution or the occurring type
@@ -228,7 +247,8 @@ unifiesAD t1 t2 = throwError $ normalizeTypeError $ UnificationFail (AD t1) (AD 
 solver :: Unifier -> Ex.Except TypeError Subst
 solver (Unifier subst constraints) = case constraints of
   Nil -> pure subst
-  ((Constraint t1 t2 idx) : rest) -> do
+  (ConstraintError typeError idx : rest) -> solver (Unifier subst rest)
+  (Constraint t1 t2 idx : rest) -> do
     subst1 <- unifies t1 t2
     solver (Unifier (subst1 `compose` subst) (apply subst1 rest))
 
@@ -243,7 +263,9 @@ assignTypes (Unifier subst constraints) expr = flip map expr \(Tuple _ idx) ->
       Just tv -> Tuple (Just $ apply subst tv) idx
   where
   unzippedConstraints :: Tuple (List Type) (List Index)
-  unzippedConstraints = unzip (map (\(Constraint t1 t2 idx) -> Tuple t1 idx) constraints)
+  unzippedConstraints = unzip (map mapFunc constraints)
+  mapFunc (Constraint t1 t2 idx) = Tuple t1 idx
+  mapFunc (ConstraintError typeError idx) = Tuple typeError idx
   types = fst unzippedConstraints
   indices = snd unzippedConstraints
 
