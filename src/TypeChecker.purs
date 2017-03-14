@@ -11,6 +11,7 @@ import Control.Apply (lift2)
 import Control.Bind (ifM)
 import Data.Either (Either(Left, Right))
 import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, length, concat, (!!))
+import Data.List as List
 import Data.Array as Array
 import Data.Map as Map
 import Data.Map (Map, insert, lookup, empty)
@@ -217,6 +218,21 @@ solver (Unifier subst constraints) = case constraints of
   ((Constraint t1 t2 idx) : rest) -> do
     subst1 <- unifies t1 t2
     solver (Unifier (subst1 `compose` subst) (apply subst1 rest))
+
+-- | Go through tree and assign every tree node its type. In order to do this we rely on the node
+-- | indices.
+assignTypes :: Unifier -> IndexedTypeTree -> IndexedTypeTree
+assignTypes (Unifier subst constraints) expr = flip map expr \(Tuple _ idx) ->
+  case List.elemIndex idx indices of
+    Nothing -> Tuple Nothing idx
+    Just tvIndex -> case List.index types tvIndex of
+      Nothing -> Tuple Nothing idx
+      Just tv -> Tuple (Just $ apply subst tv) idx
+  where
+  unzippedConstraints :: Tuple (List Type) (List Index)
+  unzippedConstraints = unzip (map (\(Constraint t1 t2 idx) -> Tuple t1 idx) constraints)
+  types = fst unzippedConstraints
+  indices = snd unzippedConstraints
 
 ---------------------------------------------------------------------------------------------------
 
