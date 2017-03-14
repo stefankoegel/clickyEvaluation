@@ -6,7 +6,7 @@ import Data.Bifunctor (rmap)
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
-import Data.Tuple (Tuple(..), snd)
+import Data.Tuple (Tuple(..), fst, snd)
 
 -- | Operators
 -- |
@@ -236,6 +236,9 @@ makeIndexedTree expr = evalState (makeIndexedTree' (makeIndexed expr)) 0
       let new = Tuple mt idx
       put (idx + 1)
       pure new
+
+removeIndices :: IndexedTypeTree -> TypeTree
+removeIndices = map fst
 
 insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Tuple t index) expr

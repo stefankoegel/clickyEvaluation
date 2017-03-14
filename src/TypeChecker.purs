@@ -96,6 +96,10 @@ intToIntToIntType = intType `TypArr` intToIntType
 -- | Type constraints.
 data Constraint = Constraint Type Type Index
                 | ConstraintError Type Index
+
+-- TODO: Change to `Map.Map Index Constraint`.
+--       Whenever a new constraint is added which stands in conflict with an already present
+--       constraint for the given node, change the type to `UnknownType`.
 type Constraints = List Constraint
 
 -- | Constraints are substitutable.
@@ -1023,6 +1027,19 @@ typeTreeProgramEnv :: TypeEnv -> TypeTree -> Either TypeError TypeTree
 typeTreeProgramEnv env tt = case evalState (runExceptT (inferAndCatchErrors env tt)) initUnique of
       Left err -> Left err
       Right result@(Tuple subst tree) -> Right (closeOverTypeTree result)
+
+data InferRes = InferRes TypeTree Constraints Subst
+twoStageInfer :: TypeEnv -> TypeTree -> Either TypeError InferRes
+twoStageInfer env tt = case runInferNew env (inferNew indexedTT) of
+      Left err -> Left err
+      Right constraints -> case runSolve constraints of
+        Left err -> Left err
+        Right subst -> do
+          -- TODO: Return unifier instead of subst from `runSolve`?
+          let expr = assignTypes (Unifier subst constraints) indexedTT
+          Right $ InferRes (removeIndices expr) constraints subst
+    where
+    indexedTT = makeIndexedTree tt
 
 closeOverTypeTree :: (Tuple Subst TypeTree) -> TypeTree
 closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)

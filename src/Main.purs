@@ -14,6 +14,7 @@ import Data.Maybe (Maybe(..))
 import Data.StrMap (empty)
 import Data.Array (cons)
 import Data.Traversable (for)
+import Data.Tuple (Tuple(..))
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
@@ -129,11 +130,13 @@ buildTypeEnvironment expr env = case TypeChecker.buildTypeEnv (Eval.envToDefs en
 -- | Type check an expression using a given typed environment.
 typeCheckExpression :: forall eff. TypeChecker.TypeEnv -> AST.TypeTree
                  -> Eff (dom :: DOM | eff) (Maybe AST.TypeTree)
-typeCheckExpression typedEnv expr = case TypeChecker.typeTreeProgramEnv typedEnv expr of
+typeCheckExpression typedEnv expr =
+  case TypeChecker.twoStageInfer typedEnv expr of
   Left error -> do
     showError "Expression" (AST.prettyPrintTypeError error)
     pure Nothing
-  Right typedExpression -> pure $ Just typedExpression
+  Right (TypeChecker.InferRes typedExpression constraints subst) -> do
+    pure $ Just typedExpression
 
 -- | Construct a div tree from the given typed expression.
 buildDivTreeFromExpression :: forall eff. AST.TypeTree -> Eval.Env -> Array AST.TypeTree
