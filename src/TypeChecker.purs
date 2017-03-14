@@ -148,17 +148,17 @@ lookupEnvNew tvar = do
 -- |   * `NoInstanceOfEnum`
 -- |   * `UnknownError`
 -- | All other errors can only be encountered during the constraint solving phase.
-runInferNew :: TypeEnv -> InferNew Constraints -> Either TypeError Constraints
-runInferNew env m = rmap fst (Ex.runExcept $ evalRWST m env initUnique)
+runInferNew :: TypeEnv -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
+runInferNew env m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m env initUnique)
 
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
-returnWithConstraint :: IndexedTypeTree -> Type -> InferNew Constraints
+returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
 returnWithConstraint expr t = do
     tv <- freshNew
-    pure (singleton $ Constraint tv t (getIndex expr))
+    pure $ Tuple tv (singleton $ Constraint tv t (getIndex expr))
 
 -- | Traverse the given type tree and collect type constraints.
-inferNew :: IndexedTypeTree -> InferNew Constraints
+inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
 inferNew ex = case ex of
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
@@ -169,10 +169,8 @@ inferNew ex = case ex of
     "div" -> returnWithConstraint ex intToIntToIntType
     -- Try to find the variable name in the type environment.
     _     -> do t <- lookupEnvNew name
-                pure Nil
-  _ -> do
-    Ex.throwError $ UnknownError "Not yet implemented."
-    pure Nil
+                pure $ Tuple t Nil
+  _ -> Ex.throwError $ UnknownError "Not yet implemented."
 
 -- | Collect the substitutions by working through the constraints. The substitution represents
 -- | the solution to the constraint solving problem.
