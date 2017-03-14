@@ -158,6 +158,10 @@ returnWithConstraint expr t = do
     tv <- freshNew
     pure $ Tuple tv (singleton $ Constraint tv t (getIndex expr))
 
+-- | Setup a new type constraint for a given expression node.
+setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
+setConstraintFor expr t1 t2 = singleton $ Constraint t1 t2 (getIndex expr)
+
 -- | Traverse the given type tree and collect type constraints.
 inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
 inferNew ex = case ex of
@@ -171,6 +175,15 @@ inferNew ex = case ex of
     -- Try to find the variable name in the type environment.
     _     -> do t <- lookupEnvNew name
                 pure $ Tuple t Nil
+  IfExpr _ cond l r -> do
+    Tuple t1 c1 <- inferNew cond
+    Tuple t2 c2 <- inferNew l
+    Tuple t3 c3 <- inferNew r
+    -- In the condition node: t1 has to be a `Bool`.
+    let c4 = setConstraintFor cond t1 boolType
+    -- In the node of the if expression: t2 and t3 have to be equal.
+    let c5 = setConstraintFor ex t2 t3
+    pure $ Tuple t2 (c1 <> c2 <> c3 <> c4 <> c5)
   _ -> Ex.throwError $ UnknownError "Not yet implemented."
 
 -- | Collect the substitutions by working through the constraints. The substitution represents
