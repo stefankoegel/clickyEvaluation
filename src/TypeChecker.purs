@@ -96,6 +96,11 @@ intToIntToIntType = intType `TypArr` intToIntType
 data Constraint = Constraint Type Type Index
 type Constraints = List Constraint
 
+-- | Constraints are substitutable.
+instance substitutableConstraint :: Substitutable Constraint where
+    apply s (Constraint t1 t2 idx) = Constraint (apply s t1) (apply s t2) idx
+    ftv (Constraint t1 t2 idx) = ftv t1 `Set.union` ftv t2
+
 ppConstraints :: Constraints -> String
 ppConstraints constraints = "Constraints:\n" <> (map ppConstraint >>> intercalate ",\n") constraints
   where ppConstraint (Constraint t1 t2 idx) = "\t"
@@ -168,6 +173,52 @@ inferNew ex = case ex of
   _ -> do
     Ex.throwError $ UnknownError "Not yet implemented."
     pure Nil
+
+-- | Collect the substitutions by working through the constraints. The substitution represents
+-- | the solution to the constraint solving problem.
+data Unifier = Unifier Subst Constraints
+
+-- | Collect the substitutions in the unifier and catch occurring type errors.
+runSolve :: Constraints -> Either TypeError Subst
+runSolve constraints = Ex.runExcept $ solver (Unifier nullSubst constraints)
+
+-- | Bind the given type variable to the given type and return the resulting substitution.
+bindTVar ::  TVar -> Type -> Ex.Except TypeError Subst
+bindTVar tv t
+  | t == (TypVar tv) = pure $ nullSubst
+  | occursCheck tv t = Ex.throwError $ normalizeTypeError $ InfiniteType tv t
+  | otherwise = pure $ Map.singleton tv t
+
+-- | Try to unify the given types and return the resulting substitution or the occurring type
+-- | error.
+unifies :: Type -> Type -> Ex.Except TypeError Subst
+unifies (TypArr l1 r1) (TypArr l2 r2) = do
+  s1 <- unifies l1 l2
+  s2 <- unifies (apply s1 r1) (apply s1 r2)
+  pure $ s2 `compose` s1
+unifies (TypVar tv) t = tv `bindTVar` t
+unifies t (TypVar tv) = tv `bindTVar` t
+unifies (TypCon c1) (TypCon c2) | c1 == c2 = pure nullSubst
+unifies t1 t2 = Ex.throwError $ normalizeTypeError $ UnificationFail t1 t2
+
+-- | Try to unify the given AD types and return the resulting substitution or the occurring type
+-- | error.
+unifiesAD :: AD -> AD -> Ex.Except TypeError Subst
+unifiesAD (TList l1) (TList l2) = unifies l1 l2
+unifiesAD (TTuple (a:as)) (TTuple (b:bs)) = do
+  s1 <- unifiesAD (TTuple as) (TTuple bs)
+  s2 <- unifies a b
+  pure $ s1 `compose` s2
+unifiesAD (TTuple Nil) (TTuple Nil) = pure nullSubst
+unifiesAD t1 t2 = throwError $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
+
+-- | Try to solve the constraints.
+solver :: Unifier -> Ex.Except TypeError Subst
+solver (Unifier subst constraints) = case constraints of
+  Nil -> pure subst
+  ((Constraint t1 t2 idx) : rest) -> do
+    subst1 <- unifies t1 t2
+    solver (Unifier (subst1 `compose` subst) (apply subst1 rest))
 
 ---------------------------------------------------------------------------------------------------
 
