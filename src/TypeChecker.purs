@@ -115,11 +115,11 @@ instance substitutableConstraint :: Substitutable Constraint where
 -- | Pretty print the given constraints.
 ppConstraints :: Constraints -> String
 ppConstraints constraints = "Constraints:\n" <>
-  (map (\(Tuple idx c) -> "node " <> show idx <> ": " <> ppConstraint c) >>> intercalate ",\n")
+  (map (\(Tuple idx c) -> "\tnode " <> show idx <> ": " <> ppConstraint c) >>> intercalate ",\n")
   (Map.toList constraints)
   where
-  ppConstraint (Constraint t1 t2) = "\t" <> prettyPrintType t1 <> " is " <> prettyPrintType t2
-  ppConstraint (ConstraintError typeError) = "\t" <> prettyPrintType typeError
+  ppConstraint (Constraint t1 t2) = prettyPrintType t1 <> " is " <> prettyPrintType t2
+  ppConstraint (ConstraintError typeError) = prettyPrintType typeError
 
 type InferNew a = (RWST
   TypeEnv               -- ^ Read from the type environment.
