@@ -2,7 +2,7 @@ module AST where
 
 import Prelude
 import Control.Monad.State (State, evalState, get, put)
-import Data.Bifunctor (rmap)
+import Data.Bifunctor (bimap, rmap)
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
@@ -168,6 +168,58 @@ instance functorTree :: Functor (Tree a b c) where
     go (Gen d b e) = Gen (f d) b (map f e)
     go (Let d b e) = Let (f d) b (map f e)
     go (Guard d e) = Guard (f d) (map f e)
+
+qualTreeMap :: forall b b' t t' m m'.
+     (b -> b')
+  -> (t -> t')
+  -> (m -> m')
+  -> QualTree b t m
+  -> QualTree b' t' m'
+qualTreeMap fb ft f (Gen x b t) = Gen (f x) (fb b) (ft t)
+qualTreeMap fb ft f (Let x b t) = Let (f x) (fb b) (ft t)
+qualTreeMap fb ft f (Guard x t) = Guard (f x) (ft t)
+
+treeMap :: forall a a' b b' o o' m m'.
+     (a -> a')        -- ^ Function applied to the atom element
+  -> (b -> b')        -- ^ Function applied to the binding element
+  -> (o -> o')        -- ^ Function applied to the operator element
+  -> (m -> m')        -- ^ Function applied to the meta element
+  -> Tree a b o m     -- ^ Tree to be transformed
+  -> Tree a' b' o' m' -- ^ Transformed tree
+treeMap fa fb fo f (Atom x a) = Atom (f x) (fa a)
+treeMap fa fb fo f (List x es) = List (f x) (map (treeMap fa fb fo f) es)
+treeMap fa fb fo f (NTuple x es) = NTuple (f x) (map (treeMap fa fb fo f) es)
+treeMap fa fb fo f (Binary x o e1 e2) =
+  Binary (f x) (fo o)
+    (treeMap fa fb fo f e1)
+    (treeMap fa fb fo f e2)
+treeMap fa fb fo f (Unary x o e) = Unary (f x) (fo o) (treeMap fa fb fo f e)
+treeMap fa fb fo f (SectL x e o) = SectL (f x) (treeMap fa fb fo f e) (fo o)
+treeMap fa fb fo f (SectR x o e) = SectR (f x) (fo o) (treeMap fa fb fo f e)
+treeMap fa fb fo f (PrefixOp x o) = PrefixOp (f x) (fo o)
+treeMap fa fb fo f (IfExpr x e1 e2 e3) =
+  IfExpr (f x)
+    (treeMap fa fb fo f e1)
+    (treeMap fa fb fo f e2)
+    (treeMap fa fb fo f e3)
+treeMap fa fb fo f (ArithmSeq x e me1 me2) =
+  ArithmSeq (f x)
+    (treeMap fa fb fo f e)
+    (map (treeMap fa fb fo f) me1)
+    (map (treeMap fa fb fo f) me2)
+treeMap fa fb fo f (LetExpr x defs e) =
+  LetExpr (f x)
+    (map (bimap fb (treeMap fa fb fo f)) defs)
+    (treeMap fa fb fo f e)
+treeMap fa fb fo f (Lambda x bs e) = Lambda (f x) (map fb bs) (treeMap fa fb fo f e)
+treeMap fa fb fo f (App x e es) =
+  App (f x)
+    (treeMap fa fb fo f e)
+    (map (treeMap fa fb fo f) es)
+treeMap fa fb fo f (ListComp x e qualTrees) =
+  ListComp (f x)
+    (treeMap fa fb fo f e)
+    (map (qualTreeMap fb (treeMap fa fb fo f) f) qualTrees)
 
 insertIntoTree :: forall a b c d. d -> Tree a b c d -> Tree a b c d
 insertIntoTree x (Atom _ atom) = Atom x atom
