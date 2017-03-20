@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Show, Unit, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
+import Prelude (class Show, Unit, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), not, bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError, catchError)
 import Control.Monad.Except as Ex
 import Control.Monad.State (State, evalState, runState, put, get)
@@ -11,7 +11,6 @@ import Control.Apply (lift2)
 import Control.Bind (ifM)
 import Data.Either (Either(Left, Right))
 import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, length, concat, (!!))
-import Data.List as List
 import Data.Array as Array
 import Data.Map as Map
 import Data.Map (Map, insert, lookup, empty)
@@ -162,11 +161,16 @@ lookupEnvNew tvar = do
 runInferNew :: TypeEnv -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
 runInferNew env m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m env initUnique)
 
+constraintSingle :: Index -> Type -> Type -> Constraints
+-- The unknown type should always stand on the right.
+constraintSingle idx UnknownType t = Map.singleton idx (Constraint t UnknownType)
+constraintSingle idx t1 t2 = Map.singleton idx (Constraint t1 t2)
+
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
 returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
 returnWithConstraint expr t = do
     tv <- freshNew
-    pure $ Tuple tv (Map.singleton (getIndex expr) (Constraint tv t))
+    pure $ Tuple tv (constraintSingle (getIndex expr) tv t)
 
 returnWithTypeError :: IndexedTypeTree -> TypeError -> InferNew (Tuple Type Constraints)
 returnWithTypeError expr typeError = do
@@ -175,11 +179,12 @@ returnWithTypeError expr typeError = do
 
 -- | Setup a new type constraint for a given expression node.
 setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
-setConstraintFor expr t1 t2 = Map.singleton (getIndex expr) (Constraint t1 t2)
+setConstraintFor expr t1 t2 = constraintSingle (getIndex expr) t1 t2
 
 -- | Traverse the given type tree and collect type constraints.
 inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
 inferNew ex = case ex of
+
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
   Atom _ atom@(AInt _) -> returnWithConstraint ex intType
@@ -208,9 +213,15 @@ inferNew ex = case ex of
 -- | the solution to the constraint solving problem.
 data Unifier = Unifier Subst Constraints
 
+-- | Create an initial unifier containing a substitution with mappings to the unknown type.
+initialUnifier :: Constraints -> Unifier
+initialUnifier constraints = Unifier unknownSubst constraints
+    where
+    unknownSubst = getUnknownSubst $ map snd $ Map.toList constraints
+
 -- | Collect the substitutions in the unifier and catch occurring type errors.
 runSolve :: Constraints -> Either TypeError Subst
-runSolve constraints = Ex.runExcept $ solver (Unifier nullSubst constraints)
+runSolve constraints = Ex.runExcept $ solver (initialUnifier constraints)
 
 -- | Bind the given type variable to the given type and return the resulting substitution.
 bindTVar ::  TVar -> Type -> Ex.Except TypeError Subst
@@ -244,19 +255,71 @@ unifiesAD (TTuple (a:as)) (TTuple (b:bs)) = do
 unifiesAD (TTuple Nil) (TTuple Nil) = pure nullSubst
 unifiesAD t1 t2 = throwError $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
 
+-- | Given a list of constraints return a tuple containing:
+-- | 1. List of all constraints mapping a type variable to another
+-- | 2. List of all constraints mapping a type variable to the unknown type.
+sortIntoLists :: List Constraint -> Tuple (List Constraint) (List Constraint)
+sortIntoLists cs = f cs (Tuple Nil Nil)
+    where
+    f :: List Constraint -> Tuple (List Constraint) (List Constraint) -> Tuple (List Constraint) (List Constraint)
+    f Nil tuple = tuple
+    f (c@(Constraint (TypVar tv) UnknownType) : cs)   (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
+    f (c@(Constraint UnknownType (TypVar tv)) : cs)   (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
+    f (c@(Constraint (TypVar tv1) (TypVar tv2)) : cs) (Tuple pairs unknowns) = f cs (Tuple (c : pairs) unknowns)
+    f (c : cs) tuple = f cs tuple
+
+-- | Create a substitution from the given constraint list. Note that only mappings from a type
+-- | variable to the unknown type are preserved.
+constraintsToSubst :: List Constraint -> Subst
+constraintsToSubst cs = foldr compose nullSubst (map constraintToSubst cs)
+
+-- | Create a substitution from the given constraint. Note that only mappings from a type variable
+-- | to the unknown type are preserved.
+constraintToSubst :: Constraint -> Subst
+constraintToSubst (Constraint (TypVar tv) UnknownType) = Map.singleton tv UnknownType
+constraintToSubst (Constraint UnknownType (TypVar tv)) = Map.singleton tv UnknownType
+constraintToSubst _ = nullSubst
+
+-- | Remove all direct or indirect mappings to the unknown type in the given constraint list.
+removeUnknowns :: List Constraint -> List Constraint
+removeUnknowns cs = filterUnknowns (unknownSubst `apply` cs)
+    where
+    filterUnknowns = filter (not isUnknownMapping)
+    isUnknownMapping (Constraint _ UnknownType) = true
+    isUnknownMapping (Constraint UnknownType _) = true
+    isUnknownMapping _ = false
+    unknownSubst = getUnknownSubst cs
+
+getUnknownSubst :: List Constraint -> Subst
+getUnknownSubst cs = applyUnknowns' (fst lists) (snd lists) nullSubst
+    where
+    lists = sortIntoLists cs
+
+applyUnknowns' :: List Constraint -> List Constraint -> Subst -> Subst
+applyUnknowns' pairs Nil subst = subst
+applyUnknowns' pairs unknowns subst =
+    applyUnknowns' (fst lists) (snd lists) (newSubst `compose` subst)
+    where
+    newSubst = constraintsToSubst unknowns
+    lists = sortIntoLists $ newSubst `apply` pairs
+
 -- | Try to solve the constraints.
 solver :: Unifier -> Ex.Except TypeError Subst
-solver (Unifier subst constraints) = solver' subst constraintList
+solver (Unifier subst constraints) = solver' subst (removeUnknowns constraintList)
   where
   -- The list containing all the constraints without the indices.
+  -- TODO: Later the indices will be needed in order to map occurring erros to the corresponding
+  --       nodes.
   constraintList = map snd (Map.toList constraints)
+  solver' :: Subst -> List Constraint -> Ex.Except TypeError Subst
   solver' subst constraints = case constraints of
     Nil -> pure subst
     (ConstraintError typeError : rest) -> solver' subst rest
     (Constraint t1 t2 : rest) -> do
       subst1 <- unifies t1 t2
-      solver'(subst1 `compose` subst) (apply subst1 rest)
+      solver' (subst1 `compose` subst) (apply subst1 rest)
 
+-- TODO: Change type to `Unifier -> IndexedTypeTree -> TypeTree`?
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
 -- | indices.
 assignTypes :: Unifier -> IndexedTypeTree -> IndexedTypeTree
