@@ -97,6 +97,7 @@ intToIntToIntType = intType `TypArr` intToIntType
 data Constraint = Constraint Type Type
                 | ConstraintError Type
 
+-- TODO: Wee need to be able to store multiple constraints per node.
 -- | A collection of constraints.
 type Constraints = Map.Map Index Constraint
 
@@ -193,10 +194,11 @@ setSingleConstraintFor expr t = constraintSingle (index expr) t t
 -- | Set a constraint not referring to a node.
 setConstraint' :: Type -> Type -> InferNew Constraints
 setConstraint' t1 t2 = do
-  Unique current <- get
+  Unique s <- get
+  put (Unique { count: (s.count + 1) })
   -- Yucky hack: we don't want to refer to an existing node index and therefore create an fairly
   -- high index number.
-  pure $ constraintSingle (current.count + 1000) t1 t2
+  pure $ constraintSingle (s.count + 1000) t1 t2
 
 -- | Traverse the given type tree and collect type constraints.
 inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
@@ -214,7 +216,31 @@ inferNew ex = case ex of
       mt <- lookupEnvNew name
       case mt of
         Nothing -> returnWithTypeError ex (UnboundVariable name)
-        Just t -> pure $ Tuple t noConstraints
+        Just t -> returnWithConstraint ex t
+
+  List _ Nil -> do
+    tv <- freshNew
+    tv2 <- freshNew
+    let c = setConstraintFor ex tv (AD $ TList tv2)
+    pure $ Tuple tv c
+
+  List _ (e : Nil) -> do
+    Tuple t c1 <- inferNew e
+    tv <- freshNew
+    let c2 = setConstraintFor ex tv (AD $ TList t)
+    pure $ Tuple tv (c1 <> c2)
+
+  List _ (e : es) -> do
+    Tuple t1 c1  <- inferNew e
+    Tuple ts cs  <- unzip <$> traverse inferNew es
+    -- Also add constraints for the rest of the list elements.
+    cs' <- flip traverse ts \t -> setConstraint' t1 t
+    let c2 = foldr (<>) Map.empty cs
+    let c4 = foldr (<>) Map.empty cs'
+    tv <- freshNew
+    let c3 = setConstraintFor ex tv (AD $ TList t1)
+    pure $ Tuple tv (c1 <> c2 <> c3 <> c4)
+
   IfExpr _ cond l r -> do
     Tuple t1 c1 <- inferNew cond
     Tuple t2 c2 <- inferNew l
@@ -236,14 +262,13 @@ inferNew ex = case ex of
 
   _ -> Ex.throwError $ UnknownError "Not yet implemented."
 
--- | Given a list of types create the corresponding arrow type. Conceputally:
+-- | Given a list of types create the corresponding arrow type. Conceptually:
 -- | [t0, t1, t2] => t0 -> (t1 -> t2)
 toArrowType :: List Type -> Type
-toArrowType ts = f ts
-  where
-  f Nil = unsafeCrashWith "Function `toArrowType` must not be called with empty list."
-  f (t : Nil) = t
-  f (t:ts) = t `TypArr` (toArrowType ts)
+toArrowType Nil = unsafeCrashWith "Function `toArrowType` must not be called with an empty list."
+toArrowType (t : Nil) = t
+toArrowType (t:ts) = t `TypArr` (toArrowType ts)
+
 -- | Collect the substitutions by working through the constraints. The substitution represents
 -- | the solution to the constraint solving problem.
 data Unifier = Unifier Subst Constraints
@@ -277,6 +302,8 @@ unifies t (TypVar tv) = tv `bindTVar` t
 unifies (TypCon c1) (TypCon c2) | c1 == c2 = pure nullSubst
 unifies UnknownType t = pure nullSubst
 unifies t UnknownType = pure nullSubst
+unifies (AD a) (AD b) | a == b = pure nullSubst
+unifies (AD a) (AD b) = unifiesAD a b
 unifies t1 t2 = Ex.throwError $ normalizeTypeError $ UnificationFail t1 t2
 
 -- | Try to unify the given AD types and return the resulting substitution or the occurring type
