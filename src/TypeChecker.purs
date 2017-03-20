@@ -172,6 +172,10 @@ returnWithConstraint expr t = do
     tv <- freshNew
     pure $ Tuple tv (constraintSingle (index expr) tv t)
 
+-- TODO: Where can this be used instead of `returnWithConstraint`?
+returnDirect :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
+returnDirect expr t = pure $ Tuple t (constraintSingle (index expr) t t)
+
 returnWithTypeError :: IndexedTypeTree -> TypeError -> InferNew (Tuple Type Constraints)
 returnWithTypeError expr typeError = do
   let error = ConstraintError (TypeError typeError)
@@ -181,6 +185,18 @@ returnWithTypeError expr typeError = do
 setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
 setConstraintFor expr t1 t2 = constraintSingle (index expr) t1 t2
 
+-- | Setup a new type constraint mapping a type to itself.
+setSingleConstraintFor :: IndexedTypeTree -> Type -> Constraints
+setSingleConstraintFor expr t = constraintSingle (index expr) t t
+
+-- TODO: Fix.
+-- | Set a constraint not referring to a node.
+setConstraint' :: Type -> Type -> InferNew Constraints
+setConstraint' t1 t2 = do
+  Unique current <- get
+  -- Yucky hack: we don't want to refer to an existing node index and therefore create an fairly
+  -- high index number.
+  pure $ constraintSingle (current.count + 1000) t1 t2
 
 -- | Traverse the given type tree and collect type constraints.
 inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
@@ -208,8 +224,26 @@ inferNew ex = case ex of
     -- In the node of the if expression: t2 and t3 have to be equal.
     let c5 = setConstraintFor ex t2 t3
     pure $ Tuple t2 (c1 <> c2 <> c3 <> c4 <> c5)
+  App _ e es -> do
+    Tuple t1 c1 <- inferNew e
+    Tuple ts cs <- unzip <$> traverse inferNew es
+    tv <- freshNew
+    -- Be careful with the nesting of `TypArr`.
+    c3 <- setConstraint' t1 (toArrowType (ts <> (tv : Nil)))
+    let c2 = foldr (<>) Map.empty cs
+    let c4 = setSingleConstraintFor ex tv
+    pure $ Tuple tv (c1 <> c2 <> c3 <> c4)
+
   _ -> Ex.throwError $ UnknownError "Not yet implemented."
 
+-- | Given a list of types create the corresponding arrow type. Conceputally:
+-- | [t0, t1, t2] => t0 -> (t1 -> t2)
+toArrowType :: List Type -> Type
+toArrowType ts = f ts
+  where
+  f Nil = unsafeCrashWith "Function `toArrowType` must not be called with empty list."
+  f (t : Nil) = t
+  f (t:ts) = t `TypArr` (toArrowType ts)
 -- | Collect the substitutions by working through the constraints. The substitution represents
 -- | the solution to the constraint solving problem.
 data Unifier = Unifier Subst Constraints
