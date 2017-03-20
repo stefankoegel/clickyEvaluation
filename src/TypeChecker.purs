@@ -1,6 +1,6 @@
 module TypeChecker where
 
-import Prelude (class Show, Unit, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), not, bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
+import Prelude (class Show, Unit, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), not, bind, id, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
 import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError, catchError)
 import Control.Monad.Except as Ex
 import Control.Monad.State (State, evalState, runState, put, get)
@@ -170,16 +170,17 @@ constraintSingle idx t1 t2 = Map.singleton idx (Constraint t1 t2)
 returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
 returnWithConstraint expr t = do
     tv <- freshNew
-    pure $ Tuple tv (constraintSingle (getIndex expr) tv t)
+    pure $ Tuple tv (constraintSingle (index expr) tv t)
 
 returnWithTypeError :: IndexedTypeTree -> TypeError -> InferNew (Tuple Type Constraints)
 returnWithTypeError expr typeError = do
   let error = ConstraintError (TypeError typeError)
-  pure $ Tuple UnknownType (Map.singleton (getIndex expr) error)
+  pure $ Tuple UnknownType (Map.singleton (index expr) error)
 
 -- | Setup a new type constraint for a given expression node.
 setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
-setConstraintFor expr t1 t2 = constraintSingle (getIndex expr) t1 t2
+setConstraintFor expr t1 t2 = constraintSingle (index expr) t1 t2
+
 
 -- | Traverse the given type tree and collect type constraints.
 inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
@@ -323,11 +324,14 @@ solver (Unifier subst constraints) = solver' subst (removeUnknowns constraintLis
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
 -- | indices.
 assignTypes :: Unifier -> IndexedTypeTree -> IndexedTypeTree
-assignTypes (Unifier subst constraints) expr = flip map expr \(Tuple _ idx) ->
-  case Map.lookup idx constraints of
-    Nothing -> Tuple Nothing idx
-    Just (Constraint tv t2) -> Tuple (Just $ apply subst tv) idx
-    Just (ConstraintError typeError) -> Tuple (Just $ apply subst typeError) idx
+assignTypes (Unifier subst constraints) expr = treeMap id id fo f expr
+  where
+  f (Tuple _ idx) = Tuple (lookupTVar idx) idx
+  fo (Tuple op (Tuple _ idx)) = Tuple op (Tuple (lookupTVar idx) idx)
+  lookupTVar idx = case Map.lookup idx constraints of
+    Nothing -> Nothing
+    Just (Constraint tv _) -> Just $ subst `apply` tv
+    Just (ConstraintError typeError) -> Just $ subst `apply` typeError
 
 ---------------------------------------------------------------------------------------------------
 

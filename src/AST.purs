@@ -8,6 +8,9 @@ import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..), fst, snd)
 
+-- TODO: Remove
+import Partial.Unsafe (unsafeCrashWith)
+
 -- | Operators
 -- |
 -- | Primitive infix operators that are evaluated directly by the `Evaluator`.
@@ -273,103 +276,105 @@ type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) MType
 type Index = Int
 type MIType = Tuple MType Index
 -- TODO: Change to
--- type IndexedTypeTree = Tree Atom (Binding MIType) (Tuple Op MIType) MIType
-type IndexedTypeTree = Tree Atom (Binding MType) (Tuple Op MType) MIType
+type IndexTypeTree = Tree Atom (Binding MIType) (Tuple Op MIType) MIType
+type IndexedTypeTree = Tree Atom (Binding MType) (Tuple Op MIType) MIType
+
+makeIndexTuple :: MType -> State Index MIType
+makeIndexTuple mt = do
+  idx <- get
+  let new = Tuple mt idx
+  put (idx + 1)
+  pure new
+
+makeIndexOpTuple :: (Tuple Op MType) -> State Index (Tuple Op MIType)
+makeIndexOpTuple (Tuple op mt) = do
+  idx <- get
+  let new = Tuple op (Tuple mt idx)
+  put (idx + 1)
+  pure new
 
 makeIndexedTree :: TypeTree -> IndexedTypeTree
-makeIndexedTree expr = evalState (makeIndexedTree' (makeIndexed expr)) 0
+makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
   where
-    -- Change the type field to a index field.
-    makeIndexed = map (\mt -> Tuple mt 0)
     -- Traverse the tree and assign indices in ascending order.
-    makeIndexedTree' :: IndexedTypeTree -> State Index IndexedTypeTree
-    makeIndexedTree' expr = flip traverseTree expr \(Tuple mt _) -> do
-      idx <- get
-      let new = Tuple mt idx
-      put (idx + 1)
-      pure new
+    makeIndexedTree' :: TypeTree -> State Index IndexedTypeTree
+    makeIndexedTree' expr = traverseTree pure makeIndexOpTuple makeIndexTuple expr
 
 removeIndices :: IndexedTypeTree -> TypeTree
-removeIndices = map fst
+removeIndices = treeMap id id (\(Tuple op mit) -> Tuple op (fst mit)) fst
 
 insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Tuple t index) expr
   where index = snd $ extractFromTree expr
 
-getIndex :: IndexedTypeTree -> Index
-getIndex = extractFromTree >>> snd
+opIndex :: (Tuple Op MIType) -> Index
+opIndex (Tuple op (Tuple mt idx)) = idx
 
-traverseTree :: forall b c d m. Monad m => (d -> m d)
-                                        -> Tree Atom b c d
-                                        -> m (Tree Atom b c d)
-traverseTree f expr@(Atom t atom) = do
+index :: IndexedTypeTree -> Index
+index = extractFromTree >>> snd
+
+traverseTree :: forall b b' o o' m m' f. Monad f =>
+     (b -> f b')
+  -> (o -> f o')
+  -> (m -> f m')
+  -> Tree Atom b o m
+  -> f (Tree Atom b' o' m')
+traverseTree fb fo f expr@(Atom t atom) = do
   t' <- f t
   pure $ Atom t' atom
-traverseTree f expr@(List t es) = do
+traverseTree fb fo f expr@(List t es) = do
   t' <- f t
-  es' <- traverse (traverseTree f) es
+  es' <- traverse (traverseTree fb fo f) es
   pure $ List t' es'
-traverseTree f expr@(NTuple t es) = do
+traverseTree fb fo f expr@(NTuple t es) = do
   t' <- f t
-  es' <- traverse (traverseTree f) es
+  es' <- traverse (traverseTree fb fo f) es
   pure $ NTuple t' es'
-traverseTree f expr@(Binary t o e1 e2) = do
+traverseTree fb fo f expr@(Binary t o e1 e2) = do
   t' <- f t
-  -- TODO: Traverse over o.
-  e1' <- traverseTree f e1
-  e2' <- traverseTree f e2
-  pure $ Binary t' o e1' e2'
-traverseTree f expr@(Unary t o e) = do
+  o' <- fo o
+  e1' <- traverseTree fb fo f e1
+  e2' <- traverseTree fb fo f e2
+  pure $ Binary t' o' e1' e2'
+traverseTree fb fo f expr@(Unary t o e) = do
   t' <- f t
-  -- TODO: Traverse over o.
-  e' <- traverseTree f e
-  pure $ Unary t' o e'
-traverseTree f expr@(SectL t e o) = do
+  o' <- fo o
+  e' <- traverseTree fb fo f e
+  pure $ Unary t' o' e'
+traverseTree fb fo f expr@(SectL t e o) = do
   t' <- f t
-  -- TODO: Traverse over o.
-  e' <- traverseTree f e
-  pure $ SectL t' e' o
-traverseTree f expr@(SectR t o e) = do
+  e' <- traverseTree fb fo f e
+  o' <- fo o
+  pure $ SectL t' e' o'
+traverseTree fb fo f expr@(SectR t o e) = do
   t' <- f t
-  -- TODO: Traverse over o.
-  e' <- traverseTree f e
-  pure $ SectR t' o e'
-traverseTree f expr@(PrefixOp t o) = do
+  o' <- fo o
+  e' <- traverseTree fb fo f e
+  pure $ SectR t' o' e'
+traverseTree fb fo f expr@(PrefixOp t o) = do
   t' <- f t
-  -- TODO: Traverse over o.
-  pure $ PrefixOp t' o
-traverseTree f expr@(IfExpr t e1 e2 e3) = do
+  o' <- fo o
+  pure $ PrefixOp t' o'
+traverseTree fb fo f expr@(IfExpr t e1 e2 e3) = do
   t' <- f t
-  e1' <- traverseTree f e1
-  e2' <- traverseTree f e2
-  e3' <- traverseTree f e3
+  e1' <- traverseTree fb fo f e1
+  e2' <- traverseTree fb fo f e2
+  e3' <- traverseTree fb fo f e3
   pure $ IfExpr t' e1' e2' e3'
-traverseTree f expr@(ArithmSeq t e me1 me2) = do
+traverseTree fb fo f expr@(ArithmSeq t e me1 me2) = do
   t' <- f t
-  e' <- traverseTree f e
-  me1' <- traverse (traverseTree f) me1
-  me2' <- traverse (traverseTree f) me2
+  e' <- traverseTree fb fo f e
+  me1' <- traverse (traverseTree fb fo f) me1
+  me2' <- traverse (traverseTree fb fo f) me2
   pure $ ArithmSeq t' e' me1' me2'
-traverseTree f expr@(LetExpr t defs e) = do
+traverseTree fb fo f expr@(LetExpr t defs e) = unsafeCrashWith "not yet implemented"
+traverseTree fb fo f expr@(Lambda t bs e) = unsafeCrashWith "not yet implemented"
+traverseTree fb fo f expr@(App t e es) = do
   t' <- f t
-  -- TODO: Traverse over defs.
-  e' <- traverseTree f e
-  pure $ LetExpr t' defs e'
-traverseTree f expr@(Lambda t bs e) = do
-  t' <- f t
-  -- TODO: Traverse over bs.
-  e' <- traverseTree f e
-  pure $ Lambda t' bs e'
-traverseTree f expr@(App t e es) = do
-  t' <- f t
-  e' <- traverseTree f e
-  es' <- traverse (traverseTree f) es
+  e' <- traverseTree fb fo f e
+  es' <- traverse (traverseTree fb fo f) es
   pure $ App t' e' es'
-traverseTree f expr@(ListComp t e quals) = do
-  t' <- f t
-  e' <- traverseTree f e
-  -- TODO: Traverse over quals.
-  pure $ ListComp t' e' quals
+traverseTree fb fo f expr@(ListComp t e quals) = unsafeCrashWith "not yet implemented"
 
 type ExprQualTree = QualTree (Binding Unit) Expr Unit
 
