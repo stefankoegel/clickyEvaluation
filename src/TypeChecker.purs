@@ -286,6 +286,8 @@ makeBindingEnv binding = case binding of
     pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
   _ -> Ex.throwError $ UnknownError "Not yet implemented."
 
+-- | Go through list of given bindings and accumulate an corresponding type. Gather environment
+-- | information and setup the type information for every binding tree node.
 makeBindingEnv' :: List IndexedTypedBinding -> InferNew (Triple (List Type) TVarMappings Constraints)
 makeBindingEnv' bindings = do
   Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bindings
@@ -323,9 +325,15 @@ inferNew ex = case ex of
         Just t -> returnWithConstraint ex t
 
   Lambda _ bs e -> do
+    -- Infer the binding types, accumulate type variable/scheme mappings and setup type information
+    -- for every binding node in the expression tree.
     Triple t1 bindingEnv c1 <- makeBindingEnv' bs
+    -- Infer the type of the body expression.
     Tuple t2 c2 <- inEnv bindingEnv (inferNew e)
+    -- Given a list of binding types, construct the corresponding type. Conceptually:
+    -- `(\a b c -> ...) => typeof a -> typeof b -> typeof c -> t2`
     let lambdaType = toArrowType (t1 <> (t2 : Nil))
+    -- Set the type for the current expression.
     let c3 = setSingleTypeConstraintFor ex lambdaType
     pure $ Tuple lambdaType (c1 <+> c2 <+> c3)
 
