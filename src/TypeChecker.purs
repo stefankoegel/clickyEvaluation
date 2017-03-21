@@ -268,30 +268,43 @@ inferNew ex = case ex of
     _     -> do
       mt <- lookupEnvNew name
       case mt of
+        -- The name is not in the environment, report an error.
         Nothing -> returnWithTypeError ex (UnboundVariable name)
+        -- The current expression should have type `t`.
         Just t -> returnWithConstraint ex t
 
+  -- Empty lists.
   List _ Nil -> do
+    -- We use `tv` as type variable for the list expression and `tv2` for type of the list
+    -- elements.
     tv <- freshNew
     tv2 <- freshNew
+    -- tv ~ [tv2]
     let c = setTypeConstraintFor ex tv (AD $ TList tv2)
     pure $ Tuple tv c
 
+  -- Single element lists.
   List _ (e : Nil) -> do
+    -- Get the constraints and type of the first list element.
     Tuple t c1 <- inferNew e
+    -- The list expression has the type `[t1]` where `t1` denotes the type of the first list
+    -- element.
     tv <- freshNew
     let c2 = setTypeConstraintFor ex tv (AD $ TList t)
     pure $ Tuple tv (c1 <+> c2)
 
+  -- List with multiple elements.
   List _ (e : es) -> do
     Tuple t1 c1  <- inferNew e
     Tuple ts cs  <- unzip <$> traverse inferNew es
-    -- Also add constraints for the rest of the list elements.
-    let cs' = map (setConstraintFor ex t1) ts
-    let c2 = foldConstraints cs
-    let c4 = foldConstraints cs'
+    -- Also add constraints for the rest of the list elements. All elements should have the same
+    -- type as the first list element.
+    let c2 = foldConstraints (map (setConstraintFor ex t1) ts)
+    let c3 = foldConstraints cs
+    -- The list expression has the type `[t1]` where `t1` denotes the type of the first list
+    -- element.
     tv <- freshNew
-    let c3 = setTypeConstraintFor ex tv (AD $ TList t1)
+    let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
     pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
 
   IfExpr _ cond l r -> do
