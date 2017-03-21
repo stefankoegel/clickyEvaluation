@@ -234,7 +234,9 @@ returnDirect expr t = pure $ Tuple t (constraintSingleMapped (index expr) t t)
 returnWithTypeError :: IndexedTypeTree -> TypeError -> InferNew (Tuple Type Constraints)
 returnWithTypeError expr typeError = do
   let error = ConstraintError (TypeError typeError)
-  pure $ Tuple UnknownType { unmapped: Nil, mapped: Map.singleton (index expr) error }
+  tv <- freshNew
+  let c = setConstraintFor expr tv UnknownType
+  pure $ Tuple tv (c <+> { unmapped: Nil, mapped: Map.singleton (index expr) error })
 
 setConstraintIndex :: Index -> Type -> Type -> Constraints
 setConstraintIndex idx t1 t2 = constraintSingleMapped idx t1 t2
