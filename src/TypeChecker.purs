@@ -124,6 +124,10 @@ appendConstraints cs1 cs2 =
   , mapped: cs1.mapped <> cs2.mapped
   }
 
+-- | Fold the given list of constraints down to a single constraint set.
+foldConstraints :: List Constraints -> Constraints
+foldConstraints = foldr (<+>) emptyConstraints
+
 infixr 5 appendConstraints as <+>
 
 -- | Constraints are substitutable.
@@ -196,14 +200,26 @@ lookupEnvNew tvar = do
 runInferNew :: TypeEnv -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
 runInferNew env m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m env initUnique)
 
-constraintSingle :: Index -> Type -> Type -> Constraints
+constraintSingleUnmapped :: Index -> Type -> Type -> Constraints
 -- The unknown type should always stand on the right.
-constraintSingle idx UnknownType t = { unmapped: (Tuple idx (Constraint t UnknownType)) : Nil, mapped: Map.empty }
-constraintSingle idx t1 t2 = { unmapped: (Tuple idx (Constraint t1 t2)) : Nil, mapped: Map.empty }
+constraintSingleUnmapped idx UnknownType t =
+  { unmapped: (Tuple idx (Constraint t UnknownType)) : Nil
+  , mapped: Map.empty
+  }
+constraintSingleUnmapped idx t1 t2 =
+  { unmapped: (Tuple idx (Constraint t1 t2)) : Nil
+  , mapped: Map.empty
+  }
 
 constraintSingleMapped :: Index -> Type -> Type -> Constraints
-constraintSingleMapped idx UnknownType t = { unmapped: Nil, mapped: Map.singleton idx (Constraint t UnknownType) }
-constraintSingleMapped idx t1 t2 = { unmapped: Nil, mapped: Map.singleton idx (Constraint t1 t2) }
+constraintSingleMapped idx UnknownType t =
+  { unmapped: Nil
+  , mapped: Map.singleton idx (Constraint t UnknownType)
+  }
+constraintSingleMapped idx t1 t2 =
+  { unmapped: Nil
+  , mapped: Map.singleton idx (Constraint t1 t2)
+  }
 
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
 returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
@@ -213,7 +229,7 @@ returnWithConstraint expr t = do
 
 -- TODO: Where can this be used instead of `returnWithConstraint`?
 returnDirect :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
-returnDirect expr t = pure $ Tuple t (constraintSingle (index expr) t t)
+returnDirect expr t = pure $ Tuple t (constraintSingleMapped (index expr) t t)
 
 returnWithTypeError :: IndexedTypeTree -> TypeError -> InferNew (Tuple Type Constraints)
 returnWithTypeError expr typeError = do
@@ -233,7 +249,7 @@ setSingleTypeConstraintFor expr t = constraintSingleMapped (index expr) t t
 
 -- | Set a constraint not referring to a node.
 setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
-setConstraintFor expr t1 t2 = constraintSingle (index expr) t1 t2
+setConstraintFor expr t1 t2 = constraintSingleUnmapped (index expr) t1 t2
 
 -- | Traverse the given type tree and collect type constraints.
 inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
@@ -270,8 +286,8 @@ inferNew ex = case ex of
     Tuple ts cs  <- unzip <$> traverse inferNew es
     -- Also add constraints for the rest of the list elements.
     let cs' = map (setConstraintFor ex t1) ts
-    let c2 = foldr (<+>) emptyConstraints cs
-    let c4 = foldr (<+>) emptyConstraints cs'
+    let c2 = foldConstraints cs
+    let c4 = foldConstraints cs'
     tv <- freshNew
     let c3 = setTypeConstraintFor ex tv (AD $ TList t1)
     pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
@@ -285,13 +301,18 @@ inferNew ex = case ex of
     -- In the node of the if expression: t2 and t3 have to be equal.
     let c5 = setTypeConstraintFor ex t2 t3
     pure $ Tuple t2 (c1 <+> c2 <+> c3 <+> c4 <+> c5)
+
+  -- Example expression: `mod 2 3`:
+  -- The subexpression `e` refers to `mod`, the expression list `es` refers to `2` and `3`.
   App _ e es -> do
     Tuple t1 c1 <- inferNew e
+    -- Collect the constraints and type information of the given parameters.
     Tuple ts cs <- unzip <$> traverse inferNew es
+    let c2 = foldConstraints cs
     tv <- freshNew
-    -- Be careful with the nesting of `TypArr`.
+    -- The function type has to match up with the given parameter types.
     let c3 = setConstraintFor ex t1 (toArrowType (ts <> (tv : Nil)))
-    let c2 = foldr (<+>) emptyConstraints cs
+    -- The application expression has the type referred to by type variable `tv`.
     let c4 = setSingleTypeConstraintFor ex tv
     pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
 
@@ -1193,7 +1214,7 @@ twoStageInfer env tt = case runInferNew env (inferNew indexedTT) of
         Right subst -> do
           -- TODO: Return unifier instead of subst from `runSolve`?
           let expr = assignTypes (Unifier subst constraints) indexedTT
-          Right $ InferRes (removeIndices expr) constraints subst
+          Right $ InferRes (normalizeTypeTree $ removeIndices expr) constraints subst
     where
     indexedTT = makeIndexedTree tt
 
