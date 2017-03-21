@@ -6,10 +6,8 @@ import Data.Bifunctor (bimap, rmap)
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse)
+import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
-
--- TODO: Remove
-import Partial.Unsafe (unsafeCrashWith)
 
 -- | Operators
 -- |
@@ -275,9 +273,7 @@ type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) MType
 
 type Index = Int
 type MIType = Tuple MType Index
--- TODO: Change to
-type IndexTypeTree = Tree Atom (Binding MIType) (Tuple Op MIType) MIType
-type IndexedTypeTree = Tree Atom (Binding MType) (Tuple Op MIType) MIType
+type IndexedTypeTree = Tree Atom (Binding MIType) (Tuple Op MIType) MIType
 
 makeIndexTuple :: MType -> State Index MIType
 makeIndexTuple mt = do
@@ -298,20 +294,62 @@ makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
   where
     -- Traverse the tree and assign indices in ascending order.
     makeIndexedTree' :: TypeTree -> State Index IndexedTypeTree
-    makeIndexedTree' expr = traverseTree pure makeIndexOpTuple makeIndexTuple expr
+    makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
 
 removeIndices :: IndexedTypeTree -> TypeTree
-removeIndices = treeMap id id (\(Tuple op mit) -> Tuple op (fst mit)) fst
+removeIndices = treeMap id (map fst) (\(Tuple op mit) -> Tuple op (fst mit)) fst
 
 insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
-insertIntoIndexedTree t expr = insertIntoTree (Tuple t index) expr
-  where index = snd $ extractFromTree expr
+insertIntoIndexedTree t expr = insertIntoTree (Tuple t idx) expr
+  where idx = snd $ extractFromTree expr
 
 opIndex :: (Tuple Op MIType) -> Index
 opIndex (Tuple op (Tuple mt idx)) = idx
 
 index :: IndexedTypeTree -> Index
 index = extractFromTree >>> snd
+
+traverseBinding :: forall m m' f. Monad f =>
+     (m -> f m')
+  -> Binding m
+  -> f (Binding m')
+traverseBinding f (Lit t atom) = do
+  t' <- f t
+  pure $ Lit t' atom
+traverseBinding f (ConsLit t b1 b2) = do
+  t' <- f t
+  b1' <- traverseBinding f b1
+  b2' <- traverseBinding f b2
+  pure $ ConsLit t' b1' b2'
+traverseBinding f (ListLit t bs) = do
+  t' <- f t
+  bs' <- traverse (traverseBinding f) bs
+  pure $ ListLit t' bs'
+traverseBinding f (NTupleLit t bs) = do
+  t' <- f t
+  bs' <- traverse (traverseBinding f) bs
+  pure $ NTupleLit t' bs'
+
+traverseQualTree :: forall b b' e e' m m' f. Monad f =>
+     (b -> f b')
+  -> (e -> f e')
+  -> (m -> f m')
+  -> QualTree b e m
+  -> f (QualTree b' e' m')
+traverseQualTree fb fe f (Gen t b e) = do
+  t' <- f t
+  b' <- fb b
+  e' <- fe e
+  pure $ Gen t' b' e'
+traverseQualTree fb fe f (Let t b e) = do
+  t' <- f t
+  b' <- fb b
+  e' <- fe e
+  pure $ Let t' b' e'
+traverseQualTree fb fe f (Guard t e) = do
+  t' <- f t
+  e' <- fe e
+  pure $ Guard t' e'
 
 traverseTree :: forall b b' o o' m m' f. Monad f =>
      (b -> f b')
@@ -367,14 +405,27 @@ traverseTree fb fo f expr@(ArithmSeq t e me1 me2) = do
   me1' <- traverse (traverseTree fb fo f) me1
   me2' <- traverse (traverseTree fb fo f) me2
   pure $ ArithmSeq t' e' me1' me2'
-traverseTree fb fo f expr@(LetExpr t defs e) = unsafeCrashWith "not yet implemented"
-traverseTree fb fo f expr@(Lambda t bs e) = unsafeCrashWith "not yet implemented"
+traverseTree fb fo f expr@(LetExpr t defs e) = do
+  t' <- f t
+  defs' <- traverse (bimap fb (traverseTree fb fo f) >>> bisequence) defs
+  e' <- traverseTree fb fo f e
+  pure $ LetExpr t' defs' e'
+traverseTree fb fo f expr@(Lambda t bs e) = do
+  t' <- f t
+  bs' <- traverse fb bs
+  e' <- traverseTree fb fo f e
+  pure $ Lambda t' bs' e'
 traverseTree fb fo f expr@(App t e es) = do
   t' <- f t
   e' <- traverseTree fb fo f e
   es' <- traverse (traverseTree fb fo f) es
   pure $ App t' e' es'
-traverseTree fb fo f expr@(ListComp t e quals) = unsafeCrashWith "not yet implemented"
+-- ListComp  m (Tree a b o m) (List (QualTree b (Tree a b o m) m))
+traverseTree fb fo f expr@(ListComp t e quals) = do
+  t' <- f t
+  e' <- traverseTree fb fo f e
+  quals' <- traverse (traverseQualTree fb (traverseTree fb fo f) f) quals
+  pure $ ListComp t' e' quals'
 
 type ExprQualTree = QualTree (Binding Unit) Expr Unit
 
