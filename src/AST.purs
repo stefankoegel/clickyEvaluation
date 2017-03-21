@@ -306,6 +306,9 @@ insertIntoIndexedTree t expr = insertIntoTree (Tuple t idx) expr
 opIndex :: (Tuple Op MIType) -> Index
 opIndex (Tuple op (Tuple mt idx)) = idx
 
+bindingIndex :: (Binding MIType) -> Index
+bindingIndex = extractFromBinding >>> snd
+
 index :: IndexedTypeTree -> Index
 index = extractFromTree >>> snd
 
@@ -420,7 +423,6 @@ traverseTree fb fo f expr@(App t e es) = do
   e' <- traverseTree fb fo f e
   es' <- traverse (traverseTree fb fo f) es
   pure $ App t' e' es'
--- ListComp  m (Tree a b o m) (List (QualTree b (Tree a b o m) m))
 traverseTree fb fo f expr@(ListComp t e quals) = do
   t' <- f t
   e' <- traverseTree fb fo f e
@@ -472,6 +474,7 @@ instance functorBinding :: Functor Binding where
   map f (NTupleLit x bindings) = NTupleLit (f x) (map f <$> bindings)
 
 type TypedBinding = Binding (Maybe Type)
+type IndexedTypedBinding = Binding MIType
 
 -- | Definitions
 -- |

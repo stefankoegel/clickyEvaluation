@@ -97,6 +97,10 @@ intToIntToIntType = intType `TypArr` intToIntType
 data Constraint = Constraint Type Type
                 | ConstraintError Type
 
+-- TODO: Simplify:
+-- Map.Map Index TVar: (Remember which node index corresponds to which type variable)
+-- List (Tuple Index Constraint): holds *all* the constraints
+
 -- | A collection of constraints.
 type Constraints = {
     -- Mapped constraints associate a node index with a constraint, which determines the type
@@ -280,8 +284,9 @@ inferNew ex = case ex of
     tv <- freshNew
     tv2 <- freshNew
     -- tv ~ [tv2]
-    let c = setTypeConstraintFor ex tv (AD $ TList tv2)
-    pure $ Tuple tv c
+    let listType = AD $ TList tv2
+    let c = setTypeConstraintFor ex tv listType
+    pure $ Tuple listType c
 
   -- Single element lists.
   List _ (e : Nil) -> do
@@ -290,8 +295,9 @@ inferNew ex = case ex of
     -- The list expression has the type `[t1]` where `t1` denotes the type of the first list
     -- element.
     tv <- freshNew
-    let c2 = setTypeConstraintFor ex tv (AD $ TList t)
-    pure $ Tuple tv (c1 <+> c2)
+    let listType = AD $ TList t
+    let c2 = setTypeConstraintFor ex tv listType
+    pure $ Tuple listType (c1 <+> c2)
 
   -- List with multiple elements.
   List _ (e : es) -> do
@@ -304,8 +310,9 @@ inferNew ex = case ex of
     -- The list expression has the type `[t1]` where `t1` denotes the type of the first list
     -- element.
     tv <- freshNew
-    let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
-    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
+    let listType = AD $ TList t1
+    let c4 = setTypeConstraintFor ex tv listType
+    pure $ Tuple listType (c1 <+> c2 <+> c3 <+> c4)
 
   IfExpr _ cond l r -> do
     Tuple t1 c1 <- inferNew cond
@@ -456,10 +463,11 @@ solver (Unifier subst constraints) = solver' subst (removeUnknowns constraintLis
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
 -- | indices.
 assignTypes :: Unifier -> IndexedTypeTree -> IndexedTypeTree
-assignTypes (Unifier subst constraints) expr = treeMap id id fo f expr
+assignTypes (Unifier subst constraints) expr = treeMap id fb fo f expr
   where
   f (Tuple _ idx) = Tuple (lookupTVar idx) idx
   fo (Tuple op (Tuple _ idx)) = Tuple op (Tuple (lookupTVar idx) idx)
+  fb = map f
   lookupTVar idx = case Map.lookup idx constraints.mapped of
     Nothing -> Nothing
     Just (Constraint tv _) -> Just $ subst `apply` tv
