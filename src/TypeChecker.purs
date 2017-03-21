@@ -383,6 +383,47 @@ inferNew ex = case ex of
     let c3 = setSingleTypeConstraintFor ex lambdaType
     pure $ Tuple lambdaType (c1 <+> c2 <+> c3)
 
+  -- Example expression: `mod 2 3`:
+  -- The subexpression `e` refers to `mod`, the expression list `es` refers to `2` and `3`.
+  App _ e es -> do
+    Tuple t1 c1 <- inferNew e
+    -- Collect the constraints and type information of the given parameters.
+    Tuple ts cs <- unzip <$> traverse inferNew es
+    let c2 = foldConstraints cs
+    tv <- freshNew
+    -- The function type has to match up with the given parameter types.
+    let c3 = setConstraintFor ex t1 (toArrowType (ts <> (tv : Nil)))
+    -- The application expression has the type referred to by type variable `tv`.
+    let c4 = setSingleTypeConstraintFor ex tv
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
+
+  IfExpr _ cond l r -> do
+    Tuple t1 c1 <- inferNew cond
+    Tuple t2 c2 <- inferNew l
+    Tuple t3 c3 <- inferNew r
+    -- In the condition node: t1 has to be a `Bool`.
+    let c4 = setTypeConstraintFor cond t1 boolType
+    -- In the node of the if expression: t2 and t3 have to be equal.
+    let c5 = setTypeConstraintFor ex t2 t3
+    pure $ Tuple t2 (c1 <+> c2 <+> c3 <+> c4 <+> c5)
+
+  Binary _ op e1 e2 -> do
+    Tuple t1 c1 <- inferOpNew op
+    Tuple t2 c2 <- inferNew e1
+    Tuple t3 c3 <- inferNew e2
+    tv <- freshNew
+    let c4 = setConstraintFor ex t1 (t2 `TypArr` (t3 `TypArr` tv))
+    let c5 = setSingleTypeConstraintFor ex tv
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4 <+> c5)
+
+  Unary _ op e -> do
+    Tuple t1 c1 <- inferOpNew op
+    Tuple t2 c2 <- inferNew e
+    tv <- freshNew
+    let c3 = setConstraintFor ex t1 (t2 `TypArr` tv)
+    let c4 = setSingleTypeConstraintFor ex tv
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
+
   -- Empty lists.
   List _ Nil -> do
     -- We use `tv` as type variable for the list expression and `tv2` for type of the list
@@ -420,38 +461,12 @@ inferNew ex = case ex of
     let c4 = setTypeConstraintFor ex tv listType
     pure $ Tuple listType (c1 <+> c2 <+> c3 <+> c4)
 
-  IfExpr _ cond l r -> do
-    Tuple t1 c1 <- inferNew cond
-    Tuple t2 c2 <- inferNew l
-    Tuple t3 c3 <- inferNew r
-    -- In the condition node: t1 has to be a `Bool`.
-    let c4 = setTypeConstraintFor cond t1 boolType
-    -- In the node of the if expression: t2 and t3 have to be equal.
-    let c5 = setTypeConstraintFor ex t2 t3
-    pure $ Tuple t2 (c1 <+> c2 <+> c3 <+> c4 <+> c5)
-
-  Binary _ op e1 e2 -> do
-    Tuple t1 c1 <- inferOpNew op
-    Tuple t2 c2 <- inferNew e1
-    Tuple t3 c3 <- inferNew e2
+  NTuple _ es -> do
+    Tuple ts cs  <- unzip <$> traverse inferNew es
     tv <- freshNew
-    let c4 = setConstraintFor ex t1 (t2 `TypArr` (t3 `TypArr` tv))
-    let c5 = setSingleTypeConstraintFor ex tv
-    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4 <+> c5)
-
-  -- Example expression: `mod 2 3`:
-  -- The subexpression `e` refers to `mod`, the expression list `es` refers to `2` and `3`.
-  App _ e es -> do
-    Tuple t1 c1 <- inferNew e
-    -- Collect the constraints and type information of the given parameters.
-    Tuple ts cs <- unzip <$> traverse inferNew es
-    let c2 = foldConstraints cs
-    tv <- freshNew
-    -- The function type has to match up with the given parameter types.
-    let c3 = setConstraintFor ex t1 (toArrowType (ts <> (tv : Nil)))
-    -- The application expression has the type referred to by type variable `tv`.
-    let c4 = setSingleTypeConstraintFor ex tv
-    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
+    let tupleType = AD $ TTuple ts
+    let c = setTypeConstraintFor ex tv tupleType
+    pure $ Tuple tupleType (foldConstraints cs <+> c)
 
   _ -> Ex.throwError $ UnknownError "Not yet implemented."
 
