@@ -231,6 +231,11 @@ returnWithConstraint expr t = do
     tv <- freshNew
     pure $ Tuple tv (constraintSingleMapped (index expr) tv t)
 
+returnWithConstraint' :: Index -> Type -> InferNew (Tuple Type Constraints)
+returnWithConstraint' idx t = do
+    tv <- freshNew
+    pure $ Tuple tv (constraintSingleMapped idx tv t)
+
 -- TODO: Where can this be used instead of `returnWithConstraint`?
 returnDirect :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
 returnDirect expr t = pure $ Tuple t (constraintSingleMapped (index expr) t t)
@@ -242,8 +247,8 @@ returnWithTypeError expr typeError = do
   let c = setConstraintFor expr tv UnknownType
   pure $ Tuple tv (c <+> { unmapped: Nil, mapped: Map.singleton (index expr) error })
 
-setConstraintIndex :: Index -> Type -> Type -> Constraints
-setConstraintIndex idx t1 t2 = constraintSingleMapped idx t1 t2
+setTypeConstraintFor' :: Index -> Type -> Type -> Constraints
+setTypeConstraintFor' idx t1 t2 = constraintSingleMapped idx t1 t2
 
 -- | Setup a new type constraint for a given expression node.
 setTypeConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
@@ -253,10 +258,43 @@ setTypeConstraintFor expr t1 t2 = constraintSingleMapped (index expr) t1 t2
 setSingleTypeConstraintFor :: IndexedTypeTree -> Type -> Constraints
 setSingleTypeConstraintFor expr t = constraintSingleMapped (index expr) t t
 
+setSingleTypeConstraintFor' :: Index -> Type -> Constraints
+setSingleTypeConstraintFor' idx t = constraintSingleMapped idx t t
+
 -- | Set a constraint not referring to a node.
 setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
 setConstraintFor expr t1 t2 = constraintSingleUnmapped (index expr) t1 t2
 
+data Triple a b c = Triple a b c
+
+-- | Choose a new type variable for the given binding and add typing information for the node index.
+makeBindingEnv :: IndexedTypedBinding -> InferNew (Triple Type TVarMappings Constraints)
+makeBindingEnv binding = case binding of
+  Lit _ atom@(Bool bool) -> do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) boolType
+    pure $ Triple boolType Nil c
+  Lit _ atom@(Char char) -> do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) charType
+    pure $ Triple charType Nil c
+  Lit _ atom@(AInt aint) -> do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) intType
+    pure $ Triple intType Nil c
+  Lit _ atom@(Name name) -> do
+    -- Set the type of the associate tree node to equal the type referred to by `tv`.
+    tv <- freshNew
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
+    pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
+  _ -> Ex.throwError $ UnknownError "Not yet implemented."
+
+makeBindingEnv' :: List IndexedTypedBinding -> InferNew (Triple (List Type) TVarMappings Constraints)
+makeBindingEnv' bindings = do
+  Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bindings
+  pure $ Triple ts (concat ms) (foldConstraints cs)
+  where
+  unzip3 = foldr
+           (\(Triple a b c) (Triple as bs cs) ->
+              Triple (a : as) (b : bs) (c : cs))
+           (Triple Nil Nil Nil)
 
 -- | Extend the type environment with the new mappings for the evaluation of `m`.
 inEnv :: forall a. TVarMappings -> InferNew a -> InferNew a
@@ -283,6 +321,13 @@ inferNew ex = case ex of
         Nothing -> returnWithTypeError ex (UnboundVariable name)
         -- The current expression should have type `t`.
         Just t -> returnWithConstraint ex t
+
+  Lambda _ bs e -> do
+    Triple t1 bindingEnv c1 <- makeBindingEnv' bs
+    Tuple t2 c2 <- inEnv bindingEnv (inferNew e)
+    let lambdaType = toArrowType (t1 <> (t2 : Nil))
+    let c3 = setSingleTypeConstraintFor ex lambdaType
+    pure $ Tuple lambdaType (c1 <+> c2 <+> c3)
 
   -- Empty lists.
   List _ Nil -> do
