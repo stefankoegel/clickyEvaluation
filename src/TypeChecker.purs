@@ -5,7 +5,7 @@ import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError, catchError)
 import Control.Monad.Except as Ex
 import Control.Monad.State (State, evalState, runState, put, get)
 import Control.Monad.RWS.Trans (RWST)
-import Control.Monad.RWS (ask, evalRWST)
+import Control.Monad.RWS (ask, evalRWST, local)
 import Data.Bifunctor (rmap)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
@@ -17,7 +17,7 @@ import Data.Map (Map, insert, lookup, empty)
 import Data.Tuple (Tuple(Tuple), snd, fst)
 import Data.Traversable (traverse)
 import Data.Set as Set
-import Data.Foldable (intercalate, foldr, foldMap, elem)
+import Data.Foldable (intercalate, foldl, foldr, foldMap, elem)
 import Data.Maybe (Maybe(..), fromMaybe, fromJust, maybe)
 import Partial.Unsafe (unsafePartial, unsafeCrashWith)
 import Data.String (fromCharArray)
@@ -256,6 +256,13 @@ setSingleTypeConstraintFor expr t = constraintSingleMapped (index expr) t t
 -- | Set a constraint not referring to a node.
 setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
 setConstraintFor expr t1 t2 = constraintSingleUnmapped (index expr) t1 t2
+
+
+-- | Extend the type environment with the new mappings for the evaluation of `m`.
+inEnv :: forall a. TVarMappings -> InferNew a -> InferNew a
+inEnv mappings m = local (scope mappings) m
+  where
+  scope mappings env = removeMultiple env (map fst mappings) `extendMultiple` mappings
 
 -- | Traverse the given type tree and collect type constraints.
 inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
@@ -607,10 +614,27 @@ instance typeExtractableTypeQual :: TypeExtractable (QualTree b t (Maybe Type)) 
 initUnique :: Unique
 initUnique = Unique { count : 0 }
 
-extend :: TypeEnv -> Tuple TVar Scheme -> TypeEnv
+-- | Given a list of type variable names, remove the corresponding schemes from the type
+-- | environment.
+removeMultiple :: TypeEnv -> List TVar -> TypeEnv
+removeMultiple (TypeEnv env) tvars = TypeEnv $ foldr Map.delete env tvars
+
+-- | Remove an entry from the type environment given a type variable name.
+remove :: TypeEnv -> TVar -> TypeEnv
+remove (TypeEnv env) tvar = TypeEnv $ Map.delete tvar env
+
+-- | Fold a list of type environments into a single type environment.
+combine :: List TypeEnv -> TypeEnv
+combine = foldl combine' emptyTypeEnv
+  where
+  combine' (TypeEnv env1) (TypeEnv env2) = TypeEnv $ Map.union env1 env2
+
+-- | Extend the given type environment by the given type variable to scheme mapping.
+extend :: TypeEnv -> TVarMapping -> TypeEnv
 extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
 
-extendMultiple :: TypeEnv -> List (Tuple TVar Scheme) -> TypeEnv
+-- | Extend the given type environment by the given mappings.
+extendMultiple :: TypeEnv -> TVarMappings -> TypeEnv
 extendMultiple = foldr (flip extend)
 
 nullSubst :: Subst
