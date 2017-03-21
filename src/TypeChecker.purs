@@ -304,6 +304,52 @@ inEnv mappings m = local (scope mappings) m
   where
   scope mappings env = removeMultiple env (map fst mappings) `extendMultiple` mappings
 
+-- | Determine the type of the given operator.
+getOpType :: Op -> InferNew Type
+getOpType op = case op of
+    Composition -> do
+      a <- freshNew
+      b <- freshNew
+      c <- freshNew
+      pure $ (b `TypArr` c) `TypArr` ((a `TypArr` b) `TypArr` (a `TypArr` c))
+    Power -> pure intToIntToIntType
+    Mul -> pure intToIntToIntType
+    Add -> pure intToIntToIntType
+    Sub -> pure intToIntToIntType
+    Colon -> do
+      a <- freshNew
+      pure $ a `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a))
+    Append -> do
+      a <- freshNew
+      pure $ (AD $ TList a) `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a))
+    Equ -> toBoolType
+    Neq -> toBoolType
+    Lt -> toBoolType
+    Leq -> toBoolType
+    Gt -> toBoolType
+    Geq -> toBoolType
+    And -> pure $ boolType `TypArr` (boolType `TypArr` boolType)
+    Or -> pure $ boolType `TypArr` (boolType `TypArr` boolType)
+    Dollar -> do
+      a <- freshNew
+      b <- freshNew
+      pure $ (a `TypArr` b) `TypArr` (a `TypArr` b)
+    -- TODO: Implement.
+    InfixFunc name -> unsafeCrashWith "Error in `getOpType`: case `InfixFunc` not yet implemented."
+  where
+  -- The type `a -> a -> Bool`.
+  toBoolType = do
+    a <- freshNew
+    pure $ a `TypArr` (a `TypArr` boolType)
+
+-- | Given an operator tuple, determine the operator type and put a type constraint on the
+-- | corresponding expression node.
+inferOpNew :: Tuple Op MIType -> InferNew (Tuple Type Constraints)
+inferOpNew opTuple@(Tuple op _) = do
+  t <- getOpType op
+  let c = setSingleTypeConstraintFor' (opIndex opTuple) t
+  pure $ Tuple t c
+
 -- | Traverse the given type tree and collect type constraints.
 inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
 inferNew ex = case ex of
@@ -383,6 +429,15 @@ inferNew ex = case ex of
     -- In the node of the if expression: t2 and t3 have to be equal.
     let c5 = setTypeConstraintFor ex t2 t3
     pure $ Tuple t2 (c1 <+> c2 <+> c3 <+> c4 <+> c5)
+
+  Binary _ op e1 e2 -> do
+    Tuple t1 c1 <- inferOpNew op
+    Tuple t2 c2 <- inferNew e1
+    Tuple t3 c3 <- inferNew e2
+    tv <- freshNew
+    let c4 = setConstraintFor ex t1 (t2 `TypArr` (t3 `TypArr` tv))
+    let c5 = setSingleTypeConstraintFor ex tv
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4 <+> c5)
 
   -- Example expression: `mod 2 3`:
   -- The subexpression `e` refers to `mod`, the expression list `es` refers to `2` and `3`.
