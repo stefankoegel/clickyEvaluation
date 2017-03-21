@@ -97,13 +97,34 @@ intToIntToIntType = intType `TypArr` intToIntType
 data Constraint = Constraint Type Type
                 | ConstraintError Type
 
--- TODO: Wee need to be able to store multiple constraints per node.
 -- | A collection of constraints.
-type Constraints = Map.Map Index Constraint
+type Constraints = {
+    -- Mapped constraints associate a node index with a constraint, which determines the type
+    -- of the node.
+    mapped :: Map.Map Index Constraint
+    -- Unmapped constraints are a list of constraints together with index of the corresponding
+    -- expression node. The index is needed here, because we need to associate occurring
+    -- unification errors with expression nodes.
+  , unmapped :: List (Tuple Index Constraint)
+  }
+
+-- | Convert the given set of constraints into a list of constraints.
+toConstraintList :: Constraints -> List Constraint
+toConstraintList constraints = (Map.toList >>> map snd) constraints.mapped
+                            <> map snd constraints.unmapped
 
 -- | Construct an empty constraint map.
-noConstraints :: Constraints
-noConstraints = Map.empty
+emptyConstraints :: Constraints
+emptyConstraints = { unmapped: Nil, mapped: Map.empty }
+
+-- | Append the given constraints.
+appendConstraints :: Constraints -> Constraints -> Constraints
+appendConstraints cs1 cs2 =
+  { unmapped: cs1.unmapped <> cs2.unmapped
+  , mapped: cs1.mapped <> cs2.mapped
+  }
+
+infixr 5 appendConstraints as <+>
 
 -- | Constraints are substitutable.
 instance substitutableConstraint :: Substitutable Constraint where
@@ -112,14 +133,27 @@ instance substitutableConstraint :: Substitutable Constraint where
     ftv (Constraint t1 t2) = ftv t1 `Set.union` ftv t2
     ftv (ConstraintError typeError) = Set.empty
 
+-- | Pretty print the given constraint.
+ppConstraint :: Constraint -> String
+ppConstraint (Constraint t1 t2) = prettyPrintType t1 <> " is " <> prettyPrintType t2
+ppConstraint (ConstraintError typeError) = prettyPrintType typeError
+
 -- | Pretty print the given constraints.
 ppConstraints :: Constraints -> String
 ppConstraints constraints = "Constraints:\n" <>
-  (map (\(Tuple idx c) -> "\tnode " <> show idx <> ": " <> ppConstraint c) >>> intercalate ",\n")
-  (Map.toList constraints)
+  "  determining the type:\n" <>
+    (map ppTuple >>> intercalate ",\n")
+    (Map.toList constraints.mapped) <> "\n" <>
+  "  other:\n" <>
+    (map ppTuple >>> intercalate ",\n")
+    constraints.unmapped
   where
-  ppConstraint (Constraint t1 t2) = prettyPrintType t1 <> " is " <> prettyPrintType t2
-  ppConstraint (ConstraintError typeError) = prettyPrintType typeError
+  ppTuple (Tuple idx constraint) = "\tnode " <> show idx <> ": " <> ppConstraint constraint
+
+-- | Pretty print the given constraint list.
+ppConstraintList :: List Constraint -> String
+ppConstraintList constraints = "Constraints:\n" <>
+  (map ppConstraint >>> intercalate ",\n") constraints
 
 type InferNew a = (RWST
   TypeEnv               -- ^ Read from the type environment.
@@ -164,14 +198,18 @@ runInferNew env m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m env 
 
 constraintSingle :: Index -> Type -> Type -> Constraints
 -- The unknown type should always stand on the right.
-constraintSingle idx UnknownType t = Map.singleton idx (Constraint t UnknownType)
-constraintSingle idx t1 t2 = Map.singleton idx (Constraint t1 t2)
+constraintSingle idx UnknownType t = { unmapped: (Tuple idx (Constraint t UnknownType)) : Nil, mapped: Map.empty }
+constraintSingle idx t1 t2 = { unmapped: (Tuple idx (Constraint t1 t2)) : Nil, mapped: Map.empty }
+
+constraintSingleMapped :: Index -> Type -> Type -> Constraints
+constraintSingleMapped idx UnknownType t = { unmapped: Nil, mapped: Map.singleton idx (Constraint t UnknownType) }
+constraintSingleMapped idx t1 t2 = { unmapped: Nil, mapped: Map.singleton idx (Constraint t1 t2) }
 
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
 returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
 returnWithConstraint expr t = do
     tv <- freshNew
-    pure $ Tuple tv (constraintSingle (index expr) tv t)
+    pure $ Tuple tv (constraintSingleMapped (index expr) tv t)
 
 -- TODO: Where can this be used instead of `returnWithConstraint`?
 returnDirect :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
@@ -180,25 +218,22 @@ returnDirect expr t = pure $ Tuple t (constraintSingle (index expr) t t)
 returnWithTypeError :: IndexedTypeTree -> TypeError -> InferNew (Tuple Type Constraints)
 returnWithTypeError expr typeError = do
   let error = ConstraintError (TypeError typeError)
-  pure $ Tuple UnknownType (Map.singleton (index expr) error)
+  pure $ Tuple UnknownType { unmapped: Nil, mapped: Map.singleton (index expr) error }
+
+setConstraintIndex :: Index -> Type -> Type -> Constraints
+setConstraintIndex idx t1 t2 = constraintSingleMapped idx t1 t2
 
 -- | Setup a new type constraint for a given expression node.
-setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
-setConstraintFor expr t1 t2 = constraintSingle (index expr) t1 t2
+setTypeConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
+setTypeConstraintFor expr t1 t2 = constraintSingleMapped (index expr) t1 t2
 
 -- | Setup a new type constraint mapping a type to itself.
-setSingleConstraintFor :: IndexedTypeTree -> Type -> Constraints
-setSingleConstraintFor expr t = constraintSingle (index expr) t t
+setSingleTypeConstraintFor :: IndexedTypeTree -> Type -> Constraints
+setSingleTypeConstraintFor expr t = constraintSingleMapped (index expr) t t
 
--- TODO: Fix.
 -- | Set a constraint not referring to a node.
-setConstraint' :: Type -> Type -> InferNew Constraints
-setConstraint' t1 t2 = do
-  Unique s <- get
-  put (Unique { count: (s.count + 1) })
-  -- Yucky hack: we don't want to refer to an existing node index and therefore create an fairly
-  -- high index number.
-  pure $ constraintSingle (s.count + 1000) t1 t2
+setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
+setConstraintFor expr t1 t2 = constraintSingle (index expr) t1 t2
 
 -- | Traverse the given type tree and collect type constraints.
 inferNew :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
@@ -221,44 +256,44 @@ inferNew ex = case ex of
   List _ Nil -> do
     tv <- freshNew
     tv2 <- freshNew
-    let c = setConstraintFor ex tv (AD $ TList tv2)
+    let c = setTypeConstraintFor ex tv (AD $ TList tv2)
     pure $ Tuple tv c
 
   List _ (e : Nil) -> do
     Tuple t c1 <- inferNew e
     tv <- freshNew
-    let c2 = setConstraintFor ex tv (AD $ TList t)
-    pure $ Tuple tv (c1 <> c2)
+    let c2 = setTypeConstraintFor ex tv (AD $ TList t)
+    pure $ Tuple tv (c1 <+> c2)
 
   List _ (e : es) -> do
     Tuple t1 c1  <- inferNew e
     Tuple ts cs  <- unzip <$> traverse inferNew es
     -- Also add constraints for the rest of the list elements.
-    cs' <- flip traverse ts \t -> setConstraint' t1 t
-    let c2 = foldr (<>) Map.empty cs
-    let c4 = foldr (<>) Map.empty cs'
+    let cs' = map (setConstraintFor ex t1) ts
+    let c2 = foldr (<+>) emptyConstraints cs
+    let c4 = foldr (<+>) emptyConstraints cs'
     tv <- freshNew
-    let c3 = setConstraintFor ex tv (AD $ TList t1)
-    pure $ Tuple tv (c1 <> c2 <> c3 <> c4)
+    let c3 = setTypeConstraintFor ex tv (AD $ TList t1)
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
 
   IfExpr _ cond l r -> do
     Tuple t1 c1 <- inferNew cond
     Tuple t2 c2 <- inferNew l
     Tuple t3 c3 <- inferNew r
     -- In the condition node: t1 has to be a `Bool`.
-    let c4 = setConstraintFor cond t1 boolType
+    let c4 = setTypeConstraintFor cond t1 boolType
     -- In the node of the if expression: t2 and t3 have to be equal.
-    let c5 = setConstraintFor ex t2 t3
-    pure $ Tuple t2 (c1 <> c2 <> c3 <> c4 <> c5)
+    let c5 = setTypeConstraintFor ex t2 t3
+    pure $ Tuple t2 (c1 <+> c2 <+> c3 <+> c4 <+> c5)
   App _ e es -> do
     Tuple t1 c1 <- inferNew e
     Tuple ts cs <- unzip <$> traverse inferNew es
     tv <- freshNew
     -- Be careful with the nesting of `TypArr`.
-    c3 <- setConstraint' t1 (toArrowType (ts <> (tv : Nil)))
-    let c2 = foldr (<>) Map.empty cs
-    let c4 = setSingleConstraintFor ex tv
-    pure $ Tuple tv (c1 <> c2 <> c3 <> c4)
+    let c3 = setConstraintFor ex t1 (toArrowType (ts <> (tv : Nil)))
+    let c2 = foldr (<+>) emptyConstraints cs
+    let c4 = setSingleTypeConstraintFor ex tv
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
 
   _ -> Ex.throwError $ UnknownError "Not yet implemented."
 
@@ -277,7 +312,7 @@ data Unifier = Unifier Subst Constraints
 initialUnifier :: Constraints -> Unifier
 initialUnifier constraints = Unifier unknownSubst constraints
     where
-    unknownSubst = getUnknownSubst $ map snd $ Map.toList constraints
+    unknownSubst = getUnknownSubst $ toConstraintList constraints
 
 -- | Collect the substitutions in the unifier and catch occurring type errors.
 runSolve :: Constraints -> Either TypeError Subst
@@ -372,7 +407,7 @@ solver (Unifier subst constraints) = solver' subst (removeUnknowns constraintLis
   -- The list containing all the constraints without the indices.
   -- TODO: Later the indices will be needed in order to map occurring erros to the corresponding
   --       nodes.
-  constraintList = map snd (Map.toList constraints)
+  constraintList = toConstraintList constraints
   solver' :: Subst -> List Constraint -> Ex.Except TypeError Subst
   solver' subst constraints = case constraints of
     Nil -> pure subst
@@ -389,7 +424,7 @@ assignTypes (Unifier subst constraints) expr = treeMap id id fo f expr
   where
   f (Tuple _ idx) = Tuple (lookupTVar idx) idx
   fo (Tuple op (Tuple _ idx)) = Tuple op (Tuple (lookupTVar idx) idx)
-  lookupTVar idx = case Map.lookup idx constraints of
+  lookupTVar idx = case Map.lookup idx constraints.mapped of
     Nothing -> Nothing
     Just (Constraint tv _) -> Just $ subst `apply` tv
     Just (ConstraintError typeError) -> Just $ subst `apply` typeError
@@ -1150,11 +1185,11 @@ typeTreeProgramEnv env tt = case evalState (runExceptT (inferAndCatchErrors env 
       Right result@(Tuple subst tree) -> Right (closeOverTypeTree result)
 
 data InferRes = InferRes TypeTree Constraints Subst
-twoStageInfer :: TypeEnv -> TypeTree -> Either TypeError InferRes
+twoStageInfer :: TypeEnv -> TypeTree -> Either (Tuple TypeError Constraints) InferRes
 twoStageInfer env tt = case runInferNew env (inferNew indexedTT) of
-      Left err -> Left err
+      Left err -> Left (Tuple err emptyConstraints)
       Right constraints -> case runSolve constraints of
-        Left err -> Left err
+        Left err -> Left (Tuple err constraints)
         Right subst -> do
           -- TODO: Return unifier instead of subst from `runSolve`?
           let expr = assignTypes (Unifier subst constraints) indexedTT

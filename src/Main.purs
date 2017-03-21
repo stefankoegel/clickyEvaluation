@@ -132,7 +132,7 @@ typeCheckExpression :: forall eff. TypeChecker.TypeEnv -> AST.TypeTree
                  -> Eff (dom :: DOM | eff) (Maybe AST.TypeTree)
 typeCheckExpression typedEnv expr =
   case TypeChecker.twoStageInfer typedEnv expr of
-  Left error -> do
+  Left (Tuple error cs) -> do
     showError "Expression" (AST.prettyPrintTypeError error)
     pure Nothing
   Right (TypeChecker.InferRes typedExpression constraints subst) -> do
