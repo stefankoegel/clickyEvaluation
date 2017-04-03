@@ -270,6 +270,12 @@ setConstraintFor' idx t1 t2 = constraintSingleUnmapped idx t1 t2
 
 data Triple a b c = Triple a b c
 
+unzip3 :: forall a b c. List (Triple a b c) -> Triple (List a) (List b) (List c)
+unzip3 = foldr
+         (\(Triple a b c) (Triple as bs cs) ->
+            Triple (a : as) (b : bs) (c : cs))
+         (Triple Nil Nil Nil)
+
 -- | Choose a new type variable for the given binding and add typing information for the node index.
 makeBindingEnv :: IndexedTypedBinding -> InferNew (Triple Type TVarMappings Constraints)
 makeBindingEnv binding = case binding of
@@ -292,7 +298,30 @@ makeBindingEnv binding = case binding of
     Triple t2 m2 c2 <- makeBindingEnv b2
     let c3 = setConstraintFor' (bindingIndex b2) (AD $ TList t1) t2
     pure $ Triple (AD $ TList t1) (m1 <> m2) (c1 <+> c2 <+> c3)
-  _ -> Ex.throwError $ UnknownError "Not yet implemented."
+
+  ListLit _ bs -> do
+    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bs
+    listElementConstraints <- setListConstraints ts
+    t <- listType ts
+    pure $ Triple t (concat ms) (foldConstraints cs <+> listElementConstraints)
+
+  NTupleLit _ bs -> do
+    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bs
+    pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs)
+
+  where
+  -- Go through the list of given types and set constraints for every to elements of the list.
+  setListConstraints Nil = pure emptyConstraints
+  setListConstraints (t:Nil) = do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TList t)
+    pure c
+  setListConstraints (t1:t2:ts) = do
+    cs <- setListConstraints (t2:ts)
+    let c = setConstraintFor' (bindingIndex binding) t1 t2 <+> cs
+    pure c
+  -- Given a list of types occurring in a list, determine the list type (choose the first element).
+  listType Nil = freshNew >>= \tv -> pure $ AD $ TList tv
+  listType (t:_) = pure $ AD $ TList t
 
 -- | Go through list of given bindings and accumulate an corresponding type. Gather environment
 -- | information and setup the type information for every binding tree node.
@@ -300,11 +329,6 @@ makeBindingEnv' :: List IndexedTypedBinding -> InferNew (Triple (List Type) TVar
 makeBindingEnv' bindings = do
   Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bindings
   pure $ Triple ts (concat ms) (foldConstraints cs)
-  where
-  unzip3 = foldr
-           (\(Triple a b c) (Triple as bs cs) ->
-              Triple (a : as) (b : bs) (c : cs))
-           (Triple Nil Nil Nil)
 
 -- | Extend the type environment with the new mappings for the evaluation of `m`.
 inEnv :: forall a. TVarMappings -> InferNew a -> InferNew a
