@@ -265,6 +265,9 @@ setSingleTypeConstraintFor' idx t = constraintSingleMapped idx t t
 setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
 setConstraintFor expr t1 t2 = constraintSingleUnmapped (index expr) t1 t2
 
+setConstraintFor' :: Index -> Type -> Type -> Constraints
+setConstraintFor' idx t1 t2 = constraintSingleUnmapped idx t1 t2
+
 data Triple a b c = Triple a b c
 
 -- | Choose a new type variable for the given binding and add typing information for the node index.
@@ -284,6 +287,11 @@ makeBindingEnv binding = case binding of
     tv <- freshNew
     let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
     pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
+  ConsLit _ b1 b2 -> do
+    Triple t1 m1 c1 <- makeBindingEnv b1
+    Triple t2 m2 c2 <- makeBindingEnv b2
+    let c3 = setConstraintFor' (bindingIndex b2) (AD $ TList t1) t2
+    pure $ Triple (AD $ TList t1) (m1 <> m2) (c1 <+> c2 <+> c3)
   _ -> Ex.throwError $ UnknownError "Not yet implemented."
 
 -- | Go through list of given bindings and accumulate an corresponding type. Gather environment
