@@ -330,6 +330,40 @@ makeBindingEnv' bindings = do
   Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bindings
   pure $ Triple ts (concat ms) (foldConstraints cs)
 
+-- | Associate a binding with a corresponding expression. Therefore, infer the given expression
+-- | and associate its type with the binding.
+associate :: IndexedTypedBinding -> IndexedTypeTree -> InferNew (Tuple TVarMappings Constraints)
+associate binding expr = do
+  Triple bt m bc1 <- makeBindingEnv binding
+  Tuple et ec <- (inferNew expr)
+  case runSolve ec of
+    Left err -> Ex.throwError err
+    Right subst -> do
+      let bc2 = setSingleTypeConstraintFor' (bindingIndex binding) et
+      -- Substitute the bound variables with the corresponding polytype.
+      env <- ask
+      let scheme = generalize (apply subst env) (apply subst et)
+      let m' = map (\(Tuple tvar s) -> Tuple tvar scheme) m
+      pure $ Tuple m' (bc2 <+> ec)
+
+-- | Given a list of bindings and corresponding expressions, associate the bindings with the
+-- | expressions and collect the type variable/scheme mappings as well as the constraints.
+associateAll :: List IndexedTypedBinding -> List IndexedTypeTree -> Tuple TVarMappings Constraints
+             -> InferNew (Tuple TVarMappings Constraints)
+associateAll (b:bs) (e:es) (Tuple ms cs) = do
+  Tuple m c <- associate b e
+  inEnv m $ associateAll bs es (Tuple (ms <> m) (cs <+> c))
+associateAll _ _ x = pure x
+
+-- | Construct a binding environment to be used in the inference of a let expression.
+makeBindingEnvLet :: List (Tuple IndexedTypedBinding IndexedTypeTree)
+                  -> InferNew (Tuple TVarMappings Constraints)
+makeBindingEnvLet defs = associateAll bindings exprs (Tuple Nil emptyConstraints)
+  where
+  bindingsAndExprs = unzip defs
+  bindings = fst bindingsAndExprs
+  exprs = snd bindingsAndExprs
+
 -- | Extend the type environment with the new mappings for the evaluation of `m`.
 inEnv :: forall a. TVarMappings -> InferNew a -> InferNew a
 inEnv mappings m = local (scope mappings) m
@@ -428,6 +462,14 @@ inferNew ex = case ex of
     -- The application expression has the type referred to by type variable `tv`.
     let c4 = setSingleTypeConstraintFor ex tv
     pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
+
+  LetExpr _ defs e -> do
+    -- Construct the binding environment and use it for the type inference of the body
+    Tuple bindingEnv c1 <- makeBindingEnvLet defs
+    Tuple t2 c2 <- inEnv bindingEnv (inferNew e)
+    -- Set the type for the current expression.
+    let c3 = setSingleTypeConstraintFor ex t2
+    pure $ Tuple t2 (c1 <+> c2 <+> c3)
 
   IfExpr _ cond l r -> do
     Tuple t1 c1 <- inferNew cond
