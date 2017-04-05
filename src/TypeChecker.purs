@@ -567,15 +567,15 @@ runSolve :: Constraints -> Either TypeError Subst
 runSolve constraints = Ex.runExcept $ solver (initialUnifier constraints)
 
 -- | Bind the given type variable to the given type and return the resulting substitution.
-bindTVar ::  TVar -> Type -> Ex.Except TypeError Subst
+bindTVar ::  TVar -> Type -> Either TypeError Subst
 bindTVar tv t
   | t == (TypVar tv) = pure $ nullSubst
-  | occursCheck tv t = Ex.throwError $ normalizeTypeError $ InfiniteType tv t
+  | occursCheck tv t = Left $ normalizeTypeError $ InfiniteType tv t
   | otherwise = pure $ Map.singleton tv t
 
 -- | Try to unify the given types and return the resulting substitution or the occurring type
 -- | error.
-unifies :: Type -> Type -> Ex.Except TypeError Subst
+unifies :: Type -> Type -> Either TypeError Subst
 unifies (TypArr l1 r1) (TypArr l2 r2) = do
   s1 <- unifies l1 l2
   s2 <- unifies (apply s1 r1) (apply s1 r2)
@@ -587,18 +587,18 @@ unifies UnknownType t = pure nullSubst
 unifies t UnknownType = pure nullSubst
 unifies (AD a) (AD b) | a == b = pure nullSubst
 unifies (AD a) (AD b) = unifiesAD a b
-unifies t1 t2 = Ex.throwError $ normalizeTypeError $ UnificationFail t1 t2
+unifies t1 t2 = Left $ normalizeTypeError $ UnificationFail t1 t2
 
 -- | Try to unify the given AD types and return the resulting substitution or the occurring type
 -- | error.
-unifiesAD :: AD -> AD -> Ex.Except TypeError Subst
+unifiesAD :: AD -> AD -> Either TypeError Subst
 unifiesAD (TList l1) (TList l2) = unifies l1 l2
 unifiesAD (TTuple (a:as)) (TTuple (b:bs)) = do
   s1 <- unifiesAD (TTuple as) (TTuple bs)
   s2 <- unifies a b
   pure $ s1 `compose` s2
 unifiesAD (TTuple Nil) (TTuple Nil) = pure nullSubst
-unifiesAD t1 t2 = throwError $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
+unifiesAD t1 t2 = Left $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
 
 -- | Given a list of constraints return a tuple containing:
 -- | 1. List of all constraints mapping a type variable to another
@@ -660,9 +660,9 @@ solver (Unifier subst constraints) = solver' subst (removeUnknowns constraintLis
   solver' subst constraints = case constraints of
     Nil -> pure subst
     (ConstraintError typeError : rest) -> solver' subst rest
-    (Constraint t1 t2 : rest) -> do
-      subst1 <- unifies t1 t2
-      solver' (subst1 `compose` subst) (apply subst1 rest)
+    (Constraint t1 t2 : rest) -> case unifies t1 t2 of
+        Left error -> Ex.throwError error
+        Right subst1 -> solver' (subst1 `compose` subst) (apply subst1 rest)
 
 -- TODO: Change type to `Unifier -> IndexedTypeTree -> TypeTree`?
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
