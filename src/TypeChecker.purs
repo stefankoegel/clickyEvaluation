@@ -325,8 +325,9 @@ makeBindingEnv binding = case binding of
 
 -- | Go through list of given bindings and accumulate an corresponding type. Gather environment
 -- | information and setup the type information for every binding tree node.
-makeBindingEnv' :: List IndexedTypedBinding -> InferNew (Triple (List Type) TVarMappings Constraints)
-makeBindingEnv' bindings = do
+makeBindingEnvLambda :: List IndexedTypedBinding
+                     -> InferNew (Triple (List Type) TVarMappings Constraints)
+makeBindingEnvLambda bindings = do
   Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bindings
   pure $ Triple ts (concat ms) (foldConstraints cs)
 
@@ -352,7 +353,7 @@ associateAll :: List IndexedTypedBinding -> List IndexedTypeTree -> Tuple TVarMa
              -> InferNew (Tuple TVarMappings Constraints)
 associateAll (b:bs) (e:es) (Tuple ms cs) = do
   Tuple m c <- associate b e
-  inEnv m $ associateAll bs es (Tuple (ms <> m) (cs <+> c))
+  withEnv m $ associateAll bs es (Tuple (ms <> m) (cs <+> c))
 associateAll _ _ x = pure x
 
 -- | Construct a binding environment to be used in the inference of a let expression.
@@ -365,8 +366,8 @@ makeBindingEnvLet defs = associateAll bindings exprs (Tuple Nil emptyConstraints
   exprs = snd bindingsAndExprs
 
 -- | Extend the type environment with the new mappings for the evaluation of `m`.
-inEnv :: forall a. TVarMappings -> InferNew a -> InferNew a
-inEnv mappings m = local (scope mappings) m
+withEnv :: forall a. TVarMappings -> InferNew a -> InferNew a
+withEnv mappings m = local (scope mappings) m
   where
   scope mappings env = removeMultiple env (map fst mappings) `extendMultiple` mappings
 
@@ -439,9 +440,9 @@ inferNew ex = case ex of
   Lambda _ bs e -> do
     -- Infer the binding types, accumulate type variable/scheme mappings and setup type information
     -- for every binding node in the expression tree.
-    Triple t1 bindingEnv c1 <- makeBindingEnv' bs
+    Triple t1 bindingEnv c1 <- makeBindingEnvLambda bs
     -- Infer the type of the body expression.
-    Tuple t2 c2 <- inEnv bindingEnv (inferNew e)
+    Tuple t2 c2 <- withEnv bindingEnv (inferNew e)
     -- Given a list of binding types, construct the corresponding type. Conceptually:
     -- `(\a b c -> ...) => typeof a -> typeof b -> typeof c -> t2`
     let lambdaType = toArrowType (t1 <> (t2 : Nil))
@@ -466,7 +467,7 @@ inferNew ex = case ex of
   LetExpr _ defs e -> do
     -- Construct the binding environment and use it for the type inference of the body
     Tuple bindingEnv c1 <- makeBindingEnvLet defs
-    Tuple t2 c2 <- inEnv bindingEnv (inferNew e)
+    Tuple t2 c2 <- withEnv bindingEnv (inferNew e)
     -- Set the type for the current expression.
     let c3 = setSingleTypeConstraintFor ex t2
     pure $ Tuple t2 (c1 <+> c2 <+> c3)
