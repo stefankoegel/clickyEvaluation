@@ -118,8 +118,9 @@ toConstraintList constraints = (Map.toList >>> map snd) constraints.mapped
                             <> map snd constraints.unmapped
 
 toConstraintAndIndexLists :: Constraints -> Tuple (List Index) (List Constraint)
-toConstraintAndIndexLists constraints = unzip (Map.toList constraints.mapped)
-                                     <> unzip constraints.unmapped
+toConstraintAndIndexLists constraints =
+  unzip constraints.unmapped <>
+  unzip (Map.toList constraints.mapped)
 
 -- | Construct an empty constraint map.
 emptyConstraints :: Constraints
@@ -505,6 +506,33 @@ inferNew ex = case ex of
     let c3 = setConstraintFor ex t1 (t2 `TypArr` tv)
     let c4 = setSingleTypeConstraintFor ex tv
     pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
+
+  -- Expressions of the form `(4+)`.
+  SectL _ e op -> do
+    Tuple t1 c1 <- inferOpNew op
+    Tuple left c2 <- inferNew e
+    right <- freshNew
+    tv <- freshNew
+    let c3 = setConstraintFor ex t1 (left `TypArr` (right `TypArr` tv))
+    let c4 = setSingleTypeConstraintFor ex (right `TypArr` tv)
+    pure $ Tuple (right `TypArr` tv) (c1 <+> c2 <+> c3 <+> c4)
+
+  -- Expressions of the form `(^2)`.
+  SectR _ op e -> do
+    Tuple t1 c1 <- inferOpNew op
+    Tuple right c2 <- inferNew e
+    left <- freshNew
+    tv <- freshNew
+    let c3 = setSingleTypeConstraintFor ex (left `TypArr` tv)
+    let c4 = setConstraintFor ex t1 (left `TypArr` (right `TypArr` tv))
+    pure $ Tuple (left `TypArr` tv) (c1 <+> c2 <+> c3 <+> c4)
+
+  -- Expressions of the form `(:)`.
+  PrefixOp _ op -> do
+    Tuple t1 c1 <- inferOpNew op
+    tv <- freshNew
+    let c2 = setSingleTypeConstraintFor ex t1
+    pure $ Tuple t1 (c1 <+> c2)
 
   -- Empty lists.
   List _ Nil -> do
