@@ -208,6 +208,13 @@ lookupEnvNew tvar = do
 runInferNew :: TypeEnv -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
 runInferNew env m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m env initUnique)
 
+-- | Create a constraint structure representing an error of a tree node.
+constraintError :: Index -> Type -> TypeError -> Constraints
+constraintError idx tv error =
+  { unmapped: Tuple idx (Constraint tv UnknownType) : Nil
+  , mapped: Map.singleton idx (ConstraintError $ TypeError error)
+  }
+
 constraintSingleUnmapped :: Index -> Type -> Type -> Constraints
 -- The unknown type should always stand on the right.
 constraintSingleUnmapped idx UnknownType t =
@@ -246,10 +253,8 @@ returnDirect expr t = pure $ Tuple t (constraintSingleMapped (index expr) t t)
 
 returnWithTypeError :: IndexedTypeTree -> TypeError -> InferNew (Tuple Type Constraints)
 returnWithTypeError expr typeError = do
-  let error = ConstraintError (TypeError typeError)
   tv <- freshNew
-  let c = setConstraintFor expr tv UnknownType
-  pure $ Tuple tv (c <+> { unmapped: Nil, mapped: Map.singleton (index expr) error })
+  pure $ Tuple tv (constraintError (index expr) tv typeError)
 
 setTypeConstraintFor' :: Index -> Type -> Type -> Constraints
 setTypeConstraintFor' idx t1 t2 = constraintSingleMapped idx t1 t2
@@ -669,7 +674,7 @@ solver { subst: beginningSubst, constraints: constraints } =
           _ -> do
             -- Give the constraint for the node at the current index an unknown type and restart
             -- the constraint solving.
-            let errors' = { unmapped: (Tuple idx (Constraint (TypVar tv) UnknownType)) : Nil, mapped: Map.singleton idx (ConstraintError $ TypeError error) } <+> errors
+            let errors' = constraintError idx (TypVar tv) error <+> errors
             let mapped' = Map.insert idx (Constraint (TypVar tv) UnknownType) constraints.mapped
             let constraints' = { unmapped: constraints.unmapped, mapped: mapped' }
             let lists' = toConstraintAndIndexLists constraints'
