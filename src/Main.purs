@@ -128,6 +128,7 @@ buildTypeEnvironment expr env = case TypeChecker.buildTypeEnv (Eval.envToDefs en
 
 -- TODO: Add support for partially typed trees.
 -- | Type check an expression using a given typed environment.
+-- | Construct a div tree from the given typed expression.
 typeCheckExpression :: forall eff. TypeChecker.TypeEnv -> AST.TypeTree
                  -> Eff (dom :: DOM | eff) (Maybe AST.TypeTree)
 typeCheckExpression typedEnv expr =
@@ -135,7 +136,8 @@ typeCheckExpression typedEnv expr =
   Left (Tuple error cs) -> do
     showError "Expression" (AST.prettyPrintTypeError error)
     pure Nothing
-  Right (TypeChecker.InferRes typedExpression constraints subst) -> do
+  Right (TypeChecker.InferRes expr constraints subst) -> do
+    let typedExpression = TypeChecker.closeOverTypeTree (Tuple subst (AST.removeIndices expr))
     pure $ Just typedExpression
 
 -- | Construct a div tree from the given typed expression.
