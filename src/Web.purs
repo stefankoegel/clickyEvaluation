@@ -275,9 +275,14 @@ needsTypeContainer classes (Just t) = decideByClass classes && decideByType t
     decideByType _ = true
     decideByClass classes = if oneOfClasses ["op", "binding", "num", "char", "bool", "gen", "guard", "let"] classes then false else true
 
+-- | Return true if the given `MType` represents a type error.
+isTypeError :: MType -> Boolean
+isTypeError (Just (TypeError _)) = true
+isTypeError _ = false
+
 divToJQuery :: forall eff. Boolean -> Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
 divToJQuery isTopLevelDiv callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
-  let needsContainer = needsTypeContainer classes exprType || isTopLevelDiv
+  let needsContainer = needsTypeContainer classes exprType || isTopLevelDiv || isTypeError exprType
   let isTyped = isJust exprType
 
   container <- makeDiv "" ["container"]
