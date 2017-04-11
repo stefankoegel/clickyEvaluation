@@ -583,8 +583,8 @@ inferNew ex = case ex of
     Tuple t1 c1 <- inferRequireEnumType first
     -- Try to infer the types of the `step` and `last` expression if existing and set the
     -- constraints accordingly.
-    c2 <- f'' step t1
-    c3 <- f'' last t1
+    c2 <- tryInferRequireEnumType step t1
+    c3 <- tryInferRequireEnumType last t1
     tv <- freshNew
     let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
     pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
