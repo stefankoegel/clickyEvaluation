@@ -430,8 +430,8 @@ traverseTree fb fo f expr@(ListComp t e quals) = do
   pure $ ListComp t' e' quals'
 
 type ExprQualTree = QualTree (Binding Unit) Expr Unit
-
-type TypeQual  = QualTree (Binding MType) TypeTree MType
+type TypeQual = QualTree (Binding MType) TypeTree MType
+type IndexedQualTree = QualTree (Binding MIType) IndexedTypeTree MIType
 
 type TVar = String
 

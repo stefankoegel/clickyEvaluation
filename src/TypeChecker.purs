@@ -1,45 +1,65 @@
 module TypeChecker where
 
-import Prelude (class Show, Unit, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), not, bind, id, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (>>>), (<<<))
-import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError, catchError)
-import Control.Monad.Except as Ex
-import Control.Monad.State (State, evalState, runState, put, get)
-import Control.Monad.RWS.Trans (RWST)
-import Control.Monad.RWS (ask, evalRWST, local)
-import Data.Bifunctor (rmap)
 import Control.Apply (lift2)
 import Control.Bind (ifM)
-import Data.Either (Either(Left, Right))
-import Data.List (List(..), filter, delete, concatMap, unzip, foldM, (:), zip, singleton, length, concat, (!!))
+import Control.Monad.Except as Ex
+import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError, catchError)
+import Control.Monad.RWS (ask, evalRWST, local)
+import Control.Monad.RWS.Trans (RWST)
+import Control.Monad.State (State, evalState, runState, put, get)
 import Data.Array as Array
-import Data.Map as Map
-import Data.Map (Map, insert, lookup, empty)
-import Data.Tuple (Tuple(Tuple), snd, fst, uncurry)
-import Data.Traversable (traverse)
-import Data.Set as Set
-import Data.Foldable (intercalate, foldl, foldr, foldMap, elem)
-import Data.Maybe (Maybe(..), fromMaybe, fromJust, maybe)
-import Partial.Unsafe (unsafePartial, unsafeCrashWith)
-import Data.String (fromCharArray)
+import Data.Bifunctor (rmap)
 import Data.Char as Char
+import Data.Either (Either(Left, Right))
+import Data.Foldable (intercalate, foldl, foldr, foldMap, elem)
+import Data.List (List(..), (:), (!!),
+  concat, concatMap, delete, filter, foldM, length, singleton, unzip, zip)
+import Data.Map (Map, insert, lookup, empty)
+import Data.Map as Map
+import Data.Maybe (Maybe(..), fromMaybe, fromJust, maybe)
+import Data.Set as Set
+import Data.String (fromCharArray)
+import Data.Traversable (traverse)
+import Data.Tuple (Tuple(Tuple), snd, fst, uncurry)
+import Partial.Unsafe (unsafePartial, unsafeCrashWith)
+import Prelude (
+  class Show, Unit,
+  ($), (&&), (+), (-), (/=), (<$>), (<*>), (<<<), (<>), (==), (>), (>>=), (>>>),
+  bind, const, div, flip, id, map, mod, not, otherwise, pure, show)
 
 import AST
 
+---------------------------------------------------------------------------------------------------
+-- | Data Types and Helper Functions                                                             --
+---------------------------------------------------------------------------------------------------
+
+-- | A triple type.
+data Triple a b c = Triple a b c
+
+-- | Similar to `unzip` on tuples.
+unzip3 :: forall a b c. List (Triple a b c) -> Triple (List a) (List b) (List c)
+unzip3 = foldr
+         (\(Triple a b c) (Triple as bs cs) ->
+            Triple (a : as) (b : bs) (c : cs))
+         (Triple Nil Nil Nil)
+
+-- | A type scheme represents a polytype. It contains a list of type variables, which may occur in
+-- | the type.
 data Scheme = Forall (List TVar) Type
 
+-- TODO: Remove, and use `ppScheme`?
 instance showScheme :: Show Scheme where
   show (Forall a b) = "Forall (" <> show a <> ") " <> show b
 
 -- | Pretty print a type scheme.
 ppScheme :: Scheme -> String
 ppScheme (Forall Nil t) = prettyPrintType t
-ppScheme (Forall tvars t) = "forall "
-                         <> intercalate " " tvars
-                         <> ". "
-                         <> prettyPrintType t
+ppScheme (Forall tvars t) = "forall " <> intercalate " " tvars <> ". " <> prettyPrintType t
 
+-- | Mappings from type variable to type schemes. These mappings are used for bindings in lambda
+-- | and let expressions. Here for every binding the type variable and the corresponding scheme is
+-- | stored.
 type TVarMapping = Tuple TVar Scheme
-
 type TVarMappings = List TVarMapping
 
 -- | The type environment is a mapping from type variables to polytypes.
@@ -62,16 +82,9 @@ ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
   (Map.toList env)
   where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " : " <> ppScheme scheme
 
+-- TODO: Remove in favor of `ppTypeEnv`?
 instance showTypeEnv :: Show TypeEnv where
   show (TypeEnv a) = show a
-
-data Unique = Unique { count :: Int }
-
-type Infer a = ExceptT TypeError (State Unique) a
-
----------------------------------------------------------------------------------------------------
--- | Refactoring into 2-phase type process                                                       --
----------------------------------------------------------------------------------------------------
 
 -- | The type `Bool`.
 boolType :: Type
@@ -92,6 +105,10 @@ intToIntType = intType `TypArr` intType
 -- | The type `Int -> Int -> Int`.
 intToIntToIntType :: Type
 intToIntToIntType = intType `TypArr` intToIntType
+
+-- +------------------+
+-- | Type Constraints |
+-- +------------------+
 
 -- | Type constraints.
 data Constraint = Constraint Type Type
@@ -114,8 +131,9 @@ type Constraints = {
 
 -- | Convert the given set of constraints into a list of constraints.
 toConstraintList :: Constraints -> List Constraint
-toConstraintList constraints = (Map.toList >>> map snd) constraints.mapped
-                            <> map snd constraints.unmapped
+toConstraintList constraints =
+  (Map.toList >>> map snd) constraints.mapped <>
+  map snd constraints.unmapped
 
 toConstraintAndIndexLists :: Constraints -> Tuple (List Index) (List Constraint)
 toConstraintAndIndexLists constraints =
@@ -124,7 +142,10 @@ toConstraintAndIndexLists constraints =
 
 -- | Construct an empty constraint map.
 emptyConstraints :: Constraints
-emptyConstraints = { unmapped: Nil, mapped: Map.empty }
+emptyConstraints =
+  { unmapped: Nil
+  , mapped: Map.empty
+  }
 
 -- | Append the given constraints.
 appendConstraints :: Constraints -> Constraints -> Constraints
@@ -132,82 +153,6 @@ appendConstraints cs1 cs2 =
   { unmapped: cs1.unmapped <> cs2.unmapped
   , mapped: cs1.mapped <> cs2.mapped
   }
-
--- | Fold the given list of constraints down to a single constraint set.
-foldConstraints :: List Constraints -> Constraints
-foldConstraints = foldr (<+>) emptyConstraints
-
-infixr 5 appendConstraints as <+>
-
--- | Constraints are substitutable.
-instance substitutableConstraint :: Substitutable Constraint where
-    apply s (Constraint t1 t2) = Constraint (apply s t1) (apply s t2)
-    apply s (ConstraintError typeError) = ConstraintError (apply s typeError)
-    ftv (Constraint t1 t2) = ftv t1 `Set.union` ftv t2
-    ftv (ConstraintError typeError) = Set.empty
-
--- | Pretty print the given constraint.
-ppConstraint :: Constraint -> String
-ppConstraint (Constraint t1 t2) = prettyPrintType t1 <> " is " <> prettyPrintType t2
-ppConstraint (ConstraintError typeError) = prettyPrintType typeError
-
--- | Pretty print the given constraints.
-ppConstraints :: Constraints -> String
-ppConstraints constraints = "Constraints:\n" <>
-  "  determining the type:\n" <>
-    (map ppTuple >>> intercalate ",\n")
-    (Map.toList constraints.mapped) <> "\n" <>
-  "  other:\n" <>
-    (map ppTuple >>> intercalate ",\n")
-    constraints.unmapped
-  where
-  ppTuple (Tuple idx constraint) = "\tnode " <> show idx <> ": " <> ppConstraint constraint
-
--- | Pretty print the given constraint list.
-ppConstraintList :: List Constraint -> String
-ppConstraintList constraints = "Constraints:\n" <>
-  (map ppConstraint >>> intercalate ",\n") constraints
-
-type InferNew a = (RWST
-  TypeEnv               -- ^ Read from the type environment.
-  Unit
-  Unique                -- ^ The infer state.
-  (Ex.Except TypeError) -- ^ Catch type errors.
-  a)
-
--- | Choose a fresh type variable name.
-freshTVarNew :: InferNew TVar
-freshTVarNew = do
-    Unique s <- get
-    put (Unique { count: (s.count + 1) })
-    pure $ "t_" <> show s.count
-
--- | Choose a fresh type variable.
-freshNew :: InferNew Type
-freshNew = TypVar <$> freshTVarNew
-
--- | Create a monotype from the given type scheme.
-instantiateNew :: Scheme -> InferNew Type
-instantiateNew (Forall as t) = do
-  as' <- traverse (const freshNew) as
-  let s = Map.fromFoldable $ zip as as'
-  pure $ apply s t
-
--- | Lookup a type in the type environment.
-lookupEnvNew :: TVar -> InferNew MType
-lookupEnvNew tvar = do
-  TypeEnv env <- ask
-  case Map.lookup tvar env of
-    Nothing -> pure Nothing
-    Just scheme  -> instantiateNew scheme >>= (pure <<< Just)
-
--- | Run the type inference and catch type errors. Note that the only possible errors are:
--- |   * `UnboundVariable`
--- |   * `NoInstanceOfEnum`
--- |   * `UnknownError`
--- | All other errors can only be encountered during the constraint solving phase.
-runInferNew :: TypeEnv -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
-runInferNew env m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m env initUnique)
 
 -- | Create a constraint structure representing an error of a tree node.
 constraintError :: Index -> Type -> TypeError -> Constraints
@@ -237,16 +182,96 @@ constraintSingleMapped idx t1 t2 =
   , mapped: Map.singleton idx (Constraint t1 t2)
   }
 
+-- | Fold the given list of constraints down to a single constraint set.
+foldConstraints :: List Constraints -> Constraints
+foldConstraints = foldr (<+>) emptyConstraints
+
+infixr 5 appendConstraints as <+>
+
+-- | Constraints are substitutable.
+instance substitutableConstraint :: Substitutable Constraint where
+  apply s (Constraint t1 t2) = Constraint (apply s t1) (apply s t2)
+  apply s (ConstraintError typeError) = ConstraintError (apply s typeError)
+  ftv (Constraint t1 t2) = ftv t1 `Set.union` ftv t2
+  ftv (ConstraintError typeError) = Set.empty
+
+-- | Pretty print the given constraint.
+ppConstraint :: Constraint -> String
+ppConstraint (Constraint t1 t2) = prettyPrintType t1 <> " is " <> prettyPrintType t2
+ppConstraint (ConstraintError typeError) = prettyPrintType typeError
+
+-- | Pretty print the given constraints.
+ppConstraints :: Constraints -> String
+ppConstraints constraints = "Constraints:\n" <>
+  "  determining the type:\n" <>
+    (map ppTuple >>> intercalate ",\n")
+    (Map.toList constraints.mapped) <> "\n" <>
+  "  other:\n" <>
+    (map ppTuple >>> intercalate ",\n")
+    constraints.unmapped
+  where
+  ppTuple (Tuple idx constraint) = "\tnode " <> show idx <> ": " <> ppConstraint constraint
+
+-- | Pretty print the given constraint list.
+ppConstraintList :: List Constraint -> String
+ppConstraintList constraints = "Constraints:\n" <>
+  (map ppConstraint >>> intercalate ",\n") constraints
+
+---------------------------------------------------------------------------------------------------
+-- | Type Inference                                                                              --
+---------------------------------------------------------------------------------------------------
+
+type InferNew a = (RWST
+  TypeEnv               -- ^ Read from the type environment.
+  Unit
+  Unique                -- ^ The infer state.
+  (Ex.Except TypeError) -- ^ Catch type errors.
+  a)
+
+-- | Choose a fresh type variable name.
+freshTVarNew :: InferNew TVar
+freshTVarNew = do
+  Unique s <- get
+  put (Unique { count: (s.count + 1) })
+  pure $ "t_" <> show s.count
+
+-- | Choose a fresh type variable.
+freshNew :: InferNew Type
+freshNew = TypVar <$> freshTVarNew
+
+-- | Create a monotype from the given type scheme.
+instantiateNew :: Scheme -> InferNew Type
+instantiateNew (Forall as t) = do
+  as' <- traverse (const freshNew) as
+  let s = Map.fromFoldable $ zip as as'
+  pure $ apply s t
+
+-- | Lookup a type in the type environment.
+lookupEnvNew :: TVar -> InferNew MType
+lookupEnvNew tvar = do
+  TypeEnv env <- ask
+  case Map.lookup tvar env of
+    Nothing -> pure Nothing
+    Just scheme  -> instantiateNew scheme >>= (pure <<< Just)
+
+-- | Run the type inference and catch type errors. Note that the only possible errors are:
+-- |   * `UnboundVariable`
+-- |   * `NoInstanceOfEnum`
+-- |   * `UnknownError`
+-- | All other errors can only be encountered during the constraint solving phase.
+runInferNew :: TypeEnv -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
+runInferNew env m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m env initUnique)
+
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
 returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
 returnWithConstraint expr t = do
-    tv <- freshNew
-    pure $ Tuple tv (constraintSingleMapped (index expr) tv t)
+  tv <- freshNew
+  pure $ Tuple tv (constraintSingleMapped (index expr) tv t)
 
 returnWithConstraint' :: Index -> Type -> InferNew (Tuple Type Constraints)
 returnWithConstraint' idx t = do
-    tv <- freshNew
-    pure $ Tuple tv (constraintSingleMapped idx tv t)
+  tv <- freshNew
+  pure $ Tuple tv (constraintSingleMapped idx tv t)
 
 -- TODO: Where can this be used instead of `returnWithConstraint`?
 returnDirect :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
@@ -278,31 +303,28 @@ setConstraintFor expr t1 t2 = constraintSingleUnmapped (index expr) t1 t2
 setConstraintFor' :: Index -> Type -> Type -> Constraints
 setConstraintFor' idx t1 t2 = constraintSingleUnmapped idx t1 t2
 
-data Triple a b c = Triple a b c
-
-unzip3 :: forall a b c. List (Triple a b c) -> Triple (List a) (List b) (List c)
-unzip3 = foldr
-         (\(Triple a b c) (Triple as bs cs) ->
-            Triple (a : as) (b : bs) (c : cs))
-         (Triple Nil Nil Nil)
-
--- | Choose a new type variable for the given binding and add typing information for the node index.
+-- | Choose a new type variable for the given binding and add typing information for the node
+-- | index.
 makeBindingEnv :: IndexedTypedBinding -> InferNew (Triple Type TVarMappings Constraints)
 makeBindingEnv binding = case binding of
   Lit _ atom@(Bool bool) -> do
     let c = setSingleTypeConstraintFor' (bindingIndex binding) boolType
     pure $ Triple boolType Nil c
+
   Lit _ atom@(Char char) -> do
     let c = setSingleTypeConstraintFor' (bindingIndex binding) charType
     pure $ Triple charType Nil c
+
   Lit _ atom@(AInt aint) -> do
     let c = setSingleTypeConstraintFor' (bindingIndex binding) intType
     pure $ Triple intType Nil c
+
   Lit _ atom@(Name name) -> do
     -- Set the type of the associate tree node to equal the type referred to by `tv`.
     tv <- freshNew
     let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
     pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
+
   ConsLit _ b1 b2 -> do
     Triple t1 m1 c1 <- makeBindingEnv b1
     Triple t2 m2 c2 <- makeBindingEnv b2
@@ -420,8 +442,8 @@ getOpType op = case op of
 -- | corresponding expression node.
 inferOpNew :: Tuple Op MIType -> InferNew (Tuple Type Constraints)
 inferOpNew (Tuple (InfixFunc name) (Tuple _ idx)) = do
-    Tuple t c <- inferNew (Atom (Tuple Nothing idx) (Name name))
-    pure $ Tuple t c
+  Tuple t c <- inferNew (Atom (Tuple Nothing idx) (Name name))
+  pure $ Tuple t c
 inferOpNew opTuple@(Tuple op _) = do
   t <- getOpType op
   let c = setSingleTypeConstraintFor' (opIndex opTuple) t
@@ -673,6 +695,10 @@ toArrowType Nil = unsafeCrashWith "Function `toArrowType` must not be called wit
 toArrowType (t : Nil) = t
 toArrowType (t:ts) = t `TypArr` (toArrowType ts)
 
+---------------------------------------------------------------------------------------------------
+-- | Constraint Solving                                                                          --
+---------------------------------------------------------------------------------------------------
+
 -- | Collect the substitutions by working through the constraints. The substitution represents
 -- | the solution to the constraint solving problem.
 type Unifier = { subst :: Subst, constraints :: Constraints }
@@ -680,8 +706,7 @@ type Unifier = { subst :: Subst, constraints :: Constraints }
 -- | Create an initial unifier containing a substitution with mappings to the unknown type.
 initialUnifier :: Constraints -> Unifier
 initialUnifier constraints = { subst: unknownSubst, constraints: constraints }
-    where
-    unknownSubst = getUnknownSubst $ toConstraintList constraints
+  where unknownSubst = getUnknownSubst $ toConstraintList constraints
 
 -- | Collect the substitutions in the unifier and catch occurring type errors.
 runSolve :: Constraints -> Unifier
@@ -726,12 +751,12 @@ unifiesAD t1 t2 = Left $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
 -- | 2. List of all constraints mapping a type variable to the unknown type.
 sortIntoLists :: List Constraint -> Tuple (List Constraint) (List Constraint)
 sortIntoLists cs = f cs (Tuple Nil Nil)
-    where
-    f :: List Constraint -> Tuple (List Constraint) (List Constraint) -> Tuple (List Constraint) (List Constraint)
-    f Nil tuple = tuple
-    f (c@(Constraint t UnknownType) : cs)   (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
-    f (c@(Constraint UnknownType t) : cs)   (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
-    f (c : cs) (Tuple pairs unknowns) = f cs (Tuple (c : pairs) unknowns)
+  where
+  f :: List Constraint -> Tuple (List Constraint) (List Constraint) -> Tuple (List Constraint) (List Constraint)
+  f Nil tuple = tuple
+  f (c@(Constraint t UnknownType) : cs)   (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
+  f (c@(Constraint UnknownType t) : cs)   (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
+  f (c : cs) (Tuple pairs unknowns) = f cs (Tuple (c : pairs) unknowns)
 
 -- | Create a substitution from the given constraint list. Note that only mappings from a type
 -- | variable to the unknown type are preserved.
@@ -759,14 +784,14 @@ replaceArrowType Nil = Nil
 -- | Given a list of constraints, find the substitution mapping type variables to unknown types.
 getUnknownSubst :: List Constraint -> Subst
 getUnknownSubst cs = uncurry (applyUnknowns nullSubst) lists
-    where lists = sortIntoLists (replaceArrowType cs)
+  where lists = sortIntoLists (replaceArrowType cs)
 
 applyUnknowns :: Subst -> List Constraint -> List Constraint -> Subst
 applyUnknowns subst pairs Nil = subst
 applyUnknowns subst pairs unknowns = uncurry (applyUnknowns (newSubst `compose` subst)) lists
-    where
-    newSubst = constraintsToSubst unknowns
-    lists = sortIntoLists $ newSubst `apply` pairs
+  where
+  newSubst = constraintsToSubst unknowns
+  lists = sortIntoLists $ newSubst `apply` pairs
 
 -- | Try to solve the constraints.
 solver :: Unifier -> Unifier
@@ -778,7 +803,8 @@ solver { subst: beginningSubst, constraints: constraints } =
   constraintList = snd lists
 
   solver' :: Subst -> Constraints -> List Index -> List Constraint -> Unifier
-  solver' subst errors (idx:idxs) (ConstraintError typeError : rest) = solver' subst errors idxs rest
+  solver' subst errors (idx:idxs) (ConstraintError typeError : rest) =
+    solver' subst errors idxs rest
   solver' subst errors (idx:idxs) (Constraint t1 t2 : rest) = case unifies t1 t2 of
     Left error ->
       -- Get type variable name at current index.
@@ -814,6 +840,8 @@ assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f
 
 ---------------------------------------------------------------------------------------------------
 
+data Unique = Unique { count :: Int }
+type Infer a = ExceptT TypeError (State Unique) a
 type Subst = Map.Map TVar Type
 
 -- | Pretty print a substitution.
