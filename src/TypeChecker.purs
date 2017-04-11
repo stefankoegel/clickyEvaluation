@@ -409,8 +409,7 @@ getOpType op = case op of
       a <- freshNew
       b <- freshNew
       pure $ (a `TypArr` b) `TypArr` (a `TypArr` b)
-    -- TODO: Implement.
-    InfixFunc name -> unsafeCrashWith "Error in `getOpType`: case `InfixFunc` not yet implemented."
+    _ -> pure UnknownType
   where
   -- The type `a -> a -> Bool`.
   toBoolType = do
@@ -420,6 +419,9 @@ getOpType op = case op of
 -- | Given an operator tuple, determine the operator type and put a type constraint on the
 -- | corresponding expression node.
 inferOpNew :: Tuple Op MIType -> InferNew (Tuple Type Constraints)
+inferOpNew (Tuple (InfixFunc name) (Tuple _ idx)) = do
+    Tuple t c <- inferNew (Atom (Tuple Nothing idx) (Name name))
+    pure $ Tuple t c
 inferOpNew opTuple@(Tuple op _) = do
   t <- getOpType op
   let c = setSingleTypeConstraintFor' (opIndex opTuple) t
