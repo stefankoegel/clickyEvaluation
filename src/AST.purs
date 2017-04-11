@@ -1,7 +1,7 @@
 module AST where
 
 import Prelude
-import Control.Monad.State (State, evalState, get, put)
+import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor (bimap, rmap)
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe(..))
@@ -289,6 +289,16 @@ makeIndexOpTuple (Tuple op mt) = do
   put (idx + 1)
   pure new
 
+-- | Transform the given definition into an indexed definition.
+makeIndexedDefinition :: Definition -> IndexedDefinition
+makeIndexedDefinition (Def name bindings expr) =
+  let idxAndBindings = runState (toIndexedBindings bindings) 0
+      idxAndExpr = runState (toIndexedTree expr) (snd idxAndBindings)
+  in IndexedDef name (fst idxAndBindings) (fst idxAndExpr)
+  where
+  toIndexedBindings = traverse $ traverseBinding makeIndexTuple
+  toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
+
 makeIndexedTree :: TypeTree -> IndexedTypeTree
 makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
   where
@@ -481,7 +491,11 @@ type IndexedTypedBinding = Binding MIType
 -- | Definitions for functions and constants
 data Definition = Def String (List (Binding MType)) TypeTree
 
+-- | A definition with indexed bindings and an indexed expression
+data IndexedDefinition = IndexedDef String (List IndexedTypedBinding) IndexedTypeTree
+
 derive instance eqDefintion :: Eq Definition
+derive instance eqIndexedDefintion :: Eq IndexedDefinition
 
 instance showAtom :: Show Atom where
   show atom = case atom of
