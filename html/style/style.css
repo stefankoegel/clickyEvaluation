@@ -69,8 +69,7 @@ h3 {
   padding: 10px;
 }
 
-.list, .lambda, .section, .name, .top, .tuple, .unary, .binary, .app, .if,
-.container > .num, .container > .prefixOp, .letexpr, .output > .container > .atom {
+.container > * {
   font-family: monospace;
   font-size: 15px;
   border: none;
