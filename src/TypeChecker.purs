@@ -631,8 +631,22 @@ associate binding expr = do
       bc2 = setSingleTypeConstraintFor' (bindingIndex binding) et
       -- Substitute the bound variables with the corresponding polytype.
       scheme = generalize (apply uni.subst env) (apply uni.subst et)
-      m' = map (\(Tuple tvar s) -> Tuple tvar scheme) m
+      m' = mapSchemeOnTVarMappings m scheme
   pure $ Tuple m' (uni.constraints <+> bc2 <+> ec)
+
+-- TODO: This doesn't currently work for list and cons bindings!
+-- | Given a mapping, representing a binding, and a scheme, try to map the scheme onto the mapping.
+-- | Example expression: `let (a, b) = (\x -> x, "cake") in a b`
+-- | Here we get the mapping `{ a :: t_0, b :: t_1 }` and infer the scheme
+-- | `forall t_2. (t_2 -> t_2, [Char])`. The task is now to map the scheme components onto the
+-- | mapping, resulting in the mapping `{ a :: forall t_2. t_2 -> t_2, b :: [Char] }`.
+mapSchemeOnTVarMappings :: TVarMappings -> Scheme -> TVarMappings
+mapSchemeOnTVarMappings m (Forall tvars (AD (TTuple ts))) = f m ts
+  where
+  f ((Tuple tv s):ms) (t:ts) = Tuple tv (Forall (commonFreeTVars t) t) : f ms ts
+  f _ _ = Nil
+  commonFreeTVars t = Set.toUnfoldable $ ftv t `Set.intersection` ftv (map TypVar tvars)
+mapSchemeOnTVarMappings m scheme = map (\(Tuple tv s) -> Tuple tv scheme) m
 
 -- | Given a list of bindings and corresponding expressions, associate the bindings with the
 -- | expressions and collect the type variable/scheme mappings as well as the constraints.
