@@ -589,7 +589,45 @@ inferNew ex = case ex of
     let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
     pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
 
-  _ -> Ex.throwError $ UnknownError "Not yet implemented."
+  ListComp  _ body quals -> do
+    -- Infer the types of the qual expressions, gather the constraints and the binding environment.
+    Tuple bindingEnv c1 <- makeBindingEnvListComp quals
+    Tuple t1 c2 <- withEnv bindingEnv (inferNew body)
+    tv <- freshNew
+    let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
+    pure $ Tuple tv (c1 <+> c2 <+> c4)
+
+-- +---------------------+
+-- | List Comprehensions |
+-- +---------------------+
+
+-- | Given a list of qual expressions, infer the types, set the constraints and accumulate a
+-- | binding environment. The environment and constraints are returned.
+makeBindingEnvListComp :: List IndexedQualTree -> InferNew (Tuple TVarMappings Constraints)
+makeBindingEnvListComp quals = f quals Nil emptyConstraints
+  where f (qual:quals) ms cs = do
+          -- Infer the type, set constraints and accumulate binding environment for the current
+          -- qual expression. Then pass the environment and constraints and continue with the next
+          -- qual expression.
+          Tuple m c <- makeBindingEnvQual qual
+          withEnv m $ f quals (ms <> m) (cs <+> c)
+        f Nil ms cs = pure (Tuple ms cs)
+
+-- | Set constraints and build binding environment for the given qual expression.
+makeBindingEnvQual :: IndexedQualTree -> InferNew (Tuple TVarMappings Constraints)
+makeBindingEnvQual qual = case qual of
+  -- Just associate the binding with the expression.
+  Let _ binding expr -> associate binding expr
+  -- Generate the binding environment for the binding and infer the generator expression.
+  Gen _ binding genExpr -> do
+    Triple t1 m c1 <- makeBindingEnv binding
+    Tuple t2 c2 <- inferNew genExpr
+    let c3 = setConstraintFor genExpr (AD $ TList t1) t2
+    pure $ Tuple m (c1 <+> c2 <+> c3)
+  -- Only infer the expression type and set the constraints.
+  Guard _ guardExpr -> do
+    Tuple _ c <- inferNew guardExpr
+    pure $ Tuple Nil c
 
 -- +----------------------+
 -- | Arithmetic Sequences |
