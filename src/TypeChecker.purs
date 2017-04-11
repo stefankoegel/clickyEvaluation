@@ -346,7 +346,7 @@ makeBindingEnvLambda bindings = do
 associate :: IndexedTypedBinding -> IndexedTypeTree -> InferNew (Tuple TVarMappings Constraints)
 associate binding expr = do
   Triple bt m bc1 <- makeBindingEnv binding
-  Tuple et ec <- (inferNew expr)
+  Tuple et ec <- inferNew expr
   env <- ask
   let uni = runSolve ec
       bc2 = setSingleTypeConstraintFor' (bindingIndex binding) et
@@ -572,13 +572,59 @@ inferNew ex = case ex of
     pure $ Tuple listType (c1 <+> c2 <+> c3 <+> c4)
 
   NTuple _ es -> do
-    Tuple ts cs  <- unzip <$> traverse inferNew es
+    Tuple ts cs <- unzip <$> traverse inferNew es
     tv <- freshNew
     let tupleType = AD $ TTuple ts
     let c = setTypeConstraintFor ex tv tupleType
     pure $ Tuple tupleType (foldConstraints cs <+> c)
 
+  ArithmSeq _ first step last -> do
+    -- Infer the type of the beginning expression, which always exists.
+    Tuple t1 c1 <- inferRequireEnumType first
+    -- Try to infer the types of the `step` and `last` expression if existing and set the
+    -- constraints accordingly.
+    c2 <- f'' step t1
+    c3 <- f'' last t1
+    tv <- freshNew
+    let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
+
   _ -> Ex.throwError $ UnknownError "Not yet implemented."
+
+-- +----------------------+
+-- | Arithmetic Sequences |
+-- +----------------------+
+
+-- | If the given expression is non-empty, infer the type, set and return the constraints.
+tryInferRequireEnumType :: Maybe IndexedTypeTree -> Type -> InferNew Constraints
+tryInferRequireEnumType (Just expr) t1 = do
+  Tuple t2 c1 <- inferRequireEnumType expr
+  let c2 = setSingleTypeConstraintFor expr t2
+  let c3 = setConstraintFor expr t1 t2
+  pure (c1 <+> c2 <+> c3)
+tryInferRequireEnumType _ t = pure emptyConstraints
+
+-- | Infer the type of the given expression, then run the constraint solving in order to retrieve
+-- | the expression type. If the type is not an enum type, return with the corresponding type error.
+inferRequireEnumType :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
+inferRequireEnumType expr = do
+  Tuple t c <- inferNew expr
+  let uni = runSolve c
+  -- Get the type hiding behind `t`.
+  case Map.lookup (index expr) c.mapped of
+    Just (Constraint tv _) -> do
+      let exprType = apply uni.subst tv
+      if not isEnumType exprType
+        then returnWithTypeError expr (NoInstanceOfEnum exprType)
+        else pure $ Tuple exprType c
+    _ -> pure $ Tuple t c
+
+-- | Return true, if the given type is enumerable.
+isEnumType :: Type -> Boolean
+isEnumType (TypCon "Int") = true
+isEnumType (TypCon "Char") = true
+isEnumType (TypCon "Bool") = true
+isEnumType _ = false
 
 -- | Given a list of types create the corresponding arrow type. Conceptually:
 -- | [t0, t1, t2] => t0 -> (t1 -> t2)
