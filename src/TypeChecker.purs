@@ -56,9 +56,14 @@ ppScheme :: Scheme -> String
 ppScheme (Forall Nil t) = prettyPrintType t
 ppScheme (Forall tvars t) = "forall " <> intercalate " " tvars <> ". " <> prettyPrintType t
 
+-- | Substitions map type variables to monotypes and can be applied to data structures containing
+-- | types.
+type Subst = Map.Map TVar Type
+
 -- | Mappings from type variable to type schemes. These mappings are used for bindings in lambda
--- | and let expressions. Here for every binding the type variable and the corresponding scheme is
--- | stored.
+-- | and let expressions and list comprehensions. Here for every binding the type variable and the
+-- | corresponding scheme is stored.
+-- TODO: Rename to `BindingEnvironment`?
 type TVarMapping = Tuple TVar Scheme
 type TVarMappings = List TVarMapping
 
@@ -86,6 +91,10 @@ ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
 instance showTypeEnv :: Show TypeEnv where
   show (TypeEnv a) = show a
 
+-- +--------------------------------+
+-- | Type Specific Helper Functions |
+-- +--------------------------------+
+
 -- | The type `Bool`.
 boolType :: Type
 boolType = TypCon "Bool"
@@ -105,6 +114,13 @@ intToIntType = intType `TypArr` intType
 -- | The type `Int -> Int -> Int`.
 intToIntToIntType :: Type
 intToIntToIntType = intType `TypArr` intToIntType
+
+-- | Given a list of types create the corresponding arrow type. Conceptually:
+-- | [t0, t1, t2] => t0 -> (t1 -> t2)
+toArrowType :: List Type -> Type
+toArrowType Nil = unsafeCrashWith "Function `toArrowType` must not be called with an empty list."
+toArrowType (t : Nil) = t
+toArrowType (t:ts) = t `TypArr` (toArrowType ts)
 
 -- +------------------+
 -- | Type Constraints |
@@ -221,6 +237,8 @@ ppConstraintList constraints = "Constraints:\n" <>
 -- | Type Inference                                                                              --
 ---------------------------------------------------------------------------------------------------
 
+data Unique = Unique { count :: Int }
+
 type InferNew a = (RWST
   TypeEnv               -- ^ Read from the type environment.
   Unit
@@ -302,104 +320,6 @@ setConstraintFor expr t1 t2 = constraintSingleUnmapped (index expr) t1 t2
 
 setConstraintFor' :: Index -> Type -> Type -> Constraints
 setConstraintFor' idx t1 t2 = constraintSingleUnmapped idx t1 t2
-
--- | Choose a new type variable for the given binding and add typing information for the node
--- | index.
-makeBindingEnv :: IndexedTypedBinding -> InferNew (Triple Type TVarMappings Constraints)
-makeBindingEnv binding = case binding of
-  Lit _ atom@(Bool bool) -> do
-    let c = setSingleTypeConstraintFor' (bindingIndex binding) boolType
-    pure $ Triple boolType Nil c
-
-  Lit _ atom@(Char char) -> do
-    let c = setSingleTypeConstraintFor' (bindingIndex binding) charType
-    pure $ Triple charType Nil c
-
-  Lit _ atom@(AInt aint) -> do
-    let c = setSingleTypeConstraintFor' (bindingIndex binding) intType
-    pure $ Triple intType Nil c
-
-  Lit _ atom@(Name name) -> do
-    -- Set the type of the associate tree node to equal the type referred to by `tv`.
-    tv <- freshNew
-    let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
-    pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
-
-  ConsLit _ b1 b2 -> do
-    Triple t1 m1 c1 <- makeBindingEnv b1
-    Triple t2 m2 c2 <- makeBindingEnv b2
-    let c3 = setConstraintFor' (bindingIndex b2) (AD $ TList t1) t2
-    pure $ Triple (AD $ TList t1) (m1 <> m2) (c1 <+> c2 <+> c3)
-
-  ListLit _ bs -> do
-    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bs
-    listElementConstraints <- setListConstraints ts
-    t <- listType ts
-    pure $ Triple t (concat ms) (foldConstraints cs <+> listElementConstraints)
-
-  NTupleLit _ bs -> do
-    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bs
-    pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs)
-
-  where
-  -- Go through the list of given types and set constraints for every to elements of the list.
-  setListConstraints Nil = pure emptyConstraints
-  setListConstraints (t:Nil) = do
-    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TList t)
-    pure c
-  setListConstraints (t1:t2:ts) = do
-    cs <- setListConstraints (t2:ts)
-    let c = setConstraintFor' (bindingIndex binding) t1 t2 <+> cs
-    pure c
-  -- Given a list of types occurring in a list, determine the list type (choose the first element).
-  listType Nil = freshNew >>= \tv -> pure $ AD $ TList tv
-  listType (t:_) = pure $ AD $ TList t
-
--- | Go through list of given bindings and accumulate an corresponding type. Gather environment
--- | information and setup the type information for every binding tree node.
-makeBindingEnvLambda :: List IndexedTypedBinding
-                     -> InferNew (Triple (List Type) TVarMappings Constraints)
-makeBindingEnvLambda bindings = do
-  Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bindings
-  pure $ Triple ts (concat ms) (foldConstraints cs)
-
--- | Associate a binding with a corresponding expression. Therefore, infer the given expression
--- | and associate its type with the binding.
-associate :: IndexedTypedBinding -> IndexedTypeTree -> InferNew (Tuple TVarMappings Constraints)
-associate binding expr = do
-  Triple bt m bc1 <- makeBindingEnv binding
-  Tuple et ec <- inferNew expr
-  env <- ask
-  let uni = runSolve ec
-      bc2 = setSingleTypeConstraintFor' (bindingIndex binding) et
-      -- Substitute the bound variables with the corresponding polytype.
-      scheme = generalize (apply uni.subst env) (apply uni.subst et)
-      m' = map (\(Tuple tvar s) -> Tuple tvar scheme) m
-  pure $ Tuple m' (uni.constraints <+> bc2 <+> ec)
-
--- | Given a list of bindings and corresponding expressions, associate the bindings with the
--- | expressions and collect the type variable/scheme mappings as well as the constraints.
-associateAll :: List IndexedTypedBinding -> List IndexedTypeTree -> Tuple TVarMappings Constraints
-             -> InferNew (Tuple TVarMappings Constraints)
-associateAll (b:bs) (e:es) (Tuple ms cs) = do
-  Tuple m c <- associate b e
-  withEnv m $ associateAll bs es (Tuple (ms <> m) (cs <+> c))
-associateAll _ _ x = pure x
-
--- | Construct a binding environment to be used in the inference of a let expression.
-makeBindingEnvLet :: List (Tuple IndexedTypedBinding IndexedTypeTree)
-                  -> InferNew (Tuple TVarMappings Constraints)
-makeBindingEnvLet defs = associateAll bindings exprs (Tuple Nil emptyConstraints)
-  where
-  bindingsAndExprs = unzip defs
-  bindings = fst bindingsAndExprs
-  exprs = snd bindingsAndExprs
-
--- | Extend the type environment with the new mappings for the evaluation of `m`.
-withEnv :: forall a. TVarMappings -> InferNew a -> InferNew a
-withEnv mappings m = local (scope mappings) m
-  where
-  scope mappings env = removeMultiple env (map fst mappings) `extendMultiple` mappings
 
 -- | Determine the type of the given operator.
 getOpType :: Op -> InferNew Type
@@ -621,6 +541,117 @@ inferNew ex = case ex of
     let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
     pure $ Tuple tv (c1 <+> c2 <+> c4)
 
+-- +-----------------------------------+
+-- | Bindings and Binding Environments |
+-- +-----------------------------------+
+
+-- | Choose a new type variable for the given binding and add typing information for the node
+-- | index. This function is needed whenever binding environments have to be built: lambda and let
+-- | expressions as well as list comprehensions.
+makeBindingEnv :: IndexedTypedBinding -> InferNew (Triple Type TVarMappings Constraints)
+makeBindingEnv binding = case binding of
+  Lit _ atom@(Bool bool) -> do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) boolType
+    pure $ Triple boolType Nil c
+
+  Lit _ atom@(Char char) -> do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) charType
+    pure $ Triple charType Nil c
+
+  Lit _ atom@(AInt aint) -> do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) intType
+    pure $ Triple intType Nil c
+
+  Lit _ atom@(Name name) -> do
+    -- Set the type of the associate tree node to equal the type referred to by `tv`.
+    tv <- freshNew
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
+    pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
+
+  ConsLit _ b1 b2 -> do
+    Triple t1 m1 c1 <- makeBindingEnv b1
+    Triple t2 m2 c2 <- makeBindingEnv b2
+    let c3 = setConstraintFor' (bindingIndex b2) (AD $ TList t1) t2
+    pure $ Triple (AD $ TList t1) (m1 <> m2) (c1 <+> c2 <+> c3)
+
+  ListLit _ bs -> do
+    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bs
+    listElementConstraints <- setListConstraints ts
+    t <- listType ts
+    pure $ Triple t (concat ms) (foldConstraints cs <+> listElementConstraints)
+
+  NTupleLit _ bs -> do
+    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bs
+    pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs)
+
+  where
+  -- Go through the list of given types and set constraints for every to elements of the list.
+  setListConstraints Nil = pure emptyConstraints
+  setListConstraints (t:Nil) = do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TList t)
+    pure c
+  setListConstraints (t1:t2:ts) = do
+    cs <- setListConstraints (t2:ts)
+    let c = setConstraintFor' (bindingIndex binding) t1 t2 <+> cs
+    pure c
+  -- Given a list of types occurring in a list, determine the list type (choose the first element).
+  listType Nil = freshNew >>= \tv -> pure $ AD $ TList tv
+  listType (t:_) = pure $ AD $ TList t
+
+-- | Extend the type environment with the new mappings for the evaluation of `m`.
+withEnv :: forall a. TVarMappings -> InferNew a -> InferNew a
+withEnv mappings m = local (scope mappings) m
+  where
+  scope mappings env = removeMultiple env (map fst mappings) `extendMultiple` mappings
+
+-- +--------------------+
+-- | Lambda Expressions |
+-- +--------------------+
+
+-- | Go through list of given bindings and accumulate an corresponding type. Gather environment
+-- | information and setup the type information for every binding tree node.
+makeBindingEnvLambda :: List IndexedTypedBinding
+                     -> InferNew (Triple (List Type) TVarMappings Constraints)
+makeBindingEnvLambda bindings = do
+  Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bindings
+  pure $ Triple ts (concat ms) (foldConstraints cs)
+
+-- +----------------------------------------+
+-- | Let Expressions and List Comprehension |
+-- +----------------------------------------+
+
+-- | Associate a binding with a corresponding expression. Therefore, infer the given expression
+-- | and associate its type with the binding.
+associate :: IndexedTypedBinding -> IndexedTypeTree -> InferNew (Tuple TVarMappings Constraints)
+associate binding expr = do
+  Triple bt m bc1 <- makeBindingEnv binding
+  Tuple et ec <- inferNew expr
+  env <- ask
+  let uni = runSolve ec
+      bc2 = setSingleTypeConstraintFor' (bindingIndex binding) et
+      -- Substitute the bound variables with the corresponding polytype.
+      scheme = generalize (apply uni.subst env) (apply uni.subst et)
+      m' = map (\(Tuple tvar s) -> Tuple tvar scheme) m
+  pure $ Tuple m' (uni.constraints <+> bc2 <+> ec)
+
+-- | Given a list of bindings and corresponding expressions, associate the bindings with the
+-- | expressions and collect the type variable/scheme mappings as well as the constraints.
+associateAll :: List IndexedTypedBinding -> List IndexedTypeTree -> Tuple TVarMappings Constraints
+             -> InferNew (Tuple TVarMappings Constraints)
+associateAll (b:bs) (e:es) (Tuple ms cs) = do
+  Tuple m c <- associate b e
+  withEnv m $ associateAll bs es (Tuple (ms <> m) (cs <+> c))
+associateAll _ _ x = pure x
+
+-- | Construct a binding environment to be used in the inference of a let expression.
+makeBindingEnvLet :: List (Tuple IndexedTypedBinding IndexedTypeTree)
+                  -> InferNew (Tuple TVarMappings Constraints)
+makeBindingEnvLet defs = associateAll bindings exprs (Tuple Nil emptyConstraints)
+  where
+  bindingsAndExprs = unzip defs
+  bindings = fst bindingsAndExprs
+  exprs = snd bindingsAndExprs
+
 -- +---------------------+
 -- | List Comprehensions |
 -- +---------------------+
@@ -667,7 +698,8 @@ tryInferRequireEnumType (Just expr) t1 = do
 tryInferRequireEnumType _ t = pure emptyConstraints
 
 -- | Infer the type of the given expression, then run the constraint solving in order to retrieve
--- | the expression type. If the type is not an enum type, return with the corresponding type error.
+-- | the expression type. If the type is not an enum type, return with the corresponding type
+-- | error.
 inferRequireEnumType :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
 inferRequireEnumType expr = do
   Tuple t c <- inferNew expr
@@ -687,13 +719,6 @@ isEnumType (TypCon "Int") = true
 isEnumType (TypCon "Char") = true
 isEnumType (TypCon "Bool") = true
 isEnumType _ = false
-
--- | Given a list of types create the corresponding arrow type. Conceptually:
--- | [t0, t1, t2] => t0 -> (t1 -> t2)
-toArrowType :: List Type -> Type
-toArrowType Nil = unsafeCrashWith "Function `toArrowType` must not be called with an empty list."
-toArrowType (t : Nil) = t
-toArrowType (t:ts) = t `TypArr` (toArrowType ts)
 
 ---------------------------------------------------------------------------------------------------
 -- | Constraint Solving                                                                          --
@@ -752,10 +777,9 @@ unifiesAD t1 t2 = Left $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
 sortIntoLists :: List Constraint -> Tuple (List Constraint) (List Constraint)
 sortIntoLists cs = f cs (Tuple Nil Nil)
   where
-  f :: List Constraint -> Tuple (List Constraint) (List Constraint) -> Tuple (List Constraint) (List Constraint)
   f Nil tuple = tuple
-  f (c@(Constraint t UnknownType) : cs)   (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
-  f (c@(Constraint UnknownType t) : cs)   (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
+  f (c@(Constraint t UnknownType) : cs) (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
+  f (c@(Constraint UnknownType t) : cs) (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
   f (c : cs) (Tuple pairs unknowns) = f cs (Tuple (c : pairs) unknowns)
 
 -- | Create a substitution from the given constraint list. Note that only mappings from a type
@@ -794,6 +818,7 @@ applyUnknowns subst pairs unknowns = uncurry (applyUnknowns (newSubst `compose` 
   lists = sortIntoLists $ newSubst `apply` pairs
 
 -- | Try to solve the constraints.
+-- TODO: Cleanup.
 solver :: Unifier -> Unifier
 solver { subst: beginningSubst, constraints: constraints } =
   solver' beginningSubst emptyConstraints indexList constraintList
@@ -818,11 +843,12 @@ solver { subst: beginningSubst, constraints: constraints } =
             let mapped' = Map.insert idx (Constraint (TypVar tv) UnknownType) constraints.mapped
             let constraints' = { unmapped: constraints.unmapped, mapped: mapped' }
             let lists' = toConstraintAndIndexLists constraints'
-            solver' (beginningSubst `compose` getUnknownSubst (snd lists')) errors' (fst lists') (snd lists')
+            let subst' = beginningSubst `compose` getUnknownSubst (snd lists')
+            solver' subst' errors' (fst lists') (snd lists')
         _ -> solver' subst errors idxs rest
     Right subst1 -> solver' (subst1 `compose` subst) errors idxs (apply subst1 rest)
   -- Worked through all the constraints.
-  solver' subst errorConstraints  _ _ = { subst: subst, constraints: errorConstraints }
+  solver' subst errorConstraints _ _ = { subst: subst, constraints: errorConstraints }
 
 -- TODO: Change type to `Unifier -> IndexedTypeTree -> TypeTree`?
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
@@ -840,9 +866,7 @@ assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f
 
 ---------------------------------------------------------------------------------------------------
 
-data Unique = Unique { count :: Int }
 type Infer a = ExceptT TypeError (State Unique) a
-type Subst = Map.Map TVar Type
 
 -- | Pretty print a substitution.
 -- | Example output:
