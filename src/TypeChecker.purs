@@ -445,7 +445,9 @@ inferNew ex = case ex of
     Tuple t2 c2 <- inferNew l
     Tuple t3 c3 <- inferNew r
     -- In the condition node: t1 has to be a `Bool`.
-    let c4 = setTypeConstraintFor cond t1 boolType
+    -- Because the `cond` expression has already been given a mapped constraint, we have to use
+    -- `setConstraintFor` and not `setTypeConstraintFor`.
+    let c4 = setConstraintFor cond t1 boolType
     -- In the node of the if expression: t2 and t3 have to be equal.
     let c5 = setTypeConstraintFor ex t2 t3
     pure $ Tuple t2 (c1 <+> c2 <+> c3 <+> c4 <+> c5)
