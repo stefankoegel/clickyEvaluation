@@ -277,6 +277,7 @@ lookupEnvNew tvar = do
     Nothing -> pure Nothing
     Just scheme  -> instantiateNew scheme >>= (pure <<< Just)
 
+-- TODO: Remove in favor of `runInferNew'`
 -- | Run the type inference and catch type errors. Note that the only possible errors are:
 -- |   * `UnboundVariable`
 -- |   * `NoInstanceOfEnum`
@@ -284,6 +285,9 @@ lookupEnvNew tvar = do
 -- | All other errors can only be encountered during the constraint solving phase.
 runInferNew :: TypeEnv -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
 runInferNew env m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m env initUnique)
+
+runInferNew' :: forall a. TypeEnv -> InferNew a -> Either TypeError a
+runInferNew' env m = rmap fst $ Ex.runExcept $ evalRWST m env initUnique
 
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
 returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
@@ -1106,6 +1110,62 @@ runInfer :: Infer (Tuple Subst Type) -> Either TypeError Scheme
 runInfer m = case evalState (runExceptT m) initUnique of
   Left err -> Left err
   Right res -> Right $ closeOverType res
+
+-- +------------------------------------------------------+
+-- | Type Inference for Definitions and Definition Groups |
+-- +------------------------------------------------------+
+
+makeIndexedDefinitionGroup :: List Definition -> List IndexedDefinition
+makeIndexedDefinitionGroup = f 0
+  where
+  f _ Nil = Nil
+  f beginWith (def:defs) = case makeIndexedDefinition def beginWith of
+    Tuple indexedDef nextIdx -> indexedDef : f nextIdx defs
+
+makeIndexedDefinitionGroups :: List Definition -> Map.Map String (List IndexedDefinition)
+makeIndexedDefinitionGroups = map makeIndexedDefinitionGroup <<< buildGroups
+
+inferDefinition :: TypeEnv -> Definition -> InferNew Scheme
+inferDefinition env def = do
+  Triple t m c <- inferDefNew env indexedDef
+  let uni = runSolve c
+      subst = uni.subst
+      constraints = uni.constraints <+> c
+  pure $ closeOverType (Tuple subst t)
+  where
+  indexedDef = fst $ makeIndexedDefinition def 0
+
+inferDefGroup :: TypeEnv -> List IndexedDefinition -> InferNew Scheme
+inferDefGroup env group = do
+  Tuple t c <- inferGroupNew env group
+  let uni = runSolve c
+      subst = uni.subst
+      constraints = uni.constraints <+> c
+  pure $ closeOverType (Tuple subst t)
+
+inferGroupNew :: TypeEnv -> List IndexedDefinition -> InferNew (Tuple Type Constraints)
+inferGroupNew _ Nil = throwError $ UnknownError "Can't infer type of empty definition group"
+inferGroupNew env (def:Nil) = do
+  Triple t m c <- inferDefNew env def
+  pure $ Tuple t c
+inferGroupNew env (def:defs) = do
+  Triple t1 m c1 <- inferDefNew env def
+  Tuple t2 c2 <- withEnv m (inferGroupNew env defs)
+  let c3 = setConstraintFor' (definitionIndex def) t1 t2
+  pure $ Tuple t1 (c1 <+> c2 <+> c3)
+
+inferDefNew :: TypeEnv -> IndexedDefinition -> InferNew (Triple Type TVarMappings Constraints)
+inferDefNew env def@(IndexedDef name bindings expr) = do
+  tv <- freshNew
+  let m = Tuple name (Forall Nil tv) : Nil
+  Tuple t1 c1 <- withEnv m (inferNew (Lambda (Tuple Nothing (0-1)) bindings expr))
+  let c2 = setConstraintFor expr tv t1
+  pure $ Triple tv m (c1 <+> c2)
+
+schemeToType :: Scheme -> InferNew Type
+schemeToType scheme = do
+  t <- instantiateNew scheme
+  pure $ normalizeType t
 
 closeOverType :: (Tuple Subst Type) -> Scheme
 closeOverType (Tuple sub ty) = generalize emptyTypeEnv (apply sub ty)
