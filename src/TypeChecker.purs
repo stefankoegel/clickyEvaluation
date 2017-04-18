@@ -67,6 +67,11 @@ type Subst = Map.Map TVar Type
 type TVarMapping = Tuple TVar Scheme
 type TVarMappings = List TVarMapping
 
+ppTVarMappings :: TVarMappings -> String
+ppTVarMappings mappings = "Type Variable Mappings:\n" <>
+  (map ppTVarMapping >>> intercalate ",\n") mappings
+  where ppTVarMapping (Tuple tv scheme) = "\t" <> tv <> " :: " <> ppScheme scheme
+
 -- | The type environment is a mapping from type variables to polytypes.
 data TypeEnv = TypeEnv (Map.Map TVar Scheme)
 
@@ -85,7 +90,7 @@ ppTypeEnv :: TypeEnv -> String
 ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
   (map ppTVAndScheme >>> intercalate ",\n")
   (Map.toList env)
-  where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " : " <> ppScheme scheme
+  where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " :: " <> ppScheme scheme
 
 -- TODO: Remove in favor of `ppTypeEnv`?
 instance showTypeEnv :: Show TypeEnv where
