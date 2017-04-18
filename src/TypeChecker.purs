@@ -243,9 +243,10 @@ ppConstraintList constraints = "Constraints:\n" <>
 ---------------------------------------------------------------------------------------------------
 
 data Unique = Unique { count :: Int }
+type InferEnv = { env :: TypeEnv, stopOnError :: Boolean }
 
 type InferNew a = (RWST
-  TypeEnv               -- ^ Read from the type environment.
+  InferEnv              -- ^ Read from the type environment.
   Unit
   Unique                -- ^ The infer state.
   (Ex.Except TypeError) -- ^ Catch type errors.
@@ -272,7 +273,7 @@ instantiateNew (Forall as t) = do
 -- | Lookup a type in the type environment.
 lookupEnvNew :: TVar -> InferNew MType
 lookupEnvNew tvar = do
-  TypeEnv env <- ask
+  { env: (TypeEnv env) } <- ask
   case Map.lookup tvar env of
     Nothing -> pure Nothing
     Just scheme  -> instantiateNew scheme >>= (pure <<< Just)
@@ -283,11 +284,13 @@ lookupEnvNew tvar = do
 -- |   * `NoInstanceOfEnum`
 -- |   * `UnknownError`
 -- | All other errors can only be encountered during the constraint solving phase.
-runInferNew :: TypeEnv -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
-runInferNew env m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m env initUnique)
+runInferNew :: TypeEnv -> Boolean -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
+runInferNew env stopOnError m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m inferEnv initUnique)
+  where inferEnv = { env: env, stopOnError: stopOnError }
 
-runInferNew' :: forall a. TypeEnv -> InferNew a -> Either TypeError a
-runInferNew' env m = rmap fst $ Ex.runExcept $ evalRWST m env initUnique
+runInferNew' :: forall a. TypeEnv -> Boolean -> InferNew a -> Either TypeError a
+runInferNew' env stopOnError m = rmap fst $ Ex.runExcept $ evalRWST m inferEnv initUnique
+  where inferEnv = { env: env, stopOnError: stopOnError }
 
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
 returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
@@ -306,8 +309,12 @@ returnDirect expr t = pure $ Tuple t (constraintSingleMapped (index expr) t t)
 
 returnWithTypeError :: IndexedTypeTree -> TypeError -> InferNew (Tuple Type Constraints)
 returnWithTypeError expr typeError = do
-  tv <- freshNew
-  pure $ Tuple tv (constraintError (index expr) tv typeError)
+  { stopOnError: stopOnError } <- ask
+  if stopOnError
+    then Ex.throwError typeError
+    else do
+      tv <- freshNew
+      pure $ Tuple tv (constraintError (index expr) tv typeError)
 
 setTypeConstraintFor' :: Index -> Type -> Type -> Constraints
 setTypeConstraintFor' idx t1 t2 = constraintSingleMapped idx t1 t2
@@ -611,7 +618,9 @@ makeBindingEnv binding = case binding of
 withEnv :: forall a. TVarMappings -> InferNew a -> InferNew a
 withEnv mappings m = local (scope mappings) m
   where
-  scope mappings env = removeMultiple env (map fst mappings) `extendMultiple` mappings
+  scope mappings inferEnv = { env: removeMultiple inferEnv.env (map fst mappings) `extendMultiple` mappings
+                            , stopOnError: inferEnv.stopOnError
+                            }
 
 -- +--------------------+
 -- | Lambda Expressions |
@@ -635,7 +644,7 @@ associate :: IndexedTypedBinding -> IndexedTypeTree -> InferNew (Tuple TVarMappi
 associate binding expr = do
   Triple bt m bc1 <- makeBindingEnv binding
   Tuple et ec <- inferNew expr
-  env <- ask
+  { env: env } <- ask
   let uni = runSolve ec
       bc2 = setSingleTypeConstraintFor' (bindingIndex binding) et
       -- Substitute the bound variables with the corresponding polytype.
@@ -1717,7 +1726,7 @@ typeTreeProgramEnv env tt = case evalState (runExceptT (inferAndCatchErrors env 
 
 data InferRes = InferRes IndexedTypeTree Constraints Subst
 twoStageInfer :: TypeEnv -> TypeTree -> Either (Tuple TypeError Constraints) InferRes
-twoStageInfer env tt = case runInferNew env (inferNew indexedTT) of
+twoStageInfer env tt = case runInferNew env false (inferNew indexedTT) of
       Left err -> Left (Tuple err emptyConstraints)
       Right constraints ->
         let uni = runSolve constraints
