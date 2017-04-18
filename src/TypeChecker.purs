@@ -1126,6 +1126,10 @@ runInfer m = case evalState (runExceptT m) initUnique of
 -- | Type Inference for Definitions and Definition Groups |
 -- +------------------------------------------------------+
 
+-- TODO: Explain the terms definition and definition groups.
+
+-- | Given a list of definitions create a list of indexed definitions. Note, that the indices
+-- | start with 0 and continue growing throughout all expressions and bindings in the given group.
 makeIndexedDefinitionGroup :: List Definition -> List IndexedDefinition
 makeIndexedDefinitionGroup = f 0
   where
@@ -1133,8 +1137,38 @@ makeIndexedDefinitionGroup = f 0
   f beginWith (def:defs) = case makeIndexedDefinition def beginWith of
     Tuple indexedDef nextIdx -> indexedDef : f nextIdx defs
 
+-- | Separate the given list of definitions into indexed definition groups. The indices in the
+-- | respective groups start with 0.
 makeIndexedDefinitionGroups :: List Definition -> Map.Map String (List IndexedDefinition)
 makeIndexedDefinitionGroups = map makeIndexedDefinitionGroup <<< buildGroups
+
+-- | Given a list of definitions, infer the definition types and create a typed evaluation
+-- | environment.
+inferTypeEnvironment :: List Definition -> Either TypeError TypeEnv
+inferTypeEnvironment defs = f emptyTypeEnv (Map.toList indexedGroups)
+  where
+  indexedGroups = makeIndexedDefinitionGroups defs
+
+  accumulateMappings env Nil = Right env
+  accumulateMappings env (group:groups) = case getMappingFromGroup env group of
+    -- Encountered an unbound variable, this means either:
+    -- 1) The unbound variable has not yet been defined, but occurs later in the definition list.
+    --    In this case: First infer the type of the (now) unbound definition, afterwards go on
+    --    with the current one.
+    -- 2) The variable does not occur in the definition list: Return an error.
+    Left (UnboundVariable name) -> case Map.lookup name indexedGroups of
+      Just defs -> f env ((Tuple name defs) : group : groups)
+      Nothing -> Left $ UnboundVariable name
+    Left typeError -> Left typeError
+    Right (Tuple name scheme) -> f (env `extend` (Tuple name scheme)) groups
+
+  getMappingFromGroup env@(TypeEnv m) (Tuple name defGroup) = case Map.lookup name m of
+    -- The definition is already in the type environment, just use it.
+    Just scheme -> Right (Tuple name scheme)
+    -- The definition has not been found, try to infer the type and it to the environment.
+    Nothing -> case runInferNew' env true (inferDefGroup env defGroup) of
+      Left typeError -> Left typeError
+      Right scheme -> Right (Tuple name scheme)
 
 inferDefinition :: TypeEnv -> Definition -> InferNew Scheme
 inferDefinition env def = do
