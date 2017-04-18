@@ -290,11 +290,11 @@ makeIndexOpTuple (Tuple op mt) = do
   pure new
 
 -- | Transform the given definition into an indexed definition.
-makeIndexedDefinition :: Definition -> IndexedDefinition
-makeIndexedDefinition (Def name bindings expr) =
-  let idxAndBindings = runState (toIndexedBindings bindings) 0
+makeIndexedDefinition :: Definition -> Index -> Tuple IndexedDefinition Index
+makeIndexedDefinition (Def name bindings expr) beginWith =
+  let idxAndBindings = runState (toIndexedBindings bindings) beginWith
       idxAndExpr = runState (toIndexedTree expr) (snd idxAndBindings)
-  in IndexedDef name (fst idxAndBindings) (fst idxAndExpr)
+  in Tuple (IndexedDef name (fst idxAndBindings) (fst idxAndExpr)) (snd idxAndExpr)
   where
   toIndexedBindings = traverse $ traverseBinding makeIndexTuple
   toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
@@ -312,6 +312,9 @@ removeIndices = treeMap id (map fst) (\(Tuple op mit) -> Tuple op (fst mit)) fst
 insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Tuple t idx) expr
   where idx = snd $ extractFromTree expr
+
+definitionIndex :: IndexedDefinition -> Index
+definitionIndex (IndexedDef name bindings expr) = index expr
 
 opIndex :: (Tuple Op MIType) -> Index
 opIndex (Tuple op (Tuple mt idx)) = idx
@@ -491,7 +494,7 @@ type IndexedTypedBinding = Binding MIType
 -- | Definitions for functions and constants
 data Definition = Def String (List (Binding MType)) TypeTree
 
--- | A definition with indexed bindings and an indexed expression
+-- | A definition with indexed bindings and an indexed expression.
 data IndexedDefinition = IndexedDef String (List IndexedTypedBinding) IndexedTypeTree
 
 derive instance eqDefintion :: Eq Definition
@@ -535,6 +538,9 @@ instance showBinding :: (Show a) => Show (Binding a) where
 
 instance showDefinition :: Show Definition where
   show (Def name bindings body) = "Def " <> show name <> " (" <> show bindings <> ") (" <> show body <> ")"
+
+instance showIndexedDefinition :: Show IndexedDefinition where
+  show (IndexedDef name bindings body) = "IndexedDef " <> show name <> " (" <> show bindings <> ") (" <> show body <> ")"
 
 instance showType :: Show Type where
   show (UnknownType) = "(UnknownType)"
