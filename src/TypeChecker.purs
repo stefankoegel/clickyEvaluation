@@ -1145,7 +1145,7 @@ makeIndexedDefinitionGroups = map makeIndexedDefinitionGroup <<< buildGroups
 -- | Given a list of definitions, infer the definition types and create a typed evaluation
 -- | environment.
 inferTypeEnvironment :: List Definition -> Either TypeError TypeEnv
-inferTypeEnvironment defs = f emptyTypeEnv (Map.toList indexedGroups)
+inferTypeEnvironment defs = accumulateMappings emptyTypeEnv (Map.toList indexedGroups)
   where
   indexedGroups = makeIndexedDefinitionGroups defs
 
@@ -1157,10 +1157,10 @@ inferTypeEnvironment defs = f emptyTypeEnv (Map.toList indexedGroups)
     --    with the current one.
     -- 2) The variable does not occur in the definition list: Return an error.
     Left (UnboundVariable name) -> case Map.lookup name indexedGroups of
-      Just defs -> f env ((Tuple name defs) : group : groups)
+      Just defs -> accumulateMappings env ((Tuple name defs) : group : groups)
       Nothing -> Left $ UnboundVariable name
     Left typeError -> Left typeError
-    Right (Tuple name scheme) -> f (env `extend` (Tuple name scheme)) groups
+    Right (Tuple name scheme) -> accumulateMappings (env `extend` (Tuple name scheme)) groups
 
   getMappingFromGroup env@(TypeEnv m) (Tuple name defGroup) = case Map.lookup name m of
     -- The definition is already in the type environment, just use it.
