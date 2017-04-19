@@ -769,7 +769,9 @@ initialUnifier constraints = { subst: unknownSubst, constraints: constraints }
 
 -- | Collect the substitutions in the unifier and catch occurring type errors.
 runSolve :: Constraints -> Unifier
-runSolve constraints = solver (initialUnifier constraints)
+runSolve constraints = let uni = solver (initialUnifier constraints)
+                           errorConstraints = uni.constraints
+                       in { subst: uni.subst, constraints: errorConstraints <+> constraints }
 
 -- | Bind the given type variable to the given type and return the resulting substitution.
 bindTVar ::  TVar -> Type -> Either TypeError Subst
@@ -1175,9 +1177,7 @@ inferDefinition :: TypeEnv -> Definition -> InferNew Scheme
 inferDefinition env def = do
   Triple t m c <- inferDefNew env indexedDef
   let uni = runSolve c
-      subst = uni.subst
-      constraints = uni.constraints <+> c
-  pure $ closeOverType (Tuple subst t)
+  pure $ closeOverType (Tuple uni.subst t)
   where
   indexedDef = fst $ makeIndexedDefinition def 0
 
@@ -1185,9 +1185,7 @@ inferDefGroup :: TypeEnv -> List IndexedDefinition -> InferNew Scheme
 inferDefGroup env group = do
   Tuple t c <- inferGroupNew env group
   let uni = runSolve c
-      subst = uni.subst
-      constraints = uni.constraints <+> c
-  pure $ closeOverType (Tuple subst t)
+  pure $ closeOverType (Tuple uni.subst t)
 
 inferGroupNew :: TypeEnv -> List IndexedDefinition -> InferNew (Tuple Type Constraints)
 inferGroupNew _ Nil = throwError $ UnknownError "Can't infer type of empty definition group"
@@ -1767,9 +1765,8 @@ twoStageInfer env tt = case runInferNew env false (inferNew indexedTT) of
       Left err -> Left (Tuple err emptyConstraints)
       Right constraints ->
         let uni = runSolve constraints
-            errors = uni.constraints
-            expr = assignTypes { subst: uni.subst, constraints: errors <+> constraints} indexedTT
-        in Right $ InferRes expr (errors <+> constraints) uni.subst
+            expr = assignTypes uni indexedTT
+        in Right $ InferRes expr uni.constraints uni.subst
     where
     indexedTT = makeIndexedTree tt
 
