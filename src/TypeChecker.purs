@@ -586,7 +586,7 @@ makeBindingEnv binding = case binding of
   ConsLit _ b1 b2 -> do
     Triple t1 m1 c1 <- makeBindingEnv b1
     Triple t2 m2 c2 <- makeBindingEnv b2
-    let c3 = setConstraintFor' (bindingIndex b2) (AD $ TList t1) t2
+    let c3 = setTypeConstraintFor' (bindingIndex binding) (AD $ TList t1) t2
     pure $ Triple (AD $ TList t1) (m1 <> m2) (c1 <+> c2 <+> c3)
 
   ListLit _ bs -> do
@@ -597,7 +597,8 @@ makeBindingEnv binding = case binding of
 
   NTupleLit _ bs -> do
     Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bs
-    pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs)
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TTuple ts)
+    pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs <+> c)
 
   where
   -- Go through the list of given types and set constraints for every to elements of the list.
@@ -609,6 +610,7 @@ makeBindingEnv binding = case binding of
     cs <- setListConstraints (t2:ts)
     let c = setConstraintFor' (bindingIndex binding) t1 t2 <+> cs
     pure c
+
   -- Given a list of types occurring in a list, determine the list type (choose the first element).
   listType Nil = freshNew >>= \tv -> pure $ AD $ TList tv
   listType (t:_) = pure $ AD $ TList t
