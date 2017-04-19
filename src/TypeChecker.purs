@@ -1125,8 +1125,9 @@ runInfer m = case evalState (runExceptT m) initUnique of
 -- +------------------------------------------------------+
 -- | Type Inference for Definitions and Definition Groups |
 -- +------------------------------------------------------+
-
--- TODO: Explain the terms definition and definition groups.
+--
+-- Definition groups are a list of definitions with the same name (hence belonging together).
+-- Ungrouped lists of definitions can be grouped together using `buildGroups`.
 
 -- | Given a list of definitions create a list of indexed definitions. Note, that the indices
 -- | start with 0 and continue growing throughout all expressions and bindings in the given group.
@@ -1170,49 +1171,59 @@ inferTypeEnvironment defs = accumulateMappings emptyTypeEnv (Map.toList indexedG
       Left typeError -> Left typeError
       Right scheme -> Right (Tuple name scheme)
 
-inferDefinition :: TypeEnv -> Definition -> InferNew Scheme
-inferDefinition env def = do
-  Triple t m c <- inferDefNew env indexedDef
+-- | Infer the type scheme of the given definition.
+inferDefinitionToScheme :: Definition -> InferNew Scheme
+inferDefinitionToScheme def = do
+  Triple t m c <- inferDefinition indexedDef
   let uni = runSolve c
   pure $ closeOverType (Tuple uni.subst t)
   where
   indexedDef = fst $ makeIndexedDefinition def 0
 
-inferDefinitions :: TypeEnv -> List Definition -> InferNew Scheme
-inferDefinitions env = inferDefGroup env <<< makeIndexedDefinitionGroup
+inferDefinitions :: List Definition -> InferNew Scheme
+inferDefinitions = inferDefinitionGroup <<< makeIndexedDefinitionGroup
 
-inferDefGroup :: TypeEnv -> List IndexedDefinition -> InferNew Scheme
-inferDefGroup env group = do
-  Tuple t c <- inferGroupNew env group
+inferDefinitionGroup :: List IndexedDefinition -> InferNew Scheme
+inferDefinitionGroup group = do
+  Tuple t c <- inferGroupNew group
   let uni = runSolve c
   pure $ closeOverType (Tuple uni.subst t)
 
-inferGroupNew :: TypeEnv -> List IndexedDefinition -> InferNew (Tuple Type Constraints)
-inferGroupNew _ Nil = throwError $ UnknownError "Can't infer type of empty definition group"
-inferGroupNew env (def:Nil) = do
-  Triple t m c <- inferDefNew env def
+inferGroupNew :: List IndexedDefinition -> InferNew (Tuple Type Constraints)
+inferGroupNew Nil = throwError $ UnknownError "Can't infer type of empty definition group"
+inferGroupNew (def:Nil) = do
+  Triple t m c <- inferDefinition def
   pure $ Tuple t c
-inferGroupNew env (def:defs) = do
-  Triple t1 m c1 <- inferDefNew env def
-  Tuple t2 c2 <- withEnv m (inferGroupNew env defs)
+inferGroupNew (def:defs) = do
+  Triple t1 m c1 <- inferDefinition def
+  Tuple t2 c2 <- withEnv m (inferGroupNew defs)
   let c3 = setConstraintFor' (definitionIndex def) t1 t2
   pure $ Tuple t1 (c1 <+> c2 <+> c3)
 
-inferDefNew :: TypeEnv -> IndexedDefinition -> InferNew (Triple Type TVarMappings Constraints)
-inferDefNew env def@(IndexedDef name bindings expr) = do
+-- | Infer the type of the given indexed definitions and collect bindings and constraints.
+inferDefinition :: IndexedDefinition -> InferNew (Triple Type TVarMappings Constraints)
+inferDefinition def@(IndexedDef name bindings expr) = do
   tv <- freshNew
   let m = Tuple name (Forall Nil tv) : Nil
   Tuple t1 c1 <- withEnv m (inferNew (Lambda (Tuple Nothing (0-1)) bindings expr))
   let c2 = setConstraintFor expr tv t1
   pure $ Triple tv m (c1 <+> c2)
 
+-- | Transform the given polytype to a monotype.
 schemeToType :: Scheme -> InferNew Type
 schemeToType scheme = do
   t <- instantiateNew scheme
   pure $ normalizeType t
 
-inferTypeNew :: TypeEnv -> TypeTree -> InferNew Scheme
-inferTypeNew env expr = do
+-- | Given an expression and a list of definitions, build a typed environment and infer the type
+-- | of the expression in the context of the typed environment.
+inferTypeInContext :: List Definition -> TypeTree -> Either TypeError Type
+inferTypeInContext defs expr = case inferTypeEnvironment defs of
+  Left typeError -> Left typeError
+  Right typedEnv -> runInferNew typedEnv false (inferDefinitions defs >>= schemeToType)
+
+inferTypeNew :: TypeTree -> InferNew Scheme
+inferTypeNew expr = do
   Tuple _ constraints <- inferNew indexedExpr
   let uni = runSolve constraints
       expr = assignTypes uni indexedExpr
