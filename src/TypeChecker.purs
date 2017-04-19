@@ -23,7 +23,7 @@ import Data.Traversable (traverse)
 import Data.Tuple (Tuple(Tuple), snd, fst, uncurry)
 import Partial.Unsafe (unsafePartial, unsafeCrashWith)
 import Prelude (
-  class Show, Unit,
+  class Eq, class Show, Unit,
   ($), (&&), (+), (-), (/=), (<$>), (<*>), (<<<), (<>), (==), (>), (>>=), (>>>),
   bind, const, div, flip, id, map, mod, not, otherwise, pure, show)
 
@@ -46,6 +46,8 @@ unzip3 = foldr
 -- | A type scheme represents a polytype. It contains a list of type variables, which may occur in
 -- | the type.
 data Scheme = Forall (List TVar) Type
+
+derive instance eqScheme :: Eq Scheme
 
 -- TODO: Remove, and use `ppScheme`?
 instance showScheme :: Show Scheme where
@@ -1181,6 +1183,9 @@ inferDefinition env def = do
   where
   indexedDef = fst $ makeIndexedDefinition def 0
 
+inferDefinitions :: TypeEnv -> List Definition -> InferNew Scheme
+inferDefinitions env = inferDefGroup env <<< makeIndexedDefinitionGroup
+
 inferDefGroup :: TypeEnv -> List IndexedDefinition -> InferNew Scheme
 inferDefGroup env group = do
   Tuple t c <- inferGroupNew env group
@@ -1210,6 +1215,18 @@ schemeToType :: Scheme -> InferNew Type
 schemeToType scheme = do
   t <- instantiateNew scheme
   pure $ normalizeType t
+
+inferTypeNew :: TypeEnv -> TypeTree -> InferNew Scheme
+inferTypeNew env expr = do
+  Tuple _ constraints <- inferNew indexedExpr
+  let uni = runSolve constraints
+      expr = assignTypes uni indexedExpr
+  pure $ topLevelNodeScheme uni.subst expr
+  where
+  indexedExpr = makeIndexedTree expr
+  topLevelNodeScheme subst = closeOverType <<< (\t s -> Tuple t s) subst <<< extractType <<< extractFromTree
+  extractType (Tuple (Just mt) idx) = mt
+  extractType _ = UnknownType
 
 closeOverType :: (Tuple Subst Type) -> Scheme
 closeOverType (Tuple sub ty) = generalize emptyTypeEnv (apply sub ty)
@@ -1836,30 +1853,6 @@ buildPartiallyTypedTree env e = case typeTreeProgramEnv env e of
       env'' = envUnion env env' in
         case buildPartiallyTypedTreeBindings env'' bs of
           Tuple envR rest -> Tuple envR $ (Tuple (g b) t) : rest
-
-eqScheme :: Scheme -> Scheme -> Boolean
-eqScheme (Forall l1 t1) (Forall l2 t2)
-  = ((length l1) == (length l2)) && (fst (eqType Map.empty t1 t2))
-
-eqType :: Map.Map TVar TVar -> Type -> Type -> Tuple Boolean (Map.Map TVar TVar)
-eqType map (TypVar a) (TypVar b) = case  Map.lookup a map of
-  Just b' -> Tuple (b' == b) (map)
-  Nothing -> Tuple true (Map.insert a b map)
-eqType map (TypCon a) (TypCon b) = Tuple (a == b) map
-eqType map (TypArr a b) (TypArr a' b') = Tuple (fst tup1 && fst tup2) (snd tup2)
-  where
-  tup1 = eqType map a a'
-  tup2 = eqType (snd tup1) b b'
-eqType map (AD (TList a)) (AD (TList b)) = eqType map a b
-eqType map (AD (TTuple a)) (AD (TTuple b)) = eqTypeList map a b
-eqType map _ _ = Tuple false map
-
-eqTypeList :: Map.Map TVar TVar -> List Type -> List Type -> Tuple Boolean (Map.Map TVar TVar)
-eqTypeList map (Cons a as) (Cons b bs) = let tup1 = eqType map a b in if (fst tup1)
-  then eqTypeList (snd tup1) as bs
-  else Tuple false (snd tup1)
-eqTypeList map Nil Nil = Tuple true map
-eqTypeList map _ _ = Tuple false map
 
 normalizeType :: Type -> Type
 normalizeType t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
