@@ -25,7 +25,7 @@ import Partial.Unsafe (unsafePartial, unsafeCrashWith)
 import Prelude (
   class Eq, class Show, Unit,
   ($), (&&), (+), (-), (/=), (<$>), (<*>), (<<<), (<>), (==), (>), (>>=), (>>>),
-  bind, const, div, flip, id, map, mod, not, otherwise, pure, show)
+  bind, const, div, flip, id, map, mod, negate, not, otherwise, pure, show)
 
 import AST
 
@@ -1205,7 +1205,7 @@ inferDefinition :: IndexedDefinition -> InferNew (Triple Type TVarMappings Const
 inferDefinition def@(IndexedDef name bindings expr) = do
   tv <- freshNew
   let m = Tuple name (Forall Nil tv) : Nil
-  Tuple t1 c1 <- withEnv m (inferNew (Lambda (Tuple Nothing (0-1)) bindings expr))
+  Tuple t1 c1 <- withEnv m (inferNew (Lambda (Tuple Nothing (-1)) bindings expr))
   let c2 = setConstraintFor expr tv t1
   pure $ Triple tv m (c1 <+> c2)
 
@@ -1220,7 +1220,25 @@ schemeToType scheme = do
 inferTypeInContext :: List Definition -> TypeTree -> Either TypeError Type
 inferTypeInContext defs expr = case inferTypeEnvironment defs of
   Left typeError -> Left typeError
-  Right typedEnv -> runInferNew typedEnv false (inferDefinitions defs >>= schemeToType)
+  Right typedEnv -> runInferNew typedEnv true (inferTypeNew expr >>= schemeToType)
+
+
+-- | Given an expression and a list of definitions, build a typed environment and infer the type
+-- | of the expression tree as well as all the sub expressions in the context of the typed
+-- | environment.
+inferTypeTreeInContext :: List Definition -> TypeTree -> Either TypeError TypeTree
+inferTypeTreeInContext defs expr = case inferTypeEnvironment defs of
+  Left typeError -> Left typeError
+  Right typedEnv -> runInferNew typedEnv true (inferTree expr)
+
+-- | Perform the type inference on a given expression tree and return the normalized typed tree.
+inferTree :: TypeTree -> InferNew TypeTree
+inferTree expr = do
+  let indexedTree = makeIndexedTree expr
+  Tuple t c <- inferNew indexedTree
+  let uni = runSolve c
+      expr' = assignTypes uni indexedTree
+  pure $ closeOverTypeTree $ Tuple uni.subst (removeIndices expr')
 
 inferTypeNew :: TypeTree -> InferNew Scheme
 inferTypeNew expr = do
