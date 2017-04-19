@@ -280,18 +280,13 @@ lookupEnvNew tvar = do
     Nothing -> pure Nothing
     Just scheme  -> instantiateNew scheme >>= (pure <<< Just)
 
--- TODO: Remove in favor of `runInferNew'`
 -- | Run the type inference and catch type errors. Note that the only possible errors are:
 -- |   * `UnboundVariable`
 -- |   * `NoInstanceOfEnum`
 -- |   * `UnknownError`
 -- | All other errors can only be encountered during the constraint solving phase.
-runInferNew :: TypeEnv -> Boolean -> InferNew (Tuple Type Constraints) -> Either TypeError Constraints
-runInferNew env stopOnError m = rmap (\res -> snd $ fst res) (Ex.runExcept $ evalRWST m inferEnv initUnique)
-  where inferEnv = { env: env, stopOnError: stopOnError }
-
-runInferNew' :: forall a. TypeEnv -> Boolean -> InferNew a -> Either TypeError a
-runInferNew' env stopOnError m = rmap fst $ Ex.runExcept $ evalRWST m inferEnv initUnique
+runInferNew :: forall a. TypeEnv -> Boolean -> InferNew a -> Either TypeError a
+runInferNew env stopOnError m = rmap fst $ Ex.runExcept $ evalRWST m inferEnv initUnique
   where inferEnv = { env: env, stopOnError: stopOnError }
 
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
@@ -1171,7 +1166,7 @@ inferTypeEnvironment defs = accumulateMappings emptyTypeEnv (Map.toList indexedG
     -- The definition is already in the type environment, just use it.
     Just scheme -> Right (Tuple name scheme)
     -- The definition has not been found, try to infer the type and it to the environment.
-    Nothing -> case runInferNew' env true (inferDefGroup env defGroup) of
+    Nothing -> case runInferNew env true (inferDefinitionGroup defGroup) of
       Left typeError -> Left typeError
       Right scheme -> Right (Tuple name scheme)
 
@@ -1780,7 +1775,7 @@ data InferRes = InferRes IndexedTypeTree Constraints Subst
 twoStageInfer :: TypeEnv -> TypeTree -> Either (Tuple TypeError Constraints) InferRes
 twoStageInfer env tt = case runInferNew env false (inferNew indexedTT) of
       Left err -> Left (Tuple err emptyConstraints)
-      Right constraints ->
+      Right (Tuple t constraints) ->
         let uni = runSolve constraints
             expr = assignTypes uni indexedTT
         in Right $ InferRes expr uni.constraints uni.subst
