@@ -865,6 +865,7 @@ solver { subst: beginningSubst, constraints: constraints } =
   solver' subst errors (idx:idxs) (ConstraintError typeError : rest) =
     solver' subst errors idxs rest
   solver' subst errors (idx:idxs) (Constraint t1 t2 : rest) = case unifies t1 t2 of
+    Left error@(InfiniteType _ _) -> { subst: nullSubst, constraints: constraintError idx t1 error }
     Left error ->
       -- Get type variable name at current index.
       case Map.lookup idx constraints.mapped of
