@@ -856,7 +856,7 @@ applyUnknowns subst pairs unknowns = uncurry (applyUnknowns (newSubst `compose` 
 -- TODO: Cleanup.
 solver :: Unifier -> Unifier
 solver { subst: beginningSubst, constraints: constraints } =
-  solver' beginningSubst emptyConstraints indexList constraintList
+  solver' beginningSubst emptyConstraints indexList (apply beginningSubst constraintList)
   where
   lists = toConstraintAndIndexLists constraints
   indexList = fst lists
@@ -879,8 +879,9 @@ solver { subst: beginningSubst, constraints: constraints } =
             let mapped' = Map.insert idx (Constraint (TypVar tv) UnknownType) constraints.mapped
             let constraints' = { unmapped: constraints.unmapped, mapped: mapped' }
             let lists' = toConstraintAndIndexLists constraints'
-            let subst' = beginningSubst `compose` getUnknownSubst (snd lists')
-            solver' subst' errors' (fst lists') (snd lists')
+            let unknownSubst = getUnknownSubst (snd lists')
+            let subst' = beginningSubst `compose` unknownSubst
+            solver' subst' errors' (fst lists') (apply unknownSubst $ snd lists')
         _ -> solver' subst errors idxs rest
     Right subst1 -> solver' (subst1 `compose` subst) errors idxs (apply subst1 rest)
   -- Worked through all the constraints.
@@ -898,7 +899,7 @@ assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f
   lookupTVar idx = case Map.lookup idx constraints.mapped of
     Nothing -> Nothing
     Just (Constraint tv _) -> Just $ subst `apply` tv
-    Just (ConstraintError typeError) -> Just $ subst `apply` typeError
+    Just (ConstraintError typeError) -> Just typeError
 
 ---------------------------------------------------------------------------------------------------
 
