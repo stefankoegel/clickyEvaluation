@@ -1211,22 +1211,32 @@ closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
 -- | Type Tree and Type Normalization |
 -- +----------------------------------+
 
--- Given an int generate an array of integers used as indices into the alphabet in `getNthName`.
--- Example: map indexList (700..703) => [[24,25],[25,25],[0,0,0],[1,0,0]]
+-- | Given an int generate an array of integers used as indices into the alphabet in `getNthName`.
+-- | Example: map indexList (700..703) => [[24,25],[25,25],[0,0,0],[1,0,0]]
 indexList :: Int -> Array Int
 indexList n | n `div` 26 > 0 = n `mod` 26 `Array.cons` indexList (n `div` 26 - 1)
 indexList n = [n `mod` 26]
 
--- Given an int choose a new name. We choose names simply by indexing into the alphabet. As soon
--- "z" is reached, begin with "aa" and so on.
--- Example: map getNthName (700..703) => ["zy","zz","aaa","aab"]
+-- | Given an int choose a new name. We choose names simply by indexing into the alphabet. As soon
+-- | "z" is reached, begin with "aa" and so on.
+-- | Example: map getNthName (700..703) => ["zy","zz","aaa","aab"]
 getNthName :: Int -> String
-getNthName = String.fromCharArray <<< toCharArray <<< Array.reverse <<< indexList
-  where toCharArray = map (Char.fromCharCode <<< ((+) 97))
+getNthName = indexList >>> Array.reverse >>> toCharArray >>> String.fromCharArray
+  where toCharArray = map (((+) 97) >>> Char.fromCharCode)
+
+-- | The state used when normalizing types and type trees.
+type NormalizationState =
+  { count :: Int         -- ^ Counter, used to keep track of which name should be used next.
+  , env :: Map TVar TVar -- ^ Map old type variable names (like `t_4`) to new ones (like `d`).
+  }
+
+-- | An empty normalization state.
+emptyNormalizationState :: NormalizationState
+emptyNormalizationState = { count: 0, env: Map.empty }
 
 -- | Normalize the given type.
 normalizeType :: Type -> Type
-normalizeType t = evalState (helpTypeToABC t) { count: 0, env: Map.empty }
+normalizeType t = evalState (normalizeType' t) emptyNormalizationState
 
 -- | Normalize the given type error.
 normalizeTypeError :: TypeError -> TypeError
@@ -1236,44 +1246,51 @@ normalizeTypeError error = error
 
 -- | Normalize the given typed expression tree.
 normalizeTypeTree :: TypeTree -> TypeTree
-normalizeTypeTree expr = evalState (helptxToABC expr) { count : 0, env : Map.empty }
+normalizeTypeTree expr = evalState (normalizeTypeTree' expr) emptyNormalizationState
 
-opTypeToABC :: (Tuple Op MType) -> State { count :: Int, env :: Map String String } (Tuple Op MType)
-opTypeToABC (Tuple op opType) = do
-    opType' <- helpMTypeToABC opType
+-- | Normalize the type in the given operator tuple.
+normalizeOp' :: (Tuple Op MType) -> State NormalizationState (Tuple Op MType)
+normalizeOp' (Tuple op opType) = do
+    opType' <- normalizeMType' opType
     pure $ Tuple op opType'
 
-helptxToABC :: TypeTree -> State {count :: Int, env :: Map String String} TypeTree
-helptxToABC = AST.traverseTree helpBindingToABC opTypeToABC helpMTypeToABC
+-- | Normalize the given typed binding.
+normalizeBinding' :: TypedBinding -> State NormalizationState TypedBinding
+normalizeBinding' = AST.traverseBinding normalizeMType'
 
-helpBindingToABC :: TypedBinding -> State { count :: Int, env :: Map String String } TypedBinding
-helpBindingToABC = AST.traverseBinding helpMTypeToABC
+-- | Normalize the given typed expression tree.
+normalizeTypeTree' :: TypeTree -> State NormalizationState TypeTree
+normalizeTypeTree' = AST.traverseTree normalizeBinding' normalizeOp' normalizeMType'
 
-helpTypeToABC :: Type -> State {count :: Int, env :: Map String String} Type
-helpTypeToABC t = go t
-  where
-    go (TypVar var) = do
-       {env: env} :: {count :: Int, env :: Map String String} <- get
-       case Map.lookup var env of
-         Just var' -> pure $ TypVar var'
-         Nothing -> do
-           {count: count} <- get
-           let newVarName = getNthName count
-           let env' = Map.insert var newVarName env
-           put {count: count + 1, env: env'}
-           pure $ TypVar newVarName
-    go (TypArr t1 t2) = do
-         t1' <- helpTypeToABC t1
-         t2' <- helpTypeToABC t2
-         pure $ TypArr t1' t2'
-    go (AD a) = helpADTypeToABC a >>= \a -> pure $ AD a
-    go a = pure a
+-- | Normalize the given type. The only interesting part is the type variable case, where all the
+-- | work is done.
+normalizeType' :: Type -> State NormalizationState Type
+normalizeType' t = case t of
+  TypVar var -> do
+    { env: env } <- get
+    -- If the type variable is not yet in the environment, create a new corresponding type variable
+    -- and add it to the environment. If the type variable already has a corresponding renamed
+    -- variable, just return it.
+    case Map.lookup var env of
+      Just var' -> pure $ TypVar var'
+      Nothing -> do
+        { count: count } <- get
+        let newVarName = getNthName count
+        let env' = Map.insert var newVarName env
+        put { count: count + 1, env: env' }
+        pure $ TypVar newVarName
+  TypArr t1 t2 -> do
+    t1' <- normalizeType' t1
+    t2' <- normalizeType' t2
+    pure $ TypArr t1' t2'
+  AD (TList t) -> do
+    t' <- normalizeType' t
+    pure $ AD (TList t')
+  AD (TTuple ts) -> do
+    ts' <- traverse normalizeType' ts
+    pure $ AD (TTuple ts')
+  a -> pure a
 
-helpMTypeToABC :: Maybe Type -> State {count :: Int, env :: Map String String} (Maybe Type)
-helpMTypeToABC mt = case mt of
-    Nothing -> pure Nothing
-    Just t -> helpTypeToABC t >>= pure <<< Just
-
-helpADTypeToABC :: AD -> State {count :: Int, env :: (Map String String)} AD
-helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> pure $ TList t
-helpADTypeToABC (TTuple ts) = traverse helpTypeToABC ts >>= \ts -> pure $ TTuple ts
+-- | Use `normalizeType'` on `Maybe Type`.
+normalizeMType' :: Maybe Type -> State NormalizationState (Maybe Type)
+normalizeMType' = traverse normalizeType'
