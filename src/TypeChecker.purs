@@ -4,18 +4,18 @@ import Control.Apply (lift2)
 import Control.Monad.Except as Ex
 import Control.Monad.RWS (ask, evalRWST, local)
 import Control.Monad.RWS.Trans (RWST)
-import Control.Monad.State (State, runState, put, get)
+import Control.Monad.State (State, evalState, put, get)
 import Data.Array as Array
 import Data.Bifunctor (rmap)
 import Data.Char as Char
 import Data.Either (Either(Left, Right))
 import Data.Foldable (intercalate, foldl, foldr, foldMap, elem)
 import Data.List (List(..), (:), concat, concatMap, filter, singleton, unzip, zip)
-import Data.Map (Map, insert, lookup, empty)
+import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Set as Set
-import Data.String (fromCharArray)
+import Data.String as String
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(Tuple), snd, fst, uncurry)
 import Partial.Unsafe (unsafeCrashWith)
@@ -25,6 +25,7 @@ import Prelude (
   bind, const, div, flip, id, map, mod, negate, not, otherwise, pure, show)
 
 import AST
+import AST as AST
 
 ---------------------------------------------------------------------------------------------------
 -- | Data Types and Helper Functions                                                             --
@@ -1256,116 +1257,45 @@ indexList n = [n `mod` 26]
 -- "z" is reached, begin with "aa" and so on.
 -- Example: map getNthName (700..703) => ["zy","zz","aaa","aab"]
 getNthName :: Int -> String
-getNthName = fromCharArray <<< toCharArray <<< Array.reverse <<< indexList
+getNthName = String.fromCharArray <<< toCharArray <<< Array.reverse <<< indexList
   where toCharArray = map (Char.fromCharCode <<< ((+) 97))
 
 -- | Normalize the given type.
 normalizeType :: Type -> Type
-normalizeType t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
+normalizeType t = evalState (helpTypeToABC t) { count: 0, env: Map.empty }
 
+-- | Normalize the given type error.
 normalizeTypeError :: TypeError -> TypeError
 normalizeTypeError (UnificationFail t1 t2) = UnificationFail (normalizeType t1) (normalizeType t2)
 normalizeTypeError (InfiniteType tvar t) = InfiniteType (prettyPrintType $ normalizeType $ TypVar tvar) (normalizeType t)
 normalizeTypeError error = error
 
+-- | Normalize the given typed expression tree.
 normalizeTypeTree :: TypeTree -> TypeTree
-normalizeTypeTree tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
+normalizeTypeTree expr = evalState (helptxToABC expr) { count : 0, env : Map.empty }
+
+opTypeToABC :: (Tuple Op MType) -> State { count :: Int, env :: Map String String } (Tuple Op MType)
+opTypeToABC (Tuple op opType) = do
+    opType' <- helpMTypeToABC opType
+    pure $ Tuple op opType'
 
 helptxToABC :: TypeTree -> State {count :: Int, env :: Map String String} TypeTree
-helptxToABC tt = go tt
-  where
-    go (Atom t atom) = helpMTypeToABC t >>= \t -> pure $ Atom t atom
-    go (List t tts) = do
-      t' <- helpMTypeToABC t
-      tts' <- traverse helptxToABC tts
-      pure $ List t' tts'
-    go (NTuple t tts) = do
-      t' <- helpMTypeToABC t
-      tts' <- traverse helptxToABC tts
-      pure $ NTuple t' tts'
-    go (Binary t (Tuple op opType) tt1 tt2) = do
-      t' <- helpMTypeToABC t
-      opType' <- helpMTypeToABC opType
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      pure $ Binary t' (Tuple op opType') tt1' tt2'
-    go (Unary t (Tuple op opType) tt) = do
-      t' <- helpMTypeToABC t
-      opType' <- helpMTypeToABC opType
-      tt' <- helptxToABC tt
-      pure $ (Unary t' (Tuple op opType') tt')
-    go (SectL t tt (Tuple op opType)) = do
-      t' <- helpMTypeToABC t
-      opType' <- helpMTypeToABC opType
-      tt' <- helptxToABC tt
-      pure $ SectL t' tt' (Tuple op opType')
-    go (SectR t (Tuple op opType) tt) = do
-      t' <- helpMTypeToABC t
-      opType' <- helpMTypeToABC opType
-      tt' <- helptxToABC tt
-      pure $ SectR t' (Tuple op opType') tt'
-    go (PrefixOp op t) = helpMTypeToABC op >>= \op -> pure $ PrefixOp op t
-    go (IfExpr t tt1 tt2 tt3) = do
-      t' <- helpMTypeToABC t
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      tt3' <- helptxToABC tt3
-      pure $ IfExpr t' tt1' tt2' tt3'
-    go (ArithmSeq t tt1 tt2 tt3) = do
-      t'   <- helpMTypeToABC t
-      tt1' <- helptxToABC tt1
-      tt2' <- traverse helptxToABC tt2
-      tt3' <- traverse helptxToABC tt3
-      pure $ ArithmSeq t' tt1' tt2' tt3'
-    go (LetExpr t bin tt) = do
-      t'   <- helpMTypeToABC t
-      bin' <- traverse (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
-      tt'  <- helptxToABC tt
-      pure $ LetExpr t' bin' tt'
-    go (Lambda t tbs tt) = do
-      t' <- helpMTypeToABC t
-      tbs' <- traverse helpBindingToABC tbs
-      tt' <- helptxToABC tt
-      pure $ Lambda t' tbs' tt'
-    go (App t tt tts) = do
-      t' <- helpMTypeToABC t
-      tt' <- helptxToABC tt
-      tts' <- traverse helptxToABC tts
-      pure $ App t' tt' tts'
-    go (ListComp t tt tts) = do
-      t'   <- helpMTypeToABC t
-      tt'  <- helptxToABC tt
-      tts' <- traverse helptxToABCQual tts
-      pure $ ListComp t' tt' tts'
+helptxToABC = AST.traverseTree helpBindingToABC opTypeToABC helpMTypeToABC
 
-helptxToABCQual :: TypeQual -> State {count :: Int, env :: Map String String} TypeQual
-helptxToABCQual q = case q of
-  Gen t b e -> do
-    t' <- helpMTypeToABC t
-    b' <- helpBindingToABC b
-    e' <- helptxToABC e
-    pure $ Gen t' b' e'
-  Let t b e -> do
-    t' <- helpMTypeToABC t
-    b' <- helpBindingToABC b
-    e' <- helptxToABC e
-    pure $ Let t' b' e'
-  Guard t e -> do
-    t' <- helpMTypeToABC t
-    e' <- helptxToABC e
-    pure $ Guard t' e'
+helpBindingToABC :: TypedBinding -> State { count :: Int, env :: Map String String } TypedBinding
+helpBindingToABC = AST.traverseBinding helpMTypeToABC
 
 helpTypeToABC :: Type -> State {count :: Int, env :: Map String String} Type
 helpTypeToABC t = go t
   where
     go (TypVar var) = do
        {env: env} :: {count :: Int, env :: Map String String} <- get
-       case lookup var env of
+       case Map.lookup var env of
          Just var' -> pure $ TypVar var'
          Nothing -> do
            {count: count} <- get
            let newVarName = getNthName count
-           let env' = insert var newVarName env
+           let env' = Map.insert var newVarName env
            put {count: count + 1, env: env'}
            pure $ TypVar newVarName
     go (TypArr t1 t2) = do
@@ -1383,23 +1313,3 @@ helpMTypeToABC mt = case mt of
 helpADTypeToABC :: AD -> State {count :: Int, env :: (Map String String)} AD
 helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> pure $ TList t
 helpADTypeToABC (TTuple ts) = traverse helpTypeToABC ts >>= \ts -> pure $ TTuple ts
-
-helpBindingToABC :: TypedBinding -> State {count :: Int, env :: Map String String} TypedBinding
-helpBindingToABC bin = go bin
-  where
-    go (Lit t atom) = do
-      t' <- helpMTypeToABC t
-      pure $ Lit t' atom
-    go (ConsLit t b1 b2) = do
-      b1' <- helpBindingToABC b1
-      b2' <- helpBindingToABC b2
-      t' <- helpMTypeToABC t
-      pure $ ConsLit t' b1' b2'
-    go (ListLit t tbs) = do
-      tbs' <- traverse helpBindingToABC tbs
-      t' <- helpMTypeToABC t
-      pure $ ListLit t' tbs'
-    go (NTupleLit t tbs) = do
-      tbs' <- traverse helpBindingToABC tbs
-      t' <- helpMTypeToABC t
-      pure $ NTupleLit t' tbs'
