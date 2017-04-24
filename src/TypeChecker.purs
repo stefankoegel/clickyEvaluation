@@ -1,6 +1,5 @@
 module TypeChecker where
 
-import Control.Apply (lift2)
 import Control.Monad.Except as Ex
 import Control.Monad.RWS (ask, evalRWST, local)
 import Control.Monad.RWS.Trans (RWST)
@@ -9,8 +8,8 @@ import Data.Array as Array
 import Data.Bifunctor (rmap)
 import Data.Char as Char
 import Data.Either (Either(..))
-import Data.Foldable (intercalate, foldl, foldr, foldMap, elem)
-import Data.List (List(..), (:), concat, concatMap, filter, singleton, unzip, zip)
+import Data.Foldable (intercalate, fold, foldl, foldr, foldMap, elem)
+import Data.List (List(..), (:), concat, concatMap, filter, reverse, singleton, unzip, zip)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -649,29 +648,53 @@ makeBindingEnvLambda bindings = do
 -- | and associate its type with the binding.
 associate :: IndexedTypedBinding -> IndexedTypeTree -> InferNew (Tuple TVarMappings Constraints)
 associate binding expr = do
-  Triple bt m bc1 <- makeBindingEnv binding
-  Tuple et ec <- inferNew expr
+  Triple bt m _ <- makeBindingEnv binding
+  Tuple et c1 <- inferNew expr
   { env: env } <- ask
-  let uni = runSolve ec
-      bc2 = setSingleTypeConstraintFor' (bindingIndex binding) et
+  let uni = runSolve c1
+      c2 = setSingleTypeConstraintFor' (bindingIndex binding) et
       -- Substitute the bound variables with the corresponding polytype.
       scheme = generalize (apply uni.subst env) (apply uni.subst et)
-      m' = mapSchemeOnTVarMappings m scheme
-  pure $ Tuple m' (uni.constraints <+> bc2 <+> ec)
+  -- Map the type scheme on the binding (and sub-bindings).
+  Tuple m' c3 <- mapSchemeOnTVarMappings binding m scheme
+  pure $ Tuple m' (uni.constraints <+> c1 <+> c2 <+> c3)
 
--- TODO: This doesn't currently work for list and cons bindings!
+-- | Determine the common type variables used.
+commonFreeTVars :: List TVar -> Type -> List TVar
+commonFreeTVars tvars t = Set.toUnfoldable $ ftv t `Set.intersection` ftv (map TypVar tvars)
+
 -- | Given a mapping, representing a binding, and a scheme, try to map the scheme onto the mapping.
 -- | Example expression: `let (a, b) = (\x -> x, "cake") in a b`
 -- | Here we get the mapping `{ a :: t_0, b :: t_1 }` and infer the scheme
 -- | `forall t_2. (t_2 -> t_2, [Char])`. The task is now to map the scheme components onto the
 -- | mapping, resulting in the mapping `{ a :: forall t_2. t_2 -> t_2, b :: [Char] }`.
-mapSchemeOnTVarMappings :: TVarMappings -> Scheme -> TVarMappings
-mapSchemeOnTVarMappings m (Forall tvars (AD (TTuple ts))) = f m ts
+mapSchemeOnTVarMappings :: IndexedTypedBinding -> TVarMappings -> Scheme
+                        -> InferNew (Tuple TVarMappings Constraints)
+mapSchemeOnTVarMappings binding mappings scheme = f (binding : Nil) mappings (scheme : Nil)
   where
-  f ((Tuple tv s):ms) (t:ts) = Tuple tv (Forall (commonFreeTVars t) t) : f ms ts
-  f _ _ = Nil
-  commonFreeTVars t = Set.toUnfoldable $ ftv t `Set.intersection` ftv (map TypVar tvars)
-mapSchemeOnTVarMappings m scheme = map (\(Tuple tv s) -> Tuple tv scheme) m
+  f :: List IndexedTypedBinding -> TVarMappings -> List Scheme
+    -> InferNew (Tuple TVarMappings Constraints)
+  f (binding@ConsLit _ b1 b2 : Nil) (m : ms) (Forall tvs (AD (TList t)) : ss) = do
+    Tuple first c1 <- f (b1 : Nil) (m : Nil) (Forall tvs t : Nil)
+    Tuple second c2 <- f (b2 : Nil) ms (Forall tvs (AD (TList t)) : Nil)
+    let c3 = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TList t)
+    pure $ Tuple (first <> second) (c1 <+> c2 <+> c3)
+  f (binding@ListLit _ bs : Nil) ms (Forall tvs (AD (TList t)) : ss) = do
+    Tuple ms cs <- unzip <$> traverse (\(Tuple b m) ->
+      mapSchemeOnTVarMappings b (m : Nil) (Forall tvs t))
+      (zip bs ms)
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TList t)
+    pure $ Tuple (fold ms) (foldConstraints cs <+> c)
+  f (binding@NTupleLit _ (b:bs) : Nil) (m:ms) (Forall tvs (AD (TTuple (t:ts))) : ss) = do
+    Tuple m1 c1 <- mapSchemeOnTVarMappings b (m:Nil) (Forall tvs t)
+    Tuple m2 c2 <- f bs ms (map (Forall tvs) ts <> ss)
+    let c3 = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TTuple (t:ts))
+    pure $ Tuple (m1 <> m2) (c1 <+> c2 <+> c3)
+  f (binding@(Lit _ b) : Nil) (Tuple tv oldScheme : ms) (Forall tvs t : Nil) = do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) t
+    let tVarMappings = Tuple tv (Forall (commonFreeTVars tvs t) t) : Nil
+    pure $ Tuple tVarMappings c
+  f _ _ _ = pure $ Tuple Nil emptyConstraints
 
 -- | Given a list of bindings and corresponding expressions, associate the bindings with the
 -- | expressions and collect the type variable/scheme mappings as well as the constraints.
@@ -1251,8 +1274,8 @@ normalizeTypeTree expr = evalState (normalizeTypeTree' expr) emptyNormalizationS
 -- | Normalize the type in the given operator tuple.
 normalizeOp' :: (Tuple Op MType) -> State NormalizationState (Tuple Op MType)
 normalizeOp' (Tuple op opType) = do
-    opType' <- normalizeMType' opType
-    pure $ Tuple op opType'
+  opType' <- normalizeMType' opType
+  pure $ Tuple op opType'
 
 -- | Normalize the given typed binding.
 normalizeBinding' :: TypedBinding -> State NormalizationState TypedBinding
