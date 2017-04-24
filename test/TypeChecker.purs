@@ -189,9 +189,9 @@ runTests = do
   -- +--------------------------------------------------+
 
   -- (3^) :: Int -> Int
-  testInferExpr "SectL" "(3^)" TC.intToIntType
+  testInferExpr "SectL" "(3^)" intToIntType
   -- (^3) :: Int -> Int
-  testInferExpr "SectR" "(^3)" TC.intToIntType
+  testInferExpr "SectR" "(^3)" intToIntType
   -- (\a b c d -> a b c d) :: (a -> b -> c -> d) -> a -> b -> c -> d
   testInferExpr "Lambda1" "\\a b c d -> a b c d"
     ((TypVar "a" `TypArr` (TypVar "b" `TypArr` (TypVar "c" `TypArr` TypVar "d"))) `TypArr`
@@ -442,6 +442,104 @@ runTests = do
       (Just $ typVarArrow "a" "a")
       ((Lit (Just $ TypVar "a") (Name "x")) : Nil)
       (Atom (Just $ TypVar "a") (Name "x")))
+
+  -- Check that (\(x, y) -> x) :: (t_10, t_2) -> t_10
+  --         == (\(x, y) -> x) :: (a, b) -> a
+  testNormalizeTT "Normalization: Tuple binding in lambda"
+    (Lambda
+      (Just (typVarTuple ("t_10" : "t_2" : Nil) `TypArr` TypVar "t_10"))
+      (
+        (NTupleLit (Just (typVarTuple ("t_10" : "t_2" : Nil)))
+          (
+            (Lit (Just (TypVar "t_10")) (Name "x")) :
+            (Lit (Just (TypVar "t_2")) (Name "y")) :
+            Nil
+          )
+        ) : Nil
+      )
+      (Atom (Just (TypVar "t_10")) (Name "x"))
+    )
+    (Lambda
+      (Just (typVarTuple ("a" : "b" : Nil) `TypArr` TypVar "a"))
+      (
+        (NTupleLit (Just (typVarTuple ("a" : "b" : Nil)))
+          (
+            (Lit (Just (TypVar "a")) (Name "x")) :
+            (Lit (Just (TypVar "b")) (Name "y")) :
+            Nil
+          )
+        ) : Nil
+      )
+      (Atom (Just (TypVar "a")) (Name "x"))
+    )
+
+  -- Check that (\(x:xs) [a,b] (u,v,w) -> x) :: [t_4] -> [t_2] -> (t_1, t_3, t_5) -> t_4
+  --         == (\(x:xs) [a,b] (u,v,w) -> x) :: [a] -> [b] -> (c, d, e) -> a
+  testNormalizeTT "Normalization: Tuple binding in lambda"
+    (Lambda
+      -- :: [t_4] -> [t_2] -> (t_1, t_3, t_5) -> t_4
+      (Just
+        (typVarList "t_4" `TypArr`
+          (typVarList "t_2" `TypArr`
+            (typVarTuple ("t_1" : "t_3" : "t_5" : Nil)) `TypArr`
+              TypVar "t_4")))
+      (
+        -- (x:xs) [a,b] (u,v,w)
+        (ConsLit (Just (typVarList "t_4"))
+          (Lit (Just (TypVar "t_4")) (Name "x"))
+          (Lit (Just (typVarList "t_4")) (Name "xs"))
+        ) :
+        (ListLit (Just (typVarList "t_2"))
+          (
+            (Lit (Just (TypVar "t_2")) (Name "a")) :
+            (Lit (Just (TypVar "t_2")) (Name "b")) :
+            Nil
+          )
+        ) :
+        (NTupleLit (Just (typVarTuple ("t_1" : "t_3" : "t_5" : Nil)))
+          (
+            (Lit (Just (TypVar "t_1")) (Name "u")) :
+            (Lit (Just (TypVar "t_3")) (Name "v")) :
+            (Lit (Just (TypVar "t_5")) (Name "w")) :
+            Nil
+          )
+        ) :
+        Nil
+      )
+      (Atom (Just (TypVar "t_4")) (Name "x"))
+    )
+    (Lambda
+      -- :: [a] -> [b] -> (c, d, e) -> a
+      (Just
+        (typVarList "a" `TypArr`
+          (typVarList "b" `TypArr`
+            (typVarTuple ("c" : "d" : "e" : Nil)) `TypArr`
+              TypVar "a")))
+      (
+        -- (x:xs) [a,b] (u,v,w)
+        (ConsLit (Just (typVarList "a"))
+          (Lit (Just (TypVar "a")) (Name "x"))
+          (Lit (Just (typVarList "a")) (Name "xs"))
+        ) :
+        (ListLit (Just (typVarList "b"))
+          (
+            (Lit (Just (TypVar "b")) (Name "a")) :
+            (Lit (Just (TypVar "b")) (Name "b")) :
+            Nil
+          )
+        ) :
+        (NTupleLit (Just (typVarTuple ("c" : "d" : "e" : Nil)))
+          (
+            (Lit (Just (TypVar "c")) (Name "u")) :
+            (Lit (Just (TypVar "d")) (Name "v")) :
+            (Lit (Just (TypVar "e")) (Name "w")) :
+            Nil
+          )
+        ) :
+        Nil
+      )
+      (Atom (Just (TypVar "a")) (Name "x"))
+    )
 
   -- Check that (\f x -> f x) :: (t_4 -> t_45) -> t_4 -> t_45
   --         == (\f x -> f x) :: (a -> b) -> a -> b
