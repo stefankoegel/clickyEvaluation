@@ -8,7 +8,7 @@ import Control.Monad.State (State, evalState, put, get)
 import Data.Array as Array
 import Data.Bifunctor (rmap)
 import Data.Char as Char
-import Data.Either (Either(Left, Right))
+import Data.Either (Either(..))
 import Data.Foldable (intercalate, foldl, foldr, foldMap, elem)
 import Data.List (List(..), (:), concat, concatMap, filter, singleton, unzip, zip)
 import Data.Map (Map)
@@ -60,6 +60,19 @@ ppScheme (Forall tvars t) = "forall " <> intercalate " " tvars <> ". " <> pretty
 -- | types.
 type Subst = Map.Map TVar Type
 
+-- | Pretty print a substitution.
+-- | Example output:
+-- | ```
+-- | Substitution:
+-- |   t0 ~ Int,
+-- |   t1 ~ Int -> Int
+-- | ```
+ppSubst :: Subst -> String
+ppSubst subst = "Substitutions:\n" <>
+  (map ppTVAndType >>> intercalate ",\n")
+  (Map.toList subst)
+  where ppTVAndType (Tuple tv t) = "\t" <> tv <> " ~ " <> prettyPrintType t
+
 -- | Mappings from type variable to type schemes. These mappings are used for bindings in lambda
 -- | and let expressions and list comprehensions. Here for every binding the type variable and the
 -- | corresponding scheme is stored.
@@ -75,9 +88,9 @@ ppTVarMappings mappings = "Type Variable Mappings:\n" <>
 -- | The type environment is a mapping from type variables to polytypes.
 data TypeEnv = TypeEnv (Map.Map TVar Scheme)
 
--- | Create an empty type environment.
-emptyTypeEnv :: TypeEnv
-emptyTypeEnv = TypeEnv Map.empty
+-- TODO: Remove in favor of `ppTypeEnv`?
+instance showTypeEnv :: Show TypeEnv where
+  show (TypeEnv a) = show a
 
 -- | Pretty print a type environment.
 -- | Example output:
@@ -92,9 +105,9 @@ ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
   (Map.toList env)
   where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " :: " <> ppScheme scheme
 
--- TODO: Remove in favor of `ppTypeEnv`?
-instance showTypeEnv :: Show TypeEnv where
-  show (TypeEnv a) = show a
+-- | Create an empty type environment.
+emptyTypeEnv :: TypeEnv
+emptyTypeEnv = TypeEnv Map.empty
 
 -- +--------------------------------+
 -- | Type Specific Helper Functions |
@@ -292,11 +305,6 @@ returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constrai
 returnWithConstraint expr t = do
   tv <- freshNew
   pure $ Tuple tv (constraintSingleMapped (index expr) tv t)
-
-returnWithConstraint' :: Index -> Type -> InferNew (Tuple Type Constraints)
-returnWithConstraint' idx t = do
-  tv <- freshNew
-  pure $ Tuple tv (constraintSingleMapped idx tv t)
 
 -- TODO: Where can this be used instead of `returnWithConstraint`?
 returnDirect :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
@@ -854,10 +862,10 @@ applyUnknowns subst pairs unknowns = uncurry (applyUnknowns (newSubst `compose` 
 -- TODO: Cleanup.
 solver :: Unifier -> Unifier
 solver { subst: beginningSubst, constraints: constraints } =
-  solver' beginningSubst emptyConstraints indexList (apply beginningSubst constraintList)
+  solver' beginningSubst emptyConstraints indices (apply beginningSubst constraintList)
   where
   lists = toConstraintAndIndexLists constraints
-  indexList = fst lists
+  indices = fst lists
   constraintList = snd lists
 
   solver' :: Subst -> Constraints -> List Index -> List Constraint -> Unifier
@@ -901,19 +909,6 @@ assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f
 
 ---------------------------------------------------------------------------------------------------
 
--- | Pretty print a substitution.
--- | Example output:
--- | ```
--- | Substitution:
--- |   t0 ~ Int,
--- |   t1 ~ Int -> Int
--- | ```
-ppSubst :: Subst -> String
-ppSubst subst = "Substitutions:\n" <>
-  (map ppTVAndType >>> intercalate ",\n")
-  (Map.toList subst)
-  where ppTVAndType (Tuple tv t) = "\t" <> tv <> " ~ " <> prettyPrintType t
-
 class Substitutable a where
   apply :: Subst -> a -> a
   ftv   :: a -> Set.Set TVar
@@ -954,14 +949,8 @@ instance subTypeEnv :: Substitutable TypeEnv where
 instance subAD :: Substitutable AD where
   apply s (TList t) = TList (apply s t)
   apply s(TTuple t) = TTuple (apply s t)
-
   ftv (TList t) = ftv t
   ftv (TTuple t) = ftv t
-
-instance subTupTVarScheme :: Substitutable (Tuple String Scheme) where
-  apply s (Tuple a b) = Tuple a (apply s b)
-
-  ftv (Tuple _ b) = ftv b
 
 instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => Substitutable (QualTree a b c) where
   apply s (Gen a b c) = Gen (apply s a) (apply s b) (apply s c)
@@ -1002,31 +991,6 @@ instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (NTupleLit t lb) = NTupleLit (apply s t) (apply s lb)
 
   ftv = extractFromBinding >>> ftv
-
--- | A `TypeExtractable` represents a data structure holding a type which can be extracted.
-class TypeExtractable a where
-  extractType :: a -> Type
-
--- | Convenience functions for extracting types out of typed trees, typed bindings and typed quals.
--- | Note, that these functions will crash if a `Nothing` is encountered instead of a type.
-
-instance typeExtractableTypeTree :: TypeExtractable (Tree a b o (Maybe Type)) where
-  extractType tree = case extractFromTree tree of
-    Just t -> t
-    Nothing -> unsafeCrashWith $
-      "You found a bug: the given tree should be typed (type field contains `Nothing`)."
-
-instance typeExtractableTypeBinding :: TypeExtractable (Binding (Maybe Type)) where
-  extractType binding = case extractFromBinding binding of
-    Just t -> t
-    Nothing -> unsafeCrashWith $
-      "You found a bug: the given binding should be typed (type field contains `Nothing`)."
-
-instance typeExtractableTypeQual :: TypeExtractable (QualTree b t (Maybe Type)) where
-  extractType qual = case extractFromQualTree qual of
-    Just t -> t
-    Nothing -> unsafeCrashWith $
-      "You found a bug: the given qual should be typed (type field contains `Nothing`)."
 
 initUnique :: Unique
 initUnique = Unique { count : 0 }
