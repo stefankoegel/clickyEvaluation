@@ -1163,6 +1163,18 @@ inferExpr expr = do
   let expr' = assignTypes uni indexedTree
   pure $ normalizeTypeTree (apply uni.subst expr')
 
+-- | Represents a result of the type inference process.
+type DebugInferResult = { expr :: TypeTree, constraints :: Constraints, subst :: Subst }
+
+-- | Debug version of `inferExpr`.
+inferExprDebug :: TypeTree -> Infer DebugInferResult
+inferExprDebug expr = do
+  let indexedTree = makeIndexedTree expr
+  Tuple t c <- infer indexedTree
+  uni <- solveConstraints c
+  let expr' = normalizeTypeTree (apply uni.subst $ assignTypes uni indexedTree)
+  pure { expr: expr', constraints: c, subst: uni.subst }
+
 -- | Perform type inference on expression tree and extract top level type.
 inferExprToType :: TypeTree -> Infer Type
 inferExprToType expr = (extractFromTree >>> fromMaybe UnknownType) <$> inferExpr expr
@@ -1192,16 +1204,6 @@ buildDefinitionGroups (def@(Def str bin exp):defs) = case binList of
   defMap = buildDefinitionGroups defs
   binList = Map.lookup str defMap
 
---data InferRes = InferRes IndexedTypeTree Constraints Subst
---twoStageInfer :: TypeEnv -> TypeTree -> Either (Tuple TypeError Constraints) InferRes
---twoStageInfer env tt = case runInferWith env false (infer indexedTT) of
---      Left err -> Left (Tuple err emptyConstraints)
---      Right (Tuple t constraints) ->
---        let uni = runSolve constraints
---            expr = assignTypes uni indexedTT
---        in Right $ InferRes expr uni.constraints uni.subst
---    where
---    indexedTT = makeIndexedTree tt
 
 -- +----------------------------------+
 -- | Type Tree and Type Normalization |
