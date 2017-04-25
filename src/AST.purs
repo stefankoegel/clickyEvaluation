@@ -4,7 +4,7 @@ import Prelude
 import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor (bimap, rmap)
 import Data.List (List(..), fold, (:))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Traversable (traverse)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
@@ -137,6 +137,12 @@ exprToTypeTree (ListComp _ t qualTrees) = ListComp Nothing
 
 binary :: Op -> TypeTree -> TypeTree -> TypeTree
 binary op left right = Binary Nothing (Tuple op Nothing) left right
+
+-- | Get the expression element from a given qual tree.
+getQualTreeExpression :: forall b t m. QualTree b t m -> t
+getQualTreeExpression (Gen _ _ e) = e
+getQualTreeExpression (Let _ _ e) = e
+getQualTreeExpression (Guard _ e) = e
 
 -- TODO: Find better name.
 data QualTree b t m = Gen m b t
@@ -366,6 +372,24 @@ traverseQualTree fb fe f (Guard t e) = do
   t' <- f t
   e' <- fe e
   pure $ Guard t' e'
+
+-- | Return a list of child nodes of a given tree.
+getTreeChildren :: forall a b o m. Tree a b o m -> List (Tree a b o m)
+getTreeChildren (List _ es) = es
+getTreeChildren (NTuple _ es) = es
+getTreeChildren (Binary _ _ e1 e2) = e1 : e2 : Nil
+getTreeChildren (Unary _ _ e) = e : Nil
+getTreeChildren (SectL _ e _) = e : Nil
+getTreeChildren (SectR _ _ e) = e : Nil
+getTreeChildren (IfExpr _ e1 e2 e3) = e1 : e2 : e3 : Nil
+getTreeChildren (ArithmSeq _ e me1 me2) = e : (maybeTreeChilden me1) <> (maybeTreeChilden me2)
+  where
+  maybeTreeChilden (Just t) = t : Nil
+  maybeTreeChilden _ = Nil
+getTreeChildren (LetExpr _ defs e) = e : (map snd defs)
+getTreeChildren (App _ e es) = e : es
+getTreeChildren (ListComp _ e quals) = e : (map getQualTreeExpression quals)
+getTreeChildren _ = Nil
 
 traverseTree :: forall b b' o o' m m' f. Monad f =>
      (b -> f b')
