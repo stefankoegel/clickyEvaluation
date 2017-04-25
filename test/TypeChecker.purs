@@ -76,6 +76,14 @@ compareTypes testName expected actual = if expected == actual
                "Expected type: " <> prettyPrintType expected <> "\n" <>
                "Actual type: " <> prettyPrintType actual
 
+-- | Compare the given type errors and report an error if they are not equal.
+compareTypeError :: String -> TypeError -> TypeError -> Writer (List String) Unit
+compareTypeError testName expected actual = if expected == actual
+  then pure unit
+  else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
+               "Expected type error: " <> prettyPrintTypeError expected <> "\n" <>
+               "Actual type error: " <> prettyPrintTypeError actual <> "\n"
+
 -- | Try to infer the type of a given expression and compare the result with the expected type.
 testInferExpr :: String -> String -> Type -> Writer (List String) Unit
 testInferExpr name expressionString expected = case parseExpr expressionString of
@@ -92,11 +100,7 @@ testInferExprFail name expressionString expected = case parseExpr expressionStri
     Right t -> tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
                        "Expected type error: " <> prettyPrintTypeError expected <> "\n" <>
                        "Found type: " <> prettyPrintType t <> "\n"
-    Left typeError -> if typeError == expected
-      then pure unit
-      else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
-                   "Expected type error: " <> prettyPrintTypeError typeError <> "\n" <>
-                   "Actual type error: " <> prettyPrintTypeError expected <> "\n"
+    Left typeError -> compareTypeError name expected typeError
 
 testInferDef :: String -> String -> Type -> Writer (List String) Unit
 testInferDef name definitionString expected = case parseDefs definitionString of
@@ -162,6 +166,15 @@ testInferTT name untypedTree expectedTypedTree =
                    "Expected type tree: " <> show expectedTypedTree <> "\n" <>
                    "Actual type tree: " <> show typedTree <> "\n"
 
+testInferTTFail :: String -> TypeTree -> TypeError -> Writer (List String) Unit
+testInferTTFail name expr expectedError =
+  case TC.tryInferExprInContext parsedPrelude expr of
+    Left typeError -> compareTypeError name expectedError typeError
+    Right typedExpr ->
+      tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+              "Expected type error: " <> prettyPrintTypeError expectedError <> "\n" <>
+              "Found type tree: " <> show typedExpr <> "\n"
+
 -- | Test type tree normalization.
 testNormalizeTT :: String -> TypeTree -> TypeTree -> Writer (List String) Unit
 testNormalizeTT name tt normalizedTT = if (TC.normalizeTypeTree tt) == normalizedTT
@@ -190,6 +203,52 @@ listOne = List (Just $ typConList "Int") (Atom (Just $ TypCon "Int") (AInt 1) : 
 -- | Untyped type tree representing `[1]`.
 untypedListOne :: TypeTree
 untypedListOne = List Nothing (Atom Nothing (AInt 1) : Nil)
+
+runPartialTest :: Writer (List String) Unit
+runPartialTest = do
+  -- Test that ((2 :: Int) + 4) is typed correctly.
+  testInferTT "Partially typed"
+    (Binary
+      Nothing
+      (Tuple Add Nothing)
+      (Atom (Just intType) (AInt 2))
+      (Atom Nothing (AInt 4))
+    )
+    (Binary
+      (Just (TypCon "Int"))
+      (Tuple Add (Just (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
+      (Atom (Just intType) (AInt 2))
+      (Atom (Just intType) (AInt 4))
+    )
+
+  -- Test that ((2 :: Char) + 4) results in a type error.
+  testInferTTFail "Partially typed"
+    (Binary
+      Nothing
+      (Tuple Add Nothing)
+      (Atom (Just charType) (AInt 2))
+      (Atom Nothing (AInt 4))
+    )
+    (UnificationFail intType charType)
+
+  -- Test that `let (f :: Int -> Int) = \x -> x in f True` results in a type error.
+  testInferTTFail "Partially typed let expression"
+    (LetExpr
+      Nothing
+      (
+        Tuple (Lit (Just intToIntType) (Name "f"))
+          (Lambda Nothing
+            ((Lit Nothing (Name "x")) : Nil)
+            (Atom Nothing (Name "x"))) :
+        Nil
+      )
+      (App
+        Nothing
+        (Atom Nothing (Name "f"))
+        ((Atom Nothing (Bool true)) : Nil)
+      )
+    )
+    (UnificationFail intType boolType)
 
 runTests :: Writer (List String) Unit
 runTests = do
