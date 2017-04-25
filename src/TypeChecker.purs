@@ -299,6 +299,11 @@ runInferNew :: forall a. TypeEnv -> Boolean -> InferNew a -> Either TypeError a
 runInferNew env stopOnError m = rmap fst $ Ex.runExcept $ evalRWST m inferEnv initUnique
   where inferEnv = { env: env, stopOnError: stopOnError }
 
+-- | Run the type inference monad with an empty environment an stop on occurring errors.
+runInferSimple :: forall a. InferNew a -> Either TypeError a
+runInferSimple m = Ex.runExcept (fst <$> evalRWST m inferEnv initUnique)
+  where inferEnv = { env: emptyTypeEnv, stopOnError: true }
+
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
 returnWithConstraint :: IndexedTypeTree -> Type -> InferNew (Tuple Type Constraints)
 returnWithConstraint expr t = do

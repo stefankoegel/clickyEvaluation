@@ -2,17 +2,17 @@ module Test.TypeChecker where
 
 import AST
 import TypeChecker as TC
-import TypeChecker (charType, emptyTypeEnv, intType, intToIntType)
+import TypeChecker (Scheme(..), TVarMappings, boolType, charType, emptyTypeEnv, intType, intToIntType)
 import Parser (parseExpr, parseDefs)
 import Test.Parser (parsedPrelude)
 
-import Prelude (Unit, bind, map, pure, show, unit, ($), (==), (<<<), (<>), (>>=))
+import Prelude (Unit, bind, map, pure, show, unit, ($), (==), (<<<), (<>), (>>=), (<$>))
 import Control.Monad.Writer (Writer, tell)
 import Data.Array as Array
 import Data.Either (Either(..))
 import Data.List (List(..), (:), singleton)
 import Data.Maybe (Maybe(..))
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), fst)
 import Text.Parsing.Parser (ParseError, parseErrorMessage)
 
 toList :: forall a. Array a -> List a
@@ -172,6 +172,19 @@ testNormalizeTT name tt normalizedTT = if (TC.normalizeTypeTree tt) == normalize
   else tell' $ "Type tree normalization failed in test case `" <> name <> "`:\n" <>
                "Expected type tree: " <> show normalizedTT <> "\n" <>
                "Actual type tree: " <> show tt <> "\n"
+
+-- | Test the function `mapSchemeOnTVarMappings`.
+testMapSchemeOnTVarMappings :: String -> Scheme -> IndexedTypedBinding -> TVarMappings
+                            -> TVarMappings -> Writer (List String) Unit
+testMapSchemeOnTVarMappings name scheme binding m expected =
+  case TC.runInferSimple (fst <$> TC.mapSchemeOnTVarMappings binding m scheme) of
+    Left typeError -> reportTypeError name typeError
+    Right result -> if result == expected
+      then pure unit
+      else tell' $
+        "The function `mapSchemeOnTVarMappings` failed in test case `" <> name <> "`:\n" <>
+        "Expected type variable mapping: " <> TC.ppTVarMappings expected <> "\n" <>
+        "Actual type variable mapping: " <> TC.ppTVarMappings result <> "\n"
 
 -- | Typed type tree representing `[1]`.
 listOne :: TypeTree
@@ -554,7 +567,9 @@ runTests = do
       (App
         (Just (TypVar  "t_45"))
         (Atom (Just (typVarArrow "t_4" "t_45")) (Name "f"))
-        ((Atom (Just (TypVar  "t_4")) (Name "x")) : Nil)))
+        ((Atom (Just (TypVar  "t_4")) (Name "x")) : Nil)
+      )
+    )
     (Lambda
       (Just (typVarArrow "a" "b" `TypArr` typVarArrow "a" "b"))
       (
@@ -565,4 +580,49 @@ runTests = do
       (App
         (Just (TypVar  "b"))
         (Atom (Just (typVarArrow "a" "b")) (Name "f"))
-        ((Atom (Just (TypVar  "a")) (Name "x")) : Nil)))
+        ((Atom (Just (TypVar  "a")) (Name "x")) : Nil)
+      )
+    )
+
+  testMapSchemeOnTVarMappings "Map scheme on literal binding"
+    (Forall Nil intType)
+    (Lit (Tuple Nothing 0) (Name "x"))
+    (Tuple "x" (Forall Nil (TypVar "t_0")) : Nil)
+    (Tuple "x" (Forall Nil intType) : Nil)
+
+  -- Map scheme (forall t_4. t_4 -> t_4, (Int, Bool)) on { f = t_0, n = t_1, b = t_2 } for
+  -- binding (f, (n, b))
+  testMapSchemeOnTVarMappings "Map scheme on tuple"
+    -- The scheme: (forall t_4. t_4 -> t_4, (Int, Bool))
+    (Forall ("t_4" : Nil)
+      (AD (TTuple (typVarArrow "t_4" "t_4" :
+        (AD (TTuple (intType : boolType : Nil))) : Nil)))
+    )
+    -- The binding: (f, (n, b))
+    (NTupleLit (Tuple Nothing 1)
+      (
+        (Lit (Tuple Nothing 2) (Name "f")) :
+        (NTupleLit (Tuple Nothing 3)
+          (
+            (Lit (Tuple Nothing 4) (Name "n")) :
+            (Lit (Tuple Nothing 5) (Name "b")) :
+            Nil
+          )
+        ) :
+        Nil
+      )
+    )
+    -- The type variable mapping: { f = t_0, n = t_1, b = t_2 }
+    (
+      (Tuple "f" (Forall Nil (TypVar "t_0"))) :
+      (Tuple "n" (Forall Nil (TypVar "t_1"))) :
+      (Tuple "b" (Forall Nil (TypVar "t_2"))) :
+      Nil
+    )
+    -- The expected result: { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }
+    (
+      (Tuple "f" (Forall ("t_4" : Nil) (typVarArrow "t_4" "t_4"))) :
+      (Tuple "n" (Forall Nil intType)) :
+      (Tuple "b" (Forall Nil boolType)) :
+      Nil
+    )
