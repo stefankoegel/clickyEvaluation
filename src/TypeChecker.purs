@@ -40,6 +40,11 @@ unzip3 = foldr
             Triple (a : as) (b : bs) (c : cs))
          (Triple Nil Nil Nil)
 
+
+-- +--------------+
+-- | Type Schemes |
+-- +--------------+
+
 -- | A type scheme represents a polytype. It contains a list of type variables, which may occur in
 -- | the type.
 data Scheme = Forall (List TVar) Type
@@ -54,6 +59,10 @@ instance showScheme :: Show Scheme where
 ppScheme :: Scheme -> String
 ppScheme (Forall Nil t) = prettyPrintType t
 ppScheme (Forall tvars t) = "forall " <> intercalate " " tvars <> ". " <> prettyPrintType t
+
+-- +---------------+
+-- | Substitutions |
+-- +---------------+
 
 -- | Substitions map type variables to monotypes and can be applied to data structures containing
 -- | types.
@@ -72,6 +81,101 @@ ppSubst subst = "Substitutions:\n" <>
   (Map.toList subst)
   where ppTVAndType (Tuple tv t) = "\t" <> tv <> " ~ " <> prettyPrintType t
 
+-- | The empty substition.
+nullSubst :: Subst
+nullSubst = Map.empty
+
+-- | Compose the two given substitiutions into a single one.
+compose :: Subst -> Subst -> Subst
+compose s1 s2 = map (apply s1) s2 `Map.union` s1
+
+class Substitutable a where
+  apply :: Subst -> a -> a
+  ftv   :: a -> Set.Set TVar
+
+instance subScheme :: Substitutable Scheme where
+    apply s (Forall as t)   = Forall as $ apply s' t
+                              where s' = foldr Map.delete s as
+    ftv (Forall as t) = (ftv t) `Set.difference` Set.fromFoldable as
+
+instance subType :: Substitutable Type where
+   apply _ UnknownType = UnknownType
+   apply _ (TypCon a) = TypCon a
+   apply s t@(TypVar a) = fromMaybe t $ Map.lookup a s
+   apply s (TypArr t1 t2) =  TypArr (apply s t1) (apply s t2)
+   apply s (AD a) = AD (apply s a)
+   apply _ (TypeError err) = TypeError err
+
+   ftv UnknownType = Set.empty
+   ftv (TypCon  _)         = Set.empty
+   ftv (TypVar a)       = Set.singleton a
+   ftv (TypArr t1 t2) =  Set.union (ftv t1) (ftv t2)
+   ftv (AD a) = ftv a
+   ftv (TypeError err) = Set.empty
+
+instance subMaybeType :: Substitutable (Maybe Type) where
+  apply s t = apply s <$> t
+  ftv (Just t) = ftv t
+  ftv Nothing = Set.empty
+
+instance listSub :: (Substitutable a) => Substitutable (List a) where
+  apply s xs = map (apply s) xs
+  ftv   = foldr (\a b -> Set.union (ftv a) b) Set.empty
+
+instance subTypeEnv :: Substitutable TypeEnv where
+  apply s (TypeEnv env) =  TypeEnv $ map (apply s) env
+  ftv (TypeEnv env) = ftv $ snd $ unzip $ Map.toList env
+
+instance subAD :: Substitutable AD where
+  apply s (TList t) = TList (apply s t)
+  apply s(TTuple t) = TTuple (apply s t)
+  ftv (TList t) = ftv t
+  ftv (TTuple t) = ftv t
+
+instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => Substitutable (QualTree a b c) where
+  apply s (Gen a b c) = Gen (apply s a) (apply s b) (apply s c)
+  apply s (Let a b c) = Let (apply s a) (apply s b) (apply s c)
+  apply s (Guard a c) = Guard (apply s a) (apply s c)
+
+  ftv (Gen a b c) = ftv c
+  ftv (Let a b c) = ftv c
+  ftv (Guard a c) = ftv c
+
+-- | Substitutable instance for the type tree.
+instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) (Maybe Type)) where
+  apply s (Atom t a) = Atom (apply s t) a
+  apply s (List t es) = List (apply s t) (apply s es)
+  apply s (NTuple t es) = NTuple (apply s t) (apply s es)
+  apply s (Binary t op l r) = Binary (apply s t) (apply s op) (apply s l) (apply s r)
+  apply s (Unary t op e) = Unary (apply s t) (apply s op) (apply s e)
+  apply s (SectL t e op) = SectL (apply s t) (apply s e) (apply s op)
+  apply s (SectR t op e) = SectR (apply s t) (apply s op) (apply s e)
+  apply s (PrefixOp t op) = PrefixOp (apply s t) (apply s op)
+  apply s (IfExpr t c l r) = IfExpr (apply s t) (apply s c) (apply s l) (apply s r)
+  apply s (ArithmSeq t begin step end) = ArithmSeq (apply s t) (apply s begin) (apply s <$> step) (apply s <$> end)
+  apply s (LetExpr t bs e) = LetExpr (apply s t) ((\(Tuple x y) -> Tuple (apply s x) (apply s y)) <$> bs) (apply s e)
+  apply s (Lambda t bs body) = Lambda (apply s t) (apply s bs) (apply s body)
+  apply s (App t e es) = App (apply s t) (apply s e) (apply s es)
+  apply s (ListComp t e qs) = ListComp (apply s t) (apply s e) (apply s qs)
+  ftv typeTree = ftv (extractFromTree typeTree)
+
+-- | Substitutable instance for operator tuples used in the type tree.
+instance subOpTuple :: Substitutable (Tuple Op (Maybe Type)) where
+  apply s (Tuple op t) = Tuple op (apply s t)
+  ftv (Tuple op t) = ftv t
+
+instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
+  apply s (Lit t atom) = Lit (apply s t) atom
+  apply s (ConsLit t b1 b2) = ConsLit (apply s t) (apply s b1) (apply s b2)
+  apply s (ListLit t lb) = ListLit (apply s t) (apply s lb)
+  apply s (NTupleLit t lb) = NTupleLit (apply s t) (apply s lb)
+
+  ftv = extractFromBinding >>> ftv
+
+-- +------------------------+
+-- | Type Variable Mappings |
+-- +------------------------+
+
 -- | Mappings from type variable to type schemes. These mappings are used for bindings in lambda
 -- | and let expressions and list comprehensions. Here for every binding the type variable and the
 -- | corresponding scheme is stored.
@@ -83,6 +187,10 @@ ppTVarMappings :: TVarMappings -> String
 ppTVarMappings mappings = "Type Variable Mappings:\n" <>
   (map ppTVarMapping >>> intercalate ",\n") mappings
   where ppTVarMapping (Tuple tv scheme) = "\t" <> tv <> " :: " <> ppScheme scheme
+
+-- +------------------+
+-- | Type Environment |
+-- +------------------+
 
 -- | The type environment is a mapping from type variables to polytypes.
 data TypeEnv = TypeEnv (Map.Map TVar Scheme)
@@ -107,6 +215,29 @@ ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
 -- | Create an empty type environment.
 emptyTypeEnv :: TypeEnv
 emptyTypeEnv = TypeEnv Map.empty
+
+-- | Given a list of type variable names, remove the corresponding schemes from the type
+-- | environment.
+removeMultiple :: TypeEnv -> List TVar -> TypeEnv
+removeMultiple (TypeEnv env) tvars = TypeEnv $ foldr Map.delete env tvars
+
+-- | Remove an entry from the type environment given a type variable name.
+remove :: TypeEnv -> TVar -> TypeEnv
+remove (TypeEnv env) tvar = TypeEnv $ Map.delete tvar env
+
+-- | Fold a list of type environments into a single type environment.
+combine :: List TypeEnv -> TypeEnv
+combine = foldl combine' emptyTypeEnv
+  where
+  combine' (TypeEnv env1) (TypeEnv env2) = TypeEnv $ Map.union env1 env2
+
+-- | Extend the given type environment by the given type variable to scheme mapping.
+extend :: TypeEnv -> TVarMapping -> TypeEnv
+extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
+
+-- | Extend the given type environment by the given mappings.
+extendMultiple :: TypeEnv -> TVarMappings -> TypeEnv
+extendMultiple = foldr (flip extend)
 
 -- +--------------------------------+
 -- | Type Specific Helper Functions |
@@ -267,6 +398,15 @@ type InferNew a = (RWST
   Unique                -- ^ The infer state.
   (Ex.Except TypeError) -- ^ Catch type errors.
   a)
+
+-- | Check, if a type variable occurs in a substitutable instance.
+occursCheck :: forall a. Substitutable a => TVar -> a -> Boolean
+occursCheck a t = a `Set.member` ftv t
+
+-- | Generalize a monotype to a polytype in the context of a given type environment.
+generalize :: TypeEnv -> Type -> Scheme
+generalize env t  = Forall as t
+  where as = Set.toUnfoldable $ ftv t `Set.difference` ftv env
 
 -- | Choose a fresh type variable name.
 freshTVarNew :: InferNew TVar
@@ -877,130 +1017,6 @@ assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f
     Just (Constraint tv _) -> Just $ subst `apply` tv
     Just (ConstraintError typeError) -> Just typeError
 
----------------------------------------------------------------------------------------------------
-
-class Substitutable a where
-  apply :: Subst -> a -> a
-  ftv   :: a -> Set.Set TVar
-
-instance subScheme :: Substitutable Scheme where
-    apply s (Forall as t)   = Forall as $ apply s' t
-                              where s' = foldr Map.delete s as
-    ftv (Forall as t) = (ftv t) `Set.difference` Set.fromFoldable as
-
-instance subType :: Substitutable Type where
-   apply _ UnknownType = UnknownType
-   apply _ (TypCon a) = TypCon a
-   apply s t@(TypVar a) = fromMaybe t $ Map.lookup a s
-   apply s (TypArr t1 t2) =  TypArr (apply s t1) (apply s t2)
-   apply s (AD a) = AD (apply s a)
-   apply _ (TypeError err) = TypeError err
-
-   ftv UnknownType = Set.empty
-   ftv (TypCon  _)         = Set.empty
-   ftv (TypVar a)       = Set.singleton a
-   ftv (TypArr t1 t2) =  Set.union (ftv t1) (ftv t2)
-   ftv (AD a) = ftv a
-   ftv (TypeError err) = Set.empty
-
-instance subMaybeType :: Substitutable (Maybe Type) where
-  apply s t = apply s <$> t
-  ftv (Just t) = ftv t
-  ftv Nothing = Set.empty
-
-instance listSub :: (Substitutable a) => Substitutable (List a) where
-  apply s xs = map (apply s) xs
-  ftv   = foldr (\a b -> Set.union (ftv a) b) Set.empty
-
-instance subTypeEnv :: Substitutable TypeEnv where
-  apply s (TypeEnv env) =  TypeEnv $ map (apply s) env
-  ftv (TypeEnv env) = ftv $ snd $ unzip $ Map.toList env
-
-instance subAD :: Substitutable AD where
-  apply s (TList t) = TList (apply s t)
-  apply s(TTuple t) = TTuple (apply s t)
-  ftv (TList t) = ftv t
-  ftv (TTuple t) = ftv t
-
-instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => Substitutable (QualTree a b c) where
-  apply s (Gen a b c) = Gen (apply s a) (apply s b) (apply s c)
-  apply s (Let a b c) = Let (apply s a) (apply s b) (apply s c)
-  apply s (Guard a c) = Guard (apply s a) (apply s c)
-
-  ftv (Gen a b c) = ftv c
-  ftv (Let a b c) = ftv c
-  ftv (Guard a c) = ftv c
-
--- | Substitutable instance for the type tree.
-instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) (Maybe Type)) where
-  apply s (Atom t a) = Atom (apply s t) a
-  apply s (List t es) = List (apply s t) (apply s es)
-  apply s (NTuple t es) = NTuple (apply s t) (apply s es)
-  apply s (Binary t op l r) = Binary (apply s t) (apply s op) (apply s l) (apply s r)
-  apply s (Unary t op e) = Unary (apply s t) (apply s op) (apply s e)
-  apply s (SectL t e op) = SectL (apply s t) (apply s e) (apply s op)
-  apply s (SectR t op e) = SectR (apply s t) (apply s op) (apply s e)
-  apply s (PrefixOp t op) = PrefixOp (apply s t) (apply s op)
-  apply s (IfExpr t c l r) = IfExpr (apply s t) (apply s c) (apply s l) (apply s r)
-  apply s (ArithmSeq t begin step end) = ArithmSeq (apply s t) (apply s begin) (apply s <$> step) (apply s <$> end)
-  apply s (LetExpr t bs e) = LetExpr (apply s t) ((\(Tuple x y) -> Tuple (apply s x) (apply s y)) <$> bs) (apply s e)
-  apply s (Lambda t bs body) = Lambda (apply s t) (apply s bs) (apply s body)
-  apply s (App t e es) = App (apply s t) (apply s e) (apply s es)
-  apply s (ListComp t e qs) = ListComp (apply s t) (apply s e) (apply s qs)
-  ftv typeTree = ftv (extractFromTree typeTree)
-
--- | Substitutable instance for operator tuples used in the type tree.
-instance subOpTuple :: Substitutable (Tuple Op (Maybe Type)) where
-  apply s (Tuple op t) = Tuple op (apply s t)
-  ftv (Tuple op t) = ftv t
-
-instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
-  apply s (Lit t atom) = Lit (apply s t) atom
-  apply s (ConsLit t b1 b2) = ConsLit (apply s t) (apply s b1) (apply s b2)
-  apply s (ListLit t lb) = ListLit (apply s t) (apply s lb)
-  apply s (NTupleLit t lb) = NTupleLit (apply s t) (apply s lb)
-
-  ftv = extractFromBinding >>> ftv
-
--- | Given a list of type variable names, remove the corresponding schemes from the type
--- | environment.
-removeMultiple :: TypeEnv -> List TVar -> TypeEnv
-removeMultiple (TypeEnv env) tvars = TypeEnv $ foldr Map.delete env tvars
-
--- | Remove an entry from the type environment given a type variable name.
-remove :: TypeEnv -> TVar -> TypeEnv
-remove (TypeEnv env) tvar = TypeEnv $ Map.delete tvar env
-
--- | Fold a list of type environments into a single type environment.
-combine :: List TypeEnv -> TypeEnv
-combine = foldl combine' emptyTypeEnv
-  where
-  combine' (TypeEnv env1) (TypeEnv env2) = TypeEnv $ Map.union env1 env2
-
--- | Extend the given type environment by the given type variable to scheme mapping.
-extend :: TypeEnv -> TVarMapping -> TypeEnv
-extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
-
--- | Extend the given type environment by the given mappings.
-extendMultiple :: TypeEnv -> TVarMappings -> TypeEnv
-extendMultiple = foldr (flip extend)
-
-nullSubst :: Subst
-nullSubst = Map.empty
-
-occursCheck :: forall a.  (Substitutable a) => TVar -> a -> Boolean
-occursCheck a t = a `Set.member` ftv t
-
-compose :: Subst -> Subst -> Subst
-compose s1 s2 = map (apply s1) s2 `Map.union` s1
-
-envUnion :: TypeEnv -> TypeEnv -> TypeEnv
-envUnion (TypeEnv a) (TypeEnv b) = TypeEnv $ a `Map.union` b
-
-generalize :: TypeEnv -> Type -> Scheme
-generalize env t  = Forall as t
-  where as = Set.toUnfoldable $ ftv t `Set.difference` ftv env
-
 -- +------------------------------------------------------+
 -- | Type Inference for Definitions and Definition Groups |
 -- +------------------------------------------------------+
@@ -1131,9 +1147,6 @@ inferTypeNew expr = do
   extractType (Tuple (Just mt) idx) = mt
   extractType _ = UnknownType
 
-closeOverType :: (Tuple Subst Type) -> Scheme
-closeOverType (Tuple sub ty) = generalize emptyTypeEnv (apply sub ty)
-
 overlappingBindings :: List TypedBinding -> List String
 overlappingBindings Nil = Nil
 overlappingBindings (Cons x Nil) = Nil
@@ -1170,6 +1183,9 @@ twoStageInfer env tt = case runInferNew env false (inferNew indexedTT) of
         in Right $ InferRes expr uni.constraints uni.subst
     where
     indexedTT = makeIndexedTree tt
+
+closeOverType :: (Tuple Subst Type) -> Scheme
+closeOverType (Tuple sub ty) = generalize emptyTypeEnv (apply sub ty)
 
 closeOverTypeTree :: (Tuple Subst TypeTree) -> TypeTree
 closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
