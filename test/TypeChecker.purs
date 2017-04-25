@@ -2,7 +2,8 @@ module Test.TypeChecker where
 
 import AST
 import TypeChecker as TC
-import TypeChecker (Scheme(..), TVarMappings, boolType, charType, emptyTypeEnv, intType, intToIntType)
+import TypeChecker (Scheme(..), TVarMappings, boolType, charType, emptyTypeEnv, intType,
+  intToIntType, intToIntToIntType)
 import Parser (parseExpr, parseDefs)
 import Test.Parser (parsedPrelude)
 
@@ -227,9 +228,10 @@ runTests = do
   -- ((\xs -> [ x | x <- xs ]) [1]) :: [Int]
   testInferExpr "List comprehension inside lambda" "(\\xs -> [ x | x <- xs ]) [1]" intList
 
-  -- TODO:
-  -- testInferExprFail "List3" "[(+), 4]" (UnificationFail (TypCon "Int") (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int"))))
-  -- testInferExprFail "Colon" "3 : [1 + 2, 3 + 4, \"Hallo\"]" (Left ((UnificationFail (AD $ TList $ TypCon "Char") (TypCon "Int"))))
+  testInferExprFail "List unification fail" "[(+), 4]" (UnificationFail intToIntToIntType intType)
+  testInferExprFail "Cons unification fail"
+    "let str = \"Hallo\" in 3 : [1 + 2, 3 + 4, str]"
+    (UnificationFail intType (AD $ TList charType))
 
   -- +-----------------------------------------------+
   -- | Test the inferred types of single definitions |
@@ -254,9 +256,8 @@ runTests = do
       (TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "c") : TypVar "a" : TypVar "b" : Nil))
         `TypArr` TypVar "c")
 
-  -- TODO:
-  --testInferDefFail "Listlit binding" "list [a, b, c] = a b c" intType
-    --(InfiniteType "a" (TypVar "a" `TypArr` TypVar "b"))
+  testInferDefFail "Listlit binding" "list [a, b, c] = a b c"
+    (InfiniteType "a" (TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "c")))
 
   -- +----------------------------------------------+
   -- | Test the inferred types of definition groups |
