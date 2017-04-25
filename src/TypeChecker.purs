@@ -9,14 +9,14 @@ import Data.Bifunctor (rmap)
 import Data.Char as Char
 import Data.Either (Either(..))
 import Data.Foldable (intercalate, fold, foldl, foldr, foldMap, elem)
-import Data.List (List(..), (:), concat, concatMap, filter, reverse, singleton, unzip, zip)
+import Data.List (List(..), (:), concat, concatMap, filter, singleton, unzip, zip)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Set as Set
 import Data.String as String
 import Data.Traversable (traverse)
-import Data.Tuple (Tuple(Tuple), snd, fst, uncurry)
+import Data.Tuple (Tuple(Tuple), snd, fst)
 import Partial.Unsafe (unsafeCrashWith)
 import Prelude (
   class Eq, class Show, Unit,
@@ -255,6 +255,10 @@ ppConstraintList constraints = "Constraints:\n" <>
 ---------------------------------------------------------------------------------------------------
 
 data Unique = Unique { count :: Int }
+
+initUnique :: Unique
+initUnique = Unique { count : 0 }
+
 type InferEnv = { env :: TypeEnv, stopOnError :: Boolean }
 
 type InferNew a = (RWST
@@ -797,8 +801,7 @@ type Unifier = { subst :: Subst, constraints :: Constraints }
 
 -- | Create an initial unifier containing a substitution with mappings to the unknown type.
 initialUnifier :: Constraints -> Unifier
-initialUnifier constraints = { subst: unknownSubst, constraints: constraints }
-  where unknownSubst = getUnknownSubst $ toConstraintList constraints
+initialUnifier constraints = { subst: nullSubst, constraints: constraints }
 
 -- | Collect the substitutions in the unifier and catch occurring type errors.
 runSolve :: Constraints -> Unifier
@@ -840,52 +843,6 @@ unifiesAD (TTuple (a:as)) (TTuple (b:bs)) = do
 unifiesAD (TTuple Nil) (TTuple Nil) = pure nullSubst
 unifiesAD t1 t2 = Left $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
 
--- | Given a list of constraints return a tuple containing:
--- | 1. List of all constraints mapping a type variable to another
--- | 2. List of all constraints mapping a type variable to the unknown type.
-sortIntoLists :: List Constraint -> Tuple (List Constraint) (List Constraint)
-sortIntoLists cs = f cs (Tuple Nil Nil)
-  where
-  f Nil tuple = tuple
-  f (c@(Constraint t UnknownType) : cs) (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
-  f (c@(Constraint UnknownType t) : cs) (Tuple pairs unknowns) = f cs (Tuple pairs (c : unknowns))
-  f (c : cs) (Tuple pairs unknowns) = f cs (Tuple (c : pairs) unknowns)
-
--- | Create a substitution from the given constraint list. Note that only mappings from a type
--- | variable to the unknown type are preserved.
-constraintsToSubst :: List Constraint -> Subst
-constraintsToSubst cs = foldr compose nullSubst (map constraintToSubst cs)
-
--- | Create a substitution from the given constraint. Note that only mappings from a type variable
--- | to the unknown type are preserved.
-constraintToSubst :: Constraint -> Subst
-constraintToSubst (Constraint (TypVar tv) UnknownType) = Map.singleton tv UnknownType
-constraintToSubst (Constraint UnknownType (TypVar tv)) = Map.singleton tv UnknownType
-constraintToSubst _ = nullSubst
-
--- | Replace every constraint mapping arrow types to one another `t0 -> t1 = t2 -> t3`, replace
--- | it with corresponding constraints (`t0 = t2` and `t1 = t3`).
-replaceArrowType :: List Constraint -> List Constraint
-replaceArrowType (Constraint l@(TypArr _ _) r@(TypArr _ _) : cs) = f l r <> replaceArrowType cs
-  where
-  f (TypArr l1 l2@(TypArr _ _)) (TypArr r1 r2) = Constraint l1 r1 : f l2 r2
-  f (TypArr l1 l2) (TypArr r1 r2) = Constraint l1 r1 : Constraint l2 r2 : Nil
-  f _ _ = Nil
-replaceArrowType (c : cs) = c : replaceArrowType cs
-replaceArrowType Nil = Nil
-
--- | Given a list of constraints, find the substitution mapping type variables to unknown types.
-getUnknownSubst :: List Constraint -> Subst
-getUnknownSubst cs = uncurry (applyUnknowns nullSubst) lists
-  where lists = sortIntoLists (replaceArrowType cs)
-
-applyUnknowns :: Subst -> List Constraint -> List Constraint -> Subst
-applyUnknowns subst pairs Nil = subst
-applyUnknowns subst pairs unknowns = uncurry (applyUnknowns (newSubst `compose` subst)) lists
-  where
-  newSubst = constraintsToSubst unknowns
-  lists = sortIntoLists $ newSubst `apply` pairs
-
 -- | Try to solve the constraints.
 -- TODO: Cleanup.
 solver :: Unifier -> Unifier
@@ -901,22 +858,7 @@ solver { subst: beginningSubst, constraints: constraints } =
     solver' subst errors idxs rest
   solver' subst errors (idx:idxs) (Constraint t1 t2 : rest) = case unifies t1 t2 of
     Left error@(InfiniteType _ _) -> { subst: nullSubst, constraints: constraintError idx t1 error }
-    Left error ->
-      -- Get type variable name at current index.
-      case Map.lookup idx constraints.mapped of
-        Just (Constraint (TypVar tv) _) -> case Map.lookup tv subst of
-          Just UnknownType -> solver' subst errors idxs rest
-          _ -> do
-            -- Give the constraint for the node at the current index an unknown type and restart
-            -- the constraint solving.
-            let errors' = constraintError idx (TypVar tv) error <+> errors
-            let mapped' = Map.insert idx (Constraint (TypVar tv) UnknownType) constraints.mapped
-            let constraints' = { unmapped: constraints.unmapped, mapped: mapped' }
-            let lists' = toConstraintAndIndexLists constraints'
-            let unknownSubst = getUnknownSubst (snd lists')
-            let subst' = beginningSubst `compose` unknownSubst
-            solver' subst' errors' (fst lists') (apply unknownSubst $ snd lists')
-        _ -> solver' subst errors idxs rest
+    Left error -> { subst: nullSubst, constraints: constraintError idx t1 error }
     Right subst1 -> solver' (subst1 `compose` subst) errors idxs (apply subst1 rest)
   -- Worked through all the constraints.
   solver' subst errorConstraints _ _ = { subst: subst, constraints: errorConstraints }
@@ -1019,9 +961,6 @@ instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (NTupleLit t lb) = NTupleLit (apply s t) (apply s lb)
 
   ftv = extractFromBinding >>> ftv
-
-initUnique :: Unique
-initUnique = Unique { count : 0 }
 
 -- | Given a list of type variable names, remove the corresponding schemes from the type
 -- | environment.
