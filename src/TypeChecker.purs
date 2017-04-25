@@ -397,6 +397,20 @@ type Infer a = (RWST
   (Ex.Except TypeError) -- ^ Catch type errors.
   a)
 
+-- | Run the type inference with a given typed environment and catch type errors. Note that the
+-- | only possible errors are:
+-- |   * `UnboundVariable`
+-- |   * `NoInstanceOfEnum`
+-- |   * `UnknownError`
+-- | All other errors can only be encountered during the constraint solving phase.
+runInferWith :: forall a. TypeEnv -> Boolean -> Infer a -> Either TypeError a
+runInferWith env stopOnError m = Ex.runExcept (fst <$> evalRWST m inferEnv initUnique)
+  where inferEnv = { env: env, stopOnError: stopOnError }
+
+-- | Run the type inference with the empty environment.
+runInfer :: forall a. Boolean -> Infer a -> Either TypeError a
+runInfer = runInferWith emptyTypeEnv
+
 -- | Check, if a type variable occurs in a substitutable instance.
 occursCheck :: forall a. Substitutable a => TVar -> a -> Boolean
 occursCheck a t = a `Set.member` ftv t
@@ -424,6 +438,10 @@ instantiate (Forall as t) = do
   let s = Map.fromFoldable $ zip as as'
   pure $ apply s t
 
+-- | Return canonical, polymorphic type.
+closeOverType :: Type -> Scheme
+closeOverType t = generalize emptyTypeEnv t
+
 -- | Lookup a type in the type environment.
 lookupEnv :: TVar -> Infer MType
 lookupEnv tvar = do
@@ -431,20 +449,6 @@ lookupEnv tvar = do
   case Map.lookup tvar env of
     Nothing -> pure Nothing
     Just scheme -> instantiate scheme >>= (pure <<< Just)
-
--- | Run the type inference and catch type errors. Note that the only possible errors are:
--- |   * `UnboundVariable`
--- |   * `NoInstanceOfEnum`
--- |   * `UnknownError`
--- | All other errors can only be encountered during the constraint solving phase.
-runInfer :: forall a. TypeEnv -> Boolean -> Infer a -> Either TypeError a
-runInfer env stopOnError m = Ex.runExcept (fst <$> evalRWST m inferEnv initUnique)
-  where inferEnv = { env: env, stopOnError: stopOnError }
-
--- | Run the type inference monad with an empty environment an stop on occurring errors.
-runInferSimple :: forall a. Infer a -> Either TypeError a
-runInferSimple m = Ex.runExcept (fst <$> evalRWST m inferEnv initUnique)
-  where inferEnv = { env: emptyTypeEnv, stopOnError: true }
 
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
 returnWithConstraint :: IndexedTypeTree -> Type -> Infer (Tuple Type Constraints)
@@ -1026,14 +1030,13 @@ solver stopOnError { subst: beginningSubst, constraints: constraints } =
   -- Worked through all the constraints.
   solver' subst errorConstraints _ _ = pure { subst: subst, constraints: errorConstraints }
 
--- TODO: Change type to `Unifier -> IndexedTypeTree -> TypeTree`?
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
 -- | indices.
-assignTypes :: Unifier -> IndexedTypeTree -> IndexedTypeTree
+assignTypes :: Unifier -> IndexedTypeTree -> TypeTree
 assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f expr
   where
-  f (Tuple _ idx) = Tuple (lookupTVar idx) idx
-  fo (Tuple op (Tuple _ idx)) = Tuple op (Tuple (lookupTVar idx) idx)
+  f (Tuple _ idx) = lookupTVar idx
+  fo (Tuple op (Tuple _ idx)) = Tuple op (lookupTVar idx)
   fb = map f
   lookupTVar idx = case Map.lookup idx constraints.mapped of
     Nothing -> Nothing
@@ -1045,7 +1048,7 @@ assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f
 -- +------------------------------------------------------+
 --
 -- Definition groups are a list of definitions with the same name (hence belonging together).
--- Ungrouped lists of definitions can be grouped together using `buildGroups`.
+-- Ungrouped lists of definitions can be grouped together using `buildDefinitionGroups`.
 
 -- | Given a list of definitions create a list of indexed definitions. Note, that the indices
 -- | start with 0 and continue growing throughout all expressions and bindings in the given group.
@@ -1059,12 +1062,12 @@ makeIndexedDefinitionGroup = f 0
 -- | Separate the given list of definitions into indexed definition groups. The indices in the
 -- | respective groups start with 0.
 makeIndexedDefinitionGroups :: List Definition -> Map.Map String (List IndexedDefinition)
-makeIndexedDefinitionGroups = map makeIndexedDefinitionGroup <<< buildGroups
+makeIndexedDefinitionGroups = map makeIndexedDefinitionGroup <<< buildDefinitionGroups
 
 -- | Given a list of definitions, infer the definition types and create a typed evaluation
 -- | environment.
-inferTypeEnvironment :: List Definition -> Either TypeError TypeEnv
-inferTypeEnvironment defs = accumulateMappings emptyTypeEnv (Map.toList indexedGroups)
+tryInferEnvironment :: List Definition -> Either TypeError TypeEnv
+tryInferEnvironment defs = accumulateMappings emptyTypeEnv (Map.toList indexedGroups)
   where
   indexedGroups = makeIndexedDefinitionGroups defs
 
@@ -1085,28 +1088,31 @@ inferTypeEnvironment defs = accumulateMappings emptyTypeEnv (Map.toList indexedG
     -- The definition is already in the type environment, just use it.
     Just scheme -> Right (Tuple name scheme)
     -- The definition has not been found, try to infer the type and it to the environment.
-    Nothing -> case runInfer env true (inferDefinitionGroupToScheme defGroup) of
+    Nothing -> case runInferWith env true (schemeOfIndexedDefinitionGroup defGroup) of
       Left typeError -> Left typeError
       Right scheme -> Right (Tuple name scheme)
 
 -- | Infer the type scheme of the given definition.
-inferDefinitionToScheme :: Definition -> Infer Scheme
-inferDefinitionToScheme def = do
+schemeOfDefinition :: Definition -> Infer Scheme
+schemeOfDefinition def = do
   Triple t m c <- inferDefinition indexedDef
   uni <- solveConstraints c
-  pure $ closeOverType (Tuple uni.subst t)
+  pure $ closeOverType (apply uni.subst t)
   where
   indexedDef = fst $ makeIndexedDefinition def 0
 
-inferDefinitions :: List Definition -> Infer Scheme
-inferDefinitions = inferDefinitionGroupToScheme <<< makeIndexedDefinitionGroup
+-- | Infer the type scheme of the given unindexed definition group.
+schemeOfDefinitionGroup :: List Definition -> Infer Scheme
+schemeOfDefinitionGroup = schemeOfIndexedDefinitionGroup <<< makeIndexedDefinitionGroup
 
-inferDefinitionGroupToScheme :: List IndexedDefinition -> Infer Scheme
-inferDefinitionGroupToScheme group = do
+-- | Infer the type scheme of the given indexed definition group.
+schemeOfIndexedDefinitionGroup :: List IndexedDefinition -> Infer Scheme
+schemeOfIndexedDefinitionGroup group = do
   Tuple t c <- inferDefinitionGroup group
   uni <- solveConstraints c
-  pure $ closeOverType (Tuple uni.subst t)
+  pure $ closeOverType (apply uni.subst t)
 
+-- | Infer the type (and collect constraints) for the given indexed definition group.
 inferDefinitionGroup :: List IndexedDefinition -> Infer (Tuple Type Constraints)
 inferDefinitionGroup Nil = Ex.throwError $ UnknownError "Can't infer type of empty definition group"
 inferDefinitionGroup (def:Nil) = do
@@ -1135,31 +1141,31 @@ schemeToType scheme = do
 
 -- | Given an expression and a list of definitions, build a typed environment and infer the type
 -- | of the expression in the context of the typed environment.
-inferTypeInContext :: List Definition -> TypeTree -> Either TypeError Type
-inferTypeInContext defs expr = case inferTypeEnvironment defs of
+tryInferTypeInContext :: List Definition -> TypeTree -> Either TypeError Type
+tryInferTypeInContext defs expr = case tryInferEnvironment defs of
   Left typeError -> Left typeError
-  Right typedEnv -> runInfer typedEnv true (inferTypeTreeToType expr)
+  Right typedEnv -> runInferWith typedEnv true (inferExprToType expr)
 
 -- | Given an expression and a list of definitions, build a typed environment and infer the type
 -- | of the expression tree as well as all the sub expressions in the context of the typed
 -- | environment.
-inferTypeTreeInContext :: List Definition -> TypeTree -> Either TypeError TypeTree
-inferTypeTreeInContext defs expr = case inferTypeEnvironment defs of
+tryInferExprInContext :: List Definition -> TypeTree -> Either TypeError TypeTree
+tryInferExprInContext defs expr = case tryInferEnvironment defs of
   Left typeError -> Left typeError
-  Right typedEnv -> runInfer typedEnv true (inferTree expr)
+  Right typedEnv -> runInferWith typedEnv true (inferExpr expr)
 
 -- | Perform the type inference on a given expression tree and return the normalized typed tree.
-inferTree :: TypeTree -> Infer TypeTree
-inferTree expr = do
+inferExpr :: TypeTree -> Infer TypeTree
+inferExpr expr = do
   let indexedTree = makeIndexedTree expr
   Tuple t c <- infer indexedTree
   uni <- solveConstraints c
   let expr' = assignTypes uni indexedTree
-  pure $ closeOverTypeTree $ Tuple uni.subst (removeIndices expr')
+  pure $ normalizeTypeTree (apply uni.subst expr')
 
 -- | Perform type inference on expression tree and extract top level type.
-inferTypeTreeToType :: TypeTree -> Infer Type
-inferTypeTreeToType expr = (extractFromTree >>> fromMaybe UnknownType) <$> inferTree expr
+inferExprToType :: TypeTree -> Infer Type
+inferExprToType expr = (extractFromTree >>> fromMaybe UnknownType) <$> inferExpr expr
 
 overlappingBindings :: List TypedBinding -> List String
 overlappingBindings Nil = Nil
@@ -1175,21 +1181,20 @@ overlappingBindings (Cons x xs) = (filter (\y -> elem y (concatMap boundNames xs
       go (NTupleLit _ bs)    = foldMap go bs
       go _                 = Nil
 
-buildGroups :: List Definition -> Map.Map String (List Definition)
-buildGroups Nil = Map.empty
-buildGroups (Cons def@(Def str bin exp) Nil) =
-  Map.singleton str (Cons def Nil)
-buildGroups (Cons def@(Def str bin exp) defs) =
-  case binList of
-    Just list -> Map.insert str (Cons def list) defMap
-    Nothing -> Map.insert str (Cons def Nil) defMap
+-- | Given a list of definitions create a map of definition groups.
+buildDefinitionGroups :: List Definition -> Map.Map String (List Definition)
+buildDefinitionGroups Nil = Map.empty
+buildDefinitionGroups (def@(Def str bin exp):Nil) = Map.singleton str (def:Nil)
+buildDefinitionGroups (def@(Def str bin exp):defs) = case binList of
+  Just list -> Map.insert str (def:list) defMap
+  Nothing -> Map.insert str (def:Nil) defMap
   where
-    defMap = buildGroups defs
-    binList = Map.lookup str defMap
+  defMap = buildDefinitionGroups defs
+  binList = Map.lookup str defMap
 
 --data InferRes = InferRes IndexedTypeTree Constraints Subst
 --twoStageInfer :: TypeEnv -> TypeTree -> Either (Tuple TypeError Constraints) InferRes
---twoStageInfer env tt = case runInfer env false (infer indexedTT) of
+--twoStageInfer env tt = case runInferWith env false (infer indexedTT) of
 --      Left err -> Left (Tuple err emptyConstraints)
 --      Right (Tuple t constraints) ->
 --        let uni = runSolve constraints
@@ -1197,12 +1202,6 @@ buildGroups (Cons def@(Def str bin exp) defs) =
 --        in Right $ InferRes expr uni.constraints uni.subst
 --    where
 --    indexedTT = makeIndexedTree tt
-
-closeOverType :: (Tuple Subst Type) -> Scheme
-closeOverType (Tuple sub ty) = generalize emptyTypeEnv (apply sub ty)
-
-closeOverTypeTree :: (Tuple Subst TypeTree) -> TypeTree
-closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
 
 -- +----------------------------------+
 -- | Type Tree and Type Normalization |

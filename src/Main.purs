@@ -122,7 +122,7 @@ buildTypeEnvironment :: forall eff. AST.TypeTree -> Eval.Env
                      -> Eff (dom :: DOM | eff) (Maybe TypeChecker.TypeEnv)
 buildTypeEnvironment expr env =
   let defs = Eval.envToDefs env
-  in case TypeChecker.inferTypeEnvironment defs of
+  in case TypeChecker.tryInferEnvironment defs of
     Left error -> pure Nothing
     Right typedEnv -> pure $ Just typedEnv
 
@@ -131,7 +131,7 @@ buildTypeEnvironment expr env =
 typeCheckExpression :: forall eff. TypeChecker.TypeEnv -> AST.TypeTree
                  -> Eff (dom :: DOM | eff) (Maybe AST.TypeTree)
 typeCheckExpression typedEnv expr = do
-  case TypeChecker.runInferNew typedEnv false (TypeChecker.inferTree expr) of
+  case TypeChecker.runInferWith typedEnv false (TypeChecker.inferExpr expr) of
     Left typeError -> do
       showError "Expression" (AST.prettyPrintTypeError typeError)
       pure Nothing

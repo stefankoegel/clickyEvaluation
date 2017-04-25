@@ -80,7 +80,7 @@ compareTypes testName expected actual = if expected == actual
 testInferExpr :: String -> String -> Type -> Writer (List String) Unit
 testInferExpr name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
-  Right expression -> case TC.runInfer emptyTypeEnv true (TC.inferTypeTreeToType expression) of
+  Right expression -> case TC.runInfer true (TC.inferExprToType expression) of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
 
@@ -88,7 +88,7 @@ testInferExpr name expressionString expected = case parseExpr expressionString o
 testInferExprFail :: String -> String -> TypeError -> Writer (List String) Unit
 testInferExprFail name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
-  Right expression -> case TC.runInfer emptyTypeEnv true (TC.inferTypeTreeToType expression) of
+  Right expression -> case TC.runInfer true (TC.inferExprToType expression) of
     Right t -> tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
                        "Expected type error: " <> prettyPrintTypeError expected <> "\n" <>
                        "Found type: " <> prettyPrintType t <> "\n"
@@ -101,18 +101,18 @@ testInferExprFail name expressionString expected = case parseExpr expressionStri
 testInferDef :: String -> String -> Type -> Writer (List String) Unit
 testInferDef name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
-  Right (def:_) -> case TC.runInfer emptyTypeEnv true (inferAndConvertToType def) of
+  Right (def:_) -> case TC.runInfer true (inferAndConvertToType def) of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
   _ -> tell' $ "Expected to parse definition in test case `" <> name <> "`\n" <>
                "\nNote that this is not a failing test but rather an error in the test definition."
   where
-  inferAndConvertToType def = TC.inferDefinitionToScheme def >>= TC.schemeToType
+  inferAndConvertToType def = TC.schemeOfDefinition def >>= TC.schemeToType
 
 testInferDefFail :: String -> String -> TypeError -> Writer (List String) Unit
 testInferDefFail name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
-  Right (def:_) -> case TC.runInfer emptyTypeEnv true (inferAndConvertToType def) of
+  Right (def:_) -> case TC.runInfer true (inferAndConvertToType def) of
     Left typeError -> if typeError == expected
       then pure unit
       else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
@@ -124,22 +124,22 @@ testInferDefFail name definitionString expected = case parseDefs definitionStrin
   _ -> tell' $ "Expected to parse definition in test case `" <> name <> "`\n" <>
                "\nNote that this is not a failing test but rather an error in the test definition."
   where
-  inferAndConvertToType def = TC.inferDefinitionToScheme def >>= TC.schemeToType
+  inferAndConvertToType def = TC.schemeOfDefinition def >>= TC.schemeToType
 
 testInferDefGroup :: String -> String -> Type -> Writer (List String) Unit
 testInferDefGroup name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
-  Right definitions -> case TC.runInfer emptyTypeEnv true (inferAndConvertToType definitions) of
+  Right definitions -> case TC.runInfer true (inferAndConvertToType definitions) of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
   where
-  inferAndConvertToType defs = TC.inferDefinitions defs >>= TC.schemeToType
+  inferAndConvertToType defs = TC.schemeOfDefinitionGroup defs >>= TC.schemeToType
 
 -- | Infer the type of the given expression in the context of the prelude.
 testInferExprWithPrelude :: String -> String -> Type -> Writer (List String) Unit
 testInferExprWithPrelude name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
-  Right expression -> case TC.inferTypeInContext parsedPrelude expression of
+  Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
 
@@ -154,7 +154,7 @@ testInferTT' name unparsedTree expectedTypeTree = case parseExpr unparsedTree of
 -- | expression is checked, but also the type of every subexpression.
 testInferTT :: String -> TypeTree -> TypeTree -> Writer (List String) Unit
 testInferTT name untypedTree expectedTypedTree =
-  case TC.inferTypeTreeInContext parsedPrelude untypedTree of
+  case TC.tryInferExprInContext parsedPrelude untypedTree of
     Left typeError -> reportTypeError name typeError
     Right typedTree -> if expectedTypedTree == typedTree
       then pure unit
@@ -174,7 +174,7 @@ testNormalizeTT name tt normalizedTT = if (TC.normalizeTypeTree tt) == normalize
 testMapSchemeOnTVarMappings :: String -> Scheme -> IndexedTypedBinding -> TVarMappings
                             -> TVarMappings -> Writer (List String) Unit
 testMapSchemeOnTVarMappings name scheme binding m expected =
-  case TC.runInferSimple (fst <$> TC.mapSchemeOnTVarMappings binding m scheme) of
+  case TC.runInfer true (fst <$> TC.mapSchemeOnTVarMappings binding m scheme) of
     Left typeError -> reportTypeError name typeError
     Right result -> if result == expected
       then pure unit
