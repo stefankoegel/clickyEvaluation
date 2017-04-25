@@ -11,7 +11,7 @@ import Data.Foldable (intercalate, fold, foldl, foldr, foldMap, elem)
 import Data.List (List(..), (:), concat, concatMap, filter, singleton, unzip, zip)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.Set as Set
 import Data.String as String
 import Data.Traversable (traverse)
@@ -538,9 +538,21 @@ inferOp opTuple@(Tuple op _) = do
   let c = setSingleTypeConstraintFor' (opIndex opTuple) t
   pure $ Tuple t c
 
--- | Traverse the given type tree and collect type constraints.
+-- | Return true, if the top-level node of the given expression has a type.
+isTypedExpr :: IndexedTypeTree -> Boolean
+isTypedExpr = extractFromTree >>> fst >>> isJust
+
+-- | Traverse the given type tree and collect type constraints. For expression nodes which are
+-- | already typed, corresponding constraints are emitted.
 infer :: IndexedTypeTree -> Infer (Tuple Type Constraints)
-infer ex = case ex of
+infer expr
+  | isTypedExpr expr = Ex.throwError $ UnknownError "partially typed expressions not yet supported"
+  | otherwise = infer' expr
+
+-- | Traverse the given type tree and collect type constraints. This function is only called by
+-- | `infer`, which checks for already present type information.
+infer' :: IndexedTypeTree -> Infer (Tuple Type Constraints)
+infer' ex = case ex of
 
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
@@ -1203,7 +1215,6 @@ buildDefinitionGroups (def@(Def str bin exp):defs) = case binList of
   where
   defMap = buildDefinitionGroups defs
   binList = Map.lookup str defMap
-
 
 -- +----------------------------------+
 -- | Type Tree and Type Normalization |
