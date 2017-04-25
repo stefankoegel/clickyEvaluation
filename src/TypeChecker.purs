@@ -542,15 +542,22 @@ inferOp opTuple@(Tuple op _) = do
 isTypedExpr :: IndexedTypeTree -> Boolean
 isTypedExpr = extractFromTree >>> fst >>> isJust
 
--- | Traverse the given type tree and collect type constraints. For expression nodes which are
--- | already typed, corresponding constraints are emitted.
+-- | Traverse the given (partially typed) expression and collect type constraints. For expression
+-- | nodes which are already typed, corresponding constraints are emitted.
 infer :: IndexedTypeTree -> Infer (Tuple Type Constraints)
 infer expr
-  | isTypedExpr expr = Ex.throwError $ UnknownError "partially typed expressions not yet supported"
+  | isTypedExpr expr = do
+      -- Perform type inference on child nodes.
+      Tuple _ c1 <- unzip <$> traverse infer (AST.getTreeChildren expr)
+      -- Add already known type as constraint.
+      Tuple t c2 <- returnWithConstraint expr (getType expr)
+      pure $ Tuple t (foldConstraints c1 <+> c2)
+    where
+    getType = extractFromTree >>> fst >>> fromMaybe UnknownType
   | otherwise = infer' expr
 
--- | Traverse the given type tree and collect type constraints. This function is only called by
--- | `infer`, which checks for already present type information.
+-- | Traverse the given untyped expression and collect type constraints. This function is only
+-- | called by `infer`, which checks for already present type information.
 infer' :: IndexedTypeTree -> Infer (Tuple Type Constraints)
 infer' ex = case ex of
 
