@@ -120,25 +120,23 @@ doWithJust mMaybe f = do
 -- | environment.
 buildTypeEnvironment :: forall eff. AST.TypeTree -> Eval.Env
                      -> Eff (dom :: DOM | eff) (Maybe TypeChecker.TypeEnv)
-buildTypeEnvironment expr env = case TypeChecker.buildTypeEnv (Eval.envToDefs env) of
-  Left error -> do
-    showError "Definitions" (AST.prettyPrintTypeError error)
-    pure Nothing
-  Right typedEnv -> pure $ Just typedEnv
+buildTypeEnvironment expr env =
+  let defs = Eval.envToDefs env
+  in case TypeChecker.inferTypeEnvironment defs of
+    Left error -> pure Nothing
+    Right typedEnv -> pure $ Just typedEnv
 
--- TODO: Add support for partially typed trees.
 -- | Type check an expression using a given typed environment.
 -- | Construct a div tree from the given typed expression.
 typeCheckExpression :: forall eff. TypeChecker.TypeEnv -> AST.TypeTree
                  -> Eff (dom :: DOM | eff) (Maybe AST.TypeTree)
-typeCheckExpression typedEnv expr =
-  case TypeChecker.twoStageInfer typedEnv expr of
-  Left (Tuple error cs) -> do
-    showError "Expression" (AST.prettyPrintTypeError error)
-    pure Nothing
-  Right (TypeChecker.InferRes expr constraints subst) -> do
-    let typedExpression = TypeChecker.closeOverTypeTree (Tuple subst (AST.removeIndices expr))
-    pure $ Just typedExpression
+typeCheckExpression typedEnv expr = do
+  case TypeChecker.runInferNew typedEnv false (TypeChecker.inferTree expr) of
+    Left typeError -> do
+      showError "Expression" (AST.prettyPrintTypeError typeError)
+      pure Nothing
+    Right typedExpr -> do
+      pure $ Just typedExpr
 
 -- | Construct a div tree from the given typed expression.
 buildDivTreeFromExpression :: forall eff. AST.TypeTree -> Eval.Env -> Array AST.TypeTree

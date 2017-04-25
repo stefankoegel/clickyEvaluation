@@ -800,8 +800,8 @@ associate binding expr = do
   Triple bt m _ <- makeBindingEnv binding
   Tuple et c1 <- inferNew expr
   { env: env } <- ask
-  let uni = runSolve c1
-      c2 = setSingleTypeConstraintFor' (bindingIndex binding) et
+  uni <- solveConstraints c1
+  let c2 = setSingleTypeConstraintFor' (bindingIndex binding) et
       -- Substitute the bound variables with the corresponding polytype.
       scheme = generalize (apply uni.subst env) (apply uni.subst et)
   -- Map the type scheme on the binding (and sub-bindings).
@@ -914,7 +914,7 @@ tryInferRequireEnumType _ t = pure emptyConstraints
 inferRequireEnumType :: IndexedTypeTree -> InferNew (Tuple Type Constraints)
 inferRequireEnumType expr = do
   Tuple t c <- inferNew expr
-  let uni = runSolve c
+  uni <- solveConstraints c
   -- Get the type hiding behind `t`.
   case Map.lookup (index expr) c.mapped of
     Just (Constraint tv _) -> do
@@ -943,11 +943,27 @@ type Unifier = { subst :: Subst, constraints :: Constraints }
 initialUnifier :: Constraints -> Unifier
 initialUnifier constraints = { subst: nullSubst, constraints: constraints }
 
--- | Collect the substitutions in the unifier and catch occurring type errors.
-runSolve :: Constraints -> Unifier
-runSolve constraints = let uni = solver (initialUnifier constraints)
-                           errorConstraints = uni.constraints
-                       in { subst: uni.subst, constraints: errorConstraints <+> constraints }
+-- | Collect the substitutions in the unifier and catch occurring unification errors.
+-- | If the flag `stopOnError` is set, unification errors are not reported, instead
+-- | a corresponding error constraint is returned.
+runSolve :: Boolean -> Constraints -> Either TypeError Unifier
+runSolve stopOnError constraints =
+  case Ex.runExcept $ solver stopOnError (initialUnifier constraints) of
+    Left typeError -> Left typeError
+    Right uni ->
+      let errorConstraints = uni.constraints
+      in Right { subst: uni.subst,
+                 constraints: errorConstraints <+> constraints }
+
+-- | Run the constraint solving inside the infer monad and catch occurring errors. Depending on
+-- | the state of the `stopOnError` flag, the error is reported immediatlely or a corresponding
+-- | constraint is emitted.
+solveConstraints :: Constraints -> InferNew Unifier
+solveConstraints cs = do
+  { stopOnError: stopOnError } <- ask
+  case runSolve stopOnError cs of
+    Left typeError -> Ex.throwError typeError
+    Right unifier -> pure unifier
 
 -- | Bind the given type variable to the given type and return the resulting substitution.
 bindTVar ::  TVar -> Type -> Either TypeError Subst
@@ -983,25 +999,34 @@ unifiesAD (TTuple (a:as)) (TTuple (b:bs)) = do
 unifiesAD (TTuple Nil) (TTuple Nil) = pure nullSubst
 unifiesAD t1 t2 = Left $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
 
+-- | Given a set of constraints...
+getErrorConstraintIndex :: Constraints -> Maybe Index
+getErrorConstraintIndex { mapped: _, unmapped: Tuple idx _ : Nil } = Just idx
+getErrorConstraintIndex _ = Nothing
+
 -- | Try to solve the constraints.
 -- TODO: Cleanup.
-solver :: Unifier -> Unifier
-solver { subst: beginningSubst, constraints: constraints } =
+solver :: Boolean -> Unifier -> Ex.Except TypeError Unifier
+solver stopOnError { subst: beginningSubst, constraints: constraints } =
   solver' beginningSubst emptyConstraints indices (apply beginningSubst constraintList)
   where
   lists = toConstraintAndIndexLists constraints
   indices = fst lists
   constraintList = snd lists
 
-  solver' :: Subst -> Constraints -> List Index -> List Constraint -> Unifier
+  solver' :: Subst -> Constraints -> List Index -> List Constraint -> Ex.Except TypeError Unifier
   solver' subst errors (idx:idxs) (ConstraintError typeError : rest) =
     solver' subst errors idxs rest
   solver' subst errors (idx:idxs) (Constraint t1 t2 : rest) = case unifies t1 t2 of
-    Left error@(InfiniteType _ _) -> { subst: nullSubst, constraints: constraintError idx t1 error }
-    Left error -> { subst: nullSubst, constraints: constraintError idx t1 error }
+    -- Infinite types will always result in a type error for now.
+    Left error@(InfiniteType _ _) -> Ex.throwError error
+      --pure { subst: nullSubst, constraints: constraintError idx t1 error }
+    Left error -> if stopOnError
+      then Ex.throwError error
+      else pure { subst: nullSubst, constraints: constraintError idx t1 error }
     Right subst1 -> solver' (subst1 `compose` subst) errors idxs (apply subst1 rest)
   -- Worked through all the constraints.
-  solver' subst errorConstraints _ _ = { subst: subst, constraints: errorConstraints }
+  solver' subst errorConstraints _ _ = pure { subst: subst, constraints: errorConstraints }
 
 -- TODO: Change type to `Unifier -> IndexedTypeTree -> TypeTree`?
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
@@ -1070,7 +1095,7 @@ inferTypeEnvironment defs = accumulateMappings emptyTypeEnv (Map.toList indexedG
 inferDefinitionToScheme :: Definition -> InferNew Scheme
 inferDefinitionToScheme def = do
   Triple t m c <- inferDefinition indexedDef
-  let uni = runSolve c
+  uni <- solveConstraints c
   pure $ closeOverType (Tuple uni.subst t)
   where
   indexedDef = fst $ makeIndexedDefinition def 0
@@ -1081,7 +1106,7 @@ inferDefinitions = inferDefinitionGroup <<< makeIndexedDefinitionGroup
 inferDefinitionGroup :: List IndexedDefinition -> InferNew Scheme
 inferDefinitionGroup group = do
   Tuple t c <- inferGroupNew group
-  let uni = runSolve c
+  uni <- solveConstraints c
   pure $ closeOverType (Tuple uni.subst t)
 
 inferGroupNew :: List IndexedDefinition -> InferNew (Tuple Type Constraints)
@@ -1131,15 +1156,15 @@ inferTree :: TypeTree -> InferNew TypeTree
 inferTree expr = do
   let indexedTree = makeIndexedTree expr
   Tuple t c <- inferNew indexedTree
-  let uni = runSolve c
-      expr' = assignTypes uni indexedTree
+  uni <- solveConstraints c
+  let expr' = assignTypes uni indexedTree
   pure $ closeOverTypeTree $ Tuple uni.subst (removeIndices expr')
 
 inferTypeNew :: TypeTree -> InferNew Scheme
 inferTypeNew expr = do
   Tuple _ constraints <- inferNew indexedExpr
-  let uni = runSolve constraints
-      expr = assignTypes uni indexedExpr
+  uni <- solveConstraints constraints
+  let expr = assignTypes uni indexedExpr
   pure $ topLevelNodeScheme uni.subst expr
   where
   indexedExpr = makeIndexedTree expr
@@ -1173,16 +1198,16 @@ buildGroups (Cons def@(Def str bin exp) defs) =
     defMap = buildGroups defs
     binList = Map.lookup str defMap
 
-data InferRes = InferRes IndexedTypeTree Constraints Subst
-twoStageInfer :: TypeEnv -> TypeTree -> Either (Tuple TypeError Constraints) InferRes
-twoStageInfer env tt = case runInferNew env false (inferNew indexedTT) of
-      Left err -> Left (Tuple err emptyConstraints)
-      Right (Tuple t constraints) ->
-        let uni = runSolve constraints
-            expr = assignTypes uni indexedTT
-        in Right $ InferRes expr uni.constraints uni.subst
-    where
-    indexedTT = makeIndexedTree tt
+--data InferRes = InferRes IndexedTypeTree Constraints Subst
+--twoStageInfer :: TypeEnv -> TypeTree -> Either (Tuple TypeError Constraints) InferRes
+--twoStageInfer env tt = case runInferNew env false (inferNew indexedTT) of
+--      Left err -> Left (Tuple err emptyConstraints)
+--      Right (Tuple t constraints) ->
+--        let uni = runSolve constraints
+--            expr = assignTypes uni indexedTT
+--        in Right $ InferRes expr uni.constraints uni.subst
+--    where
+--    indexedTT = makeIndexedTree tt
 
 closeOverType :: (Tuple Subst Type) -> Scheme
 closeOverType (Tuple sub ty) = generalize emptyTypeEnv (apply sub ty)
