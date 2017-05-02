@@ -3,6 +3,7 @@ module AST where
 import Prelude
 import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor (bimap, rmap)
+import Data.Foldable (intercalate)
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Traversable (traverse)
@@ -271,6 +272,24 @@ extractFromQualTree (Gen x _ _) = x
 extractFromQualTree (Let x _ _) = x
 extractFromQualTree (Guard x _) = x
 
+-- | Return a list of child nodes of a given tree.
+getTreeChildren :: forall a b o m. Tree a b o m -> List (Tree a b o m)
+getTreeChildren (List _ es) = es
+getTreeChildren (NTuple _ es) = es
+getTreeChildren (Binary _ _ e1 e2) = e1 : e2 : Nil
+getTreeChildren (Unary _ _ e) = e : Nil
+getTreeChildren (SectL _ e _) = e : Nil
+getTreeChildren (SectR _ _ e) = e : Nil
+getTreeChildren (IfExpr _ e1 e2 e3) = e1 : e2 : e3 : Nil
+getTreeChildren (ArithmSeq _ e me1 me2) = e : (maybeTreeChilden me1) <> (maybeTreeChilden me2)
+  where
+  maybeTreeChilden (Just t) = t : Nil
+  maybeTreeChilden _ = Nil
+getTreeChildren (LetExpr _ defs e) = e : (map snd defs)
+getTreeChildren (App _ e es) = e : es
+getTreeChildren (ListComp _ e quals) = e : (map getQualTreeExpression quals)
+getTreeChildren _ = Nil
+
 type Expr = Tree Atom (Binding Unit) Op Unit
 
 type MType = Maybe Type
@@ -373,24 +392,6 @@ traverseQualTree fb fe f (Guard t e) = do
   e' <- fe e
   pure $ Guard t' e'
 
--- | Return a list of child nodes of a given tree.
-getTreeChildren :: forall a b o m. Tree a b o m -> List (Tree a b o m)
-getTreeChildren (List _ es) = es
-getTreeChildren (NTuple _ es) = es
-getTreeChildren (Binary _ _ e1 e2) = e1 : e2 : Nil
-getTreeChildren (Unary _ _ e) = e : Nil
-getTreeChildren (SectL _ e _) = e : Nil
-getTreeChildren (SectR _ _ e) = e : Nil
-getTreeChildren (IfExpr _ e1 e2 e3) = e1 : e2 : e3 : Nil
-getTreeChildren (ArithmSeq _ e me1 me2) = e : (maybeTreeChilden me1) <> (maybeTreeChilden me2)
-  where
-  maybeTreeChilden (Just t) = t : Nil
-  maybeTreeChilden _ = Nil
-getTreeChildren (LetExpr _ defs e) = e : (map snd defs)
-getTreeChildren (App _ e es) = e : es
-getTreeChildren (ListComp _ e quals) = e : (map getQualTreeExpression quals)
-getTreeChildren _ = Nil
-
 traverseTree :: forall b b' o o' m m' f. Monad f =>
      (b -> f b')
   -> (o -> f o')
@@ -491,6 +492,7 @@ data TypeError
   | UnboundVariable String
   | UnknownError String
   | NoInstanceOfEnum Type
+  | PatternMismatch IndexedTypedBinding Type
 
 derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c) 
 
@@ -509,6 +511,13 @@ instance functorBinding :: Functor Binding where
   map f (ConsLit x binding1 binding2) = ConsLit (f x) (f <$> binding1) (f <$> binding2)
   map f (ListLit x bindings) = ListLit (f x) (map f <$> bindings)
   map f (NTupleLit x bindings) = NTupleLit (f x) (map f <$> bindings)
+
+-- | Given a binding, return a list of (direct) children bindings.
+getBindingChildren :: forall m. Binding m -> List (Binding m)
+getBindingChildren (ConsLit _ b1 b2) = b1 : b2 : Nil
+getBindingChildren (ListLit _ bs) = bs
+getBindingChildren (NTupleLit _ bs) = bs
+getBindingChildren _ = Nil
 
 type TypedBinding = Binding (Maybe Type)
 type IndexedTypedBinding = Binding MIType
@@ -587,9 +596,26 @@ instance showTypeError :: Show TypeError where
   show (InfiniteType a b ) = "(InfiniteType " <> show a <> " " <> show b <> ")"
   show (UnboundVariable a) = "(UnboundVariable " <> show a <> ")"
   show (UnknownError s) = "(UnknownError " <> s <> ")"
+  show (PatternMismatch b t) = "(PatternMismatch " <> show b <> " " <> show t <> ")"
   show (NoInstanceOfEnum t) = "(" <> show t <> "is no instance of Enum)"
 
 derive instance eqTypeError :: Eq TypeError
+
+prettyPrintAtom :: Atom -> String
+prettyPrintAtom (AInt n) = show n
+prettyPrintAtom (Bool b) = show b
+prettyPrintAtom (Char c) = c
+prettyPrintAtom (Name s) = s
+
+prettyPrintBinding :: forall m. Binding m -> String
+prettyPrintBinding (Lit _ atom) = prettyPrintAtom atom
+prettyPrintBinding (ConsLit _ b1 b2) = "("
+    <> prettyPrintBinding b1
+    <> ":"
+    <> prettyPrintBinding b2
+    <> ")"
+prettyPrintBinding (ListLit _ bs) = "[" <> intercalate ", " (map prettyPrintBinding bs) <> "]"
+prettyPrintBinding (NTupleLit _ bs) = "(" <> intercalate ", " (map prettyPrintBinding bs) <> ")"
 
 prettyPrintType :: Type -> String
 prettyPrintType (UnknownType) = "?"
@@ -610,4 +636,5 @@ prettyPrintTypeError (UnificationFail t1 t2) = "UnificationFail: Can't unify " <
 prettyPrintTypeError (InfiniteType tvar t) = "InfiniteType: cannot construct the infinite type: " <> tvar <> " ~ " <> prettyPrintType t
 prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope " <> var
 prettyPrintTypeError (NoInstanceOfEnum t) = "No instance for Enum " <> prettyPrintType t <> " defined."
+prettyPrintTypeError (PatternMismatch b t) = "PatternMismatch: The pattern " <> prettyPrintBinding b <> " doesn't match with " <> prettyPrintType t
 prettyPrintTypeError (UnknownError str) = "UnknownError: " <> str
