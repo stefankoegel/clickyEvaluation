@@ -735,6 +735,10 @@ infer' ex = case ex of
 -- | Bindings and Binding Environments |
 -- +-----------------------------------+
 
+-- | Return true, if the given top-level binding has a type.
+isTypedBinding :: IndexedTypedBinding -> Boolean
+isTypedBinding = extractFromBinding >>> fst >>> isJust
+
 -- | Choose a new type variable for the given binding and add typing information for the node
 -- | index. This function is needed whenever binding environments have to be built: lambda and let
 -- | expressions as well as list comprehensions.
@@ -884,13 +888,17 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
   _ -> pure $ Tuple Nil emptyConstraints
   where
   -- Set a type constraint for the current binding.
-  returnAs mapping constraints t = do
-    -- Add a type constraint for the current binding node.
-    let c = setSingleTypeConstraintFor' (bindingIndex binding) t
-    pure $ Tuple mapping (constraints <+> c)
+  returnAs mapping constraints t =
+    let c = if isTypedBinding binding
+            then setSingleTypeConstraintFor' (bindingIndex binding) t
+            else setSingleTypeConstraintFor' (bindingIndex binding) (getBindingType binding)
+    in pure $ Tuple mapping (constraints <+> c)
+
   reportMismatch = do
       t <- schemeToType scheme
       Ex.throwError $ PatternMismatch binding t
+
+  getBindingType = extractFromBinding >>> fst >>> fromMaybe UnknownType
   expectListType (Forall tvs (AD (TList t))) = Just $ AD $ TList t
   expectListType _ = Nothing
   expectTupleType (Forall tvs (AD (TTuple ts))) = Just $ AD $ TTuple ts
