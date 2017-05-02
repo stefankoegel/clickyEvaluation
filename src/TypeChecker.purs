@@ -830,7 +830,7 @@ associate binding expr = do
       -- Substitute the bound variables with the corresponding polytype.
       scheme = generalize (apply uni.subst env) (apply uni.subst et)
   -- Map the type scheme on the binding (and sub-bindings).
-  Tuple m' c3 <- mapSchemeOnTVarMappings binding scheme
+  Tuple m' c3 <- mapSchemeOnTVarMappingsPartial binding scheme
   checkPattern binding scheme m m'
   pure $ Tuple m' (uni.constraints <+> c1 <+> c2 <+> c3)
 
@@ -853,6 +853,17 @@ compareTVarMappings :: TVarMappings -> TVarMappings -> Boolean
 compareTVarMappings m1 m2 = (toSet m1) == (toSet m2)
   where toSet m = Set.fromFoldable (map fst m)
 
+-- | Map the given scheme to optionally partially typyed bindings.
+mapSchemeOnTVarMappingsPartial :: IndexedTypedBinding -> Scheme -> Infer (Tuple TVarMappings Constraints)
+mapSchemeOnTVarMappingsPartial binding scheme
+  -- This case is only encountered, when the encountered binding literal is typed. Just use the
+  -- given type instead of the inferred type scheme.
+  | isTypedBinding binding = mapSchemeOnTVarMappings binding (Forall Nil t)
+    where
+    getBindingType = extractFromBinding >>> fst >>> fromMaybe UnknownType
+    t = getBindingType binding
+  | otherwise = mapSchemeOnTVarMappings binding scheme
+
 -- | Given a binding and a scheme, try to construct a mapping for every type variable inside the
 -- | binding patter to the corresponding polytype. In the process setup type constraints for the
 -- | nodes in the binding tree.
@@ -865,15 +876,15 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
 
   ConsLit _ b1 b2 -> case expectListType scheme of
     Just listType@(AD (TList t)) -> do
-      Tuple m1 c1 <- mapSchemeOnTVarMappings b1 (toScheme t)
-      Tuple m2 c2 <- mapSchemeOnTVarMappings b2 (toScheme listType)
+      Tuple m1 c1 <- mapSchemeOnTVarMappingsPartial b1 (toScheme t)
+      Tuple m2 c2 <- mapSchemeOnTVarMappingsPartial b2 (toScheme listType)
       returnAs (m1 <> m2) (c1 <+> c2) listType
     _ -> reportMismatch
 
   NTupleLit _ bs -> case expectTupleType scheme of
     Just tupleType@(AD (TTuple ts)) -> do
       Tuple ms cs <- unzip <$> traverse (\(Tuple binding t) ->
-        mapSchemeOnTVarMappings binding (toScheme t))
+        mapSchemeOnTVarMappingsPartial binding (toScheme t))
         (zip bs ts)
       returnAs (fold ms) (foldConstraints cs) tupleType
     _ -> reportMismatch
@@ -881,7 +892,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
   ListLit _ bs -> case expectListType scheme of
     Just listType@(AD (TList t)) -> do
       Tuple ms cs <- unzip <$> traverse (\binding ->
-        mapSchemeOnTVarMappings binding (toScheme t)) bs
+        mapSchemeOnTVarMappingsPartial binding (toScheme t)) bs
       returnAs (fold ms) (foldConstraints cs) listType
     _ -> reportMismatch
 
@@ -889,9 +900,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
   where
   -- Set a type constraint for the current binding.
   returnAs mapping constraints t =
-    let c = if isTypedBinding binding
-            then setSingleTypeConstraintFor' (bindingIndex binding) t
-            else setSingleTypeConstraintFor' (bindingIndex binding) (getBindingType binding)
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) t
     in pure $ Tuple mapping (constraints <+> c)
 
   reportMismatch = do
