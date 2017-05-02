@@ -818,7 +818,7 @@ makeBindingEnvLambda bindings = do
 -- | and associate its type with the binding.
 associate :: IndexedTypedBinding -> IndexedTypeTree -> Infer (Tuple TVarMappings Constraints)
 associate binding expr = do
-  Triple bt m _ <- makeBindingEnv binding
+  Triple _ m _ <- makeBindingEnv binding
   Tuple et c1 <- infer expr
   { env: env } <- ask
   uni <- solveConstraints c1
@@ -826,45 +826,58 @@ associate binding expr = do
       -- Substitute the bound variables with the corresponding polytype.
       scheme = generalize (apply uni.subst env) (apply uni.subst et)
   -- Map the type scheme on the binding (and sub-bindings).
-  Tuple m' c3 <- mapSchemeOnTVarMappings binding m scheme
+  Tuple m' c3 <- mapSchemeOnTVarMappings binding scheme
   pure $ Tuple m' (uni.constraints <+> c1 <+> c2 <+> c3)
 
 -- | Determine the common type variables used.
 commonFreeTVars :: List TVar -> Type -> List TVar
 commonFreeTVars tvars t = Set.toUnfoldable $ ftv t `Set.intersection` ftv (map TypVar tvars)
 
--- | Given a mapping, representing a binding, and a scheme, try to map the scheme onto the mapping.
--- | Example expression: `let (a, b) = (\x -> x, "cake") in a b`
--- | Here we get the mapping `{ a :: t_0, b :: t_1 }` and infer the scheme
--- | `forall t_2. (t_2 -> t_2, [Char])`. The task is now to map the scheme components onto the
--- | mapping, resulting in the mapping `{ a :: forall t_2. t_2 -> t_2, b :: [Char] }`.
-mapSchemeOnTVarMappings :: IndexedTypedBinding -> TVarMappings -> Scheme
-                        -> Infer (Tuple TVarMappings Constraints)
-mapSchemeOnTVarMappings binding mappings scheme = f (binding : Nil) mappings (scheme : Nil)
+-- | Given a binding and a scheme, try to construct a mapping for every type variable inside the
+-- | binding patter to the corresponding polytype. In the process setup type constraints for the
+-- | nodes in the binding tree.
+mapSchemeOnTVarMappings :: IndexedTypedBinding -> Scheme -> Infer (Tuple TVarMappings Constraints)
+mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding of
+
+  Lit _ (Name name) -> do
+    let m = Tuple name (filteredScheme scheme) : Nil
+    returnAs m emptyConstraints (schemeType scheme)
+
+  ConsLit _ b1 b2 -> case expectListType scheme of
+    Just listType@(AD (TList t)) -> do
+      Tuple m1 c1 <- mapSchemeOnTVarMappings b1 (toScheme t)
+      Tuple m2 c2 <- mapSchemeOnTVarMappings b2 (toScheme listType)
+      returnAs (m1 <> m2) (c1 <+> c2) listType
+    _ -> Ex.throwError $ UnknownError "expected list"
+
+  NTupleLit _ bs -> case expectTupleType scheme of
+    Just tupleType@(AD (TTuple ts)) -> do
+      Tuple ms cs <- unzip <$> traverse (\(Tuple binding t) ->
+        mapSchemeOnTVarMappings binding (toScheme t))
+        (zip bs ts)
+      returnAs (fold ms) (foldConstraints cs) tupleType
+    _ -> Ex.throwError $ UnknownError "expected tuple"
+
+  ListLit _ bs -> case expectListType scheme of
+    Just listType@(AD (TList t)) -> do
+      Tuple ms cs <- unzip <$> traverse (\binding ->
+        mapSchemeOnTVarMappings binding (toScheme t)) bs
+      returnAs (fold ms) (foldConstraints cs) listType
+    _ -> Ex.throwError $ UnknownError "expected list"
+
+  _ -> Ex.throwError $ UnknownError "not yet implemented"
   where
-  f :: List IndexedTypedBinding -> TVarMappings -> List Scheme
-    -> Infer (Tuple TVarMappings Constraints)
-  f (binding@ConsLit _ b1 b2 : Nil) (m : ms) (Forall tvs (AD (TList t)) : ss) = do
-    Tuple first c1 <- f (b1 : Nil) (m : Nil) (Forall tvs t : Nil)
-    Tuple second c2 <- f (b2 : Nil) ms (Forall tvs (AD (TList t)) : Nil)
-    let c3 = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TList t)
-    pure $ Tuple (first <> second) (c1 <+> c2 <+> c3)
-  f (binding@ListLit _ bs : Nil) ms (Forall tvs (AD (TList t)) : ss) = do
-    Tuple ms cs <- unzip <$> traverse (\(Tuple b m) ->
-      mapSchemeOnTVarMappings b (m : Nil) (Forall tvs t))
-      (zip bs ms)
-    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TList t)
-    pure $ Tuple (fold ms) (foldConstraints cs <+> c)
-  f (binding@NTupleLit _ (b:bs) : Nil) (m:ms) (Forall tvs (AD (TTuple (t:ts))) : ss) = do
-    Tuple m1 c1 <- mapSchemeOnTVarMappings b (m:Nil) (Forall tvs t)
-    Tuple m2 c2 <- f bs ms (map (Forall tvs) ts <> ss)
-    let c3 = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TTuple (t:ts))
-    pure $ Tuple (m1 <> m2) (c1 <+> c2 <+> c3)
-  f (binding@(Lit _ b) : Nil) (Tuple tv oldScheme : ms) (Forall tvs t : Nil) = do
+  returnAs mapping constraints t = do
+    -- Add a type constraint for the current binding node.
     let c = setSingleTypeConstraintFor' (bindingIndex binding) t
-    let tVarMappings = Tuple tv (Forall (commonFreeTVars tvs t) t) : Nil
-    pure $ Tuple tVarMappings c
-  f _ _ _ = pure $ Tuple Nil emptyConstraints
+    pure $ Tuple mapping (constraints <+> c)
+  expectListType (Forall tvs (AD (TList t))) = Just $ AD $ TList t
+  expectListType _ = Nothing
+  expectTupleType (Forall tvs (AD (TTuple ts))) = Just $ AD $ TTuple ts
+  expectTupleType _ = Nothing
+  toScheme t = Forall typeVariables t
+  filteredScheme (Forall tvs t) = (Forall (commonFreeTVars tvs t) t)
+  schemeType (Forall tvs t) = t
 
 -- | Given a list of bindings and corresponding expressions, associate the bindings with the
 -- | expressions and collect the type variable/scheme mappings as well as the constraints.
