@@ -305,7 +305,7 @@ div.keyword {
 }
 
 .hasTypeError:hover {
-  background: #cc4455;
+  background: #cc4455 !important;
 }
 
 
