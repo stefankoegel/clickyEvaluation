@@ -20,7 +20,7 @@ import Partial.Unsafe (unsafeCrashWith)
 import Prelude (
   class Eq, class Show, Unit,
   ($), (+), (-), (<$>), (<<<), (<>), (==), (>), (>>=), (>>>),
-  bind, const, div, flip, id, map, mod, negate, not, otherwise, pure, show)
+  bind, const, div, flip, id, map, mod, negate, not, otherwise, pure, show, unit)
 
 import AST
 import AST as AST
@@ -827,11 +827,27 @@ associate binding expr = do
       scheme = generalize (apply uni.subst env) (apply uni.subst et)
   -- Map the type scheme on the binding (and sub-bindings).
   Tuple m' c3 <- mapSchemeOnTVarMappings binding scheme
+  checkPattern binding scheme m m'
   pure $ Tuple m' (uni.constraints <+> c1 <+> c2 <+> c3)
 
 -- | Determine the common type variables used.
 commonFreeTVars :: List TVar -> Type -> List TVar
 commonFreeTVars tvars t = Set.toUnfoldable $ ftv t `Set.intersection` ftv (map TypVar tvars)
+
+-- | Report an pattern mismatch error, if the given type variable mappings don't match up. The
+-- | first type variable mapping is determined by shape of the binding, while the second type
+-- | variable mapping is determined by the expression scheme.
+checkPattern :: IndexedTypedBinding -> Scheme -> TVarMappings -> TVarMappings -> Infer Unit
+checkPattern binding scheme m1 m2 = if compareTVarMappings m1 m2
+  then pure unit
+  else do
+    t <- schemeToType scheme
+    Ex.throwError $ PatternMismatch binding t
+
+-- | Return true, if the given type variable mappings contain exactly the same type variables.
+compareTVarMappings :: TVarMappings -> TVarMappings -> Boolean
+compareTVarMappings m1 m2 = (toSet m1) == (toSet m2)
+  where toSet m = Set.fromFoldable (map fst m)
 
 -- | Given a binding and a scheme, try to construct a mapping for every type variable inside the
 -- | binding patter to the corresponding polytype. In the process setup type constraints for the
@@ -848,7 +864,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
       Tuple m1 c1 <- mapSchemeOnTVarMappings b1 (toScheme t)
       Tuple m2 c2 <- mapSchemeOnTVarMappings b2 (toScheme listType)
       returnAs (m1 <> m2) (c1 <+> c2) listType
-    _ -> Ex.throwError $ UnknownError "expected list"
+    _ -> reportMismatch
 
   NTupleLit _ bs -> case expectTupleType scheme of
     Just tupleType@(AD (TTuple ts)) -> do
@@ -856,21 +872,25 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
         mapSchemeOnTVarMappings binding (toScheme t))
         (zip bs ts)
       returnAs (fold ms) (foldConstraints cs) tupleType
-    _ -> Ex.throwError $ UnknownError "expected tuple"
+    _ -> reportMismatch
 
   ListLit _ bs -> case expectListType scheme of
     Just listType@(AD (TList t)) -> do
       Tuple ms cs <- unzip <$> traverse (\binding ->
         mapSchemeOnTVarMappings binding (toScheme t)) bs
       returnAs (fold ms) (foldConstraints cs) listType
-    _ -> Ex.throwError $ UnknownError "expected list"
+    _ -> reportMismatch
 
-  _ -> Ex.throwError $ UnknownError "not yet implemented"
+  _ -> pure $ Tuple Nil emptyConstraints
   where
+  -- Set a type constraint for the current binding.
   returnAs mapping constraints t = do
     -- Add a type constraint for the current binding node.
     let c = setSingleTypeConstraintFor' (bindingIndex binding) t
     pure $ Tuple mapping (constraints <+> c)
+  reportMismatch = do
+      t <- schemeToType scheme
+      Ex.throwError $ PatternMismatch binding t
   expectListType (Forall tvs (AD (TList t))) = Just $ AD $ TList t
   expectListType _ = Nothing
   expectTupleType (Forall tvs (AD (TTuple ts))) = Just $ AD $ TTuple ts
