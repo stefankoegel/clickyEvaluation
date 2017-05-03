@@ -739,6 +739,26 @@ infer' ex = case ex of
 isTypedBinding :: IndexedTypedBinding -> Boolean
 isTypedBinding = extractFromBinding >>> fst >>> isJust
 
+-- | Proxy for `makeBindingEnv`. Checks, if the given binding is typed. Whenever the binding is
+-- | typed, call `makeBindingEnv` and overwrite the constraints with a type constraint for the
+-- | current binding node.
+makeBindingEnvPartial :: IndexedTypedBinding -> Infer (Triple Type TVarMappings Constraints)
+makeBindingEnvPartial binding
+  | isTypedBinding binding = case binding of
+
+    -- In this case, the mapping also has to be updated to contain the type already set.
+    Lit (Tuple (Just t) idx) (Name name) -> do
+      let c = setSingleTypeConstraintFor' (bindingIndex binding) t
+      pure $ Triple t (Tuple name (Forall Nil t) : Nil) c
+
+    _ -> do
+      Triple _ m c1 <- makeBindingEnv binding
+      let t = (extractFromBinding >>> fst >>> fromMaybe UnknownType) binding
+      let c2 = setSingleTypeConstraintFor' (bindingIndex binding) t
+      pure $ Triple t m (c2 <+> c1)
+
+  | otherwise = makeBindingEnv binding
+
 -- | Choose a new type variable for the given binding and add typing information for the node
 -- | index. This function is needed whenever binding environments have to be built: lambda and let
 -- | expressions as well as list comprehensions.
@@ -763,19 +783,19 @@ makeBindingEnv binding = case binding of
     pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
 
   ConsLit _ b1 b2 -> do
-    Triple t1 m1 c1 <- makeBindingEnv b1
-    Triple t2 m2 c2 <- makeBindingEnv b2
+    Triple t1 m1 c1 <- makeBindingEnvPartial b1
+    Triple t2 m2 c2 <- makeBindingEnvPartial b2
     let c3 = setTypeConstraintFor' (bindingIndex binding) (AD $ TList t1) t2
     pure $ Triple (AD $ TList t1) (m1 <> m2) (c1 <+> c2 <+> c3)
 
   ListLit _ bs -> do
-    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bs
+    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bs
     listElementConstraints <- setListConstraints ts
     t <- listType ts
     pure $ Triple t (concat ms) (foldConstraints cs <+> listElementConstraints)
 
   NTupleLit _ bs -> do
-    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bs
+    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bs
     let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TTuple ts)
     pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs <+> c)
 
@@ -798,9 +818,10 @@ makeBindingEnv binding = case binding of
 withEnv :: forall a. TVarMappings -> Infer a -> Infer a
 withEnv mappings m = local (scope mappings) m
   where
-  scope mappings inferEnv = { env: removeMultiple inferEnv.env (map fst mappings) `extendMultiple` mappings
-                            , stopOnError: inferEnv.stopOnError
-                            }
+  scope mappings inferEnv =
+    { env: removeMultiple inferEnv.env (map fst mappings) `extendMultiple` mappings
+    , stopOnError: inferEnv.stopOnError
+    }
 
 -- +--------------------+
 -- | Lambda Expressions |
@@ -811,7 +832,7 @@ withEnv mappings m = local (scope mappings) m
 makeBindingEnvLambda :: List IndexedTypedBinding
                      -> Infer (Triple (List Type) TVarMappings Constraints)
 makeBindingEnvLambda bindings = do
-  Triple ts ms cs <- unzip3 <$> traverse makeBindingEnv bindings
+  Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bindings
   pure $ Triple ts (concat ms) (foldConstraints cs)
 
 -- +----------------------------------------+
@@ -822,7 +843,7 @@ makeBindingEnvLambda bindings = do
 -- | and associate its type with the binding.
 associate :: IndexedTypedBinding -> IndexedTypeTree -> Infer (Tuple TVarMappings Constraints)
 associate binding expr = do
-  Triple _ m _ <- makeBindingEnv binding
+  Triple _ m _ <- makeBindingEnvPartial binding
   Tuple et c1 <- infer expr
   { env: env } <- ask
   uni <- solveConstraints c1
@@ -957,7 +978,7 @@ makeBindingEnvQual qual = case qual of
   Let _ binding expr -> associate binding expr
   -- Generate the binding environment for the binding and infer the generator expression.
   Gen _ binding genExpr -> do
-    Triple t1 m c1 <- makeBindingEnv binding
+    Triple t1 m c1 <- makeBindingEnvPartial binding
     Tuple t2 c2 <- infer genExpr
     let c3 = setConstraintFor genExpr (AD $ TList t1) t2
     pure $ Tuple m (c1 <+> c2 <+> c3)
