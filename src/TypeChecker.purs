@@ -85,7 +85,11 @@ nullSubst = Map.empty
 
 -- | Compose the two given substitiutions into a single one.
 compose :: Subst -> Subst -> Subst
-compose s1 s2 = map (apply s1) s2 `Map.union` s1
+compose s1 s2 = Map.unionWith f (map (apply s1) s2) s1
+    where
+    f UnknownType _ = UnknownType
+    f _ UnknownType = UnknownType
+    f t1 t2 = t1
 
 class Substitutable a where
   apply :: Subst -> a -> a
@@ -1067,8 +1071,6 @@ bindTVar tv t
 -- | Try to unify the given types and return the resulting substitution or the occurring type
 -- | error.
 unifies :: Type -> Type -> Either TypeError Subst
-unifies UnknownType t = pure nullSubst
-unifies t UnknownType = pure nullSubst
 unifies (TypArr l1 r1) (TypArr l2 r2) = do
   s1 <- unifies l1 l2
   s2 <- unifies (apply s1 r1) (apply s1 r2)
@@ -1078,6 +1080,8 @@ unifies t (TypVar tv) = tv `bindTVar` t
 unifies (TypCon c1) (TypCon c2) | c1 == c2 = pure nullSubst
 unifies (AD a) (AD b) | a == b = pure nullSubst
 unifies (AD a) (AD b) = unifiesAD a b
+unifies UnknownType t = pure nullSubst
+unifies t UnknownType = pure nullSubst
 unifies t1 t2 = Left $ normalizeTypeError $ UnificationFail t1 t2
 
 -- | Try to unify the given AD types and return the resulting substitution or the occurring type
