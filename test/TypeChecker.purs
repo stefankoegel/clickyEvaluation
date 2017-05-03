@@ -184,10 +184,10 @@ testNormalizeTT name tt normalizedTT = if (TC.normalizeTypeTree tt) == normalize
                "Actual type tree: " <> show tt <> "\n"
 
 -- | Test the function `mapSchemeOnTVarMappings`.
-testMapSchemeOnTVarMappings :: String -> Scheme -> IndexedTypedBinding -> TVarMappings
+testMapSchemeOnTVarMappings :: String -> Scheme -> IndexedTypedBinding
                             -> TVarMappings -> Writer (List String) Unit
-testMapSchemeOnTVarMappings name scheme binding m expected =
-  case TC.runInfer true (fst <$> TC.mapSchemeOnTVarMappings binding m scheme) of
+testMapSchemeOnTVarMappings name scheme binding expected =
+  case TC.runInfer true (fst <$> TC.mapSchemeOnTVarMappings binding scheme) of
     Left typeError -> reportTypeError name typeError
     Right result -> if result == expected
       then pure unit
@@ -204,8 +204,8 @@ listOne = List (Just $ typConList "Int") (Atom (Just $ TypCon "Int") (AInt 1) : 
 untypedListOne :: TypeTree
 untypedListOne = List Nothing (Atom Nothing (AInt 1) : Nil)
 
-runPartialTest :: Writer (List String) Unit
-runPartialTest = do
+partiallyTypedExprTests :: Writer (List String) Unit
+partiallyTypedExprTests = do
   -- Test that ((2 :: Int) + 4) is typed correctly.
   testInferTT "Partially typed"
     (Binary
@@ -232,7 +232,7 @@ runPartialTest = do
     (UnificationFail intType charType)
 
   -- Test that `let (f :: Int -> Int) = \x -> x in f True` results in a type error.
-  testInferTTFail "Partially typed let expression"
+  testInferTTFail "Partially typed let expression 1"
     (LetExpr
       Nothing
       (
@@ -250,9 +250,63 @@ runPartialTest = do
     )
     (UnificationFail intType boolType)
 
+  -- Test that `let f = ((\x -> x) :: Int -> Int) in f True` results in a type error.
+  testInferTTFail "Partially typed let expression 2"
+    (LetExpr
+      Nothing
+      (
+        Tuple (Lit Nothing (Name "f"))
+          (Lambda (Just intToIntType)
+            ((Lit Nothing (Name "x")) : Nil)
+            (Atom Nothing (Name "x"))) :
+        Nil
+      )
+      (App
+        Nothing
+        (Atom Nothing (Name "f"))
+        ((Atom Nothing (Bool true)) : Nil)
+      )
+    )
+    (UnificationFail intType boolType)
+
+  -- Test that `(\(a :: Bool) b -> a)) 'x'` results in a type error.
+  testInferTTFail "Partially typed lambda expression 1"
+    (App
+      Nothing
+      (Lambda
+        Nothing
+        ((Lit (Just boolType) (Name "a")) : (Lit Nothing (Name "b")) : Nil)
+        (Atom Nothing (Name "a"))
+      )
+      ((Atom Nothing (Char "x")) : Nil)
+    )
+    (UnificationFail boolType charType)
+
+  -- Test that `(\(x:(y :: Char):ys) -> mod x y)` results in a type error.
+  testInferTTFail "Partially typed lambda expression 1"
+    (Lambda
+      Nothing
+        (
+          (ConsLit
+            Nothing
+            (Lit Nothing (Name "x"))
+            (ConsLit
+              Nothing
+              (Lit (Just charType) (Name "y"))
+              (Lit Nothing (Name "ys"))
+            ) : Nil
+          )
+        )
+        (App
+          Nothing
+          (Atom Nothing (Name "mod"))
+          (Atom Nothing (Name "x") : Atom Nothing (Name "y") : Nil)
+        )
+    )
+    (UnificationFail intType charType)
+
 runTests :: Writer (List String) Unit
 runTests = do
-
   -- +--------------------------------------------------+
   -- | Test the inferred types of arbitrary expressions |
   -- +--------------------------------------------------+
@@ -640,15 +694,17 @@ runTests = do
       )
     )
 
-  testMapSchemeOnTVarMappings "Map scheme on literal binding"
+  -- Map scheme `Int` on `x`. We expect the type variable mapping { x = Int }.
+  testMapSchemeOnTVarMappings
+    "Map scheme on literal binding"
     (Forall Nil intType)
     (Lit (Tuple Nothing 0) (Name "x"))
-    (Tuple "x" (Forall Nil (TypVar "t_0")) : Nil)
     (Tuple "x" (Forall Nil intType) : Nil)
 
-  -- Map scheme (forall t_4. t_4 -> t_4, (Int, Bool)) on { f = t_0, n = t_1, b = t_2 } for
-  -- binding (f, (n, b))
-  testMapSchemeOnTVarMappings "Map scheme on tuple"
+  -- Map scheme `(forall t_4. t_4 -> t_4, (Int, Bool)) on `(f, (n, b))`. We expect the mapping
+  -- { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }.
+  testMapSchemeOnTVarMappings
+    "Map scheme on tuple"
     -- The scheme: (forall t_4. t_4 -> t_4, (Int, Bool))
     (Forall ("t_4" : Nil)
       (AD (TTuple (typVarArrow "t_4" "t_4" :
@@ -668,13 +724,6 @@ runTests = do
         Nil
       )
     )
-    -- The type variable mapping: { f = t_0, n = t_1, b = t_2 }
-    (
-      (Tuple "f" (Forall Nil (TypVar "t_0"))) :
-      (Tuple "n" (Forall Nil (TypVar "t_1"))) :
-      (Tuple "b" (Forall Nil (TypVar "t_2"))) :
-      Nil
-    )
     -- The expected result: { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }
     (
       (Tuple "f" (Forall ("t_4" : Nil) (typVarArrow "t_4" "t_4"))) :
@@ -682,3 +731,5 @@ runTests = do
       (Tuple "b" (Forall Nil boolType)) :
       Nil
     )
+
+  partiallyTypedExprTests
