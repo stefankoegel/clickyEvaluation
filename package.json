@@ -11,7 +11,7 @@
   },
   "scripts": {
     "postinstall": "pulp --version && bower --version && bower update",
-    "build": "pulp build --to html/libs/Main.js",
+    "build": "pulp --version && pulp build --to html/libs/Main.js",
     "test": "pulp test",
     "watch": "pulp -w test"
   }

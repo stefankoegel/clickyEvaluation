@@ -17,7 +17,7 @@
   "dependencies": {
     "purescript-ace": "^3.0.0",
     "purescript-arrays": "^3.0.0",
-    "purescript-dom": "^3.0.0",
+    "purescript-dom": "3.7.x",
     "purescript-jquery": "^3.0.0",
     "purescript-lists": "^3.0.0",
     "purescript-maps": "^2.0.0",
