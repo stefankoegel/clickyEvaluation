@@ -1095,34 +1095,59 @@ unifiesAD (TTuple (a:as)) (TTuple (b:bs)) = do
 unifiesAD (TTuple Nil) (TTuple Nil) = pure nullSubst
 unifiesAD t1 t2 = Left $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
 
--- | Given a set of constraints...
-getErrorConstraintIndex :: Constraints -> Maybe Index
-getErrorConstraintIndex { mapped: _, unmapped: Tuple idx _ : Nil } = Just idx
-getErrorConstraintIndex _ = Nothing
+-- | Try to find a type variable associated with a specific expression node, given a set of
+-- | constraint and the node index.
+findTVarForNode :: Constraints -> Index -> Maybe TVar
+findTVarForNode c idx = case Map.lookup idx c.mapped of
+  Just (Constraint (TypVar tv) _) -> Just tv
+  Just (Constraint _ (TypVar tv)) -> Just tv
+  _ -> Nothing
 
 -- | Try to solve the constraints.
--- TODO: Cleanup.
 solver :: Boolean -> Unifier -> Ex.Except TypeError Unifier
 solver stopOnError { subst: beginningSubst, constraints: constraints } =
-  solver' beginningSubst emptyConstraints indices (apply beginningSubst constraintList)
+      -- Accumulate the final substitution and error constraints.
+  let accumulatorUnifier = { subst: beginningSubst, constraints: emptyConstraints }
+      lists = toConstraintAndIndexLists constraints
+      indices = fst lists
+      constraintList = snd lists
+  in solver' accumulatorUnifier indices (apply beginningSubst constraintList)
   where
-  lists = toConstraintAndIndexLists constraints
-  indices = fst lists
-  constraintList = snd lists
-
-  solver' :: Subst -> Constraints -> List Index -> List Constraint -> Ex.Except TypeError Unifier
-  solver' subst errors (idx:idxs) (ConstraintError typeError : rest) =
-    solver' subst errors idxs rest
-  solver' subst errors (idx:idxs) (Constraint t1 t2 : rest) = case unifies t1 t2 of
-    -- Infinite types will always result in a type error for now.
-    Left error@(InfiniteType _ _) -> Ex.throwError error
-      --pure { subst: nullSubst, constraints: constraintError idx t1 error }
-    Left error -> if stopOnError
-      then Ex.throwError error
-      else pure { subst: nullSubst, constraints: constraintError idx t1 error }
-    Right subst1 -> solver' (subst1 `compose` subst) errors idxs (apply subst1 rest)
+  -- Work through the list of constraints and the corresponding indices.
+  solver' uni (idx:idxs) (c:cs) = do
+    uni' <- solveSingleConstraint stopOnError uni idx c
+    solver' uni' idxs (apply uni'.subst cs)
   -- Worked through all the constraints.
-  solver' subst errorConstraints _ _ = pure { subst: subst, constraints: errorConstraints }
+  solver' uni _ _ = pure uni
+
+  -- | Try to create the unifier for the given constraint.
+  --solveSingleConstraint :: Boolean -> Unifier -> Index -> Constraint -> Ex.Except TypeError Unifier
+  solveSingleConstraint stopOnError uni idx constraint = case constraint of
+    ConstraintError typeError -> pure uni
+    Constraint t1 t2 -> case unifies t1 t2 of
+      Left error@(InfiniteType _ _) -> Ex.throwError error
+      Left error -> if stopOnError
+        then Ex.throwError error
+        else case findTVarForNode constraints idx of
+          Nothing -> pure uni
+          Just tv -> case Map.lookup tv uni.subst of
+            -- If the given type variable already has a substitution which maps it to the unknown
+            -- type, we already have encountered an error and just return the unifier.
+            Just UnknownType -> pure uni
+            _ -> do
+              -- Collect the new error and append it to the previously collected error constraints.
+              let errors = constraintError idx (TypVar tv) error <+> uni.constraints
+              -- Create an updated initial constraint list, with the additional constraint:
+              -- `tv == ?`.
+              let mapped' = Map.insert idx (Constraint (TypVar tv) UnknownType) constraints.mapped
+              let constraints' = { unmapped: constraints.unmapped, mapped: mapped' }
+              -- Create an updated beginning substitution.
+              let subst' = Map.alter (const $ Just UnknownType) tv beginningSubst
+              -- Restart the constraint solving phase with the error we found just now.
+              let lists' = toConstraintAndIndexLists (constraints' <+> errors)
+              solver' { subst: subst', constraints: errors } (fst lists') (apply subst' $ snd lists')
+      Right newSubst -> pure $ unifier (newSubst `compose` uni.subst)
+    where unifier s = { subst: s `compose` uni.subst, constraints: uni.constraints }
 
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
 -- | indices.
@@ -1267,7 +1292,7 @@ inferExprDebug expr = do
   Tuple t c <- infer indexedTree
   uni <- solveConstraints c
   let expr' = normalizeTypeTree (apply uni.subst $ assignTypes uni indexedTree)
-  pure { expr: expr', constraints: c, subst: uni.subst }
+  pure { expr: expr', constraints: uni.constraints, subst: uni.subst }
 
 -- | Perform type inference on expression tree and extract top level type.
 inferExprToType :: TypeTree -> Infer Type
