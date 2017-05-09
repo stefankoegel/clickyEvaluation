@@ -337,6 +337,10 @@ runTests = do
   -- ((\xs -> [ x | x <- xs ]) [1]) :: [Int]
   testInferExpr "List comprehension inside lambda" "(\\xs -> [ x | x <- xs ]) [1]" intList
 
+  -- Check that let polymorphism works: `let f = \x -> x in (f True, f 42)` :: (Bool, Int).
+  testInferExpr "Let polymorphism" "let f = \\x -> x in (f True, f 42)"
+    (AD $ TTuple (boolType : intType : Nil))
+
   testInferExprFail "List unification fail" "[(+), 4]" (UnificationFail intToIntToIntType intType)
   testInferExprFail "Cons unification fail"
     "let str = \"Hallo\" in 3 : [1 + 2, 3 + 4, str]"
