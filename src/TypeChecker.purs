@@ -9,6 +9,7 @@ import Data.Char as Char
 import Data.Either (Either(..))
 import Data.Foldable (intercalate, fold, foldl, foldr, foldMap, elem)
 import Data.List (List(..), (:), concat, concatMap, filter, singleton, unzip, zip)
+import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, isJust)
@@ -546,26 +547,23 @@ inferOp opTuple@(Tuple op _) = do
 isTypedExpr :: IndexedTypeTree -> Boolean
 isTypedExpr = extractFromTree >>> fst >>> isJust
 
--- | In the given set of constraints, mark the index of the given expression to be of type `t`.
-setTypeInConstraints :: IndexedTypeTree -> Type -> Constraints -> Infer Constraints
-setTypeInConstraints expr t cs = do
-  tv <- fresh
-  let c = Constraint tv t
-  pure { mapped: Map.update (const $ Just c) idx cs.mapped, unmapped: cs.unmapped }
-  where
-  idx = index expr
-
 -- | Traverse the given (partially typed) expression and collect type constraints. For expression
 -- | nodes which are already typed, corresponding constraints are emitted.
 infer :: IndexedTypeTree -> Infer (Tuple Type Constraints)
 infer expr
   | isTypedExpr expr = do
       -- Perform type inference on the expression as usual.
-      Tuple _ cs <- infer' expr
-      -- Add already known type as constraint.
+      Tuple inferredType cs <- infer' expr
       let t = getType expr
-      cs' <- setTypeInConstraints expr t cs
-      pure $ Tuple t cs'
+          idx = index expr
+      -- Add already known type as well as the inferred type as constraints.
+      tv1 <- fresh
+      tv2 <- fresh
+      let newConstraints = Tuple idx (Constraint tv1 t)
+                         : Tuple idx (Constraint tv2 inferredType)
+                         : Tuple idx (Constraint t inferredType)
+                         : Nil
+      pure $ Tuple t { mapped: cs.mapped, unmapped: newConstraints <> cs.unmapped }
     where
     getType = extractFromTree >>> fst >>> fromMaybe UnknownType
   | otherwise = infer' expr
