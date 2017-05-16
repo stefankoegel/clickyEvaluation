@@ -546,16 +546,26 @@ inferOp opTuple@(Tuple op _) = do
 isTypedExpr :: IndexedTypeTree -> Boolean
 isTypedExpr = extractFromTree >>> fst >>> isJust
 
+-- | In the given set of constraints, mark the index of the given expression to be of type `t`.
+setTypeInConstraints :: IndexedTypeTree -> Type -> Constraints -> Infer Constraints
+setTypeInConstraints expr t cs = do
+  tv <- fresh
+  let c = Constraint tv t
+  pure { mapped: Map.update (const $ Just c) idx cs.mapped, unmapped: cs.unmapped }
+  where
+  idx = index expr
+
 -- | Traverse the given (partially typed) expression and collect type constraints. For expression
 -- | nodes which are already typed, corresponding constraints are emitted.
 infer :: IndexedTypeTree -> Infer (Tuple Type Constraints)
 infer expr
   | isTypedExpr expr = do
-      -- Perform type inference on child nodes.
-      Tuple _ c1 <- unzip <$> traverse infer (AST.getTreeChildren expr)
+      -- Perform type inference on the expression as usual.
+      Tuple _ cs <- infer' expr
       -- Add already known type as constraint.
-      Tuple t c2 <- returnWithConstraint expr (getType expr)
-      pure $ Tuple t (foldConstraints c1 <+> c2)
+      let t = getType expr
+      cs' <- setTypeInConstraints expr t cs
+      pure $ Tuple t cs'
     where
     getType = extractFromTree >>> fst >>> fromMaybe UnknownType
   | otherwise = infer' expr
