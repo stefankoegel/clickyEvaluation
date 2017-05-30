@@ -561,7 +561,7 @@ infer expr
       tv2 <- fresh
       let newConstraints = Tuple idx (Constraint tv1 t)
                          : Tuple idx (Constraint tv2 inferredType)
-                         : Tuple idx (Constraint t inferredType)
+                         : Tuple idx (Constraint tv1 tv2)
                          : Nil
       pure $ Tuple t { mapped: cs.mapped, unmapped: newConstraints <> cs.unmapped }
     where
@@ -1305,20 +1305,6 @@ inferExprDebug expr = do
 -- | Perform type inference on expression tree and extract top level type.
 inferExprToType :: TypeTree -> Infer Type
 inferExprToType expr = (extractFromTree >>> fromMaybe UnknownType) <$> inferExpr expr
-
-overlappingBindings :: List TypedBinding -> List String
-overlappingBindings Nil = Nil
-overlappingBindings (Cons x Nil) = Nil
-overlappingBindings (Cons x xs) = (filter (\y -> elem y (concatMap boundNames xs)) (boundNames x)) <> overlappingBindings xs
-  where
-    boundNames :: TypedBinding -> (List String)
-    boundNames = go
-      where
-      go (Lit _ (Name name)) = singleton name
-      go (ConsLit _ b1 b2)   = go b1 <> go b2
-      go (ListLit _ bs)      = foldMap go bs
-      go (NTupleLit _ bs)    = foldMap go bs
-      go _                 = Nil
 
 -- | Given a list of definitions create a map of definition groups.
 buildDefinitionGroups :: List Definition -> Map.Map String (List Definition)
