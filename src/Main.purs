@@ -115,15 +115,13 @@ doWithJust mMaybe f = do
     Nothing -> pure unit
     Just x  -> f x
 
--- | Given a type tree and an evaluation environment, try to infere the types inside the given
--- | environment.
-buildTypeEnvironment :: forall eff. AST.TypeTree -> Eval.Env
-                     -> Eff (dom :: DOM | eff) (Maybe TypeChecker.TypeEnv)
-buildTypeEnvironment expr env =
+-- | Given an evaluation environment, try to infer the types inside of it.
+buildTypeEnvironment :: Eval.Env -> Maybe TypeChecker.TypeEnv
+buildTypeEnvironment env =
   let defs = Eval.envToDefs env
   in case TypeChecker.tryInferEnvironment defs of
-    Left error -> pure Nothing
-    Right typedEnv -> pure $ Just typedEnv
+    Left error -> Nothing
+    Right typedEnv -> Just typedEnv
 
 -- | Type check an expression using a given typed environment.
 -- | Construct a div tree from the given typed expression.
@@ -163,15 +161,20 @@ showExprIn :: forall eff. AST.TypeTree -> Eval.Env -> Array AST.TypeTree -> J.JQ
            -> Maybe J.JQuery -> Eff (dom :: DOM | eff) Unit
 showExprIn expr env history container histContainer = do
   -- Try to infer the types of the environment.
-  doWithJust (buildTypeEnvironment expr env) \typedEnv -> do
+  -- doWithJust (buildTypeEnvironment expr env) \typedEnv -> do
     -- Try to infer the type of the given expression.
-    doWithJust (typeCheckExpression typedEnv expr) \typedExpr ->
+    doWithJust (typeCheckExpression preludeTyped expr) \typedExpr ->
       buildDivTreeFromExpression typedExpr env history container histContainer
 
 stringToEnv :: String -> Eval.Env
 stringToEnv str = case Parser.parseDefs str of
   Left _     -> empty
   Right defs -> Eval.defsToEnv defs
+
+preludeTyped :: TypeChecker.TypeEnv
+preludeTyped = case buildTypeEnvironment preludeEnv of
+  Just env -> env
+  Nothing -> TypeChecker.emptyTypeEnv
 
 preludeEnv :: Eval.Env
 preludeEnv = stringToEnv prelude
