@@ -1,11 +1,12 @@
 module Test.Main where
 
-import Prelude (Unit, show, (<>), ($), bind, (==), (+))
+import Prelude
 import Data.List (length)
 import Data.Traversable (for)
 
 import Test.Parser as Parser
 import Test.Evaluator as Evaluator
+import Test.AST as AST
 import Test.TypeChecker as TypeChecker
 
 import Control.Monad.Eff (Eff)
@@ -16,6 +17,11 @@ import Node.Process (PROCESS, exit)
 
 main :: forall eff. Eff (console :: CONSOLE, process :: PROCESS | eff) Unit
 main = do
+  log $ "Running AST tests..."
+  let astLog = execWriter AST.runTests
+  log $ "  ...found " <> show (length astLog) <> " errors"
+  for astLog log
+
   log $ "Running parser tests..."
   let parserLog = execWriter Parser.runTests
   log $ "  ...found " <> show (length parserLog) <> " errors"
@@ -26,9 +32,12 @@ main = do
   log $ "  ...found " <> show (length evaluatorLog) <> " errors"
   for evaluatorLog log
 
-  TypeChecker.runTests
+  log $ "Running type checker tests..."
+  let typeCheckerLog = execWriter TypeChecker.runTests
+  log $ "  ...found " <> show (length typeCheckerLog) <> " errors"
+  for typeCheckerLog log
 
-  let errorCount = length parserLog + length evaluatorLog
+  let errorCount = length parserLog + length evaluatorLog + length astLog + length typeCheckerLog
   if errorCount == 0
     then do
       log $ "All tests succesfull"

@@ -10,46 +10,45 @@
     <script src="libs/bootstrap-switch.min.js"></script>
   </head>
   <body>
-  <a href="https://github.com/stefankoegel/clickyEvaluation"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/a6677b08c955af8400f44c6298f40e7d19cc5b2d/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f677261795f3664366436642e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png"></a>
 
-    <script type="text/javascript" src="libs/ace.js" charset="utf-8"></script>
-    <script type="text/javascript" src="libs/theme-tomorrow.js" charset="utf-8"></script>
-    <script type="text/javascript" src="libs/mode-haskell.js" charset="utf-8"></script>
-    <script>
-      jQuery(function() {
-        // ace editor setup
-        var editor = ace.edit("definitions");
-        editor.setTheme("ace/theme/tomorrow");
-        editor.getSession().setMode("ace/mode/haskell");
-        editor.getSession().setTabSize(8);
-        editor.setShowPrintMargin(false);
+    <!-- <script type="text/javascript" src="libs/ace.js" charset="utf-8"></script> -->
+    <!-- <script type="text/javascript" src="libs/theme-tomorrow.js" charset="utf-8"></script> -->
+    <!-- <script type="text/javascript" src="libs/mode-haskell.js" charset="utf-8"></script> -->
+    <!-- <script> -->
+    <!--   jQuery(function() { -->
+    <!--     // ace editor setup -->
+    <!--     var editor = ace.edit("definitions"); -->
+    <!--     editor.setTheme("ace/theme/tomorrow"); -->
+    <!--     editor.getSession().setMode("ace/mode/haskell"); -->
+    <!--     editor.getSession().setTabSize(8); -->
+    <!--     editor.setShowPrintMargin(false); -->
 
-        // bootstrapSwitch for types
-        $.fn.bootstrapSwitch.defaults.size = 'mini';
-        var checkbox = $("#typecheckbox")
-        checkbox.bootstrapSwitch();
-        checkbox.on('switchChange.bootstrapSwitch', function (event, state) {
-          var styleLink = $("#showTypeStylesheet");
-          if(state){
-            styleLink.attr({"href":"style/showType.css"});
-          }
-          else{
-            styleLink.attr({"href":"style/hideType.css"});
-          }
-        });
+    <!--     // bootstrapSwitch for types -->
+    <!--     $.fn.bootstrapSwitch.defaults.size = 'mini'; -->
+    <!--     var checkbox = $("#typecheckbox") -->
+    <!--     checkbox.bootstrapSwitch(); -->
+    <!--     checkbox.on('switchChange.bootstrapSwitch', function (event, state) { -->
+    <!--       var styleLink = $("#showTypeStylesheet"); -->
+    <!--       if(state){ -->
+    <!--         styleLink.attr({"href":"style/showType.css"}); -->
+    <!--       } -->
+    <!--       else{ -->
+    <!--         styleLink.attr({"href":"style/hideType.css"}); -->
+    <!--       } -->
+    <!--     }); -->
 
-        // bootstrapSwitch for history
-        var historycheckbox = $("#historycheckbox")
-        historycheckbox.bootstrapSwitch();
-        historycheckbox.on('switchChange.bootstrapSwitch', function (event, state) {
-          if(state) {
-            historycheckbox.prop('checked', true);
-          } else {
-            historycheckbox.prop('checked', false);
-          }
-        });
-      });
-    </script>
+    <!--     // bootstrapSwitch for history -->
+    <!--     var historycheckbox = $("#historycheckbox") -->
+    <!--     historycheckbox.bootstrapSwitch(); -->
+    <!--     historycheckbox.on('switchChange.bootstrapSwitch', function (event, state) { -->
+    <!--       if(state) { -->
+    <!--         historycheckbox.prop('checked', true); -->
+    <!--       } else { -->
+    <!--         historycheckbox.prop('checked', false); -->
+    <!--       } -->
+    <!--     }); -->
+    <!--   }); -->
+    <!-- </script> -->
     <script charset="utf-8" src="libs/Main.js"></script>
 
     <div id="info"></div>
@@ -66,115 +65,130 @@
 
   <div class="frame">
     <div id="topLevelOutput-container">
-        <div id="output-container">
+        <div class="output">
         </div>
     </div>
   </div>
 
 <h3> History </h3>
-    <div id="history-container">
+    <div class="historyBox">
     </div>
 
-    <h3>Definitions</h3>
-    <div class="ace" id="definitions">
-and (True:xs)  = and xs
-and (False:xs) = False
-and []         = True
+    <script>
+    (function() {
+        var timer;
+        var parseInput = function() {
+            PS.Main.makeCEwithHistory($("#input").val())(".output")(".historyBox")();
+        }
 
-or (False:xs) = or xs
-or (True:xs)  = True
-or []         = False
+        $("#input").on("keypress", function() {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(parseInput, 500);
+        });
+    })();
 
-all p = and . map p
-any p = or . map p
+    $(function() { PS.Main.makeCEwithHistory($("#input").val())(".output")(".historyBox")(); });
+    </script>
+    <!-- <h3>Definitions</h3> -->
+<!--     <div class="ace" id="definitions"> -->
+<!-- and (True:xs)  = and xs -->
+<!-- and (False:xs) = False -->
+<!-- and []         = True -->
 
-head (x:xs) = x
-tail (x:xs) = xs
+<!-- or (False:xs) = or xs -->
+<!-- or (True:xs)  = True -->
+<!-- or []         = False -->
 
-take 0 xs     = []
-take n (x:xs) = x : take (n - 1) xs
+<!-- all p = and . map p -->
+<!-- any p = or . map p -->
 
-drop 0 xs     = xs
-drop n (x:xs) = drop (n - 1) xs
+<!-- head (x:xs) = x -->
+<!-- tail (x:xs) = xs -->
 
-elem e []     = False
-elem e (x:xs) = if e == x then True else elem e xs
+<!-- take 0 xs     = [] -->
+<!-- take n (x:xs) = x : take (n - 1) xs -->
 
-max a b = if a >= b then a else b
-min a b = if a <= b then a else b
+<!-- drop 0 xs     = xs -->
+<!-- drop n (x:xs) = drop (n - 1) xs -->
 
-maximum (x:xs) = foldl max x xs
-minimum (x:xs) = foldl min x xs
+<!-- elem e []     = False -->
+<!-- elem e (x:xs) = if e == x then True else elem e xs -->
 
-length []     = 0
-length (x:xs) = 1 + length xs
+<!-- max a b = if a >= b then a else b -->
+<!-- min a b = if a <= b then a else b -->
 
-zip (x:xs) (y:ys) = (x, y) : zip xs ys
-zip []      _     = []
-zip _       []    = []
+<!-- maximum (x:xs) = foldl max x xs -->
+<!-- minimum (x:xs) = foldl min x xs -->
 
-zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys
-zipWith _ []     _      = []
-zipWith _ _      []     = []
+<!-- length []     = 0 -->
+<!-- length (x:xs) = 1 + length xs -->
 
-unzip []          = ([], [])
-unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs
+<!-- zip (x:xs) (y:ys) = (x, y) : zip xs ys -->
+<!-- zip []      _     = [] -->
+<!-- zip _       []    = [] -->
 
-fst (x,_) = x
-snd (_,y) = y
+<!-- zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys -->
+<!-- zipWith _ []     _      = [] -->
+<!-- zipWith _ _      []     = [] -->
 
-curry f a b = f (a, b)
-uncurry f (a, b) = f a b
+<!-- unzip []          = ([], []) -->
+<!-- unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs -->
 
-repeat x = x : repeat x
+<!-- fst (x,_) = x -->
+<!-- snd (_,y) = y -->
 
-replicate 0 _ = []
-replicate n x = x : replicate (n - 1) x
+<!-- curry f a b = f (a, b) -->
+<!-- uncurry f (a, b) = f a b -->
 
-enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []
+<!-- repeat x = x : repeat x -->
 
-sum (x:xs) = x + sum xs
-sum [] = 0
+<!-- replicate 0 _ = [] -->
+<!-- replicate n x = x : replicate (n - 1) x -->
 
-product (x:xs) = x * product xs
-product [] = 1
+<!-- enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else [] -->
 
-reverse []     = []
-reverse (x:xs) = reverse xs ++ [x]
+<!-- sum (x:xs) = x + sum xs -->
+<!-- sum [] = 0 -->
 
-concat = foldr (++) []
+<!-- product (x:xs) = x * product xs -->
+<!-- product [] = 1 -->
 
-map f []     = []
-map f (x:xs) = f x : map f xs
+<!-- reverse []     = [] -->
+<!-- reverse (x:xs) = reverse xs ++ [x] -->
 
-not True  = False
-not False = True
+<!-- concat = foldr (++) [] -->
 
-filter p (x:xs) = if p x then x : filter p xs else filter p xs
-filter p []     = []
+<!-- map f []     = [] -->
+<!-- map f (x:xs) = f x : map f xs -->
 
-foldr f ini []     = ini
-foldr f ini (x:xs) = f x (foldr f ini xs)
+<!-- not True  = False -->
+<!-- not False = True -->
 
-foldl f acc []     = acc
-foldl f acc (x:xs) = foldl f (f acc x) xs
+<!-- filter p (x:xs) = if p x then x : filter p xs else filter p xs -->
+<!-- filter p []     = [] -->
 
-scanl f b []     = [b]
-scanl f b (x:xs) = b : scanl f (f b x) xs
+<!-- foldr f ini []     = ini -->
+<!-- foldr f ini (x:xs) = f x (foldr f ini xs) -->
 
-iterate f x = x : iterate f (f x)
+<!-- foldl f acc []     = acc -->
+<!-- foldl f acc (x:xs) = foldl f (f acc x) xs -->
 
-id x = x
+<!-- scanl f b []     = [b] -->
+<!-- scanl f b (x:xs) = b : scanl f (f b x) xs -->
 
-const x _ = x
+<!-- iterate f x = x : iterate f (f x) -->
 
-flip f x y = f y x
+<!-- id x = x -->
 
-even n = (n `mod` 2) == 0
-odd n = (n `mod` 2) == 1
+<!-- const x _ = x -->
 
-fix f = f (fix f)
-</div>
+<!-- flip f x y = f y x -->
+
+<!-- even n = (n `mod` 2) == 0 -->
+<!-- odd n = (n `mod` 2) == 1 -->
+
+<!-- fix f = f (fix f) -->
+<!-- </div> -->
 
   </body>
 </html>

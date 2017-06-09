@@ -22,10 +22,9 @@ import Control.Apply ((*>), lift2)
 import Control.Applicative (pure)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.State (State, evalState)
-import Control.Monad.State.Trans (gets, get, put)
-import Data.Either (Either(..))
+import Control.Monad.State.Trans (get, put)
 
-import Text.Parsing.Parser (ParseError, ParserT(..), ParseState(..), fail)
+import Text.Parsing.Parser (ParserT, ParseState(ParseState), fail)
 import Text.Parsing.Parser.Combinators
 import Text.Parsing.Parser.Pos (Position(..), initialPos)
 import Text.Parsing.Parser.String (string, oneOf)

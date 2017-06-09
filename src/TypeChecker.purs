@@ -1,41 +1,96 @@
 module TypeChecker where
 
-import Prelude (class Show, (&&), (==), (/=), (>>=), map, ($), pure, (<*>), (<$>), bind, const, otherwise, show, (+), div, mod, flip, (<>), (>), (-), (<<<))
-
-import Control.Monad.Except.Trans (ExceptT, runExceptT, throwError)
-import Control.Monad.State (State, evalState, runState, put, get)
-import Control.Apply (lift2)
-import Control.Bind (ifM)
-import Data.Either (Either(Left, Right))
-import Data.List (List(..), filter, delete, concatMap, reverse, unzip, foldM, (:), zip, singleton, length, concat, (!!))
+import Control.Monad.Except as Ex
+import Control.Monad.RWS (ask, evalRWST, local)
+import Control.Monad.RWS.Trans (RWST)
+import Control.Monad.State (State, evalState, put, get)
 import Data.Array as Array
-import Data.Map as Map
-import Data.Map (Map, insert, lookup, empty)
-import Data.Tuple (Tuple(Tuple), snd, fst)
-import Data.Traversable (traverse)
-import Data.Set as Set
-import Data.Foldable (foldl, foldr, foldMap, elem)
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.String (toCharArray, fromCharArray)
 import Data.Char as Char
+import Data.Either (Either(..))
+import Data.Foldable (intercalate, fold, foldl, foldr, foldMap, elem)
+import Data.List (List(..), (:), concat, concatMap, filter, singleton, unzip, zip)
+import Data.List as List
+import Data.Map (Map)
+import Data.Map as Map
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
+import Data.Set as Set
+import Data.String as String
+import Data.Traversable (traverse)
+import Data.Tuple (Tuple(Tuple), snd, fst)
+import Partial.Unsafe (unsafeCrashWith)
+import Prelude (
+  class Eq, class Show, Unit,
+  ($), (+), (-), (<$>), (<<<), (<>), (==), (>), (>>=), (>>>),
+  bind, const, div, flip, id, map, mod, negate, not, otherwise, pure, show, unit)
 
-import AST (AD(..), Atom(..), Binding(..), Definition(..), Expr(..), Qual(..), ExprQual, QualTree(..), TypeQual, Op(..), TVar, Type(..), TypeBinding(..), TypeTree(..),TypeError(..),Path(..), extractType, extractBindingType, prettyPrintType)
+import AST
+import AST as AST
 
+---------------------------------------------------------------------------------------------------
+-- | Data Types and Helper Functions                                                             --
+---------------------------------------------------------------------------------------------------
+
+-- | A triple type.
+data Triple a b c = Triple a b c
+
+-- | Similar to `unzip` on tuples.
+unzip3 :: forall a b c. List (Triple a b c) -> Triple (List a) (List b) (List c)
+unzip3 = foldr
+         (\(Triple a b c) (Triple as bs cs) ->
+            Triple (a : as) (b : bs) (c : cs))
+         (Triple Nil Nil Nil)
+
+-- +--------------+
+-- | Type Schemes |
+-- +--------------+
+
+-- | A type scheme represents a polytype. It contains a list of type variables, which may occur in
+-- | the type.
 data Scheme = Forall (List TVar) Type
 
+derive instance eqScheme :: Eq Scheme
+
+-- TODO: Remove, and use `ppScheme`?
 instance showScheme :: Show Scheme where
   show (Forall a b) = "Forall (" <> show a <> ") " <> show b
 
-data TypeEnv = TypeEnv (Map.Map TVar Scheme)
+-- | Pretty print a type scheme.
+ppScheme :: Scheme -> String
+ppScheme (Forall Nil t) = prettyPrintType t
+ppScheme (Forall tvars t) = "forall " <> intercalate " " tvars <> ". " <> prettyPrintType t
 
-instance showTypeEnv :: Show TypeEnv where
-  show (TypeEnv a) = show a
+-- +---------------+
+-- | Substitutions |
+-- +---------------+
 
-data Unique = Unique { count :: Int }
-
-type Infer a = ExceptT TypeError (State Unique) a
-
+-- | Substitions map type variables to monotypes and can be applied to data structures containing
+-- | types.
 type Subst = Map.Map TVar Type
+
+-- | Pretty print a substitution.
+-- | Example output:
+-- | ```
+-- | Substitution:
+-- |   t0 ~ Int,
+-- |   t1 ~ Int -> Int
+-- | ```
+ppSubst :: Subst -> String
+ppSubst subst = "Substitutions:\n" <>
+  (map ppTVAndType >>> intercalate ",\n")
+  (Map.toList subst)
+  where ppTVAndType (Tuple tv t) = "\t" <> tv <> " ~ " <> prettyPrintType t
+
+-- | The empty substition.
+nullSubst :: Subst
+nullSubst = Map.empty
+
+-- | Compose the two given substitiutions into a single one.
+compose :: Subst -> Subst -> Subst
+compose s1 s2 = Map.unionWith f (map (apply s1) s2) s1
+    where
+    f UnknownType _ = UnknownType
+    f _ UnknownType = UnknownType
+    f t1 t2 = t1
 
 class Substitutable a where
   apply :: Subst -> a -> a
@@ -47,17 +102,24 @@ instance subScheme :: Substitutable Scheme where
     ftv (Forall as t) = (ftv t) `Set.difference` Set.fromFoldable as
 
 instance subType :: Substitutable Type where
+   apply _ UnknownType = UnknownType
    apply _ (TypCon a) = TypCon a
    apply s t@(TypVar a) = fromMaybe t $ Map.lookup a s
    apply s (TypArr t1 t2) =  TypArr (apply s t1) (apply s t2)
    apply s (AD a) = AD (apply s a)
-   apply _ (TypeError err) = TypeError err  --TODO make typeError Substitutable
+   apply _ (TypeError err) = TypeError err
 
+   ftv UnknownType = Set.empty
    ftv (TypCon  _)         = Set.empty
    ftv (TypVar a)       = Set.singleton a
    ftv (TypArr t1 t2) =  Set.union (ftv t1) (ftv t2)
    ftv (AD a) = ftv a
    ftv (TypeError err) = Set.empty
+
+instance subMaybeType :: Substitutable (Maybe Type) where
+  apply s t = apply s <$> t
+  ftv (Just t) = ftv t
+  ftv Nothing = Set.empty
 
 instance listSub :: (Substitutable a) => Substitutable (List a) where
   apply s xs = map (apply s) xs
@@ -70,901 +132,1275 @@ instance subTypeEnv :: Substitutable TypeEnv where
 instance subAD :: Substitutable AD where
   apply s (TList t) = TList (apply s t)
   apply s(TTuple t) = TTuple (apply s t)
-
   ftv (TList t) = ftv t
   ftv (TTuple t) = ftv t
 
-instance subTupTVarScheme :: Substitutable (Tuple String Scheme) where
-  apply s (Tuple a b) = Tuple a (apply s b)
-
-  ftv (Tuple _ b) = ftv b
-
-instance subQual :: (Substitutable b, Substitutable e) => Substitutable (Qual b e) where
-  apply s (Gen b e) = Gen (apply s b) (apply s e)
-  apply s (Let b e) = Let (apply s b) (apply s e)
-  apply s (Guard e) = Guard (apply s e)
-
-  ftv (Gen _ t) = ftv t
-  ftv (Let _ t) = ftv t
-  ftv (Guard t) = ftv t
-
 instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => Substitutable (QualTree a b c) where
-  apply s (TGen a b c) = TGen (apply s a) (apply s b) (apply s c)
-  apply s (TLet a b c) = TLet (apply s a) (apply s b) (apply s c)
-  apply s (TGuard a c) = TGuard (apply s a) (apply s c)
+  apply s (Gen a b c) = Gen (apply s a) (apply s b) (apply s c)
+  apply s (Let a b c) = Let (apply s a) (apply s b) (apply s c)
+  apply s (Guard a c) = Guard (apply s a) (apply s c)
 
-  ftv (TGen a b c) = ftv c
-  ftv (TLet a b c) = ftv c
-  ftv (TGuard a c) = ftv c
+  ftv (Gen a b c) = ftv c
+  ftv (Let a b c) = ftv c
+  ftv (Guard a c) = ftv c
 
-instance subTypeTree :: Substitutable TypeTree where
-  apply s (TAtom t) = TAtom $ apply s t
-  apply s (TListTree l t) = TListTree (apply s l) (apply s t)
-  apply s (TNTuple l t) = TNTuple (apply s l) (apply s t)
-  apply s (TBinary op tt1 tt2 t) =  TBinary (apply s op) (apply s tt1) (apply s tt2) (apply s t)
-  apply s (TUnary op tt t) = TUnary (apply s op) (apply s tt) (apply s t)
-  apply s (TSectL tt op t) = TSectL (apply s tt) (apply s op) (apply s t)
-  apply s (TSectR op tt t) = TSectR (apply s op) (apply s tt) (apply s t)
-  apply s (TPrefixOp t) = TPrefixOp $ apply s t
-  apply s (TIfExpr tt1 tt2 tt3 t) = TIfExpr (apply s tt1) (apply s tt2) (apply s tt3) (apply s t)
-  apply s (TArithmSeq st by end t) = TArithmSeq (apply s st) ((apply s) <$> by) ((apply s) <$> end) (apply s t)
-  apply s (TLetExpr bin tt t) = TLetExpr ((\(Tuple x y) -> (Tuple (apply s x) (apply s y))) <$> bin) (apply s tt) (apply s t)
-  apply s (TLambda lb tt t) = TLambda (apply s lb) (apply s tt) (apply s t)
-  apply s (TApp tt1 l t) = TApp (apply s tt1) (apply s l) (apply s t)
-  apply s (TListComp tt tts t) = TListComp (apply s tt) (apply s tts) (apply s t)
+-- | Substitutable instance for the type tree.
+instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) (Maybe Type)) where
+  apply s (Atom t a) = Atom (apply s t) a
+  apply s (List t es) = List (apply s t) (apply s es)
+  apply s (NTuple t es) = NTuple (apply s t) (apply s es)
+  apply s (Binary t op l r) = Binary (apply s t) (apply s op) (apply s l) (apply s r)
+  apply s (Unary t op e) = Unary (apply s t) (apply s op) (apply s e)
+  apply s (SectL t e op) = SectL (apply s t) (apply s e) (apply s op)
+  apply s (SectR t op e) = SectR (apply s t) (apply s op) (apply s e)
+  apply s (PrefixOp t op) = PrefixOp (apply s t) (apply s op)
+  apply s (IfExpr t c l r) = IfExpr (apply s t) (apply s c) (apply s l) (apply s r)
+  apply s (ArithmSeq t begin step end) = ArithmSeq (apply s t) (apply s begin) (apply s <$> step) (apply s <$> end)
+  apply s (LetExpr t bs e) = LetExpr (apply s t) ((\(Tuple x y) -> Tuple (apply s x) (apply s y)) <$> bs) (apply s e)
+  apply s (Lambda t bs body) = Lambda (apply s t) (apply s bs) (apply s body)
+  apply s (App t e es) = App (apply s t) (apply s e) (apply s es)
+  apply s (ListComp t e qs) = ListComp (apply s t) (apply s e) (apply s qs)
+  ftv typeTree = ftv (extractFromTree typeTree)
 
-  ftv (TAtom t)  = ftv t
-  ftv (TListTree _ t)  = ftv t
-  ftv (TNTuple _ t)  = ftv t
-  ftv (TBinary _ _ _ t)  = ftv t
-  ftv (TUnary _ _ t)  = ftv t
-  ftv (TSectL _ _ t)  = ftv t
-  ftv (TSectR _ _ t)  = ftv t
-  ftv (TPrefixOp t)  = ftv t
-  ftv (TIfExpr _ _ _ t)  = ftv t
-  ftv (TArithmSeq _ _ _ t) = ftv t
-  ftv (TLetExpr _ _ t)  = ftv t
-  ftv (TLambda _ _ t)  = ftv t
-  ftv (TApp _ _ t)  = ftv t
-  ftv (TListComp _ _ t) = ftv t
+-- | Substitutable instance for operator tuples used in the type tree.
+instance subOpTuple :: Substitutable (Tuple Op (Maybe Type)) where
+  apply s (Tuple op t) = Tuple op (apply s t)
+  ftv (Tuple op t) = ftv t
 
-instance subTypeBinding :: Substitutable TypeBinding where
-  apply s (TLit t) = TLit $ apply s t
-  apply s (TConsLit b1 b2 t) = TConsLit (apply s b1) (apply s b2) (apply s t)
-  apply s (TListLit lb t) = TListLit (apply s lb) (apply s t)
-  apply s (TNTupleLit lb t) = TNTupleLit (apply s lb) (apply s t)
+instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
+  apply s (Lit t atom) = Lit (apply s t) atom
+  apply s (ConsLit t b1 b2) = ConsLit (apply s t) (apply s b1) (apply s b2)
+  apply s (ListLit t lb) = ListLit (apply s t) (apply s lb)
+  apply s (NTupleLit t lb) = NTupleLit (apply s t) (apply s lb)
 
-  ftv (TLit t) = ftv t
-  ftv (TConsLit _ _ t) = ftv t
-  ftv (TListLit _ t) = ftv t
-  ftv (TNTupleLit _ t) = ftv t
+  ftv = extractFromBinding >>> ftv
+
+-- +------------------------+
+-- | Type Variable Mappings |
+-- +------------------------+
+
+-- | Mappings from type variable to type schemes. These mappings are used for bindings in lambda
+-- | and let expressions and list comprehensions. Here for every binding the type variable and the
+-- | corresponding scheme is stored.
+-- TODO: Rename to `BindingEnvironment`?
+type TVarMapping = Tuple TVar Scheme
+type TVarMappings = List TVarMapping
+
+ppTVarMappings :: TVarMappings -> String
+ppTVarMappings mappings = "Type Variable Mappings:\n" <>
+  (map ppTVarMapping >>> intercalate ",\n") mappings
+  where ppTVarMapping (Tuple tv scheme) = "\t" <> tv <> " :: " <> ppScheme scheme
+
+-- +------------------+
+-- | Type Environment |
+-- +------------------+
+
+-- | The type environment is a mapping from type variables to polytypes.
+data TypeEnv = TypeEnv (Map.Map TVar Scheme)
+
+-- TODO: Remove in favor of `ppTypeEnv`?
+instance showTypeEnv :: Show TypeEnv where
+  show (TypeEnv a) = show a
+
+-- | Pretty print a type environment.
+-- | Example output:
+-- | ```
+-- | Type environment:
+-- |   not : Bool -> Bool,
+-- |   id : forall t_2. t_2 -> t_2
+-- | ```
+ppTypeEnv :: TypeEnv -> String
+ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
+  (map ppTVAndScheme >>> intercalate ",\n")
+  (Map.toList env)
+  where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " :: " <> ppScheme scheme
+
+-- | Create an empty type environment.
+emptyTypeEnv :: TypeEnv
+emptyTypeEnv = TypeEnv Map.empty
+
+-- | Given a list of type variable names, remove the corresponding schemes from the type
+-- | environment.
+removeMultiple :: TypeEnv -> List TVar -> TypeEnv
+removeMultiple (TypeEnv env) tvars = TypeEnv $ foldr Map.delete env tvars
+
+-- | Remove an entry from the type environment given a type variable name.
+remove :: TypeEnv -> TVar -> TypeEnv
+remove (TypeEnv env) tvar = TypeEnv $ Map.delete tvar env
+
+-- | Fold a list of type environments into a single type environment.
+combine :: List TypeEnv -> TypeEnv
+combine = foldl combine' emptyTypeEnv
+  where
+  combine' (TypeEnv env1) (TypeEnv env2) = TypeEnv $ Map.union env1 env2
+
+-- | Extend the given type environment by the given type variable to scheme mapping.
+extend :: TypeEnv -> TVarMapping -> TypeEnv
+extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
+
+-- | Extend the given type environment by the given mappings.
+extendMultiple :: TypeEnv -> TVarMappings -> TypeEnv
+extendMultiple = foldr (flip extend)
+
+-- +--------------------------------+
+-- | Type Specific Helper Functions |
+-- +--------------------------------+
+
+-- | The type `Bool`.
+boolType :: Type
+boolType = TypCon "Bool"
+
+-- | The type `Char`.
+charType :: Type
+charType = TypCon "Char"
+
+-- | The type `Int`.
+intType :: Type
+intType = TypCon "Int"
+
+-- | The type `Int -> Int`.
+intToIntType :: Type
+intToIntType = intType `TypArr` intType
+
+-- | The type `Int -> Int -> Int`.
+intToIntToIntType :: Type
+intToIntToIntType = intType `TypArr` intToIntType
+
+-- | Given a list of types create the corresponding arrow type. Conceptually:
+-- | [t0, t1, t2] => t0 -> (t1 -> t2)
+toArrowType :: List Type -> Type
+toArrowType Nil = unsafeCrashWith "Function `toArrowType` must not be called with an empty list."
+toArrowType (t : Nil) = t
+toArrowType (t:ts) = t `TypArr` (toArrowType ts)
+
+-- +------------------+
+-- | Type Constraints |
+-- +------------------+
+
+-- | Type constraints.
+data Constraint = Constraint Type Type
+                | ConstraintError Type
+
+-- TODO: Simplify:
+-- Map.Map Index TVar: (Remember which node index corresponds to which type variable)
+-- List (Tuple Index Constraint): holds *all* the constraints
+
+-- | A collection of constraints.
+type Constraints = {
+    -- Mapped constraints associate a node index with a constraint, which determines the type
+    -- of the node.
+    mapped :: Map.Map Index Constraint
+    -- Unmapped constraints are a list of constraints together with index of the corresponding
+    -- expression node. The index is needed here, because we need to associate occurring
+    -- unification errors with expression nodes.
+  , unmapped :: List (Tuple Index Constraint)
+  }
+
+-- | Convert the given set of constraints into a list of constraints.
+toConstraintList :: Constraints -> List Constraint
+toConstraintList constraints =
+  (Map.toList >>> map snd) constraints.mapped <>
+  map snd constraints.unmapped
+
+toConstraintAndIndexLists :: Constraints -> Tuple (List Index) (List Constraint)
+toConstraintAndIndexLists constraints =
+  unzip constraints.unmapped <>
+  unzip (Map.toList constraints.mapped)
+
+-- | Construct an empty constraint map.
+emptyConstraints :: Constraints
+emptyConstraints =
+  { unmapped: Nil
+  , mapped: Map.empty
+  }
+
+-- | Append the given constraints.
+appendConstraints :: Constraints -> Constraints -> Constraints
+appendConstraints cs1 cs2 =
+  { unmapped: cs1.unmapped <> cs2.unmapped
+  , mapped: cs1.mapped <> cs2.mapped
+  }
+
+-- | Create a constraint structure representing an error of a tree node.
+constraintError :: Index -> Type -> TypeError -> Constraints
+constraintError idx tv error =
+  { unmapped: Tuple idx (Constraint tv UnknownType) : Nil
+  , mapped: Map.singleton idx (ConstraintError $ TypeError error)
+  }
+
+constraintSingleUnmapped :: Index -> Type -> Type -> Constraints
+-- The unknown type should always stand on the right.
+constraintSingleUnmapped idx UnknownType t =
+  { unmapped: (Tuple idx (Constraint t UnknownType)) : Nil
+  , mapped: Map.empty
+  }
+constraintSingleUnmapped idx t1 t2 =
+  { unmapped: (Tuple idx (Constraint t1 t2)) : Nil
+  , mapped: Map.empty
+  }
+
+constraintSingleMapped :: Index -> Type -> Type -> Constraints
+constraintSingleMapped idx UnknownType t =
+  { unmapped: Nil
+  , mapped: Map.singleton idx (Constraint t UnknownType)
+  }
+constraintSingleMapped idx t1 t2 =
+  { unmapped: Nil
+  , mapped: Map.singleton idx (Constraint t1 t2)
+  }
+
+-- | Fold the given list of constraints down to a single constraint set.
+foldConstraints :: List Constraints -> Constraints
+foldConstraints = foldr (<+>) emptyConstraints
+
+infixr 5 appendConstraints as <+>
+
+-- | Constraints are substitutable.
+instance substitutableConstraint :: Substitutable Constraint where
+  apply s (Constraint t1 t2) = Constraint (apply s t1) (apply s t2)
+  apply s (ConstraintError typeError) = ConstraintError (apply s typeError)
+  ftv (Constraint t1 t2) = ftv t1 `Set.union` ftv t2
+  ftv (ConstraintError typeError) = Set.empty
+
+-- | Pretty print the given constraint.
+ppConstraint :: Constraint -> String
+ppConstraint (Constraint t1 t2) = prettyPrintType t1 <> " is " <> prettyPrintType t2
+ppConstraint (ConstraintError typeError) = prettyPrintType typeError
+
+-- | Pretty print the given constraints.
+ppConstraints :: Constraints -> String
+ppConstraints constraints = "Constraints:\n" <>
+  "  determining the type:\n" <>
+    (map ppTuple >>> intercalate ",\n")
+    (Map.toList constraints.mapped) <> "\n" <>
+  "  other:\n" <>
+    (map ppTuple >>> intercalate ",\n")
+    constraints.unmapped
+  where
+  ppTuple (Tuple idx constraint) = "\tnode " <> show idx <> ": " <> ppConstraint constraint
+
+-- | Pretty print the given constraint list.
+ppConstraintList :: List Constraint -> String
+ppConstraintList constraints = "Constraints:\n" <>
+  (map ppConstraint >>> intercalate ",\n") constraints
+
+---------------------------------------------------------------------------------------------------
+-- | Type Inference                                                                              --
+---------------------------------------------------------------------------------------------------
+
+data Unique = Unique { count :: Int }
 
 initUnique :: Unique
 initUnique = Unique { count : 0 }
 
-extend :: TypeEnv -> Tuple TVar Scheme -> TypeEnv
-extend (TypeEnv env) (Tuple x s) = TypeEnv $ Map.insert x s env
+type InferEnv = { env :: TypeEnv, stopOnError :: Boolean }
 
-extendMultiple :: TypeEnv -> List (Tuple TVar Scheme) -> TypeEnv
-extendMultiple = foldr (flip extend)
+type Infer a = (RWST
+  InferEnv              -- ^ Read from the type environment.
+  Unit
+  Unique                -- ^ The infer state.
+  (Ex.Except TypeError) -- ^ Catch type errors.
+  a)
 
-nullSubst :: Subst
-nullSubst = Map.empty
+-- | Run the type inference with a given typed environment and catch type errors. Note that the
+-- | only possible errors are:
+-- |   * `UnboundVariable`
+-- |   * `NoInstanceOfEnum`
+-- |   * `UnknownError`
+-- | All other errors can only be encountered during the constraint solving phase.
+runInferWith :: forall a. TypeEnv -> Boolean -> Infer a -> Either TypeError a
+runInferWith env stopOnError m = Ex.runExcept (fst <$> evalRWST m inferEnv initUnique)
+  where inferEnv = { env: env, stopOnError: stopOnError }
 
-freshTVar :: Infer String
+-- | Run the type inference with the empty environment.
+runInfer :: forall a. Boolean -> Infer a -> Either TypeError a
+runInfer = runInferWith emptyTypeEnv
+
+-- | Check, if a type variable occurs in a substitutable instance.
+occursCheck :: forall a. Substitutable a => TVar -> a -> Boolean
+occursCheck a t = a `Set.member` ftv t
+
+-- | Generalize a monotype to a polytype in the context of a given type environment.
+generalize :: TypeEnv -> Type -> Scheme
+generalize env t  = Forall as t
+  where as = Set.toUnfoldable $ ftv t `Set.difference` ftv env
+
+-- | Choose a fresh type variable name.
+freshTVar :: Infer TVar
 freshTVar = do
-    Unique s <- get
-    put (Unique { count: (s.count + 1) })
-    pure $ "t_" <> show s.count
+  Unique s <- get
+  put (Unique { count: (s.count + 1) })
+  pure $ "t_" <> show s.count
 
+-- | Choose a fresh type variable.
 fresh :: Infer Type
 fresh = TypVar <$> freshTVar
 
-unify :: Type -> Type -> Infer Subst
-unify (TypArr l r) (TypArr l' r')  = do
-    s1 <- unify l l'
-    s2 <- unify (apply s1 r) (apply s1 r')
-    pure (s2 `compose` s1)
-
-unify (TypVar a) t = bindVar a t
-unify t (TypVar a) = bindVar a t
-unify (TypCon a) (TypCon b) | a == b = pure nullSubst
-unify (AD a) (AD b) | a == b = pure nullSubst
-unify (AD a) (AD b) = unifyAD a b
-unify t1 t2 = throwError $ normalizeTypeError $ UnificationFail t1 t2
-
-unifyAD :: AD -> AD -> Infer Subst
-unifyAD (TList a) (TList b) = unify a b
-unifyAD (TTuple (Cons a as)) (TTuple (Cons b bs)) = do
-  s1 <- unifyAD (TTuple as) (TTuple bs)
-  s2 <- unify a b
-  pure (s1 `compose` s2)
-unifyAD (TTuple Nil) (TTuple Nil) = pure nullSubst
-
-unifyAD a b = throwError $ normalizeTypeError $ UnificationFail (AD a) (AD b)
-
-bindVar ::  TVar -> Type -> Infer Subst
-bindVar a t
-  | t == (TypVar a) = pure nullSubst
-  | occursCheck a t = throwError $ normalizeTypeError $ InfiniteType a t
-  | otherwise       = pure $ Map.singleton a t
-
-occursCheck :: forall a.  (Substitutable a) => TVar -> a -> Boolean
-occursCheck a t = a `Set.member` ftv t
-
-compose :: Subst -> Subst -> Subst
-compose s1 s2 = map (apply s1) s2 `Map.union` s1
-
-envUnion :: TypeEnv -> TypeEnv -> TypeEnv
-envUnion (TypeEnv a) (TypeEnv b) = TypeEnv $ a `Map.union` b
-
+-- | Create a monotype from the given type scheme.
 instantiate :: Scheme -> Infer Type
 instantiate (Forall as t) = do
   as' <- traverse (const fresh) as
   let s = Map.fromFoldable $ zip as as'
   pure $ apply s t
 
-generalize :: TypeEnv -> Type -> Scheme
-generalize env t  = Forall as t
-  where as = Set.toUnfoldable $ ftv t `Set.difference` ftv env
+-- | Return canonical, polymorphic type.
+closeOverType :: Type -> Scheme
+closeOverType t = generalize emptyTypeEnv t
 
-runInfer :: Infer (Tuple Subst Type) -> Either TypeError Scheme
-runInfer m = case evalState (runExceptT m) initUnique of
-  Left err -> Left err
-  Right res -> Right $ closeOverType res
-
-closeOverType :: (Tuple Subst Type) -> Scheme
-closeOverType (Tuple sub ty) = generalize emptyTyenv (apply sub ty)
-
-emptyTyenv :: TypeEnv
-emptyTyenv = TypeEnv Map.empty
-
-overlappingBindings :: List Binding -> List String
-overlappingBindings Nil = Nil
-overlappingBindings (Cons x Nil) = Nil
-overlappingBindings (Cons x xs) = (filter (\y -> elem y (concatMap boundNames xs)) (boundNames x)) <> overlappingBindings xs
-  where
-    boundNames :: Binding -> (List String)
-    boundNames = go
-      where
-      go (Lit (Name name)) = singleton name
-      go (ConsLit b1 b2)   = go b1 <> go b2
-      go (ListLit bs)      = foldMap go bs
-      go (NTupleLit bs)    = foldMap go bs
-      go _                 = Nil
-
-lookupEnv :: TypeEnv -> TVar -> Infer (Tuple Subst Type)
-lookupEnv (TypeEnv env) tvar = do
+-- | Lookup a type in the type environment.
+lookupEnv :: TVar -> Infer MType
+lookupEnv tvar = do
+  { env: (TypeEnv env) } <- ask
   case Map.lookup tvar env of
-    Nothing -> throwError $ UnboundVariable tvar
-    Just s  -> do t <- instantiate s
-                  pure (Tuple nullSubst t)
+    Nothing -> pure Nothing
+    Just scheme -> instantiate scheme >>= (pure <<< Just)
 
-inferType :: TypeEnv -> Expr -> Infer (Tuple Subst Type)
-inferType env exp = do
-  Tuple s t <- infer env exp
-  let t' = extractType t
-  pure $ Tuple s t'
+-- | Given an indexed expression, add a type constraint using the given type and expression index.
+returnWithConstraint :: IndexedTypeTree -> Type -> Infer (Tuple Type Constraints)
+returnWithConstraint expr t = do
+  tv <- fresh
+  pure $ Tuple tv (constraintSingleMapped (index expr) tv t)
 
-data InferResult a = InferResult {subst :: Subst, envi :: TypeEnv, result :: a}
+-- TODO: Where can this be used instead of `returnWithConstraint`?
+returnDirect :: IndexedTypeTree -> Type -> Infer (Tuple Type Constraints)
+returnDirect expr t = pure $ Tuple t (constraintSingleMapped (index expr) t t)
 
-inferBinding :: TypeEnv -> Binding -> Expr -> Infer (InferResult (Tuple TypeBinding TypeTree))
-inferBinding env bin e1 = do
-  Tuple s1 t1 <- infer env e1
-  Tuple list typ <- extractBinding bin
-  s2 <- unify (extractBindingType typ) (extractType t1)
-  let env' = apply (s1 `compose` s2) env
-      t'   = generalize env' (apply (s1 `compose` s2) (extractType t1))
-      env'' = apply s2 (foldr (\a b -> extend b a) env' list)
-  pure $ InferResult {subst: s2, envi: env'', result: (Tuple typ t1)}
-
-inferBindings :: TypeEnv -> List (Tuple Binding Expr) -> Infer (InferResult (List (Tuple TypeBinding TypeTree)))
-inferBindings _ Nil = throwError $ UnknownError "congrats you found a bug TypeChecker.inferBindings"
-inferBindings env (Cons (Tuple bin expr) Nil) = do
-  InferResult {subst: s, envi: e, result: r} <- inferBinding env bin expr
-  pure $ InferResult {subst: s, envi: e, result: (pure r)}
-inferBindings env (Cons (Tuple bin expr) rest) = do
-  InferResult {subst: s, envi: e, result: res}    <- inferBinding env bin expr
-  InferResult {subst: sr, envi: er, result: resr} <- inferBindings e rest
-  let sRes = s `compose` sr
-  pure $ InferResult {subst: sRes, envi: er, result: (Cons res resr)}
-
-infer :: TypeEnv -> Expr -> Infer (Tuple Subst TypeTree)
-infer env ex = case ex of
-  Atom (Name name) -> case name of
-    "mod" -> pure $ Tuple nullSubst (TAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
-    "div" -> pure $ Tuple nullSubst (TAtom (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int")))
-    _     -> do
-      Tuple s t <- lookupEnv env name
-      pure (Tuple s $ TAtom t)
-  Atom (Bool _) -> pure (Tuple nullSubst $ TAtom (TypCon "Bool"))
-  Atom (Char _) -> pure (Tuple nullSubst $ TAtom (TypCon "Char"))
-  Atom (AInt _) -> pure (Tuple nullSubst $ TAtom (TypCon "Int"))
-
-  Lambda (Cons bin Nil) e -> do
-    Tuple envL tvB <- extractBinding bin
-    let env' = env `extendMultiple` envL
-    Tuple s1 t1 <- infer env' e
-    pure (Tuple s1 $ apply s1 (TLambda (Cons tvB Nil) t1 $ (extractBindingType tvB) `TypArr` (extractType t1)))
-
-  Lambda (Cons bin xs) e -> do
-    Tuple envL tvB <- extractBinding bin
-    let env' = env `extendMultiple` envL
-    inferred <- infer env' (Lambda xs e)
-    case inferred of
-      (Tuple s1 (TLambda tb tt t1)) ->
-        pure (Tuple s1 $ apply s1 (TLambda (Cons tvB tb) tt ((extractBindingType tvB) `TypArr` t1)))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
-
-  Lambda Nil e -> infer env e
-
-  -- one element list
-  App e1 (Cons e2 Nil) -> do
-    tv <- fresh
-    Tuple s1 t1 <- infer env e1
-    Tuple s2 t2 <- infer (apply s1 env) e2
-    s3       <- unify (apply (s1  `compose` s2) (extractType t1)) (TypArr (extractType t2) tv)
-    pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 $ TApp t1 (Cons t2 Nil) tv))
-
-  App e1 (Cons e2 xs) -> do
-    inferred <- infer env  (App (App e1 (Cons e2 Nil)) xs)
-    case inferred of
-      Tuple s (TApp (TApp tt lt _) lt' t') -> pure $ Tuple s (TApp tt (lt<>lt') t')
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
-
-  App _ Nil -> throwError $ UnknownError "congrats you found a bug TypeChecker.infer (App Nil)"
-
-  ListComp expr quals -> do
-    Tuple sq (Tuple tq env') <- inferQuals env quals
-    --let env' = apply sq env
-    Tuple s t <- infer env' expr
-    let s' = sq `compose` s
-    pure $ Tuple s' $ apply s' $ TListComp t tq (AD (TList (extractType t)))
-
-  LetExpr bindings expr -> case overlappingBindings (fst <$> bindings) of
-    Cons x _ -> throwError $ UnknownError $ "Conflicting definitions for \'" <> x <> "\'"
-    Nil      -> do
-      InferResult {subst: sb, envi: envb, result: resb} <- inferBindings env bindings
-      Tuple se te <- infer envb expr
-      let s = sb `compose` se
-      pure $ Tuple s $ apply s $ TLetExpr resb te (extractType te)
-
-  IfExpr cond tr fl -> do
-    tvar <- freshTVar
-    let t = TypVar tvar
-    let env' = env `extend` (Tuple "if" (Forall (tvar : Nil) (TypArr (TypCon "Bool") (TypArr t (TypArr t  t)))))
-    inferred <- infer env' (App (Atom $ Name "if") (cond : tr : fl : Nil))
-    case inferred of
-      Tuple s (TApp tt (Cons tcond (Cons ttr (Cons tfl Nil))) ift) -> pure (Tuple s $ apply s (TIfExpr tcond ttr tfl ift))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
-
-  ArithmSeq begin jstep jend -> do
-    Tuple s1 t1 <- infer env begin
-    tup2 <- traverse (infer env) jstep
-    tup3 <- traverse (infer env) jend
-    let t2 = snd <$> tup2
-    let t3 = snd <$> tup3
-    let s2 = maybe nullSubst fst tup2
-    let s3 = maybe nullSubst fst tup3
-    let s  = s1 `compose` s2 `compose` s3
-    let tt = extractType t1
-    let typeMissMatch m1 m2 = fromMaybe (UnknownError "congrats you found a bug TypeChecker.infer (ArithmSeq begin jstep jend)") (normalizeTypeError <$> lift2 UnificationFail m1 m2)
-    ifM (pure (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t2))))
-      (throwError (typeMissMatch (Just tt) (extractType <$> t2)))
-      (ifM (pure (fromMaybe false (lift2 (/=) (Just tt) (extractType <$> t3))))
-        (throwError (typeMissMatch (Just tt) (extractType <$> t3)))
-        (ifM (pure (fromMaybe false (lift2 (/=) (extractType <$> t2) (extractType <$> t3))))
-          (throwError (typeMissMatch (extractType <$> t2) (extractType <$> t3)))
-          (case tt of
-            TypCon "Int"  -> pure $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
-            TypCon "Bool" -> pure $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
-            TypCon "Char" -> pure $ Tuple s $ apply s $ TArithmSeq t1 t2 t3 (AD (TList tt))
-            _             -> throwError $ NoInstanceOfEnum tt)))
-
-  PrefixOp op -> do
-    Tuple s t <- inferOp env op
-    pure (Tuple s $ TPrefixOp t)
-
-  SectL e op -> do
-    tv <- fresh
-    Tuple s1 t1 <- inferOp env op
-    Tuple s2 t2 <- infer (apply s1 env) e
-    s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
-    pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TSectL t2 t1 tv)))
-
-  SectR op e -> do
-    inferredOp <- inferOp env op
-    case inferredOp of
-      Tuple s1 t1@(TypArr a (TypArr b c)) -> do
-        Tuple s2 t2 <- infer env e
-        s3       <- unify (apply s2 b) (extractType t2)
-        let s4 = (s3 `compose` s2 `compose` s1)
-        pure (Tuple s4 (apply s4 (TSectR t1 t2 (TypArr a c))))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
-
-  Unary (Sub) e -> do
+returnWithTypeError :: IndexedTypeTree -> TypeError -> Infer (Tuple Type Constraints)
+returnWithTypeError expr typeError = do
+  { stopOnError: stopOnError } <- ask
+  if stopOnError
+    then Ex.throwError typeError
+    else do
       tv <- fresh
-      let t1 = (TypCon "Int" `TypArr` TypCon "Int")
-      Tuple s2 t2 <- infer env e
-      s3 <- unify (apply s2 t1) (TypArr (extractType t2) tv)
-      pure (Tuple (s3 `compose` s2) (apply s3 (TUnary t1 t2 tv)))
+      pure $ Tuple tv (constraintError (index expr) tv typeError)
 
-  Unary op e -> do
+setTypeConstraintFor' :: Index -> Type -> Type -> Constraints
+setTypeConstraintFor' idx t1 t2 = constraintSingleMapped idx t1 t2
+
+-- | Setup a new type constraint for a given expression node.
+setTypeConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
+setTypeConstraintFor expr t1 t2 = constraintSingleMapped (index expr) t1 t2
+
+-- | Setup a new type constraint mapping a type to itself.
+setSingleTypeConstraintFor :: IndexedTypeTree -> Type -> Constraints
+setSingleTypeConstraintFor expr t = constraintSingleMapped (index expr) t t
+
+setSingleTypeConstraintFor' :: Index -> Type -> Constraints
+setSingleTypeConstraintFor' idx t = constraintSingleMapped idx t t
+
+-- | Set a constraint not referring to a node.
+setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
+setConstraintFor expr t1 t2 = constraintSingleUnmapped (index expr) t1 t2
+
+setConstraintFor' :: Index -> Type -> Type -> Constraints
+setConstraintFor' idx t1 t2 = constraintSingleUnmapped idx t1 t2
+
+-- | Determine the type of the given operator.
+getOpType :: Op -> Infer Type
+getOpType op = case op of
+    Composition -> do
+      a <- fresh
+      b <- fresh
+      c <- fresh
+      pure $ (b `TypArr` c) `TypArr` ((a `TypArr` b) `TypArr` (a `TypArr` c))
+    Power -> pure intToIntToIntType
+    Mul -> pure intToIntToIntType
+    Add -> pure intToIntToIntType
+    Sub -> pure intToIntToIntType
+    Colon -> do
+      a <- fresh
+      pure $ a `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a))
+    Append -> do
+      a <- fresh
+      pure $ (AD $ TList a) `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a))
+    Equ -> toBoolType
+    Neq -> toBoolType
+    Lt -> toBoolType
+    Leq -> toBoolType
+    Gt -> toBoolType
+    Geq -> toBoolType
+    And -> pure $ boolType `TypArr` (boolType `TypArr` boolType)
+    Or -> pure $ boolType `TypArr` (boolType `TypArr` boolType)
+    Dollar -> do
+      a <- fresh
+      b <- fresh
+      pure $ (a `TypArr` b) `TypArr` (a `TypArr` b)
+    _ -> pure UnknownType
+  where
+  -- The type `a -> a -> Bool`.
+  toBoolType = do
+    a <- fresh
+    pure $ a `TypArr` (a `TypArr` boolType)
+
+-- | Given an operator tuple, determine the operator type and put a type constraint on the
+-- | corresponding expression node.
+inferOp :: Tuple Op MIType -> Infer (Tuple Type Constraints)
+inferOp (Tuple (InfixFunc name) (Tuple _ idx)) = do
+  Tuple t c <- infer (Atom (Tuple Nothing idx) (Name name))
+  pure $ Tuple t c
+inferOp opTuple@(Tuple op _) = do
+  t <- getOpType op
+  let c = setSingleTypeConstraintFor' (opIndex opTuple) t
+  pure $ Tuple t c
+
+-- | Return true, if the top-level node of the given expression has a type.
+isTypedExpr :: IndexedTypeTree -> Boolean
+isTypedExpr = extractFromTree >>> fst >>> isJust
+
+-- | Traverse the given (partially typed) expression and collect type constraints. For expression
+-- | nodes which are already typed, corresponding constraints are emitted.
+infer :: IndexedTypeTree -> Infer (Tuple Type Constraints)
+infer expr
+  | isTypedExpr expr = do
+      -- Perform type inference on the expression as usual.
+      Tuple inferredType cs <- infer' expr
+      let t = getType expr
+          idx = index expr
+      -- Add already known type as well as the inferred type as constraints.
+      tv1 <- fresh
+      tv2 <- fresh
+      let newConstraints = Tuple idx (Constraint tv1 t)
+                         : Tuple idx (Constraint tv2 inferredType)
+                         : Tuple idx (Constraint tv1 tv2)
+                         : Nil
+      pure $ Tuple t { mapped: cs.mapped, unmapped: newConstraints <> cs.unmapped }
+    where
+    getType = extractFromTree >>> fst >>> fromMaybe UnknownType
+  | otherwise = infer' expr
+
+-- | Traverse the given untyped expression and collect type constraints. This function is only
+-- | called by `infer`, which checks for already present type information.
+infer' :: IndexedTypeTree -> Infer (Tuple Type Constraints)
+infer' ex = case ex of
+
+  Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
+  Atom _ atom@(Char _) -> returnWithConstraint ex charType
+  Atom _ atom@(AInt _) -> returnWithConstraint ex intType
+  Atom _ atom@(Name name) -> case name of
+    -- Built-in functions.
+    "mod" -> returnWithConstraint ex intToIntToIntType
+    "div" -> returnWithConstraint ex intToIntToIntType
+    -- Try to find the variable name in the type environment.
+    _     -> do
+      mt <- lookupEnv name
+      case mt of
+        -- The name is not in the environment, report an error.
+        Nothing -> returnWithTypeError ex (UnboundVariable name)
+        -- The current expression should have type `t`.
+        Just t -> returnWithConstraint ex t
+
+  Lambda _ bs e -> do
+    -- Infer the binding types, accumulate type variable/scheme mappings and setup type information
+    -- for every binding node in the expression tree.
+    Triple t1 bindingEnv c1 <- makeBindingEnvLambda bs
+    -- Infer the type of the body expression.
+    Tuple t2 c2 <- withEnv bindingEnv (infer e)
+    -- Given a list of binding types, construct the corresponding type. Conceptually:
+    -- `(\a b c -> ...) => typeof a -> typeof b -> typeof c -> t2`
+    let lambdaType = toArrowType (t1 <> (t2 : Nil))
+    -- Set the type for the current expression.
+    let c3 = setSingleTypeConstraintFor ex lambdaType
+    pure $ Tuple lambdaType (c1 <+> c2 <+> c3)
+
+  -- Example expression: `mod 2 3`:
+  -- The subexpression `e` refers to `mod`, the expression list `es` refers to `2` and `3`.
+  App _ e es -> do
+    Tuple t1 c1 <- infer e
+    -- Collect the constraints and type information of the given parameters.
+    Tuple ts cs <- unzip <$> traverse infer es
+    let c2 = foldConstraints cs
     tv <- fresh
-    Tuple s1 t1 <- inferOp env op
-    Tuple s2 t2 <- infer (apply s1 env) e
-    s3       <- unify (apply s2 t1) (TypArr (extractType t2) tv)
-    pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TUnary t1 t2 tv)))
+    -- The function type has to match up with the given parameter types.
+    let c3 = setConstraintFor ex t1 (toArrowType (ts <> (tv : Nil)))
+    -- The application expression has the type referred to by type variable `tv`.
+    let c4 = setSingleTypeConstraintFor ex tv
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
 
-  Binary op e1 e2 -> do
-    inferred <- infer env (App (PrefixOp op) (Cons e1 (Cons e2 Nil)))
-    case inferred of
-      (Tuple s (TApp tt (Cons tt1 (Cons tt2 Nil)) t)) -> pure $ Tuple s (TBinary (extractType tt) tt1 tt2 t)
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+  LetExpr _ defs e -> do
+    -- Construct the binding environment and use it for the type inference of the body
+    Tuple bindingEnv c1 <- makeBindingEnvLet defs
+    Tuple t2 c2 <- withEnv bindingEnv (infer e)
+    -- Set the type for the current expression.
+    let c3 = setSingleTypeConstraintFor ex t2
+    pure $ Tuple t2 (c1 <+> c2 <+> c3)
 
-  List (Cons e1 xs) -> do
-    inferred1 <- infer env (List xs)
-    case inferred1 of
-      Tuple s1 (TListTree ltt (AD (TList t1))) -> do
-        Tuple s2 t2 <- infer (apply s1 env) e1
-        s3 <- unify (apply s2 t1) (extractType t2)
-        pure (Tuple (s3 `compose` s2 `compose` s1) (apply s3 (TListTree (Cons t2 ltt) (AD $ TList (extractType t2)))))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+  IfExpr _ cond l r -> do
+    Tuple t1 c1 <- infer cond
+    Tuple t2 c2 <- infer l
+    Tuple t3 c3 <- infer r
+    -- In the condition node: t1 has to be a `Bool`.
+    -- Because the `cond` expression has already been given a mapped constraint, we have to use
+    -- `setConstraintFor` and not `setTypeConstraintFor`.
+    let c4 = setConstraintFor cond t1 boolType
+    -- In the node of the if expression: t2 and t3 have to be equal.
+    let c5 = setTypeConstraintFor ex t2 t3
+    pure $ Tuple t2 (c1 <+> c2 <+> c3 <+> c4 <+> c5)
 
-  List Nil -> do
+  Binary _ op e1 e2 -> do
+    Tuple t1 c1 <- inferOp op
+    Tuple t2 c2 <- infer e1
+    Tuple t3 c3 <- infer e2
     tv <- fresh
-    pure (Tuple nullSubst $ TListTree Nil (AD $ TList tv))
+    let c4 = setConstraintFor ex t1 (t2 `TypArr` (t3 `TypArr` tv))
+    let c5 = setSingleTypeConstraintFor ex tv
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4 <+> c5)
 
-  NTuple (Cons e Nil) -> do
-    Tuple s t <- infer env e
-    pure $ Tuple s $ TNTuple (Cons t Nil) (AD $ TTuple $ Cons (extractType t) Nil)
-
-  NTuple (Cons e1 xs) -> do
-    inferred1 <- infer env (NTuple xs)
-    case inferred1 of
-      Tuple s1 (TNTuple lt (AD (TTuple t1))) -> do
-          Tuple s2 t2 <- infer (apply s1 env) e1
-          pure (Tuple (s2 `compose` s1) $ TNTuple (Cons t2 lt) (AD $ TTuple (Cons (extractType t2) t1)))
-      _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
-
-  NTuple Nil -> throwError $ UnknownError "congrats you found a bug in TypeChecker.infer (NTuple Nil)"
-
-inferQual :: TypeEnv -> ExprQual -> Infer (Tuple Subst (Tuple TypeQual TypeEnv))
-inferQual env (Let bin e1) = do
-  Tuple s1 t1    <- infer env e1
-  Tuple binding bindingType <- extractBinding bin
-  s2 <- unify (extractBindingType bindingType) (extractType t1)
-  let env' = apply s2 $ env `extendMultiple` binding
-  let subst = s1 `compose` s2
-  pure $ Tuple subst $ Tuple (apply subst (TLet bindingType t1 (extractType t1))) env'
-inferQual env (Gen bin expr) = do
-  Tuple s1 exprType <- infer env expr
-  -- Think: [ bin | x <- expr], where x is found in bin
-  case extractType exprType of
-    -- Type is: [T]
-    AD (TList t) -> do
-      (Tuple binding bindingType) <- extractBinding bin
-      s2 <- unify (extractBindingType bindingType) t
-      let env' = apply s2 $ env `extendMultiple` binding
-      let subst = s1 `compose` s2
-      pure $ Tuple subst $ Tuple (apply subst (TGen bindingType exprType t)) env'
-
-    -- Type is: T (a hopefully bound type variable)
-    TypVar tvar -> do
-      -- First extract the binding and the corresponding type t0.
-      -- Then unify [t0] with the type variable tvar ([t0] ~ tvar).
-      -- Apply the resulting substitution to the environment extended by the binding.
-      Tuple binding bindingType <- extractBinding bin
-      s2 <- unify (AD $ TList $ extractBindingType bindingType) (TypVar tvar)
-      let env' = apply s2 $ env `extendMultiple` binding
-      let typeTree = TGen bindingType exprType (TypVar tvar)
-      let subst = s1 `compose` s2
-      pure $ Tuple subst (Tuple (apply subst typeTree) env')
-
-    _ -> fresh >>= (\t -> throwError $ normalizeTypeError $ UnificationFail (extractType exprType) (AD (TList t)))
-inferQual env (Guard expr) = do
-  Tuple s t <- infer env expr
-  case extractType t of
-    TypCon "Bool" -> pure $ Tuple s $ Tuple (apply s (TGuard t (extractType t))) env
-    _             -> throwError $ normalizeTypeError $ UnificationFail (extractType t) (TypCon "Bool")
-
-inferQuals :: TypeEnv -> List ExprQual -> Infer (Tuple Subst (Tuple (List TypeQual) TypeEnv))
-inferQuals env Nil = pure $ Tuple nullSubst $ Tuple Nil emptyTyenv
-inferQuals env (Cons x rest) = do
-  Tuple s  (Tuple t  env1) <- inferQual env x
-  Tuple sr (Tuple tr env2) <- inferQuals (apply s env1) rest
-  let s' = s `compose` sr
-  pure $ Tuple s' $ Tuple (t `Cons` tr) (envUnion env2 env1)
-
-inferOp :: TypeEnv -> Op -> Infer (Tuple Subst Type)
-inferOp env op = do
-  a <- fresh
-  b <- fresh
-  c <- fresh
-  case op of
-    Composition ->
-      f ((b `TypArr` c) `TypArr` ((a `TypArr` b) `TypArr` (a `TypArr` c)))
-    Power -> int3
-    Mul ->  int3
-    Add -> int3
-    Sub -> int3
-    Colon -> f (a `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a)))
-    Append -> f ((AD $ TList a) `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a)))
-    Equ -> aBool a
-    Neq -> aBool a
-    Lt -> aBool a
-    Leq -> aBool a
-    Gt -> aBool a
-    Geq -> aBool a
-    And -> f (TypCon "Bool" `TypArr` (TypCon "Bool" `TypArr` TypCon "Bool"))
-    Or -> f (TypCon "Bool" `TypArr` (TypCon "Bool" `TypArr` TypCon "Bool"))
-    Dollar -> f ((a `TypArr` b) `TypArr` (a `TypArr` b))
-    InfixFunc name -> inferType env (Atom (Name name))
- where
-  f typ = pure (Tuple nullSubst typ)
-  int3 = f (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))
-  aBool a = f (a `TypArr` (a `TypArr` TypCon "Bool"))
-
-inferDef :: TypeEnv -> Definition -> Infer (Tuple Subst Type)
-inferDef env (Def str bin exp) = do
+  Unary _ op e -> do
+    Tuple t1 c1 <- inferOp op
+    Tuple t2 c2 <- infer e
     tv <- fresh
-    let env' = env `extend` (Tuple str (Forall Nil tv))
-    let exp' = Lambda bin exp
-    Tuple s1 t1' <- infer env' exp'
-    let t1 = extractType t1'
-    let env'' = env `extend` (Tuple str (Forall Nil (apply s1 t1)))
-    Tuple s2 t2 <- infer env'' exp'
-    s3 <- unify (apply s1 t1) (apply s2 (extractType t2))
-    pure $ Tuple (s3 `compose` s1) (apply s3 (apply s1 t1))
+    let c3 = setConstraintFor ex t1 (t2 `TypArr` tv)
+    let c4 = setSingleTypeConstraintFor ex tv
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
 
-extractConsLit :: Type -> Binding -> Infer (Tuple (List (Tuple TVar Scheme)) TypeBinding)
-extractConsLit tv (ConsLit a b@(ConsLit _ _)) = do
-  Tuple list1 typ1 <- extractBinding a
-  secondBinding <- extractBinding b
-  case secondBinding of
-    Tuple list2 t2@(TConsLit b1 b2 (AD (TList typ2))) -> do
-      s1 <- unify tv (extractBindingType typ1)
-      s2 <- unify (apply s1 tv) (typ2)
-      pure $ Tuple (apply s2 (apply s1 (list1 <> list2))) (apply s2 (apply s1 (TConsLit typ1 t2 (AD $ TList typ2))))
-    _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+  -- Expressions of the form `(4+)`.
+  SectL _ e op -> do
+    Tuple t1 c1 <- inferOp op
+    Tuple left c2 <- infer e
+    right <- fresh
+    tv <- fresh
+    let c3 = setConstraintFor ex t1 (left `TypArr` (right `TypArr` tv))
+    let c4 = setSingleTypeConstraintFor ex (right `TypArr` tv)
+    pure $ Tuple (right `TypArr` tv) (c1 <+> c2 <+> c3 <+> c4)
 
-extractConsLit tv (ConsLit a (Lit (Name name))) = do
-  Tuple list typ <- extractBinding a
-  s1 <- unify tv (extractBindingType typ)
-  let list' = apply s1 list
-  let ltyp = AD $ TList (apply s1 tv)
-  pure $ Tuple (Cons (Tuple name $ Forall Nil ltyp) list') $ (apply s1 (TConsLit typ (TLit ltyp) ltyp))
+  -- Expressions of the form `(^2)`.
+  SectR _ op e -> do
+    Tuple t1 c1 <- inferOp op
+    Tuple right c2 <- infer e
+    left <- fresh
+    tv <- fresh
+    let c3 = setSingleTypeConstraintFor ex (left `TypArr` tv)
+    let c4 = setConstraintFor ex t1 (left `TypArr` (right `TypArr` tv))
+    pure $ Tuple (left `TypArr` tv) (c1 <+> c2 <+> c3 <+> c4)
 
-extractConsLit tv (ConsLit a b@(ListLit _)) = do
-  Tuple list1 typ1 <- extractBinding a
-  secondBinding <- extractBinding b
-  case secondBinding of
-    Tuple list2 t2@(TListLit b1 (AD (TList typ2))) -> do
-      s1 <- unify tv (extractBindingType typ1)
-      s2 <- unify (apply s1 tv) (typ2)
-      pure $ Tuple (apply s2 (apply s1 (list1 <> list2))) (apply s2 (apply s1 (TConsLit typ1 t2 (AD $ TList typ2))))
-    _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+  -- Expressions of the form `(:)`.
+  PrefixOp _ op -> do
+    Tuple t1 c1 <- inferOp op
+    tv <- fresh
+    let c2 = setSingleTypeConstraintFor ex t1
+    pure $ Tuple t1 (c1 <+> c2)
 
-extractConsLit _ _ = throwError $ UnknownError "congrats you found a bug in TypeChecker.extractConsLit"
+  -- Empty lists.
+  List _ Nil -> do
+    -- We use `tv` as type variable for the list expression and `tv2` for type of the list
+    -- elements.
+    tv <- fresh
+    tv2 <- fresh
+    -- tv ~ [tv2]
+    let listType = AD $ TList tv2
+    let c = setTypeConstraintFor ex tv listType
+    pure $ Tuple listType c
 
-extractListLit :: List Binding -> Infer (List (Tuple (List (Tuple TVar Scheme)) TypeBinding))
-extractListLit (Cons a Nil) = do
-  b1 <- extractBinding a
-  pure (Cons b1 Nil)
+  -- Single element lists.
+  List _ (e : Nil) -> do
+    -- Get the constraints and type of the first list element.
+    Tuple t c1 <- infer e
+    -- The list expression has the type `[t1]` where `t1` denotes the type of the first list
+    -- element.
+    tv <- fresh
+    let listType = AD $ TList t
+    let c2 = setTypeConstraintFor ex tv listType
+    pure $ Tuple listType (c1 <+> c2)
 
-extractListLit (Cons a b) = do
-  b1 <- extractBinding a
-  bs <- extractListLit b
-  pure (Cons b1 bs)
+  -- List with multiple elements.
+  List _ (e : es) -> do
+    Tuple t1 c1  <- infer e
+    Tuple ts cs  <- unzip <$> traverse infer es
+    -- Also add constraints for the rest of the list elements. All elements should have the same
+    -- type as the first list element.
+    let c2 = foldConstraints (map (setConstraintFor ex t1) ts)
+    let c3 = foldConstraints cs
+    -- The list expression has the type `[t1]` where `t1` denotes the type of the first list
+    -- element.
+    tv <- fresh
+    let listType = AD $ TList t1
+    let c4 = setTypeConstraintFor ex tv listType
+    pure $ Tuple listType (c1 <+> c2 <+> c3 <+> c4)
 
-extractListLit Nil = pure Nil
+  NTuple _ es -> do
+    Tuple ts cs <- unzip <$> traverse infer es
+    tv <- fresh
+    let tupleType = AD $ TTuple ts
+    let c = setTypeConstraintFor ex tv tupleType
+    pure $ Tuple tupleType (foldConstraints cs <+> c)
 
-extractBinding :: Binding -> Infer (Tuple (List (Tuple TVar Scheme)) TypeBinding)
-extractBinding (Lit (Name name)) = do
+  ArithmSeq _ first step last -> do
+    -- Infer the type of the beginning expression, which always exists.
+    Tuple t1 c1 <- inferRequireEnumType first
+    -- Try to infer the types of the `step` and `last` expression if existing and set the
+    -- constraints accordingly.
+    c2 <- tryInferRequireEnumType step t1
+    c3 <- tryInferRequireEnumType last t1
+    tv <- fresh
+    let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
+    pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
+
+  ListComp  _ body quals -> do
+    -- Infer the types of the qual expressions, gather the constraints and the binding environment.
+    Tuple bindingEnv c1 <- makeBindingEnvListComp quals
+    Tuple t1 c2 <- withEnv bindingEnv (infer body)
+    tv <- fresh
+    let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
+    pure $ Tuple tv (c1 <+> c2 <+> c4)
+
+-- +-----------------------------------+
+-- | Bindings and Binding Environments |
+-- +-----------------------------------+
+
+-- | Return true, if the given top-level binding has a type.
+isTypedBinding :: IndexedTypedBinding -> Boolean
+isTypedBinding = extractFromBinding >>> fst >>> isJust
+
+-- | Proxy for `makeBindingEnv`. Checks, if the given binding is typed. Whenever the binding is
+-- | typed, call `makeBindingEnv` and overwrite the constraints with a type constraint for the
+-- | current binding node.
+makeBindingEnvPartial :: IndexedTypedBinding -> Infer (Triple Type TVarMappings Constraints)
+makeBindingEnvPartial binding
+  | isTypedBinding binding = case binding of
+
+    -- In this case, the mapping also has to be updated to contain the type already set.
+    Lit (Tuple (Just t) idx) (Name name) -> do
+      let c = setSingleTypeConstraintFor' (bindingIndex binding) t
+      pure $ Triple t (Tuple name (Forall Nil t) : Nil) c
+
+    _ -> do
+      Triple _ m c1 <- makeBindingEnv binding
+      let t = (extractFromBinding >>> fst >>> fromMaybe UnknownType) binding
+      let c2 = setSingleTypeConstraintFor' (bindingIndex binding) t
+      pure $ Triple t m (c2 <+> c1)
+
+  | otherwise = makeBindingEnv binding
+
+-- | Choose a new type variable for the given binding and add typing information for the node
+-- | index. This function is needed whenever binding environments have to be built: lambda and let
+-- | expressions as well as list comprehensions.
+makeBindingEnv :: IndexedTypedBinding -> Infer (Triple Type TVarMappings Constraints)
+makeBindingEnv binding = case binding of
+  Lit _ atom@(Bool bool) -> do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) boolType
+    pure $ Triple boolType Nil c
+
+  Lit _ atom@(Char char) -> do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) charType
+    pure $ Triple charType Nil c
+
+  Lit _ atom@(AInt aint) -> do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) intType
+    pure $ Triple intType Nil c
+
+  Lit _ atom@(Name name) -> do
+    -- Set the type of the associate tree node to equal the type referred to by `tv`.
+    tv <- fresh
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
+    pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
+
+  ConsLit _ b1 b2 -> do
+    Triple t1 m1 c1 <- makeBindingEnvPartial b1
+    Triple t2 m2 c2 <- makeBindingEnvPartial b2
+    let c3 = setTypeConstraintFor' (bindingIndex binding) (AD $ TList t1) t2
+    pure $ Triple (AD $ TList t1) (m1 <> m2) (c1 <+> c2 <+> c3)
+
+  ListLit _ bs -> do
+    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bs
+    listElementConstraints <- setListConstraints ts
+    t <- listType ts
+    pure $ Triple t (concat ms) (foldConstraints cs <+> listElementConstraints)
+
+  NTupleLit _ bs -> do
+    Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bs
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TTuple ts)
+    pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs <+> c)
+
+  where
+  -- Go through the list of given types and set constraints for every to elements of the list.
+  setListConstraints Nil = pure emptyConstraints
+  setListConstraints (t:Nil) = do
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TList t)
+    pure c
+  setListConstraints (t1:t2:ts) = do
+    cs <- setListConstraints (t2:ts)
+    let c = setConstraintFor' (bindingIndex binding) t1 t2 <+> cs
+    pure c
+
+  -- Given a list of types occurring in a list, determine the list type (choose the first element).
+  listType Nil = fresh >>= \tv -> pure $ AD $ TList tv
+  listType (t:_) = pure $ AD $ TList t
+
+-- | Extend the type environment with the new mappings for the evaluation of `m`.
+withEnv :: forall a. TVarMappings -> Infer a -> Infer a
+withEnv mappings m = local (scope mappings) m
+  where
+  scope mappings inferEnv =
+    { env: removeMultiple inferEnv.env (map fst mappings) `extendMultiple` mappings
+    , stopOnError: inferEnv.stopOnError
+    }
+
+-- +--------------------+
+-- | Lambda Expressions |
+-- +--------------------+
+
+-- | Go through list of given bindings and accumulate an corresponding type. Gather environment
+-- | information and setup the type information for every binding tree node.
+makeBindingEnvLambda :: List IndexedTypedBinding
+                     -> Infer (Triple (List Type) TVarMappings Constraints)
+makeBindingEnvLambda bindings = do
+  Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bindings
+  pure $ Triple ts (concat ms) (foldConstraints cs)
+
+-- +----------------------------------------+
+-- | Let Expressions and List Comprehension |
+-- +----------------------------------------+
+
+-- | Associate a binding with a corresponding expression. Therefore, infer the given expression
+-- | and associate its type with the binding.
+associate :: IndexedTypedBinding -> IndexedTypeTree -> Infer (Tuple TVarMappings Constraints)
+associate binding expr = do
+  Triple _ m _ <- makeBindingEnvPartial binding
+  Tuple et c1 <- infer expr
+  { env: env } <- ask
+  uni <- solveConstraints c1
+  let c2 = setSingleTypeConstraintFor' (bindingIndex binding) et
+      -- Substitute the bound variables with the corresponding polytype.
+      scheme = generalize (apply uni.subst env) (apply uni.subst et)
+  -- Map the type scheme on the binding (and sub-bindings).
+  Tuple m' c3 <- mapSchemeOnTVarMappingsPartial binding scheme
+  checkPattern binding scheme m m'
+  pure $ Tuple m' (uni.constraints <+> c1 <+> c2 <+> c3)
+
+-- | Determine the common type variables used.
+commonFreeTVars :: List TVar -> Type -> List TVar
+commonFreeTVars tvars t = Set.toUnfoldable $ ftv t `Set.intersection` ftv (map TypVar tvars)
+
+-- | Report an pattern mismatch error, if the given type variable mappings don't match up. The
+-- | first type variable mapping is determined by shape of the binding, while the second type
+-- | variable mapping is determined by the expression scheme.
+checkPattern :: IndexedTypedBinding -> Scheme -> TVarMappings -> TVarMappings -> Infer Unit
+checkPattern binding scheme m1 m2 = if compareTVarMappings m1 m2
+  then pure unit
+  else do
+    t <- schemeToType scheme
+    Ex.throwError $ PatternMismatch binding t
+
+-- | Return true, if the given type variable mappings contain exactly the same type variables.
+compareTVarMappings :: TVarMappings -> TVarMappings -> Boolean
+compareTVarMappings m1 m2 = (toSet m1) == (toSet m2)
+  where toSet m = Set.fromFoldable (map fst m)
+
+-- | Map the given scheme to optionally partially typyed bindings.
+mapSchemeOnTVarMappingsPartial :: IndexedTypedBinding -> Scheme -> Infer (Tuple TVarMappings Constraints)
+mapSchemeOnTVarMappingsPartial binding scheme
+  -- This case is only encountered, when the encountered binding literal is typed. Just use the
+  -- given type instead of the inferred type scheme.
+  | isTypedBinding binding = mapSchemeOnTVarMappings binding (Forall Nil t)
+    where
+    getBindingType = extractFromBinding >>> fst >>> fromMaybe UnknownType
+    t = getBindingType binding
+  | otherwise = mapSchemeOnTVarMappings binding scheme
+
+-- | Given a binding and a scheme, try to construct a mapping for every type variable inside the
+-- | binding patter to the corresponding polytype. In the process setup type constraints for the
+-- | nodes in the binding tree.
+mapSchemeOnTVarMappings :: IndexedTypedBinding -> Scheme -> Infer (Tuple TVarMappings Constraints)
+mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding of
+
+  Lit _ (Name name) -> do
+    let m = Tuple name (filteredScheme scheme) : Nil
+    returnAs m emptyConstraints (schemeType scheme)
+
+  ConsLit _ b1 b2 -> case expectListType scheme of
+    Just listType@(AD (TList t)) -> do
+      Tuple m1 c1 <- mapSchemeOnTVarMappingsPartial b1 (toScheme t)
+      Tuple m2 c2 <- mapSchemeOnTVarMappingsPartial b2 (toScheme listType)
+      returnAs (m1 <> m2) (c1 <+> c2) listType
+    _ -> reportMismatch
+
+  NTupleLit _ bs -> case expectTupleType scheme of
+    Just tupleType@(AD (TTuple ts)) -> do
+      Tuple ms cs <- unzip <$> traverse (\(Tuple binding t) ->
+        mapSchemeOnTVarMappingsPartial binding (toScheme t))
+        (zip bs ts)
+      returnAs (fold ms) (foldConstraints cs) tupleType
+    _ -> reportMismatch
+
+  ListLit _ bs -> case expectListType scheme of
+    Just listType@(AD (TList t)) -> do
+      Tuple ms cs <- unzip <$> traverse (\binding ->
+        mapSchemeOnTVarMappingsPartial binding (toScheme t)) bs
+      returnAs (fold ms) (foldConstraints cs) listType
+    _ -> reportMismatch
+
+  _ -> pure $ Tuple Nil emptyConstraints
+  where
+  -- Set a type constraint for the current binding.
+  returnAs mapping constraints t =
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) t
+    in pure $ Tuple mapping (constraints <+> c)
+
+  reportMismatch = do
+      t <- schemeToType scheme
+      Ex.throwError $ PatternMismatch binding t
+
+  getBindingType = extractFromBinding >>> fst >>> fromMaybe UnknownType
+  expectListType (Forall tvs (AD (TList t))) = Just $ AD $ TList t
+  expectListType _ = Nothing
+  expectTupleType (Forall tvs (AD (TTuple ts))) = Just $ AD $ TTuple ts
+  expectTupleType _ = Nothing
+  toScheme t = Forall typeVariables t
+  filteredScheme (Forall tvs t) = (Forall (commonFreeTVars tvs t) t)
+  schemeType (Forall tvs t) = t
+
+-- | Given a list of bindings and corresponding expressions, associate the bindings with the
+-- | expressions and collect the type variable/scheme mappings as well as the constraints.
+associateAll :: List IndexedTypedBinding -> List IndexedTypeTree -> Tuple TVarMappings Constraints
+             -> Infer (Tuple TVarMappings Constraints)
+associateAll (b:bs) (e:es) (Tuple ms cs) = do
+  Tuple m c <- associate b e
+  withEnv m $ associateAll bs es (Tuple (ms <> m) (cs <+> c))
+associateAll _ _ x = pure x
+
+-- | Construct a binding environment to be used in the inference of a let expression.
+makeBindingEnvLet :: List (Tuple IndexedTypedBinding IndexedTypeTree)
+                  -> Infer (Tuple TVarMappings Constraints)
+makeBindingEnvLet defs = associateAll bindings exprs (Tuple Nil emptyConstraints)
+  where
+  bindingsAndExprs = unzip defs
+  bindings = fst bindingsAndExprs
+  exprs = snd bindingsAndExprs
+
+-- +---------------------+
+-- | List Comprehensions |
+-- +---------------------+
+
+-- | Given a list of qual expressions, infer the types, set the constraints and accumulate a
+-- | binding environment. The environment and constraints are returned.
+makeBindingEnvListComp :: List IndexedQualTree -> Infer (Tuple TVarMappings Constraints)
+makeBindingEnvListComp quals = f quals Nil emptyConstraints
+  where f (qual:quals) ms cs = do
+          -- Infer the type, set constraints and accumulate binding environment for the current
+          -- qual expression. Then pass the environment and constraints and continue with the next
+          -- qual expression.
+          Tuple m c <- makeBindingEnvQual qual
+          withEnv m $ f quals (ms <> m) (cs <+> c)
+        f Nil ms cs = pure (Tuple ms cs)
+
+-- | Set constraints and build binding environment for the given qual expression.
+makeBindingEnvQual :: IndexedQualTree -> Infer (Tuple TVarMappings Constraints)
+makeBindingEnvQual qual = case qual of
+  -- Just associate the binding with the expression.
+  Let _ binding expr -> associate binding expr
+  -- Generate the binding environment for the binding and infer the generator expression.
+  Gen _ binding genExpr -> do
+    Triple t1 m c1 <- makeBindingEnvPartial binding
+    Tuple t2 c2 <- infer genExpr
+    let c3 = setConstraintFor genExpr (AD $ TList t1) t2
+    pure $ Tuple m (c1 <+> c2 <+> c3)
+  -- Only infer the expression type and set the constraints.
+  Guard _ guardExpr -> do
+    Tuple _ c <- infer guardExpr
+    pure $ Tuple Nil c
+
+-- +----------------------+
+-- | Arithmetic Sequences |
+-- +----------------------+
+
+-- | If the given expression is non-empty, infer the type, set and return the constraints.
+tryInferRequireEnumType :: Maybe IndexedTypeTree -> Type -> Infer Constraints
+tryInferRequireEnumType (Just expr) t1 = do
+  Tuple t2 c1 <- inferRequireEnumType expr
+  let c2 = setSingleTypeConstraintFor expr t2
+  let c3 = setConstraintFor expr t1 t2
+  pure (c1 <+> c2 <+> c3)
+tryInferRequireEnumType _ t = pure emptyConstraints
+
+-- | Infer the type of the given expression, then run the constraint solving in order to retrieve
+-- | the expression type. If the type is not an enum type, return with the corresponding type
+-- | error.
+inferRequireEnumType :: IndexedTypeTree -> Infer (Tuple Type Constraints)
+inferRequireEnumType expr = do
+  Tuple t c <- infer expr
+  uni <- solveConstraints c
+  -- Get the type hiding behind `t`.
+  case Map.lookup (index expr) c.mapped of
+    Just (Constraint tv _) -> do
+      let exprType = apply uni.subst tv
+      if not isEnumType exprType
+        then returnWithTypeError expr (NoInstanceOfEnum exprType)
+        else pure $ Tuple exprType c
+    _ -> pure $ Tuple t c
+
+-- | Return true, if the given type is enumerable.
+isEnumType :: Type -> Boolean
+isEnumType (TypCon "Int") = true
+isEnumType (TypCon "Char") = true
+isEnumType (TypCon "Bool") = true
+isEnumType _ = false
+
+---------------------------------------------------------------------------------------------------
+-- | Constraint Solving                                                                          --
+---------------------------------------------------------------------------------------------------
+
+-- | Collect the substitutions by working through the constraints. The substitution represents
+-- | the solution to the constraint solving problem.
+type Unifier = { subst :: Subst, constraints :: Constraints }
+
+-- | Create an initial unifier containing a substitution with mappings to the unknown type.
+initialUnifier :: Constraints -> Unifier
+initialUnifier constraints = { subst: nullSubst, constraints: constraints }
+
+-- | Collect the substitutions in the unifier and catch occurring unification errors.
+-- | If the flag `stopOnError` is set, unification errors are not reported, instead
+-- | a corresponding error constraint is returned.
+runSolve :: Boolean -> Constraints -> Either TypeError Unifier
+runSolve stopOnError constraints =
+  case Ex.runExcept $ solver stopOnError (initialUnifier constraints) of
+    Left typeError -> Left typeError
+    Right uni ->
+      let errorConstraints = uni.constraints
+      in Right { subst: uni.subst,
+                 constraints: errorConstraints <+> constraints }
+
+-- | Run the constraint solving inside the infer monad and catch occurring errors. Depending on
+-- | the state of the `stopOnError` flag, the error is reported immediatlely or a corresponding
+-- | constraint is emitted.
+solveConstraints :: Constraints -> Infer Unifier
+solveConstraints cs = do
+  { stopOnError: stopOnError } <- ask
+  case runSolve stopOnError cs of
+    Left typeError -> Ex.throwError typeError
+    Right unifier -> pure unifier
+
+-- | Bind the given type variable to the given type and return the resulting substitution.
+bindTVar ::  TVar -> Type -> Either TypeError Subst
+bindTVar tv t
+  | t == (TypVar tv) = pure $ nullSubst
+  | occursCheck tv t = Left $ normalizeTypeError $ InfiniteType tv t
+  | otherwise = pure $ Map.singleton tv t
+
+-- | Try to unify the given types and return the resulting substitution or the occurring type
+-- | error.
+unifies :: Type -> Type -> Either TypeError Subst
+unifies (TypArr l1 r1) (TypArr l2 r2) = do
+  s1 <- unifies l1 l2
+  s2 <- unifies (apply s1 r1) (apply s1 r2)
+  pure $ s2 `compose` s1
+unifies (TypVar tv) t = tv `bindTVar` t
+unifies t (TypVar tv) = tv `bindTVar` t
+unifies (TypCon c1) (TypCon c2) | c1 == c2 = pure nullSubst
+unifies (AD a) (AD b) | a == b = pure nullSubst
+unifies (AD a) (AD b) = unifiesAD a b
+unifies UnknownType t = pure nullSubst
+unifies t UnknownType = pure nullSubst
+unifies t1 t2 = Left $ normalizeTypeError $ UnificationFail t1 t2
+
+-- | Try to unify the given AD types and return the resulting substitution or the occurring type
+-- | error.
+unifiesAD :: AD -> AD -> Either TypeError Subst
+unifiesAD (TList l1) (TList l2) = unifies l1 l2
+unifiesAD (TTuple (a:as)) (TTuple (b:bs)) = do
+  s1 <- unifiesAD (TTuple as) (TTuple bs)
+  s2 <- unifies a b
+  pure $ s1 `compose` s2
+unifiesAD (TTuple Nil) (TTuple Nil) = pure nullSubst
+unifiesAD t1 t2 = Left $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
+
+-- | Try to find a type variable associated with a specific expression node, given a set of
+-- | constraint and the node index.
+findTVarForNode :: Constraints -> Index -> Maybe TVar
+findTVarForNode c idx = case Map.lookup idx c.mapped of
+  Just (Constraint (TypVar tv) _) -> Just tv
+  Just (Constraint _ (TypVar tv)) -> Just tv
+  _ -> Nothing
+
+-- | Try to solve the constraints.
+solver :: Boolean -> Unifier -> Ex.Except TypeError Unifier
+solver stopOnError { subst: beginningSubst, constraints: constraints } =
+      -- Accumulate the final substitution and error constraints.
+  let accumulatorUnifier = { subst: beginningSubst, constraints: emptyConstraints }
+      lists = toConstraintAndIndexLists constraints
+      indices = fst lists
+      constraintList = snd lists
+  in solver' accumulatorUnifier indices (apply beginningSubst constraintList)
+  where
+  -- Work through the list of constraints and the corresponding indices.
+  solver' uni (idx:idxs) (c:cs) = do
+    uni' <- solveSingleConstraint stopOnError uni idx c
+    solver' uni' idxs (apply uni'.subst cs)
+  -- Worked through all the constraints.
+  solver' uni _ _ = pure uni
+
+  -- | Try to create the unifier for the given constraint.
+  --solveSingleConstraint :: Boolean -> Unifier -> Index -> Constraint -> Ex.Except TypeError Unifier
+  solveSingleConstraint stopOnError uni idx constraint = case constraint of
+    ConstraintError typeError -> pure uni
+    Constraint t1 t2 -> case unifies t1 t2 of
+      Left error@(InfiniteType _ _) -> Ex.throwError error
+      Left error -> if stopOnError
+        then Ex.throwError error
+        else case findTVarForNode constraints idx of
+          Nothing -> pure uni
+          Just tv -> case Map.lookup tv uni.subst of
+            -- If the given type variable already has a substitution which maps it to the unknown
+            -- type, we already have encountered an error and just return the unifier.
+            Just UnknownType -> pure uni
+            _ -> do
+              -- Collect the new error and append it to the previously collected error constraints.
+              let errors = constraintError idx (TypVar tv) error <+> uni.constraints
+              -- Create an updated initial constraint list, with the additional constraint:
+              -- `tv == ?`.
+              let mapped' = Map.insert idx (Constraint (TypVar tv) UnknownType) constraints.mapped
+              let constraints' = { unmapped: constraints.unmapped, mapped: mapped' }
+              -- Create an updated beginning substitution.
+              let subst' = Map.alter (const $ Just UnknownType) tv beginningSubst
+              -- Restart the constraint solving phase with the error we found just now.
+              let lists' = toConstraintAndIndexLists (constraints' <+> errors)
+              solver' { subst: subst', constraints: errors } (fst lists') (apply subst' $ snd lists')
+      Right newSubst -> pure $ unifier (newSubst `compose` uni.subst)
+    where unifier s = { subst: s `compose` uni.subst, constraints: uni.constraints }
+
+-- | Go through tree and assign every tree node its type. In order to do this we rely on the node
+-- | indices.
+assignTypes :: Unifier -> IndexedTypeTree -> TypeTree
+assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f expr
+  where
+  f (Tuple _ idx) = lookupTVar idx
+  fo (Tuple op (Tuple _ idx)) = Tuple op (lookupTVar idx)
+  fb = map f
+  lookupTVar idx = case Map.lookup idx constraints.mapped of
+    Nothing -> Nothing
+    Just (Constraint tv _) -> Just $ subst `apply` tv
+    Just (ConstraintError typeError) -> Just typeError
+
+-- +------------------------------------------------------+
+-- | Type Inference for Definitions and Definition Groups |
+-- +------------------------------------------------------+
+--
+-- Definition groups are a list of definitions with the same name (hence belonging together).
+-- Ungrouped lists of definitions can be grouped together using `buildDefinitionGroups`.
+
+-- | Given a list of definitions create a list of indexed definitions. Note, that the indices
+-- | start with 0 and continue growing throughout all expressions and bindings in the given group.
+makeIndexedDefinitionGroup :: List Definition -> List IndexedDefinition
+makeIndexedDefinitionGroup = f 0
+  where
+  f _ Nil = Nil
+  f beginWith (def:defs) = case makeIndexedDefinition def beginWith of
+    Tuple indexedDef nextIdx -> indexedDef : f nextIdx defs
+
+-- | Separate the given list of definitions into indexed definition groups. The indices in the
+-- | respective groups start with 0.
+makeIndexedDefinitionGroups :: List Definition -> Map.Map String (List IndexedDefinition)
+makeIndexedDefinitionGroups = map makeIndexedDefinitionGroup <<< buildDefinitionGroups
+
+-- | Given a list of definitions, infer the definition types and create a typed evaluation
+-- | environment.
+tryInferEnvironment :: List Definition -> Either TypeError TypeEnv
+tryInferEnvironment defs = accumulateMappings emptyTypeEnv (Map.toList indexedGroups)
+  where
+  indexedGroups = makeIndexedDefinitionGroups defs
+
+  accumulateMappings env Nil = Right env
+  accumulateMappings env (group:groups) = case getMappingFromGroup env group of
+    -- Encountered an unbound variable, this means either:
+    -- 1) The unbound variable has not yet been defined, but occurs later in the definition list.
+    --    In this case: First infer the type of the (now) unbound definition, afterwards go on
+    --    with the current one.
+    -- 2) The variable does not occur in the definition list: Return an error.
+    Left (UnboundVariable name) -> case Map.lookup name indexedGroups of
+      Just defs -> accumulateMappings env ((Tuple name defs) : group : groups)
+      Nothing -> Left $ UnboundVariable name
+    Left typeError -> Left typeError
+    Right (Tuple name scheme) -> accumulateMappings (env `extend` (Tuple name scheme)) groups
+
+  getMappingFromGroup env@(TypeEnv m) (Tuple name defGroup) = case Map.lookup name m of
+    -- The definition is already in the type environment, just use it.
+    Just scheme -> Right (Tuple name scheme)
+    -- The definition has not been found, try to infer the type and it to the environment.
+    Nothing -> case runInferWith env true (schemeOfIndexedDefinitionGroup defGroup) of
+      Left typeError -> Left typeError
+      Right scheme -> Right (Tuple name scheme)
+
+-- | Infer the type scheme of the given definition.
+schemeOfDefinition :: Definition -> Infer Scheme
+schemeOfDefinition def = do
+  Triple t m c <- inferDefinition indexedDef
+  uni <- solveConstraints c
+  pure $ closeOverType (apply uni.subst t)
+  where
+  indexedDef = fst $ makeIndexedDefinition def 0
+
+-- | Infer the type scheme of the given unindexed definition group.
+schemeOfDefinitionGroup :: List Definition -> Infer Scheme
+schemeOfDefinitionGroup = schemeOfIndexedDefinitionGroup <<< makeIndexedDefinitionGroup
+
+-- | Infer the type scheme of the given indexed definition group.
+schemeOfIndexedDefinitionGroup :: List IndexedDefinition -> Infer Scheme
+schemeOfIndexedDefinitionGroup group = do
+  Tuple t c <- inferDefinitionGroup group
+  uni <- solveConstraints c
+  pure $ closeOverType (apply uni.subst t)
+
+-- | Infer the type (and collect constraints) for the given indexed definition group.
+inferDefinitionGroup :: List IndexedDefinition -> Infer (Tuple Type Constraints)
+inferDefinitionGroup Nil = Ex.throwError $ UnknownError "Can't infer type of empty definition group"
+inferDefinitionGroup (def:Nil) = do
+  Triple t m c <- inferDefinition def
+  pure $ Tuple t c
+inferDefinitionGroup (def:defs) = do
+  Triple t1 m c1 <- inferDefinition def
+  Tuple t2 c2 <- withEnv m (inferDefinitionGroup defs)
+  let c3 = setConstraintFor' (definitionIndex def) t1 t2
+  pure $ Tuple t1 (c1 <+> c2 <+> c3)
+
+-- | Infer the type of the given indexed definitions and collect bindings and constraints.
+inferDefinition :: IndexedDefinition -> Infer (Triple Type TVarMappings Constraints)
+inferDefinition def@(IndexedDef name bindings expr) = do
   tv <- fresh
-  pure $ Tuple (Array.toUnfoldable [(Tuple name (Forall Nil tv))]) (TLit tv)
-extractBinding (Lit (Bool _)) = pure $ Tuple Nil $ TLit (TypCon "Bool")
-extractBinding (Lit (Char _)) = pure $ Tuple Nil $ TLit (TypCon "Char")
-extractBinding (Lit (AInt _)) = pure $ Tuple Nil $ TLit (TypCon "Int")
+  let m = Tuple name (Forall Nil tv) : Nil
+  Tuple t1 c1 <- withEnv m (infer (Lambda (Tuple Nothing (-1)) bindings expr))
+  let c2 = setConstraintFor expr tv t1
+  pure $ Triple tv m (c1 <+> c2)
 
-extractBinding a@(ConsLit _ _) = do
-  tv <- fresh
-  extractConsLit tv a
+-- | Transform the given polytype to a monotype.
+schemeToType :: Scheme -> Infer Type
+schemeToType scheme = do
+  t <- instantiate scheme
+  pure $ normalizeType t
 
-extractBinding (ListLit a) = do -- Tuple TypEnv  (TListLit (List TypeBinding) Type)
-  bs <- extractListLit a
-  tv <- fresh
-  let ini = Tuple Nil (TListLit Nil tv)
+-- | Given an expression and a list of definitions, build a typed environment and infer the type
+-- | of the expression in the context of the typed environment.
+tryInferTypeInContext :: List Definition -> TypeTree -> Either TypeError Type
+tryInferTypeInContext defs expr = case tryInferEnvironment defs of
+  Left typeError -> Left typeError
+  Right typedEnv -> runInferWith typedEnv true (inferExprToType expr)
 
-  binding <- foldM f ini bs
-  case binding of
-    Tuple list (TListLit lb typ) -> pure $ Tuple list (TListLit lb (AD $ TList typ))
-    _ -> throwError $ UnknownError "TODO: Fix uncovered cases."
+-- | Given an expression and a list of definitions, build a typed environment and infer the type
+-- | of the expression tree as well as all the sub expressions in the context of the typed
+-- | environment.
+tryInferExprInContext :: List Definition -> TypeTree -> Either TypeError TypeTree
+tryInferExprInContext defs expr = case tryInferEnvironment defs of
+  Left typeError -> Left typeError
+  Right typedEnv -> runInferWith typedEnv true (inferExpr expr)
+
+-- | Perform the type inference on a given expression tree and return the normalized typed tree.
+inferExpr :: TypeTree -> Infer TypeTree
+inferExpr expr = do
+  let indexedTree = makeIndexedTree expr
+  Tuple t c <- infer indexedTree
+  uni <- solveConstraints c
+  let expr' = assignTypes uni indexedTree
+  pure $ normalizeTypeTree (apply uni.subst expr')
+
+-- | Represents a result of the type inference process.
+type DebugInferResult = { expr :: TypeTree, constraints :: Constraints, subst :: Subst }
+
+-- | Debug version of `inferExpr`.
+inferExprDebug :: TypeTree -> Infer DebugInferResult
+inferExprDebug expr = do
+  let indexedTree = makeIndexedTree expr
+  Tuple t c <- infer indexedTree
+  uni <- solveConstraints c
+  let expr' = normalizeTypeTree (apply uni.subst $ assignTypes uni indexedTree)
+  pure { expr: expr', constraints: uni.constraints, subst: uni.subst }
+
+-- | Perform type inference on expression tree and extract top level type.
+inferExprToType :: TypeTree -> Infer Type
+inferExprToType expr = (extractFromTree >>> fromMaybe UnknownType) <$> inferExpr expr
+
+-- | Given a list of definitions create a map of definition groups.
+buildDefinitionGroups :: List Definition -> Map.Map String (List Definition)
+buildDefinitionGroups Nil = Map.empty
+buildDefinitionGroups (def@(Def str bin exp):Nil) = Map.singleton str (def:Nil)
+buildDefinitionGroups (def@(Def str bin exp):defs) = case binList of
+  Just list -> Map.insert str (def:list) defMap
+  Nothing -> Map.insert str (def:Nil) defMap
   where
--- :: Tuple (List (Tuple Atom Scheme)) BindingType -> Tuple (List (Tuple Atom Scheme)) BindingType
---           -> Infer (Tuple (List (Tuple Atom Scheme)) BindingType)
-    f (Tuple l1 (TListLit lb1 t1)) (Tuple l2 b) = do
-      let ls = l1 <> l2
-      s1 <- unify t1 (extractBindingType b)
-      pure $ Tuple (apply s1 ls) (apply s1 (TListLit (Cons b lb1) t1))
-    f _ _ = throwError $ UnknownError "congrats you found a bug in TypeChecker.extractBinding"
+  defMap = buildDefinitionGroups defs
+  binList = Map.lookup str defMap
 
-extractBinding (NTupleLit a) = do
-  bs <- extractListLit a
-  let tup = unzip bs
-  pure $ Tuple (concat $ fst tup) (TNTupleLit (snd tup) (AD $ TTuple $ (map extractBindingType (snd tup))))
+-- +----------------------------------+
+-- | Type Tree and Type Normalization |
+-- +----------------------------------+
 
-getTypEnv :: Binding -> TypeEnv -> Maybe TypeEnv
-getTypEnv b env = case evalState (runExceptT (extractBinding b)) initUnique of
-    Left _ -> Nothing
-    Right (Tuple bs _) -> Just $ env `extendMultiple` bs
+-- | Given an int generate an array of integers used as indices into the alphabet in `getNthName`.
+-- | Example: map indexList (700..703) => [[24,25],[25,25],[0,0,0],[1,0,0]]
+indexList :: Int -> Array Int
+indexList n | n `div` 26 > 0 = n `mod` 26 `Array.cons` indexList (n `div` 26 - 1)
+indexList n = [n `mod` 26]
 
-getTypEnvFromList :: List Binding -> TypeEnv -> Maybe TypeEnv
-getTypEnvFromList bs env = do
-                  mTypList <- traverse (flip getTypEnv emptyTyenv) bs
-                  pure $ foldr (\a b -> unionTypeEnv a b) env mTypList
+-- | Given an int choose a new name. We choose names simply by indexing into the alphabet. As soon
+-- | "z" is reached, begin with "aa" and so on.
+-- | Example: map getNthName (700..703) => ["zy","zz","aaa","aab"]
+getNthName :: Int -> String
+getNthName = indexList >>> Array.reverse >>> toCharArray >>> String.fromCharArray
+  where toCharArray = map (((+) 97) >>> Char.fromCharCode)
 
-unionTypeEnv :: TypeEnv -> TypeEnv -> TypeEnv
-unionTypeEnv (TypeEnv a) (TypeEnv b) = TypeEnv (Map.union a b)
+-- | The state used when normalizing types and type trees.
+type NormalizationState =
+  { count :: Int         -- ^ Counter, used to keep track of which name should be used next.
+  , env :: Map TVar TVar -- ^ Map old type variable names (like `t_4`) to new ones (like `d`).
+  }
 
-inferGroup :: TypeEnv -> List Definition -> Infer (Tuple Subst Type)
-inferGroup _ Nil = throwError $ UnknownError "Cant type empty Group"
-inferGroup env (Cons def1 Nil) = inferDef env def1
-inferGroup env (Cons def1 defs) = do
-  Tuple s1 t1 <- inferDef env def1
-  Tuple s2 t2 <- inferGroup env defs
-  s3 <- unify t1 t2
-  pure $ Tuple s3 (apply s3 t1)
+-- | An empty normalization state.
+emptyNormalizationState :: NormalizationState
+emptyNormalizationState = { count: 0, env: Map.empty }
 
-buildTypeEnv :: List Definition -> Either TypeError TypeEnv
-buildTypeEnv Nil = Right emptyTyenv
-buildTypeEnv defs = buildTypeEnvFromGroups emptyTyenv groupMap keys
-  where
-    groupMap = buildGroups defs
-    keys = Map.keys groupMap
-
-buildGroups :: List Definition -> Map.Map String (List Definition)
-buildGroups Nil = Map.empty
-buildGroups (Cons def@(Def str bin exp) Nil) =
-  Map.singleton str (Cons def Nil)
-
-buildGroups (Cons def@(Def str bin exp) defs) =
-  case binList of
-    Just list -> Map.insert str (Cons def list) defMap
-    Nothing -> Map.insert str (Cons def Nil) defMap
-  where
-    defMap = buildGroups defs
-    binList = Map.lookup str defMap
---                         old -> grouped Definitions -> keys -> new
-buildTypeEnvFromGroups :: TypeEnv -> Map.Map String (List Definition)
-  -> List String -> Either TypeError TypeEnv
-buildTypeEnvFromGroups env _ Nil = Right env
-buildTypeEnvFromGroups env groupMap k@(Cons key keys) =
-  case mayDefs of
-    Nothing -> Left $ UnboundVariable key
-    Just defs -> case runInfer $ inferGroup env defs of
-      Right scheme -> buildTypeEnvFromGroups
-        (env `extend` (Tuple key scheme)) (Map.delete key groupMap) keys
-      Left (UnboundVariable var) -> buildTypeEnvFromGroups
-        env groupMap (Cons var (delete var k))
-      Left err -> Left err
-  where
-    mayDefs = Map.lookup key groupMap
-
-typeProgramn :: List Definition -> Expr -> Either TypeError Scheme
-typeProgramn defs exp = case runInfer <$>
-    (inferType <$> (buildTypeEnv defs) <*> pure exp) of
-  Left err -> Left err
-  Right a -> a
-
-typeTreeProgramn :: List Definition -> Expr -> Either TypeError TypeTree
-typeTreeProgramn defs exp = case m of
-  Left e -> Left e
-  Right m' -> case evalState (runExceptT m') initUnique of
-    Left err -> Left err
-    Right res -> Right $ closeOverTypeTree res
-  where
-    m = (infer <$> (buildTypeEnv defs) <*> pure exp)
-
-typeTreeProgramnEnv :: TypeEnv -> Expr -> Either TypeError TypeTree
-typeTreeProgramnEnv env expr = case evalState (runExceptT (infer env expr)) initUnique of
-      Left err -> Left err
-      Right res -> Right $ closeOverTypeTree res
-
-closeOverTypeTree :: (Tuple Subst TypeTree) -> TypeTree
-closeOverTypeTree (Tuple s tt) = normalizeTypeTree (apply s tt)
-
-emptyType :: Type
-emptyType = TypCon ""
-
--- typeTreeProgramnEnv env expr
--- types subtree if typ correct
-buildPartiallyTypedTree :: TypeEnv -> Expr -> TypeTree
-buildPartiallyTypedTree env e = case typeTreeProgramnEnv env e of
-  Right tt -> tt
-  Left err -> f err e
-  where
-  f err (Atom _) = TAtom (TypeError err)
-  f err (List ls) = TListTree (map (buildPartiallyTypedTree env) ls) (TypeError err)
-  f err (NTuple ls) = TNTuple (map (buildPartiallyTypedTree env) ls) (TypeError err)
-  f err (Binary op e1 e2) = TBinary (typeOP op) (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (TypeError err)
-  f err (SectL e op) = TSectL (buildPartiallyTypedTree env e) (typeOP op) (TypeError err)
-  f err (SectR op e) = TSectR (typeOP op) (buildPartiallyTypedTree env e) (TypeError err)
-  f err (PrefixOp _) = TPrefixOp (TypeError err)
-  f err (IfExpr e1 e2 e3) = TIfExpr (buildPartiallyTypedTree env e1) (buildPartiallyTypedTree env e2) (buildPartiallyTypedTree env e3) (TypeError err)
-  f err (ArithmSeq e1 e2 e3) = TArithmSeq (buildPartiallyTypedTree env e1) ((buildPartiallyTypedTree env) <$> e2) ((buildPartiallyTypedTree env) <$> e3) (TypeError err)
-  f err (LetExpr bin expr) = let
-    tup   = buildPartiallyTypedTreeBindings env bin
-    env'  = fst tup
-    binds = snd tup in TLetExpr binds (buildPartiallyTypedTree env' expr) (TypeError err)
-
-  f err (Lambda bs e) = let f' env' = TLambda (map g bs) (buildPartiallyTypedTree env' e) (TypeError err) in
-                    case getTypEnvFromList bs env of
-                          Nothing -> f' env
-                          Just env' -> f' env'
-  f err (App e es) = TApp (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTree env) es) (TypeError err)
-
-  f err (ListComp e es) = TListComp (buildPartiallyTypedTree env e) (map (buildPartiallyTypedTreeQual err env) es) (TypeError err)
-  f err (Unary op e) = TUnary (typeOP op) (buildPartiallyTypedTree env e) (TypeError err)
-
--- Binding to BindingType
-  g (Lit _) = TLit emptyType
-  g (ConsLit b1 b2) = TConsLit (g b1) (g b2) emptyType
-  g (ListLit bs) = TListLit (map g bs) emptyType
-  g (NTupleLit bs) = TNTupleLit (map g bs) emptyType
-
-  -- typeOp :: Op -> Type
-  typeOP op = case typeTreeProgramnEnv env (PrefixOp op) of
-    Left err -> TypeError err
-    Right (TPrefixOp typ) -> typ
-    Right _ -> TypeError $ UnknownError "TODO: stupid error"
-
-  buildPartiallyTypedTreeQual :: TypeError -> TypeEnv -> ExprQual -> TypeQual
-  buildPartiallyTypedTreeQual err env qual = case qual of
-    Let bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
-      TLet (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
-    Gen bin expr -> let env' = fromMaybe env (getTypEnvFromList (singleton bin) env) in
-      TGen (g bin) (buildPartiallyTypedTree env' expr) (TypeError err)
-    Guard expr   -> TGuard (buildPartiallyTypedTree env expr) (TypeError err)
-
-  buildPartiallyTypedTreeBindings :: TypeEnv -> List (Tuple Binding Expr) -> Tuple TypeEnv (List (Tuple TypeBinding TypeTree))
-  buildPartiallyTypedTreeBindings env binds = case binds of
-    Nil                   -> Tuple env Nil
-    Cons (Tuple b e) bs -> let
-      t     = buildPartiallyTypedTree env e
-      env'  = fromMaybe env (getTypEnv b env)
-      env'' = envUnion env env' in
-        case buildPartiallyTypedTreeBindings env'' bs of
-          Tuple envR rest -> Tuple envR $ (Tuple (g b) t) : rest
-
-eqScheme :: Scheme -> Scheme -> Boolean
-eqScheme (Forall l1 t1) (Forall l2 t2)
-  = ((length l1) == (length l2)) && (fst (eqType Map.empty t1 t2))
-
-eqType :: Map.Map TVar TVar -> Type -> Type -> Tuple Boolean (Map.Map TVar TVar)
-eqType map (TypVar a) (TypVar b) = case  Map.lookup a map of
-  Just b' -> Tuple (b' == b) (map)
-  Nothing -> Tuple true (Map.insert a b map)
-eqType map (TypCon a) (TypCon b) = Tuple (a == b) map
-eqType map (TypArr a b) (TypArr a' b') = Tuple (fst tup1 && fst tup2) (snd tup2)
-  where
-  tup1 = eqType map a a'
-  tup2 = eqType (snd tup1) b b'
-eqType map (AD (TList a)) (AD (TList b)) = eqType map a b
-eqType map (AD (TTuple a)) (AD (TTuple b)) = eqTypeList map a b
-eqType map _ _ = Tuple false map
-
-eqTypeList :: Map.Map TVar TVar -> List Type -> List Type -> Tuple Boolean (Map.Map TVar TVar)
-eqTypeList map (Cons a as) (Cons b bs) = let tup1 = eqType map a b in if (fst tup1)
-  then eqTypeList (snd tup1) as bs
-  else Tuple false (snd tup1)
-eqTypeList map Nil Nil = Tuple true map
-eqTypeList map _ _ = Tuple false map
-
-normalizeTypeTree :: TypeTree -> TypeTree
-normalizeTypeTree tt = fst $ runState (helptxToABC tt) {count : 0, env : empty}
-
-helptxToABC :: TypeTree -> State {count :: Int, env :: Map String String} TypeTree
-helptxToABC tt = go tt
-  where
-    go (TAtom t) = helpTypeToABC t >>= \t -> pure $ TAtom t
-    go (TListTree tts t) = do
-      tts' <- traverse helptxToABC tts
-      t' <- helpTypeToABC t
-      pure $ TListTree tts' t'
-    go (TNTuple tts t) = do
-      tts' <- traverse helptxToABC tts
-      t' <- helpTypeToABC t
-      pure $ TNTuple tts' t'
-    go (TBinary t1 tt1 tt2 t) = do
-      t1' <- helpTypeToABC t1
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      t' <- helpTypeToABC t
-      pure $ TBinary t1' tt1' tt2' t'
-    go (TUnary t1 tt t) = do
-      t1' <- helpTypeToABC t1
-      tt' <- helptxToABC tt
-      t' <- helpTypeToABC t
-      pure $ (TUnary t1' tt' t')
-    go (TSectL tt t1 t) = do
-      t1' <- helpTypeToABC t1
-      tt' <- helptxToABC tt
-      t' <- helpTypeToABC t
-      pure $ TSectL tt' t1' t'
-    go (TSectR t1 tt t) = do
-      t1' <- helpTypeToABC t1
-      tt' <- helptxToABC tt
-      t' <- helpTypeToABC t
-      pure $ TSectR t1' tt' t'
-    go (TPrefixOp t) = helpTypeToABC t >>= \t -> pure $ TPrefixOp t
-    go (TIfExpr tt1 tt2 tt3 t) = do
-      tt1' <- helptxToABC tt1
-      tt2' <- helptxToABC tt2
-      tt3' <- helptxToABC tt3
-      t' <- helpTypeToABC t
-      pure $ TIfExpr tt1' tt2' tt3' t'
-    go (TArithmSeq tt1 tt2 tt3 t) = do
-      tt1' <- helptxToABC tt1
-      tt2' <- traverse helptxToABC tt2
-      tt3' <- traverse helptxToABC tt3
-      t'   <- helpTypeToABC t
-      pure $ TArithmSeq tt1' tt2' tt3' t'
-    go (TLetExpr bin tt t) = do
-      bin' <- traverse (\(Tuple x y) -> lift2 Tuple (helpBindingToABC x) (helptxToABC y)) bin
-      tt'  <- helptxToABC tt
-      t'   <- helpTypeToABC t
-      pure $ TLetExpr bin' tt' t'
-    go (TLambda tbs tt t) = do
-      tbs' <- traverse helpBindingToABC tbs
-      tt' <- helptxToABC tt
-      t' <- helpTypeToABC t
-      pure $ TLambda tbs' tt' t'
-    go (TApp tt tts t) = do
-      tt' <- helptxToABC tt
-      tts' <- traverse helptxToABC tts
-      t' <- helpTypeToABC t
-      pure $ TApp tt' tts' t'
-    go (TListComp tt tts t) = do
-      tt'  <- helptxToABC tt
-      tts' <- traverse helptxToABCQual tts
-      t'   <- helpTypeToABC t
-      pure $ TListComp tt' tts' t'
-
+-- | Normalize the given type.
 normalizeType :: Type -> Type
-normalizeType t = fst $ runState (helpTypeToABC t) {count: 0, env: empty}
+normalizeType t = evalState (normalizeType' t) emptyNormalizationState
 
+-- | Normalize the given type error.
 normalizeTypeError :: TypeError -> TypeError
 normalizeTypeError (UnificationFail t1 t2) = UnificationFail (normalizeType t1) (normalizeType t2)
 normalizeTypeError (InfiniteType tvar t) = InfiniteType (prettyPrintType $ normalizeType $ TypVar tvar) (normalizeType t)
 normalizeTypeError error = error
 
-helptxToABCQual :: TypeQual -> State {count :: Int, env :: Map String String} TypeQual
-helptxToABCQual q = case q of
-  TGen b e t -> do
-    b' <- helpBindingToABC b
-    e' <- helptxToABC e
-    t' <- helpTypeToABC t
-    pure $ TGen b' e' t'
-  TLet b e t -> do
-    b' <- helpBindingToABC b
-    e' <- helptxToABC e
-    t' <- helpTypeToABC t
-    pure $ TLet b' e' t'
-  TGuard e t -> do
-    e' <- helptxToABC e
-    t' <- helpTypeToABC t
-    pure $ TGuard e' t'
+-- | Normalize the given typed expression tree.
+normalizeTypeTree :: TypeTree -> TypeTree
+normalizeTypeTree expr = evalState (normalizeTypeTree' expr) emptyNormalizationState
 
-helpTypeToABC :: Type  -> State {count :: Int, env :: (Map String String)} Type
-helpTypeToABC t = go t
-  where
-   go (TypVar var) = do
-      {env: env} :: {count :: Int, env :: Map String String} <- get
-      case lookup var env of
-        Just var' -> pure $ TypVar var'
-        Nothing -> do
-          {count: count} <- get
-          let newVarName = getNthName count
-          let env' = insert var newVarName env
-          put {count: count + 1, env: env'}
-          pure $ TypVar newVarName
-   go (TypArr t1 t2) = do
-        t1' <- helpTypeToABC t1
-        t2' <- helpTypeToABC t2
-        pure $ TypArr t1' t2'
-   go (AD a) = helpADTypeToABC a >>= \a -> pure $ AD a
-   go a = pure a
+-- | Normalize the type in the given operator tuple.
+normalizeOp' :: (Tuple Op MType) -> State NormalizationState (Tuple Op MType)
+normalizeOp' (Tuple op opType) = do
+  opType' <- normalizeMType' opType
+  pure $ Tuple op opType'
 
-helpADTypeToABC :: AD -> State {count :: Int, env :: (Map String String)} AD
-helpADTypeToABC (TList t) = helpTypeToABC t >>= \t -> pure $ TList t
-helpADTypeToABC (TTuple ts) = traverse helpTypeToABC ts >>= \ts -> pure $ TTuple ts
+-- | Normalize the given typed binding.
+normalizeBinding' :: TypedBinding -> State NormalizationState TypedBinding
+normalizeBinding' = AST.traverseBinding normalizeMType'
 
-helpBindingToABC :: TypeBinding -> State {count :: Int, env :: (Map String String)} TypeBinding
-helpBindingToABC bin = go bin
-  where
-    go (TLit t) = helpTypeToABC t >>= \t -> pure $ TLit t
-    go (TConsLit tb1 tb2 t) = do
-      tb1' <- helpBindingToABC tb1
-      tb2' <- helpBindingToABC tb2
-      t' <- helpTypeToABC t
-      pure $ TConsLit tb1' tb2' t'
-    go (TListLit tbs t) = do
-      tbs' <- traverse helpBindingToABC tbs
-      t' <- helpTypeToABC t
-      pure $ TListLit tbs' t'
-    go (TNTupleLit tbs t) = do
-      tbs' <- traverse helpBindingToABC tbs
-      t' <- helpTypeToABC t
-      pure $ TNTupleLit tbs' t'
+-- | Normalize the given typed expression tree.
+normalizeTypeTree' :: TypeTree -> State NormalizationState TypeTree
+normalizeTypeTree' = AST.traverseTree normalizeBinding' normalizeOp' normalizeMType'
 
--- Given an int generate an array of integers used as indices into the alphabet in `getNthName`.
--- Example: map indexList (700..703) => [[24,25],[25,25],[0,0,0],[1,0,0]]
-indexList :: Int -> Array Int
-indexList n | n `div` 26 > 0 = n `mod` 26 `Array.cons` indexList (n `div` 26 - 1)
-indexList n = [n `mod` 26]
+-- | Normalize the given type. The only interesting part is the type variable case, where all the
+-- | work is done.
+normalizeType' :: Type -> State NormalizationState Type
+normalizeType' t = case t of
+  TypVar var -> do
+    { env: env } <- get
+    -- If the type variable is not yet in the environment, create a new corresponding type variable
+    -- and add it to the environment. If the type variable already has a corresponding renamed
+    -- variable, just return it.
+    case Map.lookup var env of
+      Just var' -> pure $ TypVar var'
+      Nothing -> do
+        { count: count } <- get
+        let newVarName = getNthName count
+        let env' = Map.insert var newVarName env
+        put { count: count + 1, env: env' }
+        pure $ TypVar newVarName
+  TypArr t1 t2 -> do
+    t1' <- normalizeType' t1
+    t2' <- normalizeType' t2
+    pure $ TypArr t1' t2'
+  AD (TList t) -> do
+    t' <- normalizeType' t
+    pure $ AD (TList t')
+  AD (TTuple ts) -> do
+    ts' <- traverse normalizeType' ts
+    pure $ AD (TTuple ts')
+  a -> pure a
 
--- Given an int choose a new name. We choose names simply by indexing into the alphabet. As soon
--- "z" is reached, begin with "aa" and so on.
--- Example: map getNthName (700..703) => ["zy","zz","aaa","aab"]
-getNthName :: Int -> String
-getNthName = fromCharArray <<< toCharArray <<< Array.reverse <<< indexList
-  where toCharArray = map (Char.fromCharCode <<< ((+) 97))
-
-checkForError :: Path -> TypeTree -> Boolean
-checkForError p' tt = case p' of
-  End -> isTypeError $ extractType tt
-  Fst p -> case tt of
-      TBinary op e1 e2 _ -> checkForError p e1
-      TUnary op e      _ -> checkForError p e
-      TSectL e op      _ -> checkForError p e
-      TIfExpr ce te ee _ -> checkForError p ce
-      TArithmSeq ce te ee _ -> checkForError p ce
-      TLambda bs body  _ -> checkForError p body
-      TApp e es        _ -> checkForError p e
-      TListComp e _    _ -> checkForError p e
-      TLetExpr (Cons (Tuple _ e) _) _ _ -> checkForError p e
-      _               -> true
-  Snd p -> case tt of
-      TBinary op e1 e2 _ -> checkForError p e2
-      TSectR op e      _ -> checkForError p e
-      TIfExpr ce te ee _ -> checkForError p te
-      TArithmSeq ce (Just te) ee _ -> checkForError p te
-      _               -> true
-  Thrd p -> case tt of
-      TIfExpr ce te ee _ -> checkForError p ee
-      TArithmSeq ce te (Just ee) _ -> checkForError p ee
-      _ -> true
-  Nth n p -> case tt of
-      TListTree es  _ -> nth n es p
-      TNTuple es _ -> nth n es p
-      TApp e' es _ -> nth n es p
-      TListComp e' es _ -> nth' n es p
-      _        -> true
-  where
-    nth n es p = case (!!) es n of
-      Nothing -> true
-      Just e -> checkForError p e
-
-    nth' n es p = case (!!) es n of
-      Nothing -> true
-      Just e -> checkForError' p e
-
-checkForError' :: Path -> TypeQual -> Boolean
-checkForError' p' q = case p' of
-  (End)   -> isTypeError $ extractedType q
-  (Fst p) -> case q of
-      TLet bin expr t -> checkForError p expr
-      TGen bin expr t -> checkForError p expr
-      TGuard expr t   -> checkForError p expr
-  _ -> true
-  where
-    extractedType qu = case qu of
-      TLet _ _ t -> t
-      TGen _ _ t -> t
-      TGuard _ t -> t
-
-isTypeError :: Type -> Boolean
-isTypeError t = case t of
-  (TypeError _) -> true
-  _ -> false
+-- | Use `normalizeType'` on `Maybe Type`.
+normalizeMType' :: Maybe Type -> State NormalizationState (Maybe Type)
+normalizeMType' = traverse normalizeType'

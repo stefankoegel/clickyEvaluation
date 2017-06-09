@@ -1,177 +1,739 @@
 module Test.TypeChecker where
 
-import AST (AD(TList, TTuple), Atom(AInt, Name, Char), Binding(Lit, ConsLit, ListLit, NTupleLit), Definition(Def), Expr(Atom, List, SectR, App, Binary, PrefixOp, Lambda, NTuple, LetExpr, SectL, ListComp), Op(Power, Colon, Add, Append), TVar, Type(TypCon, TypVar, AD, TypArr), TypeError(InfiniteType, UnificationFail, UnknownError), Qual(..), prettyPrintType)
-import TypeChecker (Subst, Infer, TypeEnv, Scheme(Forall), inferGroup, inferType, inferDef, emptyTyenv, runInfer, typeProgramn, eqScheme)
-import Parser (expression, definition, runParserIndent)
-
-import Prelude (Unit, bind, ($), show, (==), (<>))
-import Data.Either (Either(..))
-import Data.List (List(..), (:))
-import Data.Array (toUnfoldable) as Array
-import Data.Tuple (Tuple(..))
+import AST
+import TypeChecker as TC
+import TypeChecker (Scheme(..), TVarMappings, boolType, charType, emptyTypeEnv, intType,
+  intToIntType, intToIntToIntType)
+import Parser (parseExpr, parseDefs)
 import Test.Parser (parsedPrelude)
 
-import Text.Parsing.Parser (ParseError)
-
-import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Console (CONSOLE, log)
+import Prelude (Unit, bind, map, pure, show, unit, ($), (==), (<<<), (<>), (>>=), (<$>))
+import Control.Monad.Writer (Writer, tell)
+import Data.Array as Array
+import Data.Either (Either(..))
+import Data.List (List(..), (:), singleton)
+import Data.Maybe (Maybe(..))
+import Data.Tuple (Tuple(..), fst)
+import Text.Parsing.Parser (ParseError, parseErrorMessage)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
 
-testInfer:: forall a  eff. String -> a -> (TypeEnv -> a -> Infer (Tuple Subst Type))
- -> Either TypeError Scheme -> Eff (console :: CONSOLE | eff ) Unit
-testInfer name input f expected
-  = test name expected $ runInfer $ f emptyTyenv input
+tell' :: forall a. a -> Writer (List a) Unit
+tell' = tell <<< singleton
 
-testProgramm:: forall eff. String -> List Definition -> Expr
- -> Either TypeError Scheme -> Eff (console :: CONSOLE | eff ) Unit
-testProgramm name defs exp expected
- = test name expected $ typeProgramn defs exp
+-- | Construct a list of type [typCon] given the name of the type constants.
+typConList :: String -> Type
+typConList name = AD $ TList (TypCon name)
 
--- test  name -> expected -> actuall -> Eff ...
-test:: forall eff. String -> Either TypeError Scheme -> Either TypeError Scheme
- -> Eff (console :: CONSOLE | eff ) Unit
-test name expected actuall = if eqTypErrScheme expected actuall
-  then log $ "Typing success ("  <> name <> ")"
-  else log $ "\n \n Typing fail (" <> name <> ") :  expected result: \n"
-    <> show expected <> "\n actuall result: \n" <> show actuall <> "\n \n"
-     <> "Pretty Print expected: \n" <> prettyPrint expected
-      <> "\n Pretty Print actuall: \n" <> prettyPrint actuall <> "\n \n"
+-- | Construct a tuple type given a list of type constant names.
+typConNTuple:: List String -> Type
+typConNTuple names = AD $ TTuple (map TypCon names)
 
-eqTypErrScheme:: Either TypeError Scheme -> Either TypeError Scheme -> Boolean
-eqTypErrScheme (Left a) (Left a') = (a == a')
-eqTypErrScheme (Right a) (Right a') = eqScheme a a'
-eqTypErrScheme _ _ = false
+-- | Construct a tuple type given a list of type variable names.
+typVarTuple :: List TVar -> Type
+typVarTuple tvs = AD $ TTuple (map TypVar tvs)
 
+-- | Construct a list of type [a] given the type variable name a.
+typVarList :: TVar -> Type
+typVarList tv = AD $ TList (TypVar tv)
 
-aint :: Int -> Expr
-aint i = Atom $ AInt i
+-- | Generate an arrow type from two given type variable names.
+typVarArrow :: TVar -> TVar -> Type
+typVarArrow tv1 tv2 = TypVar tv1 `TypArr` TypVar tv2
 
-aname :: String -> Expr
-aname s = Atom $ Name s
+-- | The type (Char, Int, Int)
+charIntTupleType :: Type
+charIntTupleType = typConNTuple ("Char" : "Int" : "Int" : Nil)
 
-tvar :: String -> Type
-tvar = TypVar
+-- | The type (Int, Int)
+intTupleType :: Type
+intTupleType = typConNTuple ("Int" : "Int" : Nil)
 
-out::forall eff. String -> Eff (console :: CONSOLE | eff ) Unit
-out s = log s
+-- | The type [Int]
+intList :: Type
+intList = AD $ TList $ TypCon "Int"
 
-parseExp:: String -> Either ParseError Expr
-parseExp = runParserIndent expression
+-- | Report a parse error.
+reportParseError :: String -> ParseError -> Writer (List String) Unit
+reportParseError testName parseError = tell' $ "Parse error for test case "
+  <> testName <> ": "
+  <> parseErrorMessage parseError
+  <> "\nNote that this is not a failing test but rather an error in the test definition."
 
-parseDef:: String -> Either ParseError Definition
-parseDef = runParserIndent definition
+-- | Report a type error.
+reportTypeError :: String -> TypeError -> Writer (List String) Unit
+reportTypeError testName typeError = tell' $ "Type inference failed in test case `"
+  <> testName <> "`:\n"
+  <> "Encountered type error: "
+  <> prettyPrintTypeError typeError
 
-typeStr:: String -> Either TypeError Scheme
-typeStr expS = case runParserIndent expression expS of
-  Right exp -> runInfer $ inferType emptyTyenv exp
-  Left _ -> Left $ UnknownError "Parse Error"
+-- | Compare the given two types and report an error if they are not equal.
+compareTypes :: String -> Type -> Type -> Writer (List String) Unit
+compareTypes testName expected actual = if expected == actual
+  then pure unit
+  else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
+               "Expected type: " <> prettyPrintType expected <> "\n" <>
+               "Actual type: " <> prettyPrintType actual
 
-typeStrPre:: String -> Either TypeError Scheme
-typeStrPre expS = case runParserIndent expression expS of
-  Right exp -> typeProgramn parsedPrelude exp
-  Left _ -> Left $ UnknownError "Parse Error"
+-- | Compare the given type errors and report an error if they are not equal.
+compareTypeError :: String -> TypeError -> TypeError -> Writer (List String) Unit
+compareTypeError testName expected actual = if expected == actual
+  then pure unit
+  else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
+               "Expected type error: " <> prettyPrintTypeError expected <> "\n" <>
+               "Actual type error: " <> prettyPrintTypeError actual <> "\n"
 
-typeExp:: Expr -> Either TypeError Scheme
-typeExp exp = runInfer $ inferType emptyTyenv exp
+-- | Try to infer the type of a given expression and compare the result with the expected type.
+testInferExpr :: String -> String -> Type -> Writer (List String) Unit
+testInferExpr name expressionString expected = case parseExpr expressionString of
+  Left parseError -> reportParseError name parseError
+  Right expression -> case TC.runInfer true (TC.inferExprToType expression) of
+    Left typeError -> reportTypeError name typeError
+    Right t -> compareTypes name expected t
 
-typeDef:: Definition -> Either TypeError Scheme
-typeDef def = runInfer $ inferDef emptyTyenv def
+-- | Try to infer the type of a given expression and expect a type error to occur.
+testInferExprFail :: String -> String -> TypeError -> Writer (List String) Unit
+testInferExprFail name expressionString expected = case parseExpr expressionString of
+  Left parseError -> reportParseError name parseError
+  Right expression -> case TC.runInfer true (TC.inferExprToType expression) of
+    Right t -> tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+                       "Expected type error: " <> prettyPrintTypeError expected <> "\n" <>
+                       "Found type: " <> prettyPrintType t <> "\n"
+    Left typeError -> compareTypeError name expected typeError
 
-prettyPrint:: Either TypeError Scheme -> String
-prettyPrint a@(Left _) = show a
-prettyPrint (Right (Forall _ t)) = prettyPrintType t
+testInferDef :: String -> String -> Type -> Writer (List String) Unit
+testInferDef name definitionString expected = case parseDefs definitionString of
+  Left parseError -> reportParseError name parseError
+  Right (def:_) -> case TC.runInfer true (inferAndConvertToType def) of
+    Left typeError -> reportTypeError name typeError
+    Right t -> compareTypes name expected t
+  _ -> tell' $ "Expected to parse definition in test case `" <> name <> "`\n" <>
+               "\nNote that this is not a failing test but rather an error in the test definition."
+  where
+  inferAndConvertToType def = TC.schemeOfDefinition def >>= TC.schemeToType
 
-printTypeExp::forall eff. Expr -> Eff (console :: CONSOLE | eff ) Unit
-printTypeExp e = out $ prettyPrint $ typeExp e
+testInferDefFail :: String -> String -> TypeError -> Writer (List String) Unit
+testInferDefFail name definitionString expected = case parseDefs definitionString of
+  Left parseError -> reportParseError name parseError
+  Right (def:_) -> case TC.runInfer true (inferAndConvertToType def) of
+    Left typeError -> if typeError == expected
+      then pure unit
+      else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+                   "Expected type error: " <> prettyPrintTypeError typeError <> "\n" <>
+                   "Actual type error: " <> prettyPrintTypeError expected <> "\n"
+    Right t -> tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+                       "Expected type error: " <> prettyPrintTypeError expected <> "\n" <>
+                       "Found type: " <> prettyPrintType t <> "\n"
+  _ -> tell' $ "Expected to parse definition in test case `" <> name <> "`\n" <>
+               "\nNote that this is not a failing test but rather an error in the test definition."
+  where
+  inferAndConvertToType def = TC.schemeOfDefinition def >>= TC.schemeToType
 
-printTypeStr::forall eff. String -> Eff (console :: CONSOLE | eff ) Unit
-printTypeStr s = out $ prettyPrint $ typeStr s
+testInferDefGroup :: String -> String -> Type -> Writer (List String) Unit
+testInferDefGroup name definitionString expected = case parseDefs definitionString of
+  Left parseError -> reportParseError name parseError
+  Right definitions -> case TC.runInfer true (inferAndConvertToType definitions) of
+    Left typeError -> reportTypeError name typeError
+    Right t -> compareTypes name expected t
+  where
+  inferAndConvertToType defs = TC.schemeOfDefinitionGroup defs >>= TC.schemeToType
 
--- default 1
-d1 :: Either TypeError Scheme
-d1 = Right (Forall Nil $ tvar "a")
+-- | Infer the type of the given expression in the context of the prelude.
+testInferExprWithPrelude :: String -> String -> Type -> Writer (List String) Unit
+testInferExprWithPrelude name expressionString expected = case parseExpr expressionString of
+  Left parseError -> reportParseError name parseError
+  Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
+    Left typeError -> reportTypeError name typeError
+    Right t -> compareTypes name expected t
 
-runTests :: forall eff. Eff (console :: CONSOLE | eff) Unit
+-- | Test type inference on expression trees, given an expression string as well as the expected
+-- | resulting typed tree.
+testInferTT' :: String -> String -> TypeTree -> Writer (List String) Unit
+testInferTT' name unparsedTree expectedTypeTree = case parseExpr unparsedTree of
+  Left parseError -> reportParseError name parseError
+  Right expression -> testInferTT name expression expectedTypeTree
+
+-- | Test type inference on expression trees. Here not only the expected type of the whole
+-- | expression is checked, but also the type of every subexpression.
+testInferTT :: String -> TypeTree -> TypeTree -> Writer (List String) Unit
+testInferTT name untypedTree expectedTypedTree =
+  case TC.tryInferExprInContext parsedPrelude untypedTree of
+    Left typeError -> reportTypeError name typeError
+    Right typedTree -> if expectedTypedTree == typedTree
+      then pure unit
+      else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+                   "Expected type tree: " <> show expectedTypedTree <> "\n" <>
+                   "Actual type tree: " <> show typedTree <> "\n"
+
+testInferTTFail :: String -> TypeTree -> TypeError -> Writer (List String) Unit
+testInferTTFail name expr expectedError =
+  case TC.tryInferExprInContext parsedPrelude expr of
+    Left typeError -> compareTypeError name expectedError typeError
+    Right typedExpr ->
+      tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+              "Expected type error: " <> prettyPrintTypeError expectedError <> "\n" <>
+              "Found type tree: " <> show typedExpr <> "\n"
+
+-- | Test type tree normalization.
+testNormalizeTT :: String -> TypeTree -> TypeTree -> Writer (List String) Unit
+testNormalizeTT name tt normalizedTT = if (TC.normalizeTypeTree tt) == normalizedTT
+  then pure unit
+  else tell' $ "Type tree normalization failed in test case `" <> name <> "`:\n" <>
+               "Expected type tree: " <> show normalizedTT <> "\n" <>
+               "Actual type tree: " <> show tt <> "\n"
+
+-- | Test the function `mapSchemeOnTVarMappings`.
+testMapSchemeOnTVarMappings :: String -> Scheme -> IndexedTypedBinding
+                            -> TVarMappings -> Writer (List String) Unit
+testMapSchemeOnTVarMappings name scheme binding expected =
+  case TC.runInfer true (fst <$> TC.mapSchemeOnTVarMappings binding scheme) of
+    Left typeError -> reportTypeError name typeError
+    Right result -> if result == expected
+      then pure unit
+      else tell' $
+        "The function `mapSchemeOnTVarMappings` failed in test case `" <> name <> "`:\n" <>
+        "Expected type variable mapping: " <> TC.ppTVarMappings expected <> "\n" <>
+        "Actual type variable mapping: " <> TC.ppTVarMappings result <> "\n"
+
+-- | Typed type tree representing `[1]`.
+listOne :: TypeTree
+listOne = List (Just $ typConList "Int") (Atom (Just $ TypCon "Int") (AInt 1) : Nil)
+
+-- | Untyped type tree representing `[1]`.
+untypedListOne :: TypeTree
+untypedListOne = List Nothing (Atom Nothing (AInt 1) : Nil)
+
+partiallyTypedExprTests :: Writer (List String) Unit
+partiallyTypedExprTests = do
+  -- Test that ((2 :: Int) + 4) is typed correctly.
+  testInferTT "Partially typed"
+    (Binary
+      Nothing
+      (Tuple Add Nothing)
+      (Atom (Just intType) (AInt 2))
+      (Atom Nothing (AInt 4))
+    )
+    (Binary
+      (Just (TypCon "Int"))
+      (Tuple Add (Just (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
+      (Atom (Just intType) (AInt 2))
+      (Atom (Just intType) (AInt 4))
+    )
+
+  -- Test that ((2 :: Char) + 4) results in a type error.
+  testInferTTFail "Partially typed"
+    (Binary
+      Nothing
+      (Tuple Add Nothing)
+      (Atom (Just charType) (AInt 2))
+      (Atom Nothing (AInt 4))
+    )
+    (UnificationFail intType charType)
+
+  -- Test that `let (f :: Int -> Int) = \x -> x in f True` results in a type error.
+  testInferTTFail "Partially typed let expression 1"
+    (LetExpr
+      Nothing
+      (
+        Tuple (Lit (Just intToIntType) (Name "f"))
+          (Lambda Nothing
+            ((Lit Nothing (Name "x")) : Nil)
+            (Atom Nothing (Name "x"))) :
+        Nil
+      )
+      (App
+        Nothing
+        (Atom Nothing (Name "f"))
+        ((Atom Nothing (Bool true)) : Nil)
+      )
+    )
+    (UnificationFail intType boolType)
+
+  -- Test that `let f = ((\x -> x) :: Int -> Int) in f True` results in a type error.
+  testInferTTFail "Partially typed let expression 2"
+    (LetExpr
+      Nothing
+      (
+        Tuple (Lit Nothing (Name "f"))
+          (Lambda (Just intToIntType)
+            ((Lit Nothing (Name "x")) : Nil)
+            (Atom Nothing (Name "x"))) :
+        Nil
+      )
+      (App
+        Nothing
+        (Atom Nothing (Name "f"))
+        ((Atom Nothing (Bool true)) : Nil)
+      )
+    )
+    (UnificationFail intType boolType)
+
+  -- Test that `(\(a :: Bool) b -> a)) 'x'` results in a type error.
+  testInferTTFail "Partially typed lambda expression 1"
+    (App
+      Nothing
+      (Lambda
+        Nothing
+        ((Lit (Just boolType) (Name "a")) : (Lit Nothing (Name "b")) : Nil)
+        (Atom Nothing (Name "a"))
+      )
+      ((Atom Nothing (Char "x")) : Nil)
+    )
+    (UnificationFail boolType charType)
+
+  -- Test that `(\(x:(y :: Char):ys) -> mod x y)` results in a type error.
+  testInferTTFail "Partially typed lambda expression 1"
+    (Lambda
+      Nothing
+        (
+          (ConsLit
+            Nothing
+            (Lit Nothing (Name "x"))
+            (ConsLit
+              Nothing
+              (Lit (Just charType) (Name "y"))
+              (Lit Nothing (Name "ys"))
+            ) : Nil
+          )
+        )
+        (App
+          Nothing
+          (Atom Nothing (Name "mod"))
+          (Atom Nothing (Name "x") : Atom Nothing (Name "y") : Nil)
+        )
+    )
+    (UnificationFail intType charType)
+
+runTests :: Writer (List String) Unit
 runTests = do
-  log "Running Typing Tests"
+  -- +--------------------------------------------------+
+  -- | Test the inferred types of arbitrary expressions |
+  -- +--------------------------------------------------+
 
-  testInfer "SectL" (SectL (aint 3) Power)
-    inferType(Right (Forall Nil $ TypArr (TypCon "Int") (TypCon "Int")))
-  testInfer "SectR" (SectR Power (aint 3))
-    inferType(Right (Forall (Nil) (TypArr (TypCon "Int") (TypCon "Int"))))
-  testInfer "Lambda1" (Lambda (toList $ [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c",Lit $ Name "d"]) (App (aname "a") (toList [aname "b", aname "c", aname "d"])))
-    inferType(Right (Forall (toList ["b", "c", "d", "e"]) (TypArr (TypArr (tvar "b") (TypArr (tvar "c") (TypArr (tvar "d") (tvar "e")))) (TypArr ( tvar "b")  ((TypArr (tvar "c") (TypArr (tvar "d") (tvar "e"))))))))
-  testInfer "Lambda2" (Lambda (toList [Lit $ Name "a", Lit $ Name "b"]) (App (aname "a") (toList [aname "b"])))
-    inferType(Right (Forall ("t_3" : "t_4" : Nil) (TypArr (TypArr (TypVar "t_3") (TypVar "t_4")) (TypArr (TypVar "t_3") (TypVar "t_4")))))
-  testInfer "List1" (List (toList [aint 1, aint 2, aint 3, aint 4, aint 5])) inferType(Right (Forall (Nil) (AD (TList (TypCon "Int")))))
-  testInfer "List2" (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
-    inferType(Right (Forall (Nil) (AD (TList (TypCon "Int")))))
-  testInfer "List3" (List $ toList [PrefixOp Add, aint 4])
-    inferType(Left ((UnificationFail (TypCon "Int") (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int"))))))
-  testInfer "Nil List" (List Nil)
-    inferType (Right (Forall ("t_0" : Nil) (AD (TList (TypVar "t_0")))))
-  testInfer "Append" (Binary Append
-    (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4)])
-    (List Nil))
-    inferType(Right (Forall (Nil) (AD (TList (TypCon "Int")))))
-  testInfer "Colon" (Binary Colon (aint 3) (List $ toList [Binary Add (aint 1) (aint 2), Binary Add (aint 3) (aint 4),Atom $ Char "Hallo"]))
-    inferType(Left ((UnificationFail (TypCon "Char") (TypCon "Int"))))
-  testInfer "NTuple" (NTuple (toList [Binary Add (aint 1) (aint 2), aint 3]))
-    inferType(Right (Forall (Nil) (AD (TTuple (Cons ((TypCon "Int")) (Cons ((TypCon "Int")) (Nil)))))))
-  testInfer "SectR Colon" (SectR Colon $ List $ toList [aint 3])
-    inferType(Right (Forall (Nil) (TypArr (TypCon "Int") (AD (TList (TypCon "Int"))))))
-  testInfer "Def ~map" (Def "map" (toList [Lit $ Name "f", Lit $ Name "xs"]) (App (aname "map") (toList [aname "f",aname"xs"])))
-    inferDef (Right (Forall ("t_2" : "t_4" : "t_5" : Nil) (TypArr (TypVar "t_2") (TypArr (TypVar "t_4") (TypVar "t_5")))))
-  testInfer "Lambda Wildcard" (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aint 5))
-    inferType (Right (Forall ("t_1" : "t_3" : Nil) (TypArr (TypVar "t_1") (TypArr (TypVar "t_3") (TypCon "Int")))))
-  testInfer "Lambda ConsBinding" (Lambda (toList [ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (aname "x"))
-    inferType (Right (Forall ("t_2" : Nil) (TypArr (AD (TList (TypVar "t_2"))) (TypVar "t_2"))))
-  testInfer "singel map" (Def "map" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App  (PrefixOp Colon) (toList [App (aname "f") $ toList [(aname"x")], App (aname "map") (toList [aname"f", aname"xs"])])))
-    inferDef (Right (Forall ("t_11" : "t_5" : Nil) (TypArr (TypArr (TypVar "t_5") (TypVar "t_11")) (TypArr (AD (TList (TypVar "t_5"))) (AD (TList (TypVar "t_11")))))))
-  testInfer "foldr" (Def "foldr" (toList [Lit $ Name "f", Lit $ Name "ini", ConsLit (Lit $ Name "x") (Lit $ Name "xs")]) (App (aname "f") (toList [aname "x",App (aname "foldr") (toList [aname "f", aname "ini" ,aname "xs"  ] )])))
-    inferDef (Right (Forall ("t_5" : "t_4" : "t_7" : Nil) (TypArr (TypArr (TypVar "t_7") (TypArr (TypVar "t_4") (TypVar "t_4"))) (TypArr (TypVar "t_5") (TypArr (AD (TList (TypVar "t_7"))) (TypVar "t_4"))))))
-  testInfer "let Expr" (LetExpr (Cons (Tuple (Lit $ Name "x") (aint 3)) Nil) (Lambda (toList [Lit (Name "_"), Lit (Name "_")]) (aname "x")))
-    inferType (Right (Forall ("t_2" : "t_4" : Nil) (TypArr (TypVar "t_2") (TypArr (TypVar "t_4") (TypCon "Int")))))
-  testInfer "ConsLit Binding 1" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "x"))
-    inferDef (Right (Forall ("t_2" : Nil) (TypArr (AD (TList (TypVar "t_2"))) (TypVar "t_2"))))
-  testInfer "ConsLit Binding 2" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xs"))
-    inferDef (Right (Forall ("t_2" : Nil) (TypArr (AD (TList (TypVar "t_2"))) (TypVar "t_2"))))
-  testInfer "ConsLit Binding 3" (Def "list" (toList [ConsLit (Lit $ Name "x") (ConsLit (Lit $ Name "xs")(Lit $ Name "xss"))]) (aname "xss"))
-    inferDef (Right (Forall ("t_2" : Nil) (TypArr (AD (TList (TypVar "t_2"))) (AD (TList (TypVar "t_2"))))))
-  testInfer "Binding Tuple 1" (Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])]) (aname "a"))
-    inferDef (Right (Forall ("t_2" : "t_3" : Nil) (TypArr (AD (TTuple $ Cons ((TypVar "t_2")) (Cons ((TypVar "t_3")) (Nil)))) (TypVar "t_2"))))
-  testInfer "Binding Tuple 2" (Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])]) (aname "b"))
-    inferDef (Right (Forall ("t_2" : "t_3" : Nil) (TypArr (AD (TTuple (Cons ((TypVar "t_2")) (Cons ((TypVar "t_3")) (Nil))))) (TypVar "t_3"))))
-  testInfer "Binding Tuple 3" (Def "tuple" (toList [NTupleLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"])))
-    inferDef (Right (Forall ("t_3" : "t_4" : "t_5" : Nil) (TypArr (AD (TTuple (Cons ((TypArr (TypVar "t_3") (TypArr (TypVar "t_4") (TypVar "t_5")))) (Cons ((TypVar "t_3")) (Cons ((TypVar "t_4")) (Nil)))))) (TypVar "t_5"))))
-  testInfer "ListLit Binding" (Def "list" (toList [ListLit (toList [Lit $ Name "a",Lit $ Name "b",Lit $ Name "c"])]) (App (aname "a") (toList [aname "b", aname "c"])))
-    inferDef (Left ((InfiniteType "a" (TypArr (TypVar "a") (TypVar "b")))))
-  testInfer "NTupleLit Binding LetExp" (LetExpr (Cons (Tuple (NTupleLit (toList [Lit $ Name "a",Lit $ Name "b"])) (NTuple (toList [(Lambda (toList [Lit $ Name "f"]) (aname "f")), (Atom $ Char "Hello")]))) Nil) (App (aname "a") (toList [aname "b"])))
-    inferType (Right (Forall (Nil) (TypCon "Char")))
-  testInfer "Lambda App" (App (Lambda (Cons (Lit (Name "f")) (Cons (Lit (Name "a")) (Cons (Lit (Name "b")) (Nil)))) (App (Atom (Name "f")) (Cons (Atom (Name "a")) (Cons (Atom (Name "b")) (Nil))))) (Cons (PrefixOp Add) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))
-    inferType (Right (Forall (Nil) (TypCon "Int")))
-  testInfer "zipWith - Group" (toList [Def "zipWith" (toList [Lit $ Name "f", ConsLit (Lit $ Name "x") (Lit $ Name "xs"), ConsLit (Lit $ Name "y") (Lit $ Name "ys")])
-      (App (PrefixOp Colon) (toList [App (aname "f") (toList [aname "x",aname "y"]), App (aname "zipWith") (toList [aname "f",aname"xs",aname "ys"])])),
-      Def "zipWith" (toList [Lit $ Name "_",ListLit Nil,Lit $ Name "_"]) (List Nil),
-      Def "zipWith" (toList [Lit $ Name "_",Lit $ Name "_",ListLit Nil]) (List Nil)])
-      inferGroup (Right (Forall ("t_23" : "t_33" : "t_34" : Nil) (TypArr (TypArr (TypVar "t_23") (TypArr (TypVar "t_33") (TypVar "t_34"))) (TypArr (AD (TList (TypVar "t_23"))) (TypArr (AD (TList (TypVar "t_33"))) (AD (TList (TypVar "t_34"))))))))
-
-  testInfer "real foldr - Group" (toList [(Def "foldr" (Cons (Lit (Name "f")) (Cons (Lit (Name "ini")) (Cons (ListLit (Nil)) (Nil)))) (Atom (Name "ini"))),
-      (Def "foldr" (Cons (Lit (Name "f")) (Cons (Lit (Name "ini")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (App (Atom (Name "f")) (Cons (Atom (Name "x")) (Cons (App (Atom (Name "foldr")) (Cons (Atom (Name "f")) (Cons (Atom (Name "ini")) (Cons (Atom (Name "xs")) (Nil))))) (Nil)))))])
-      inferGroup ((Right (Forall ("t_4" : "t_7" : Nil) (TypArr (TypArr (TypVar "t_7") (TypArr (TypVar "t_4") (TypVar "t_4"))) (TypArr (TypVar "t_4") (TypArr (AD (TList (TypVar "t_7"))) (TypVar "t_4")))))))
-
-  testInfer "scanl - Group" (toList [Def "scanl" (Cons (Lit (Name "f")) (Cons (Lit (Name "b")) (Cons (ListLit (Nil)) (Nil)))) (List (Cons (Atom (Name "b")) (Nil))),
-                                     Def "scanl" (Cons (Lit (Name "f")) (Cons (Lit (Name "b")) (Cons (ConsLit (Lit (Name "x")) (Lit (Name "xs"))) (Nil)))) (Binary Colon (Atom (Name "b")) (App (Atom (Name "scanl")) (Cons (Atom (Name "f")) (Cons (App (Atom (Name "f")) (Cons (Atom (Name "b")) (Cons (Atom (Name "x")) (Nil)))) (Cons (Atom (Name "xs")) (Nil))))))])
-   inferGroup (Right (Forall ("t_39" : "t_48" : Nil) (TypArr (TypArr (TypVar "t_48") (TypArr (TypVar "t_39") (TypVar "t_48"))) (TypArr (TypVar "t_48") (TypArr (AD (TList (TypVar "t_39"))) (AD (TList (TypVar "t_48"))))))))
-
-  testProgramm "Prelude with exp" parsedPrelude
-    ((App (Atom (Name "sum")) (Cons (App (Atom (Name "map")) (Cons (SectR Power (Atom (AInt 2))) (Cons (List (Cons (Atom (AInt 1)) (Cons (Atom (AInt 2)) (Cons (Atom (AInt 3)) (Cons (Atom (AInt 4)) (Nil)))))) (Nil)))) (Nil))))
-    (Right (Forall (Nil) (TypCon "Int")))
-
+  -- (3^) :: Int -> Int
+  testInferExpr "SectL" "(3^)" intToIntType
+  -- (^3) :: Int -> Int
+  testInferExpr "SectR" "(^3)" intToIntType
+  -- (\a b c d -> a b c d) :: (a -> b -> c -> d) -> a -> b -> c -> d
+  testInferExpr "Lambda1" "\\a b c d -> a b c d"
+    ((TypVar "a" `TypArr` (TypVar "b" `TypArr` (TypVar "c" `TypArr` TypVar "d"))) `TypArr`
+      (TypVar "a" `TypArr` (TypVar "b" `TypArr` (TypVar "c" `TypArr` (TypVar "d")))))
+  testInferExpr "Lambda2" "\\a b -> a b"
+    (TypArr (TypArr (TypVar "a") (TypVar "b")) (TypArr (TypVar "a") (TypVar "b")))
+  testInferExpr "List1" "[1, 2, 3, 4, 5]" intList
+  testInferExpr "List2" "[1 + 2, 3 + 4]" intList
+  testInferExpr "Empty list" "[]" (typVarList "a")
+  testInferExpr "Append" "[1 + 2, 3 + 4] ++ []" intList
+  testInferExpr "NTuple" "(1 + 2, 3)" (typConNTuple ("Int" : "Int" : Nil))
+  testInferExpr "SectR colon" "(:[3])" (TypCon "Int" `TypArr` intList)
+  testInferExpr "Lambda wildcard" "\\_ _ -> 5" (TypVar "a" `TypArr` (TypVar "b" `TypArr` intType))
+  testInferExpr "Lambda cons binding" "\\(x:xs) -> x" (typVarList "a" `TypArr` TypVar "a")
+  testInferExpr "Let expression" "let x = 3 in \\_ _ -> x"
+    (TypVar "a" `TypArr` (TypVar "b" `TypArr` intType))
+  testInferExpr "Binding tuple in let expression" "let (a, b) = (\\f -> f, \"Hello\") in a b"
+    (typConList "Char")
+  testInferExpr "Lambda application" "(\\f a b -> f a b) (+) 3 4" intType
   -- ((\xs -> [ x | x <- xs ]) [1]) :: [Int]
-  testInfer "List comprehension inside Lambda"
-    (App (Lambda ((Lit $ Name "xs") : Nil) (ListComp (Atom $ Name "x") ((Gen (Lit $ Name "x") (Atom $ Name "xs")) : Nil))) ((List $ ((Atom $ AInt 1) : Nil)) : Nil))
-    inferType
-    (Right (Forall (Nil) (AD $ TList $ TypCon "Int")))
+  testInferExpr "List comprehension inside lambda" "(\\xs -> [ x | x <- xs ]) [1]" intList
+
+  -- Check that let polymorphism works: `let f = \x -> x in (f True, f 42)` :: (Bool, Int).
+  testInferExpr "Let polymorphism" "let f = \\x -> x in (f True, f 42)"
+    (AD $ TTuple (boolType : intType : Nil))
+
+  testInferExprFail "List unification fail" "[(+), 4]" (UnificationFail intToIntToIntType intType)
+  testInferExprFail "Cons unification fail"
+    "let str = \"Hallo\" in 3 : [1 + 2, 3 + 4, str]"
+    (UnificationFail intType (AD $ TList charType))
+
+  -- +-----------------------------------------------+
+  -- | Test the inferred types of single definitions |
+  -- +-----------------------------------------------+
+
+  testInferDef "Define app" "app f xs = app f xs"
+    (TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "c"))
+  testInferDef "Define single map" "map f (x:xs) = f x : map f xs"
+    ((TypVar "a" `TypArr` TypVar "b") `TypArr` (typVarList "a" `TypArr` typVarList "b"))
+  testInferDef "Define foldr" "foldr f ini (x:xs) = f x (foldr f ini xs)"
+    ((TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "b")) `TypArr`
+      (TypVar "c" `TypArr` (typVarList "a" `TypArr` TypVar "b")))
+  testInferDef "Conslit binding 1" "list (x:xs:xss) = x" (typVarList "a" `TypArr` TypVar "a")
+  testInferDef "Conslit binding 2" "list (x:xs:xss) = xs" (typVarList "a" `TypArr` TypVar "a")
+  testInferDef "Conslit binding 3" "list (x:xs:xss) = xss" (typVarList "a" `TypArr` typVarList "a")
+  testInferDef "Binding tuple 1" "fst (a, b) = a"
+    (typVarTuple ("a" : "b" : Nil) `TypArr` TypVar "a")
+  testInferDef "Binding tuple 2" "snd (a, b) = b"
+    (typVarTuple ("a" : "b" : Nil) `TypArr` TypVar "b")
+  testInferDef "Binding tuple 3" "f (a, b, c) = a b c"
+    ((AD $ TTuple
+      (TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "c") : TypVar "a" : TypVar "b" : Nil))
+        `TypArr` TypVar "c")
+
+  testInferDefFail "Listlit binding" "list [a, b, c] = a b c"
+    (InfiniteType "a" (TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "c")))
+
+  -- +----------------------------------------------+
+  -- | Test the inferred types of definition groups |
+  -- +----------------------------------------------+
+
+  let zipWithDef = "zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys\n" <>
+                   "zipWith _ [] _ = []\n" <>
+                   "zipWith _ _ [] = []"
+  testInferDefGroup "zipWith" zipWithDef
+    ((TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "c")) `TypArr`
+      (typVarList "a" `TypArr` (typVarList "b" `TypArr` typVarList "c")))
+
+  let foldrDef = "foldr f ini [] = ini\n" <>
+                 "foldr f ini (x:xs) = f x (foldr f ini xs)"
+  testInferDefGroup "foldr" foldrDef
+    ((TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "b"))
+      `TypArr` (TypVar "b" `TypArr` (typVarList "a" `TypArr` TypVar "b")))
+
+  let scanlDef = "scanl f b []     = [b]\n" <>
+                 "scanl f b (x:xs) = b : scanl f (f b x) xs"
+  testInferDefGroup "scanl" scanlDef
+    ((TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "a"))
+      `TypArr` (TypVar "a" `TypArr` (typVarList "b" `TypArr` typVarList "a")))
+
+  -- +-------------------------------------------------------------------+
+  -- | Test the inferred types of expressions in the prelude environment |
+  -- +-------------------------------------------------------------------+
+
+  testInferExprWithPrelude "Prelude with exp" "sum (map (^2) [1, 2, 3, 4])" intType
+
+  -- +----------------------------------------+
+  -- | Test the type inference on whole trees |
+  -- +----------------------------------------+
+
+  -- Check that \f x -> f x and all the subexpressions are typed correctly.
+  testInferTT "Apply function"
+    (Lambda Nothing
+      ((Lit Nothing (Name "f")) : (Lit Nothing (Name "x")) : Nil)
+      (App
+        Nothing
+        (Atom Nothing (Name "f"))
+        ((Atom Nothing (Name "x")) : Nil)))
+    (Lambda
+      (Just (typVarArrow "a" "b" `TypArr` typVarArrow "a" "b"))
+      (
+        (Lit (Just (typVarArrow "a" "b")) (Name "f")) :
+        (Lit (Just (TypVar  "a")) (Name "x")) :
+        Nil
+      )
+      (App
+        (Just (TypVar  "b"))
+        (Atom (Just (typVarArrow "a" "b")) (Name "f"))
+        ((Atom (Just (TypVar  "a")) (Name "x")) : Nil)))
+
+  -- Check that [1, 1 + 1, length [1]] and all the subexpressions are typed correctly.
+  testInferTT "List"
+    (List
+      Nothing
+      (
+        (Atom Nothing (AInt 1)) :
+        (Binary
+          Nothing
+          (Tuple Add Nothing)
+          (Atom Nothing (AInt 1))
+          (Atom Nothing (AInt 1))) :
+        (App
+          Nothing
+          (Atom
+            Nothing
+            (Name "length"))
+          (untypedListOne : Nil)) :
+        Nil
+      )
+    )
+    (List
+      (Just (typConList "Int"))
+      (
+        (Atom (Just (TypCon "Int")) (AInt 1)) :
+        (Binary
+          (Just (TypCon "Int"))
+          (Tuple Add (Just (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
+          (Atom (Just (TypCon "Int")) (AInt 1))
+          (Atom (Just (TypCon "Int")) (AInt 1))) :
+        (App
+          (Just (TypCon "Int"))
+          (Atom
+            (Just (typConList "Int" `TypArr` TypCon "Int"))
+            (Name "length"))
+          (listOne : Nil)) :
+        Nil
+      )
+    )
+
+  -- Check that (\(x:xs) -> x) [1] and all the subexpressions are typed correctly.
+  testInferTT "ConsLit"
+    (App
+      Nothing
+      (Lambda
+        Nothing
+        ((ConsLit
+          Nothing
+          (Lit Nothing (Name "x"))
+          (Lit Nothing (Name "xs"))) : Nil)
+        (Atom Nothing (Name "x")))
+      (untypedListOne : Nil))
+    (App
+      (Just $ TypCon "Int")
+      (Lambda
+        (Just $ typConList "Int" `TypArr` TypCon "Int")
+        ((ConsLit
+          (Just $ typConList "Int")
+          (Lit (Just $ TypCon "Int") (Name "x"))
+          (Lit (Just $ typConList "Int") (Name "xs"))) : Nil)
+        (Atom (Just $ TypCon "Int") (Name "x")))
+      (listOne : Nil))
+
+  -- Check that let x = [1] in [x] :: [[Int]] and all the subexpressions are typed correctly.
+  testInferTT "Let"
+    (LetExpr
+      Nothing
+      (Tuple (Lit Nothing (Name "x")) untypedListOne : Nil)
+      (List Nothing (Atom Nothing (Name "x") : Nil)))
+    (LetExpr
+      (Just $ AD $ TList $ typConList "Int")
+      (Tuple (Lit (Just $ typConList "Int") (Name "x")) listOne : Nil)
+      (List
+        (Just $ AD $ TList $ typConList "Int")
+        (Atom (Just $ typConList "Int") (Name "x") : Nil)))
+
+-- lit "a"
+-- intLit "a"
+
+  -- Check that (\(a,b) -> ('1',b,a)) (1,2) :: (Char, Int, Int) and all the subexpressions are
+  -- typed correctly.
+  testInferTT "Tuple and NTupleLit"
+    (App
+      Nothing
+      (Lambda
+        Nothing
+        ((NTupleLit Nothing (
+            Lit Nothing (Name "a") :
+            Lit Nothing (Name "b") :
+            Nil)) :
+          Nil)
+        (NTuple Nothing (
+          Atom Nothing (Char "1") :
+          Atom Nothing (Name "b") :
+          Atom Nothing (Name "a") :
+          Nil)))
+      (NTuple Nothing (
+          Atom Nothing (AInt 1) :
+          Atom Nothing (AInt 2) :
+          Nil) :
+        Nil))
+    (App
+      (Just $ charIntTupleType)
+      (Lambda
+        (Just $ intTupleType `TypArr` charIntTupleType)
+        ((NTupleLit (Just intTupleType) (
+            Lit (Just intType) (Name "a") :
+            Lit (Just intType) (Name "b") :
+            Nil)) :
+          Nil)
+        (NTuple (Just charIntTupleType) (
+          Atom (Just charType) (Char "1") :
+          Atom (Just intType) (Name "b") :
+          Atom (Just intType) (Name "a") :
+          Nil)))
+      (NTuple (Just intTupleType) (
+          Atom (Just intType) (AInt 1) :
+          Atom (Just intType) (AInt 2) :
+          Nil) :
+        Nil))
+
+  -- +-----------------------------+
+  -- | Test the tree normalization |
+  -- +-----------------------------+
+
+  -- Check that x :: t_42 == x :: a.
+  testNormalizeTT "Atom"
+    (Atom (Just $ TypVar "t_42") (Name "x"))
+    (Atom (Just $ TypVar "a") (Name "x"))
+
+  -- Check that an untyped atom stays untyped.
+  testNormalizeTT "Untyped atom"
+    (Atom Nothing (Name "x"))
+    (Atom Nothing (Name "x"))
+
+  -- Check that (\x -> x) :: t_2 -> t_2 == (\x -> x) :: a -> a.
+  testNormalizeTT "Identity function"
+    (Lambda
+      (Just $ typVarArrow "t_2" "t_2")
+      ((Lit (Just $ TypVar "t_2") (Name "x")) : Nil)
+      (Atom (Just $ TypVar "t_2") (Name "x")))
+    (Lambda
+      (Just $ typVarArrow "a" "a")
+      ((Lit (Just $ TypVar "a") (Name "x")) : Nil)
+      (Atom (Just $ TypVar "a") (Name "x")))
+
+  -- Check that (\(x, y) -> x) :: (t_10, t_2) -> t_10
+  --         == (\(x, y) -> x) :: (a, b) -> a
+  testNormalizeTT "Normalization: Tuple binding in lambda"
+    (Lambda
+      (Just (typVarTuple ("t_10" : "t_2" : Nil) `TypArr` TypVar "t_10"))
+      (
+        (NTupleLit (Just (typVarTuple ("t_10" : "t_2" : Nil)))
+          (
+            (Lit (Just (TypVar "t_10")) (Name "x")) :
+            (Lit (Just (TypVar "t_2")) (Name "y")) :
+            Nil
+          )
+        ) : Nil
+      )
+      (Atom (Just (TypVar "t_10")) (Name "x"))
+    )
+    (Lambda
+      (Just (typVarTuple ("a" : "b" : Nil) `TypArr` TypVar "a"))
+      (
+        (NTupleLit (Just (typVarTuple ("a" : "b" : Nil)))
+          (
+            (Lit (Just (TypVar "a")) (Name "x")) :
+            (Lit (Just (TypVar "b")) (Name "y")) :
+            Nil
+          )
+        ) : Nil
+      )
+      (Atom (Just (TypVar "a")) (Name "x"))
+    )
+
+  -- Check that (\(x:xs) [a,b] (u,v,w) -> x) :: [t_4] -> [t_2] -> (t_1, t_3, t_5) -> t_4
+  --         == (\(x:xs) [a,b] (u,v,w) -> x) :: [a] -> [b] -> (c, d, e) -> a
+  testNormalizeTT "Normalization: Tuple binding in lambda"
+    (Lambda
+      -- :: [t_4] -> [t_2] -> (t_1, t_3, t_5) -> t_4
+      (Just
+        (typVarList "t_4" `TypArr`
+          (typVarList "t_2" `TypArr`
+            (typVarTuple ("t_1" : "t_3" : "t_5" : Nil)) `TypArr`
+              TypVar "t_4")))
+      (
+        -- (x:xs) [a,b] (u,v,w)
+        (ConsLit (Just (typVarList "t_4"))
+          (Lit (Just (TypVar "t_4")) (Name "x"))
+          (Lit (Just (typVarList "t_4")) (Name "xs"))
+        ) :
+        (ListLit (Just (typVarList "t_2"))
+          (
+            (Lit (Just (TypVar "t_2")) (Name "a")) :
+            (Lit (Just (TypVar "t_2")) (Name "b")) :
+            Nil
+          )
+        ) :
+        (NTupleLit (Just (typVarTuple ("t_1" : "t_3" : "t_5" : Nil)))
+          (
+            (Lit (Just (TypVar "t_1")) (Name "u")) :
+            (Lit (Just (TypVar "t_3")) (Name "v")) :
+            (Lit (Just (TypVar "t_5")) (Name "w")) :
+            Nil
+          )
+        ) :
+        Nil
+      )
+      (Atom (Just (TypVar "t_4")) (Name "x"))
+    )
+    (Lambda
+      -- :: [a] -> [b] -> (c, d, e) -> a
+      (Just
+        (typVarList "a" `TypArr`
+          (typVarList "b" `TypArr`
+            (typVarTuple ("c" : "d" : "e" : Nil)) `TypArr`
+              TypVar "a")))
+      (
+        -- (x:xs) [a,b] (u,v,w)
+        (ConsLit (Just (typVarList "a"))
+          (Lit (Just (TypVar "a")) (Name "x"))
+          (Lit (Just (typVarList "a")) (Name "xs"))
+        ) :
+        (ListLit (Just (typVarList "b"))
+          (
+            (Lit (Just (TypVar "b")) (Name "a")) :
+            (Lit (Just (TypVar "b")) (Name "b")) :
+            Nil
+          )
+        ) :
+        (NTupleLit (Just (typVarTuple ("c" : "d" : "e" : Nil)))
+          (
+            (Lit (Just (TypVar "c")) (Name "u")) :
+            (Lit (Just (TypVar "d")) (Name "v")) :
+            (Lit (Just (TypVar "e")) (Name "w")) :
+            Nil
+          )
+        ) :
+        Nil
+      )
+      (Atom (Just (TypVar "a")) (Name "x"))
+    )
+
+  -- Check that (\f x -> f x) :: (t_4 -> t_45) -> t_4 -> t_45
+  --         == (\f x -> f x) :: (a -> b) -> a -> b
+  testNormalizeTT "Apply function"
+    (Lambda
+      (Just (typVarArrow "t_4" "t_45" `TypArr` typVarArrow "t_4" "t_45"))
+      (
+        (Lit (Just (typVarArrow "t_4" "t_45")) (Name "f")) :
+        (Lit (Just (TypVar  "t_4")) (Name "x")) :
+        Nil
+      )
+      (App
+        (Just (TypVar  "t_45"))
+        (Atom (Just (typVarArrow "t_4" "t_45")) (Name "f"))
+        ((Atom (Just (TypVar  "t_4")) (Name "x")) : Nil)
+      )
+    )
+    (Lambda
+      (Just (typVarArrow "a" "b" `TypArr` typVarArrow "a" "b"))
+      (
+        (Lit (Just (typVarArrow "a" "b")) (Name "f")) :
+        (Lit (Just (TypVar  "a")) (Name "x")) :
+        Nil
+      )
+      (App
+        (Just (TypVar  "b"))
+        (Atom (Just (typVarArrow "a" "b")) (Name "f"))
+        ((Atom (Just (TypVar  "a")) (Name "x")) : Nil)
+      )
+    )
+
+  -- Map scheme `Int` on `x`. We expect the type variable mapping { x = Int }.
+  testMapSchemeOnTVarMappings
+    "Map scheme on literal binding"
+    (Forall Nil intType)
+    (Lit (Tuple Nothing 0) (Name "x"))
+    (Tuple "x" (Forall Nil intType) : Nil)
+
+  -- Map scheme `(forall t_4. t_4 -> t_4, (Int, Bool)) on `(f, (n, b))`. We expect the mapping
+  -- { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }.
+  testMapSchemeOnTVarMappings
+    "Map scheme on tuple"
+    -- The scheme: (forall t_4. t_4 -> t_4, (Int, Bool))
+    (Forall ("t_4" : Nil)
+      (AD (TTuple (typVarArrow "t_4" "t_4" :
+        (AD (TTuple (intType : boolType : Nil))) : Nil)))
+    )
+    -- The binding: (f, (n, b))
+    (NTupleLit (Tuple Nothing 1)
+      (
+        (Lit (Tuple Nothing 2) (Name "f")) :
+        (NTupleLit (Tuple Nothing 3)
+          (
+            (Lit (Tuple Nothing 4) (Name "n")) :
+            (Lit (Tuple Nothing 5) (Name "b")) :
+            Nil
+          )
+        ) :
+        Nil
+      )
+    )
+    -- The expected result: { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }
+    (
+      (Tuple "f" (Forall ("t_4" : Nil) (typVarArrow "t_4" "t_4"))) :
+      (Tuple "n" (Forall Nil intType)) :
+      (Tuple "b" (Forall Nil boolType)) :
+      Nil
+    )
+
+  partiallyTypedExprTests

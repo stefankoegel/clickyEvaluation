@@ -17,8 +17,12 @@ exports.isEnterKey = function(event) {
 };
 
 exports.ctrlKeyPressed = function(event) {
-     return (!!(event.ctrlKey || event.metaKey))
+     return (!!(event.ctrlKey || event.metaKey))
 };
+
+exports.getType = function(event) {
+  return event.type;
+}
 
 exports.showTooltip = function(div) {
   return function(outer){

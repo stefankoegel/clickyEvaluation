@@ -1,6 +1,6 @@
 module Test.Evaluator where
 
-import Prelude (Unit, bind, (<>), ($), show, unit, pure, (==), (<<<), (+), negate, (*))
+import Prelude
 import Data.Either (Either(..))
 import Data.Tuple (Tuple(..))
 import Data.StrMap as M
