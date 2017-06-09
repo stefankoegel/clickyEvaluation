@@ -7,9 +7,8 @@ import Control.Monad.State (State, evalState, put, get)
 import Data.Array as Array
 import Data.Char as Char
 import Data.Either (Either(..))
-import Data.Foldable (intercalate, fold, foldl, foldr, foldMap, elem)
-import Data.List (List(..), (:), concat, concatMap, filter, singleton, unzip, zip)
-import Data.List as List
+import Data.Foldable (intercalate, fold, foldl, foldr)
+import Data.List (List(..), (:), concat, unzip, zip)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, isJust)

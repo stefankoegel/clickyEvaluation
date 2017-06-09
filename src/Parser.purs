@@ -24,7 +24,7 @@ import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
 import Text.Parsing.Parser.Pos (initialPos)
 
-import AST (TypeTree, MType, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, exprToTypeTree, TypeTree, toOpTuple)
+import AST (MType, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, TypeTree, toOpTuple)
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------

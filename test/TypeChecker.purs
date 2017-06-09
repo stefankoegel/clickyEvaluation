@@ -2,7 +2,7 @@ module Test.TypeChecker where
 
 import AST
 import TypeChecker as TC
-import TypeChecker (Scheme(..), TVarMappings, boolType, charType, emptyTypeEnv, intType,
+import TypeChecker (Scheme(..), TVarMappings, boolType, charType, intType,
   intToIntType, intToIntToIntType)
 import Parser (parseExpr, parseDefs)
 import Test.Parser (parsedPrelude)

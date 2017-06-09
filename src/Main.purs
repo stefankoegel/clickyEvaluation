@@ -14,7 +14,6 @@ import Data.Maybe (Maybe(..))
 import Data.StrMap (empty)
 import Data.Array (cons)
 import Data.Traversable (for)
-import Data.Tuple (Tuple(..))
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
