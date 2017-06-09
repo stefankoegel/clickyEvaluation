@@ -1,0 +1,10 @@
+ul.options {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+}
+
+.options li {
+  display: inline-block;
+  padding: 10px;
+}

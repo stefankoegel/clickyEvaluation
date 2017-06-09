@@ -4,10 +4,9 @@
     <title>Clicky Evaluation</title>
     <meta charset="utf8">
     <link rel="stylesheet" href="style/style.css" charset="utf-8">
+    <link rel="stylesheet" href="style/gui.css" charset="utf-8">
     <link rel="stylesheet" href="style/showType.css" charset="utf-8" id="showTypeStylesheet">
-    <link href="style/bootstrap-switch.min.css" rel="stylesheet">
     <script src="libs/jquery-1.11.2.min.js"></script>
-    <script src="libs/bootstrap-switch.min.js"></script>
   </head>
   <body>
 
@@ -56,11 +55,11 @@
     <h3>Expression</h3>
 
     <div id="inputBar">
-          <input type="text" id="input"  value="sum (map (^2) [1,2,3,4])">
-      <div id="options">
-        <input type="checkbox" id="typecheckbox" checked="checked"/> Show types &nbsp;&nbsp;|&nbsp;&nbsp;
-        <input type="checkbox" id="historycheckbox" checked="checked"/> Show history <br/>
-      </div>
+      <input type="text" id="input"  value="sum (map (^2) [1,2,3,4])"/>
+      <ul class="options">
+        <li><input type="checkbox" id="typecheckbox"/> Show types</li>
+        <li><input type="checkbox" id="historycheckbox"/> Show history</li>
+      </ul>
     </div>
 
   <div class="frame">
@@ -89,6 +88,7 @@
 
     $(function() { PS.Main.makeCEwithHistory($("#input").val())(".output")(".historyBox")(); });
     </script>
+
     <!-- <h3>Definitions</h3> -->
 <!--     <div class="ace" id="definitions"> -->
 <!-- and (True:xs)  = and xs -->
