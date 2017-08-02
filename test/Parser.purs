@@ -11,8 +11,8 @@ import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
 
 import Control.Monad.Writer (Writer, tell)
 
-import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), toOpTuple)
-import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent)
+import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), toOpTuple, ADTDef(..), DataCons(..), Type(..))
+import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent, typeDefinition, dataConstructor)
 import IndentParser (IndentParser)
 
 toList :: forall a. Array a -> List a
@@ -318,6 +318,7 @@ runTests = do
   test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp Nothing (Binary Nothing (toOpTuple Mul) (Atom Nothing (Name "a")) (Atom Nothing (Name "b"))) $ toList [Let Nothing (Lit Nothing (Name "a")) (Atom Nothing (AInt 5)),
     Let Nothing (Lit Nothing (Name "b")) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "a")) (Atom Nothing (AInt 1)))]
   test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp Nothing (aname "x") $ toList [ Gen Nothing (Lit Nothing (Name "x")) (ArithmSeq Nothing (aint 1) Nothing (Just (aint 10))), Guard Nothing (App Nothing (aname "even") $ toList [aname "x"])]
+  typedefTest
 
 
 prelude :: String
@@ -487,3 +488,40 @@ parsedPrelude = toList [
   (Def "odd" (Cons (Lit Nothing (Name "n")) (Nil)) (Binary Nothing (toOpTuple Equ) (Binary Nothing (toOpTuple (InfixFunc "mod")) (Atom Nothing (Name "n")) (Atom Nothing (AInt 2))) (Atom Nothing (AInt 1)))),
   (Def "fix" (Cons (Lit Nothing (Name "f")) (Nil)) (App Nothing (Atom Nothing (Name "f")) (Cons (App Nothing (Atom Nothing (Name "fix")) (Cons (Atom Nothing (Name "f")) (Nil))) (Nil))))
   ]
+
+
+typedefTest :: Writer (List String) Unit
+typedefTest = do
+  test "nil" dataConstructor
+    "Nil"
+    (DataCons "Nil" 0 Nil)
+  test "cons" dataConstructor
+    "Cons a b"
+    (DataCons "Cons" 2
+      (toList
+        [ TypVar "a"
+        , TypVar "b"]))
+  test "void" typeDefinition "data Void\n" (ADTDef "Void" Nil Nil)
+  test "none" typeDefinition
+    "data None a b c"
+    (ADTDef "None"
+      (toList ["a", "b", "c"])
+      Nil)
+  test "id" typeDefinition
+    "data Ident a = Ident a"
+    (ADTDef "Ident" (toList ["a"])
+      (toList
+        [ DataCons "Ident" 1 (toList [TypVar "a"])]))
+  test "maybe" typeDefinition
+    "data Maybe a = Nothing | Just a\n"
+    (ADTDef "Maybe" (toList ["a"])
+      (toList
+        [ DataCons "Nothing" 0 Nil
+        , DataCons "Just" 1 (toList [TypVar "a"])]))
+  test "maybe1" typeDefinition
+    "data Maybe a\n  = Nothing\n  | Just a\n"
+    (ADTDef "Maybe" (toList ["a"])
+      (toList
+        [ DataCons "Nothing" 0 Nil
+        , DataCons "Just" 1 (toList [TypVar "a"])]))
+

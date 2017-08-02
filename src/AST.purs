@@ -485,6 +485,35 @@ data AD
     = TList Type
     | TTuple (List Type)
 
+-- ADT Definition
+--
+-- The definition of a Type consists of the name of the type,
+-- followd by type variables, over which it is parametrized
+-- and a list of Data Constructors, each having a name,
+-- and a list of types, which are their parameters.
+data ADTDef
+  = ADTDef String (List TVar) (List DataCons)
+
+derive instance eqADTDef :: Eq ADTDef
+
+instance showADTDef :: Show ADTDef where
+  show (ADTDef n vs cs) =
+    "data "
+    <> n
+    <> " "
+    <> intercalate " " (map show vs)
+    <> "\n  = "
+    <> intercalate "\n  | " (map show cs)
+
+data DataCons
+  = DataCons String Int (List Type)
+
+instance showDataCons :: Show DataCons where
+  show (DataCons n _ ts) =
+    n <> " " <> intercalate " " (map show ts)
+
+derive instance eqDataCons :: Eq DataCons
+
 
 data TypeError
   = UnificationFail Type Type

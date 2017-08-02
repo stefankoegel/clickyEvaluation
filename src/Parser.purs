@@ -3,7 +3,7 @@ module Parser where
 import Prelude
 import Data.String as String
 import Data.Foldable (foldl)
-import Data.List (List(..), many, concat, elemIndex)
+import Data.List (List(..), many, concat, elemIndex, length)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..), fst)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
@@ -24,7 +24,7 @@ import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
 import Text.Parsing.Parser.Pos (initialPos)
 
-import AST (MType, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, TypeTree, toOpTuple)
+import AST (MType, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, TypeTree, toOpTuple, ADTDef(..), DataCons(..), Type(..))
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
@@ -115,6 +115,21 @@ name = do
     -- | List of reserved key words
     reservedWords :: List String
     reservedWords = Array.toUnfoldable $ (unGenLanguageDef haskellDef).reservedNames
+
+-- | Parser for type names
+typeName :: forall m. (Monad m) => ParserT String m String
+typeName = do
+  c  <- upper
+  cs <- many anyLetter
+  let nm = String.fromCharArray $ Array.fromFoldable $ Cons c cs
+  case elemIndex nm reservedWords of
+    Nothing -> pure nm
+    Just _  -> fail $ nm <> " is a reserved word!"
+  where
+    -- | List of reserved key words
+    reservedWords :: List String
+    reservedWords = Array.toUnfoldable $ (unGenLanguageDef haskellDef).reservedNames
+
 
 ---------------------------------------------------------
 -- Parsers for Atoms
@@ -440,3 +455,24 @@ definitions = skipWhite *> block definition
 
 parseDefs :: String -> Either ParseError (List Definition)
 parseDefs = runParserIndent $ definitions
+
+
+---------------------------------------------------------
+-- Parsers for Type Definitions
+---------------------------------------------------------
+
+typeDefinition :: IndentParser String ADTDef
+typeDefinition = do
+  ilexe $ string "data"
+  n <- ilexe typeName
+  tvs <- many $ ilexe name
+  conss <- (do PC.try (indent $ char '=')
+               indent dataConstructor `PC.sepBy` (PC.try $ indent $ ilexe $ char '|'))
+           <|> pure Nil
+  pure $ ADTDef n tvs conss
+
+dataConstructor :: IndentParser String DataCons
+dataConstructor = do
+  n <- ilexe typeName
+  ps <- many $ ilexe $ (TypVar <$> name)
+  pure $ DataCons n (length ps) ps
