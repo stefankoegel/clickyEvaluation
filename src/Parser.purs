@@ -24,7 +24,21 @@ import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
 import Text.Parsing.Parser.Pos (initialPos)
 
-import AST (MType, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, TypeTree, toOpTuple, ADTDef(..), DataCons(..), Type(..))
+import AST
+  ( MType
+  , Tree(..)
+  , Atom(..)
+  , Binding(..)
+  , Definition(Def)
+  , Op(..)
+  , QualTree(..)
+  , TypeQual
+  , TypeTree
+  , toOpTuple
+  , ADTDef(..)
+  , Associativity(..)
+  , DataCons(..)
+  , Type(..))
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
@@ -54,6 +68,13 @@ indent p = ((sameLine <|> indented') PC.<?> "Missing indentation! Did you type a
 ---------------------------------------------------------
 -- Parsers for Primitives
 ---------------------------------------------------------
+
+symbol :: forall m. (Monad m) => ParserT String m Char
+symbol = oneOf
+  [':','!','#','$','%','&','*'
+  ,'+','.','/','<','>','=','?'
+  ,'@','\\','^','|','-','~','_'
+  ,'°']
 
 integer :: forall m. (Monad m) => ParserT String m Int
 integer = convert <$> many1 digit
@@ -478,7 +499,26 @@ typeDefinition = do
   pure $ ADTDef n tvs conss
 
 dataConstructorDefinition :: IndentParser String (DataCons Type)
-dataConstructorDefinition = do
+dataConstructorDefinition
+  = PC.try prefixDataConstructorDefinition
+  <|> infixDataConstructorDefinition
+
+prefixDataConstructorDefinition :: IndentParser String (DataCons Type)
+prefixDataConstructorDefinition = do
   n <- ilexe typeName
   ps <- many types
   pure $ PrefixCons n (length ps) ps
+
+infixDataConstructorDefinition :: IndentParser String (DataCons Type)
+infixDataConstructorDefinition = do
+  l <- types
+  o <- indent $ ilexe infixConstructor
+  r <- types
+  pure $ InfixCons ASSOC o l r
+
+
+infixConstructor :: forall m. (Monad m) => ParserT String m String
+infixConstructor = do
+  char ':'
+  syms <- many symbol
+  pure $ String.fromCharArray $ Array.fromFoldable $ Cons ':' syms

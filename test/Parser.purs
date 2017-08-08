@@ -2,17 +2,45 @@ module Test.Parser where
 
 import Prelude
 import Data.Either (Either(..))
-import Data.List (List(..), singleton, (:))
+import Data.List (List(..), singleton, (:), many)
 import Data.Array (toUnfoldable) as Array
 import Data.Tuple (Tuple(..))
+import Data.String (toCharArray) as String
 import Data.Maybe (Maybe(..))
 
 import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
 
 import Control.Monad.Writer (Writer, tell)
 
-import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), toOpTuple, ADTDef(..), DataCons(..), Type(..))
-import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent, typeDefinition, dataConstructorDefinition)
+import AST
+  ( TypeTree
+  , Tree(..)
+  , Atom(..)
+  , Binding(..)
+  , Definition(Def)
+  , Op(..)
+  , QualTree(..)
+  , toOpTuple
+  , ADTDef(..)
+  , DataCons(..)
+  , Associativity(..)
+  , Type(..))
+import Parser
+  ( expression
+  , atom
+  , definitions
+  , definition
+  , binding
+  , variable
+  , bool
+  , int
+  , runParserIndent
+  , typeDefinition
+  , dataConstructorDefinition
+  , prefixDataConstructorDefinition
+  , infixDataConstructorDefinition
+  , symbol
+  , infixConstructor)
 import IndentParser (IndentParser)
 
 toList :: forall a. Array a -> List a
@@ -489,9 +517,35 @@ parsedPrelude = toList [
   (Def "fix" (Cons (Lit Nothing (Name "f")) (Nil)) (App Nothing (Atom Nothing (Name "f")) (Cons (App Nothing (Atom Nothing (Name "fix")) (Cons (Atom Nothing (Name "f")) (Nil))) (Nil))))
   ]
 
+stringToList :: String -> List Char
+stringToList = Array.toUnfoldable <<< String.toCharArray
 
 typedefTest :: Writer (List String) Unit
 typedefTest = do
+  test "symbol" symbol
+    "!"
+    '!'
+  test "symbols" (many symbol)
+    "!#$%&*+./<>=?@\\^|-~_°"
+    (stringToList "!#$%&*+./<>=?@\\^|-~_°")
+  test "infixConstructor1" infixConstructor
+    ":+"
+    ":+"
+  test "infixConstructor2" infixConstructor
+    ":@"
+    ":@"
+  test "infixConstructor3" infixConstructor
+    ":<>=?"
+    ":<>=?"
+  test "infixConstructor4" infixConstructor
+    ":"
+    ":"
+  test "infixConstructor1" infixDataConstructorDefinition
+    "a :+ b"
+    (InfixCons ASSOC ":+" (TypVar "a") (TypVar "b"))
+  test "infixConstructor2" infixDataConstructorDefinition
+    "a :::::: b"
+    (InfixCons ASSOC "::::::" (TypVar "a") (TypVar "b"))
   test "nil" dataConstructorDefinition
     "Nil"
     (PrefixCons "Nil" 0 Nil)
@@ -524,4 +578,11 @@ typedefTest = do
       (toList
         [ PrefixCons "Nothing" 0 Nil
         , PrefixCons "Just" 1 (toList [TypVar "a"])]))
+  test "list1" typeDefinition
+    "data InfixStuff a = a :+ a | a :- a | Prefix a\n"
+    (ADTDef "InfixStuff" (toList ["a"])
+      (toList
+        [ InfixCons ASSOC ":+" (TypVar "a") (TypVar "a")
+        , InfixCons ASSOC ":-" (TypVar "a") (TypVar "a")
+        , PrefixCons "Prefix" 1 (Cons (TypVar "a") Nil)]))
 
