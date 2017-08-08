@@ -12,7 +12,7 @@ import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
 import Control.Monad.Writer (Writer, tell)
 
 import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), toOpTuple, ADTDef(..), DataCons(..), Type(..))
-import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent, typeDefinition, dataConstructor)
+import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent, typeDefinition, dataConstructorDefinition)
 import IndentParser (IndentParser)
 
 toList :: forall a. Array a -> List a
@@ -492,12 +492,12 @@ parsedPrelude = toList [
 
 typedefTest :: Writer (List String) Unit
 typedefTest = do
-  test "nil" dataConstructor
+  test "nil" dataConstructorDefinition
     "Nil"
-    (DataCons "Nil" 0 Nil)
-  test "cons" dataConstructor
+    (PrefixCons "Nil" 0 Nil)
+  test "cons" dataConstructorDefinition
     "Cons a b"
-    (DataCons "Cons" 2
+    (PrefixCons "Cons" 2
       (toList
         [ TypVar "a"
         , TypVar "b"]))
@@ -511,17 +511,17 @@ typedefTest = do
     "data Ident a = Ident a"
     (ADTDef "Ident" (toList ["a"])
       (toList
-        [ DataCons "Ident" 1 (toList [TypVar "a"])]))
+        [ PrefixCons "Ident" 1 (toList [TypVar "a"])]))
   test "maybe" typeDefinition
     "data Maybe a = Nothing | Just a\n"
     (ADTDef "Maybe" (toList ["a"])
       (toList
-        [ DataCons "Nothing" 0 Nil
-        , DataCons "Just" 1 (toList [TypVar "a"])]))
+        [ PrefixCons "Nothing" 0 Nil
+        , PrefixCons "Just" 1 (toList [TypVar "a"])]))
   test "maybe1" typeDefinition
     "data Maybe a\n  = Nothing\n  | Just a\n"
     (ADTDef "Maybe" (toList ["a"])
       (toList
-        [ DataCons "Nothing" 0 Nil
-        , DataCons "Just" 1 (toList [TypVar "a"])]))
+        [ PrefixCons "Nothing" 0 Nil
+        , PrefixCons "Just" 1 (toList [TypVar "a"])]))
 

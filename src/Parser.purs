@@ -462,6 +462,7 @@ parseDefs = runParserIndent $ definitions
 
 types :: IndentParser String Type
 types = (TypVar <$> ilexe name)
+
 ---------------------------------------------------------
 -- Parsers for Type Definitions
 ---------------------------------------------------------
@@ -472,12 +473,12 @@ typeDefinition = do
   n <- ilexe typeName
   tvs <- many $ ilexe name
   conss <- (do PC.try (indent $ char '=')
-               indent dataConstructorDef `PC.sepBy` (PC.try $ indent $ ilexe $ char '|'))
+               indent dataConstructorDefinition `PC.sepBy` (PC.try $ indent $ ilexe $ char '|'))
            <|> pure Nil
   pure $ ADTDef n tvs conss
 
-dataConstructorDef :: IndentParser String (DataCons Type)
-dataConstructorDef = do
+dataConstructorDefinition :: IndentParser String (DataCons Type)
+dataConstructorDefinition = do
   n <- ilexe typeName
   ps <- many types
-  pure $ DataCons n (length ps) ps
+  pure $ PrefixCons n (length ps) ps

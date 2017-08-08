@@ -508,12 +508,27 @@ instance showADTDef :: Show ADTDef where
 
 -- | DataConstructor parameterized over its parameters,
 --   to use it for both, type definitions and data.
-data DataCons params
-  = DataCons String Int (List params)
 
-instance showDataCons :: (Show params) => Show (DataCons params) where
-  show (DataCons n _ ts) =
-    n <> " " <> intercalate " " (map show ts)
+data Associativity
+  = LEFTASSOC
+  | RIGHTASSOC
+  | ASSOC
+
+derive instance eqAssociativity :: Eq Associativity
+
+data DataCons param
+  = PrefixCons String Int (List param)
+  | InfixCons Associativity String param param
+
+instance showDataCons :: (Show param) => Show (DataCons param) where
+  show (PrefixCons n _ ts)
+    = n <> " " <> intercalate " " (map show ts)
+  show (InfixCons ASSOC o l r)
+    = show l <> " " <> o <> " " <> show r
+  show (InfixCons RIGHTASSOC o l r)
+    = show l <> " " <> o <> " (" <> show r <> ")"
+  show (InfixCons LEFTASSOC o l r)
+    = "(" <> show l <> ") " <> o <> " " <> show r
 
 derive instance eqDataCons :: (Eq params) => Eq (DataCons params)
 
@@ -526,7 +541,7 @@ data TypeError
   | NoInstanceOfEnum Type
   | PatternMismatch IndexedTypedBinding Type
 
-derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c) 
+derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c)
 
 -- | Bindings
 -- |
