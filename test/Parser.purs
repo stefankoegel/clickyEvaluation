@@ -24,7 +24,8 @@ import AST
   , ADTDef(..)
   , DataCons(..)
   , Associativity(..)
-  , Type(..))
+  , Type(..)
+  , AD(..))
 import Parser
   ( expression
   , atom
@@ -40,7 +41,8 @@ import Parser
   , prefixDataConstructorDefinition
   , infixDataConstructorDefinition
   , symbol
-  , infixConstructor)
+  , infixConstructor
+  , types)
 import IndentParser (IndentParser)
 
 toList :: forall a. Array a -> List a
@@ -522,6 +524,51 @@ stringToList = Array.toUnfoldable <<< String.toCharArray
 
 typedefTest :: Writer (List String) Unit
 typedefTest = do
+  test "types1" types
+    "a"
+    (TypVar "a")
+  test "types2" types
+    "A"
+    (AD (TTypeCons "A" Nil))
+  test "types3" types
+    "Int" (TypCon "Int")
+  test "types4" types
+    "Char" (TypCon "Char")
+  test "types5" types
+    "Bool" (TypCon "Bool")
+  test "types6" types
+    "A a b c"
+    (AD (TTypeCons "A" (toList [TypVar "a", TypVar "b", TypVar "c"])))
+  test "types7" types
+    "A Int b Bool"
+    (AD (TTypeCons "A" (toList [TypCon "Int", TypVar "b", TypVar "Bool"])))
+  test "types8" types
+    "A (B c)"
+    (AD
+      (TTypeCons "A"
+        (toList
+          [AD
+            (TTypeCons "B"
+              (toList [TypVar "c"]))])))
+  test "types9" types
+    "A (B Char)"
+    (AD
+      (TTypeCons "A"
+        (toList
+          [AD
+            (TTypeCons "B"
+              (toList [TypVar "Char"]))])))
+  test "types10" types
+    "A (B c) (C d)"
+    (AD
+      (TTypeCons "A"
+        (toList
+          [ AD
+            (TTypeCons "B"
+              (toList [TypVar "c"]))
+          , AD
+            (TTypeCons "C"
+              (toList [TypVar "d"]))])))
   test "symbol" symbol
     "!"
     '!'
@@ -567,19 +614,19 @@ typedefTest = do
       (toList
         [ PrefixCons "Ident" 1 (toList [TypVar "a"])]))
   test "maybe" typeDefinition
-    "data Maybe a = Nothing | Just a\n"
+    "data Maybe a = Nothing | Just a"
     (ADTDef "Maybe" (toList ["a"])
       (toList
         [ PrefixCons "Nothing" 0 Nil
         , PrefixCons "Just" 1 (toList [TypVar "a"])]))
   test "maybe1" typeDefinition
-    "data Maybe a\n  = Nothing\n  | Just a\n"
+    "data Maybe a\n  = Nothing\n  | Just a"
     (ADTDef "Maybe" (toList ["a"])
       (toList
         [ PrefixCons "Nothing" 0 Nil
         , PrefixCons "Just" 1 (toList [TypVar "a"])]))
   test "list1" typeDefinition
-    "data InfixStuff a = a :+ a | a :- a | Prefix a\n"
+    "data InfixStuff a = a :+ a | a :- a | Prefix a"
     (ADTDef "InfixStuff" (toList ["a"])
       (toList
         [ InfixCons ASSOC ":+" (TypVar "a") (TypVar "a")

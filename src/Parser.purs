@@ -13,6 +13,7 @@ import Data.Either (Either)
 
 import Control.Alt ((<|>))
 import Control.Apply (lift2)
+-- import Control.Applicative ((<*), (*>))
 import Control.Lazy (fix)
 import Control.Monad.State (runState) 
 
@@ -38,7 +39,8 @@ import AST
   , ADTDef(..)
   , Associativity(..)
   , DataCons(..)
-  , Type(..))
+  , Type(..)
+  , AD(..))
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
@@ -481,8 +483,30 @@ parseDefs = runParserIndent $ definitions
 -- Parsers for Types
 ---------------------------------------------------------
 
+simpleType :: IndentParser String Type
+simpleType
+  = TypCon <$> (string "Bool"
+               <|> string "Int"
+               <|> string "Char")
+  <|> TypVar <$> name
+
+typeCons :: IndentParser String Type -> IndentParser String Type
+typeCons t = do
+  n <- ilexe typeName
+  ps <- many (ilexe $ typeExpr t <|> simpleType)
+  pure $ AD $ TTypeCons n ps
+
+typeExpr :: IndentParser String Type -> IndentParser String Type
+typeExpr t = do
+  indent (char '(')
+  r <- indent t
+  indent (char ')')
+  pure r
+
 types :: IndentParser String Type
-types = (TypVar <$> ilexe name)
+types = do
+  whiteSpace
+  fix $ \t -> PC.try (typeCons t) <|> typeExpr t <|> simpleType
 
 ---------------------------------------------------------
 -- Parsers for Type Definitions
@@ -511,9 +535,9 @@ prefixDataConstructorDefinition = do
 
 infixDataConstructorDefinition :: IndentParser String (DataCons Type)
 infixDataConstructorDefinition = do
-  l <- types
+  l <- ilexe types
   o <- indent $ ilexe infixConstructor
-  r <- types
+  r <- indent $ ilexe types
   pure $ InfixCons ASSOC o l r
 
 

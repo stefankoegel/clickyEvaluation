@@ -484,6 +484,7 @@ data Type
 data AD
     = TList Type
     | TTuple (List Type)
+    | TTypeCons String (List Type)
 
 -- ADT Definition
 --
@@ -635,6 +636,7 @@ derive instance eqType :: Eq Type
 instance showAD :: Show AD where
   show (TList t) = "(TList "<> show t <>")"
   show (TTuple tl) = "(TTuple ("<> show tl <> "))"
+  show (TTypeCons name ps) = "(TTypeCons " <> show name <> " " <> intercalate " " (map show ps) <> ")"
 
 derive instance eqAD :: Eq AD
 
@@ -677,6 +679,8 @@ prettyPrintType (AD (TTuple ts)) = "(" <> (fold <<< separateWith ", " <<< map pr
     separateWith :: String -> List String -> List String
     separateWith _ Nil = "" : Nil
     separateWith sep (t:ts) = t : map ((<>) sep) ts
+prettyPrintType (AD (TTypeCons name ps))
+  = name <> " " <> intercalate " " (map prettyPrintType ps)
 
 prettyPrintTypeError :: TypeError -> String
 prettyPrintTypeError (UnificationFail t1 t2) = "UnificationFail: Can't unify " <> prettyPrintType t1 <> " with " <> prettyPrintType t2

@@ -130,9 +130,11 @@ instance subTypeEnv :: Substitutable TypeEnv where
 
 instance subAD :: Substitutable AD where
   apply s (TList t) = TList (apply s t)
-  apply s(TTuple t) = TTuple (apply s t)
+  apply s (TTuple t) = TTuple (apply s t)
+  apply s (TTypeCons n ps) = TTypeCons n (apply s ps)
   ftv (TList t) = ftv t
   ftv (TTuple t) = ftv t
+  ftv (TTypeCons n ps) = ftv ps
 
 instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => Substitutable (QualTree a b c) where
   apply s (Gen a b c) = Gen (apply s a) (apply s b) (apply s c)
