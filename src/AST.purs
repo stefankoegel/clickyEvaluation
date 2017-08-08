@@ -492,7 +492,7 @@ data AD
 -- and a list of Data Constructors, each having a name,
 -- and a list of types, which are their parameters.
 data ADTDef
-  = ADTDef String (List TVar) (List DataCons)
+  = ADTDef String (List TVar) (List (DataCons Type))
 
 derive instance eqADTDef :: Eq ADTDef
 
@@ -505,14 +505,17 @@ instance showADTDef :: Show ADTDef where
     <> "\n  = "
     <> intercalate "\n  | " (map show cs)
 
-data DataCons
-  = DataCons String Int (List Type)
 
-instance showDataCons :: Show DataCons where
+-- | DataConstructor parameterized over its parameters,
+--   to use it for both, type definitions and data.
+data DataCons params
+  = DataCons String Int (List params)
+
+instance showDataCons :: (Show params) => Show (DataCons params) where
   show (DataCons n _ ts) =
     n <> " " <> intercalate " " (map show ts)
 
-derive instance eqDataCons :: Eq DataCons
+derive instance eqDataCons :: (Eq params) => Eq (DataCons params)
 
 
 data TypeError

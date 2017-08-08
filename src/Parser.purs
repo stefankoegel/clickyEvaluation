@@ -456,6 +456,11 @@ definitions = skipWhite *> block definition
 parseDefs :: String -> Either ParseError (List Definition)
 parseDefs = runParserIndent $ definitions
 
+---------------------------------------------------------
+-- Parsers for Types
+---------------------------------------------------------
+
+
 
 ---------------------------------------------------------
 -- Parsers for Type Definitions
@@ -467,12 +472,12 @@ typeDefinition = do
   n <- ilexe typeName
   tvs <- many $ ilexe name
   conss <- (do PC.try (indent $ char '=')
-               indent dataConstructor `PC.sepBy` (PC.try $ indent $ ilexe $ char '|'))
+               indent dataConstructorDef `PC.sepBy` (PC.try $ indent $ ilexe $ char '|'))
            <|> pure Nil
   pure $ ADTDef n tvs conss
 
-dataConstructor :: IndentParser String DataCons
-dataConstructor = do
+dataConstructorDef :: IndentParser String (DataCons Type)
+dataConstructorDef = do
   n <- ilexe typeName
   ps <- many $ ilexe $ (TypVar <$> name)
   pure $ DataCons n (length ps) ps
