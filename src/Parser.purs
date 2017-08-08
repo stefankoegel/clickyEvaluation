@@ -506,7 +506,7 @@ typeExpr t = do
 types :: IndentParser String Type
 types = do
   whiteSpace
-  fix $ \t -> PC.try (typeCons t) <|> typeExpr t <|> simpleType
+  fix $ \t -> simpleType <|> PC.try (typeCons t) <|> typeExpr t
 
 ---------------------------------------------------------
 -- Parsers for Type Definitions

@@ -541,7 +541,7 @@ typedefTest = do
     (AD (TTypeCons "A" (toList [TypVar "a", TypVar "b", TypVar "c"])))
   test "types7" types
     "A Int b Bool"
-    (AD (TTypeCons "A" (toList [TypCon "Int", TypVar "b", TypVar "Bool"])))
+    (AD (TTypeCons "A" (toList [TypCon "Int", TypVar "b", TypCon "Bool"])))
   test "types8" types
     "A (B c)"
     (AD
@@ -557,7 +557,7 @@ typedefTest = do
         (toList
           [AD
             (TTypeCons "B"
-              (toList [TypVar "Char"]))])))
+              (toList [TypCon "Char"]))])))
   test "types10" types
     "A (B c) (C d)"
     (AD
