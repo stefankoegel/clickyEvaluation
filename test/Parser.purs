@@ -54,13 +54,13 @@ tell' = tell <<< singleton
 test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Writer (List String) Unit
 test name p input expected = case runParserIndent p input of
   Left parseError -> tell' $
-    "Parse fail (" <> name <> ":\"" <> input <> "\"): "
+    "Parse fail (" <> name <> ":" <> show input <> "): "
     <> show (parseErrorPosition parseError) <> " " <> parseErrorMessage parseError
   Right result           ->
     if result == expected
       then pure unit --tell $ "Parse success (" <> name <> ")"
       else tell' $
-        "Parse fail (" <> name <> ":\"" <> input <> "\"): "
+        "Parse fail (" <> name <> ":" <> show input <> "): "
         <> show result <> " /= " <> show expected
 
 aint :: Int -> TypeTree
@@ -586,12 +586,103 @@ typedefTest = do
     "(Int -> Int -> Int)"
     (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int")))
 
+  test "function3" types
+    "(Int -> Int) -> Int"
+    (TypArr
+      (TypArr (TypCon "Int") (TypCon "Int"))
+      (TypCon "Int"))
+
+  test "function4" types
+    "((a -> a) -> a) -> a"
+    (((TypVar "a" `TypArr` TypVar "a") `TypArr` TypVar "a") `TypArr` TypVar "a")
+
+  test "function5" types
+    "a\n\t-> a\n\t ->a"
+    (TypArr (TypVar "a") (TypArr (TypVar "a") (TypVar "a")))
+
   for_ [2, 3, 4, 5, 6, 7, 8] $ \i -> do
     test (show i <> "-tuple") types
       ("(" <> intercalate ", " (Array.replicate i "Int") <> ")")
       (AD
         (TTuple
           (toList (Array.replicate i (TypCon "Int")))))
+
+  test "tuples1" types
+    "((Int, Int), (Int, Int))"
+    (AD
+      (TTuple
+        (toList
+          [ (AD (TTuple (toList [(TypCon "Int"), (TypCon "Int")])))
+          , (AD (TTuple (toList [(TypCon "Int"), (TypCon "Int")])))])))
+
+  test "tuples2" types
+    "(Maybe a, a, b)"
+    (AD
+      (TTuple
+        (toList
+          [ (AD (TTypeCons "Maybe" (toList [TypVar "a"])))
+          , (TypVar "a")
+          , (TypVar "b")])))
+
+  test "simple-list1" types
+    "[Int]"
+    (AD (TList (TypCon "Int")))
+
+  test "simple-list2" types
+    "[a]"
+    (AD (TList (TypVar "a")))
+
+  test "list1" types
+    "[a -> b]"
+    (AD
+      (TList
+        (TypArr
+          (TypVar "a")
+          (TypVar "b"))))
+
+  test "list2" types
+    "[Either a Int]"
+    (AD
+      (TList
+        (AD
+          (TTypeCons "Either"
+            (toList
+              [ TypVar "a", TypCon "Int" ])))))
+
+  test "(list2)" types
+    "([Either a Int])"
+    (AD
+      (TList
+        (AD
+          (TTypeCons "Either"
+            (toList
+              [ TypVar "a", TypCon "Int" ])))))
+
+  test "((list2))" types
+    "(([Either a Int]))"
+    (AD
+      (TList
+        (AD
+          (TTypeCons "Either"
+            (toList
+              [ TypVar "a", TypCon "Int" ])))))
+
+  test "list3" types
+    "[Maybe a -> Either a b]"
+    (AD (TList
+      (TypArr
+        (AD (TTypeCons "Maybe"
+          (toList [TypVar "a"])))
+        (AD (TTypeCons "Either"
+          (toList [TypVar "a", TypVar "b"]))))))
+
+  test "list4" types
+    "[a] -> [b] -> [c]"
+    (TypArr
+      (AD (TList (TypVar "a")))
+      (TypArr
+        (AD (TList (TypVar "b")))
+        (AD (TList (TypVar "c")))))
 
   test "symbol" symbol
     "!"
