@@ -482,14 +482,31 @@ parseDefs = runParserIndent $ definitions
 ---------------------------------------------------------
 -- Parsers for Types
 ---------------------------------------------------------
+{-
+  <TYPE>    --> <TYPE1> [ `->` <TYPE> ]
+  <TYPE1>   --> <SIMPLE>
+              | <TYPEVAR>
+              | `[` <TYPE> `]`
+              | <CONS> { <TYPE> }
+              | `(` <TYPE> `)`
+              | `(` <TYPE> { `,` <TYPE> } `)`
+  <SIMPLE>  --> `Int` | `Bool` | `Char`
+-}
 
 simpleType :: IndentParser String Type
-simpleType
-  = TypCon <$> (string "Bool"
-               <|> string "Int"
-               <|> string "Char")
+simpleType =
+  TypCon <$> (string "Bool"
+             <|> string "Int"
+             <|> string "Char")
   <|> TypVar <$> name
-
+{-
+typeArr ::  IndentParser String Type -> IndentParser String Type
+typeArr t = do
+  l <- (typeExpr t <|> simpleType <|> typeCons t)
+  ilexe $ string "->"
+  r <- (typeExpr t <|> typeArr t <|> simpleType <|> typeCons t)
+  pure $ TypArr l r
+  -}
 typeCons :: IndentParser String Type -> IndentParser String Type
 typeCons t = do
   n <- ilexe typeName
@@ -497,16 +514,34 @@ typeCons t = do
   pure $ AD $ TTypeCons n ps
 
 typeExpr :: IndentParser String Type -> IndentParser String Type
-typeExpr t = do
-  indent (char '(')
-  r <- indent t
-  indent (char ')')
-  pure r
+typeExpr t = PC.between
+  (indent (char '('))
+  (indent (char ')'))
+  (indent t)
 
 types :: IndentParser String Type
 types = do
   whiteSpace
-  fix $ \t -> simpleType <|> PC.try (typeCons t) <|> typeExpr t
+  fix $ \t -> PC.chainr1
+    (indent (types1 t))
+    (indent (string "->") *> pure TypArr)
+
+typeTuple :: IndentParser String Type -> IndentParser String Type
+typeTuple t = PC.between
+  (ilexe (char '('))
+  (PC.try $ indent (char ')'))
+  (do ts <- PC.sepBy1 (indent t) (PC.try (indent (char ',')))
+      when (length ts <= 1) (fail "Tuple to short.")
+      pure (AD (TTuple ts)))
+
+types1 :: IndentParser String Type -> IndentParser String Type
+types1 t =
+  PC.try simpleType
+  <|> AD <<< TList <$> (ilexe (char '[') *> indent t <* indent (char ']'))
+  <|> typeCons t
+  <|> PC.try (typeExpr t)
+  <|> typeTuple t
+
 
 ---------------------------------------------------------
 -- Parsers for Type Definitions

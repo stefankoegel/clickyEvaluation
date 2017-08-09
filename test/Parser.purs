@@ -3,10 +3,11 @@ module Test.Parser where
 import Prelude
 import Data.Either (Either(..))
 import Data.List (List(..), singleton, (:), many)
-import Data.Array (toUnfoldable) as Array
+import Data.Array (toUnfoldable, replicate) as Array
 import Data.Tuple (Tuple(..))
 import Data.String (toCharArray) as String
 import Data.Maybe (Maybe(..))
+import Data.Foldable (intercalate, for_)
 
 import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
 
@@ -38,7 +39,6 @@ import Parser
   , runParserIndent
   , typeDefinition
   , dataConstructorDefinition
-  , prefixDataConstructorDefinition
   , infixDataConstructorDefinition
   , symbol
   , infixConstructor
@@ -53,11 +53,15 @@ tell' = tell <<< singleton
 
 test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Writer (List String) Unit
 test name p input expected = case runParserIndent p input of
-  Left parseError -> tell' $ "Parse fail (" <> name <> "): " <> show (parseErrorPosition parseError) <> " " <> parseErrorMessage parseError
+  Left parseError -> tell' $
+    "Parse fail (" <> name <> ":\"" <> input <> "\"): "
+    <> show (parseErrorPosition parseError) <> " " <> parseErrorMessage parseError
   Right result           ->
     if result == expected
       then pure unit --tell $ "Parse success (" <> name <> ")"
-      else tell' $ "Parse fail (" <> name <> "): " <> show result <> " /= " <> show expected
+      else tell' $
+        "Parse fail (" <> name <> ":\"" <> input <> "\"): "
+        <> show result <> " /= " <> show expected
 
 aint :: Int -> TypeTree
 aint i = Atom Nothing $ AInt i
@@ -569,6 +573,26 @@ typedefTest = do
           , AD
             (TTypeCons "C"
               (toList [TypVar "d"]))])))
+  test "function1" types
+    "Int -> Int"
+    (TypArr (TypCon "Int") (TypCon "Int"))
+  test "function1'" types
+    "(Int -> Int)"
+    (TypArr (TypCon "Int") (TypCon "Int"))
+  test "function2" types
+    "Int -> Int -> Int"
+    (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int")))
+  test "function2'" types
+    "(Int -> Int -> Int)"
+    (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int")))
+
+  for_ [2, 3, 4, 5, 6, 7, 8] $ \i -> do
+    test (show i <> "-tuple") types
+      ("(" <> intercalate ", " (Array.replicate i "Int") <> ")")
+      (AD
+        (TTuple
+          (toList (Array.replicate i (TypCon "Int")))))
+
   test "symbol" symbol
     "!"
     '!'
