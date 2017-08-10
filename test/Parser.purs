@@ -684,6 +684,43 @@ typedefTest = do
         (AD (TList (TypVar "b")))
         (AD (TList (TypVar "c")))))
 
+  test "definition1" typeDefinition
+    ("data Tree a\n"
+     <> "  = Node Int\n"
+     <> "  | Leaf (Tree a) (Tree a)")
+    (ADTDef "Tree" (toList ["a"])
+      (toList
+        [ PrefixCons "Node" 1 (Cons (TypCon "Int") Nil)
+        , PrefixCons "Leaf" 2
+          (toList
+            [ (AD (TTypeCons "Tree" (Cons (TypVar "a") Nil)))
+            , (AD (TTypeCons "Tree" (Cons (TypVar "a") Nil)))])]))
+
+  test "definition2" typeDefinition
+    ("data Test a b\n"
+     <> "  = T1 a [b]\n"
+     <> "  | T2 [a] (a,b)\n"
+     <> "  | T3 [(a,a->b)]\n"
+     <> "  | a :+ [b]")
+    (ADTDef "Test" (toList ["a","b"])
+      (toList
+        [ PrefixCons "T1" 2
+          (toList
+            [ TypVar "a"
+            , AD (TList (TypVar "b"))])
+        , PrefixCons "T2" 2
+          (toList
+            [ AD (TList (TypVar "a"))
+            , AD (TTuple (toList [TypVar "a", TypVar "b"]))])
+        , PrefixCons "T3" 1
+          (toList
+            [ AD (TList
+              (AD (TTuple
+                (toList
+                  [ TypVar "a"
+                  , TypArr (TypVar "a") (TypVar "b")]))))])
+        , InfixCons ASSOC ":+" (TypVar "a") (AD (TList (TypVar "b")))]))
+
   test "symbol" symbol
     "!"
     '!'
