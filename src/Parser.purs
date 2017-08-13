@@ -499,18 +499,11 @@ simpleType =
              <|> string "Int"
              <|> string "Char")
   <|> TypVar <$> name
-{-
-typeArr ::  IndentParser String Type -> IndentParser String Type
-typeArr t = do
-  l <- (typeExpr t <|> simpleType <|> typeCons t)
-  ilexe $ string "->"
-  r <- (typeExpr t <|> typeArr t <|> simpleType <|> typeCons t)
-  pure $ TypArr l r
-  -}
+
 typeCons :: IndentParser String Type -> IndentParser String Type
 typeCons t = do
   n <- ilexe typeName
-  ps <- many (ilexe $ typeExpr t <|> simpleType)
+  ps <- many (indent $ typeExpr t <|> simpleType)
   pure $ AD $ TTypeCons n ps
 
 typeExpr :: IndentParser String Type -> IndentParser String Type
@@ -550,10 +543,10 @@ types1 t =
 typeDefinition :: IndentParser String ADTDef
 typeDefinition = do
   ilexe $ string "data"
-  n <- ilexe typeName
-  tvs <- many $ ilexe name
+  n <- indent typeName
+  tvs <- many $ indent name
   conss <- (do PC.try (indent $ char '=')
-               indent dataConstructorDefinition `PC.sepBy` (PC.try $ indent $ ilexe $ char '|'))
+               indent dataConstructorDefinition `PC.sepBy` (PC.try $ indent $ char '|'))
            <|> pure Nil
   pure $ ADTDef n tvs conss
 

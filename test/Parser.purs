@@ -3,15 +3,17 @@ module Test.Parser where
 import Prelude
 import Data.Either (Either(..))
 import Data.List (List(..), singleton, (:), many)
-import Data.Array (toUnfoldable, replicate) as Array
+import Data.Array ((..))
+import Data.Array (length, zip, toUnfoldable, replicate) as Array
 import Data.Tuple (Tuple(..))
-import Data.String (toCharArray) as String
+import Data.String (Pattern(..), toCharArray, split, null) as String
 import Data.Maybe (Maybe(..))
 import Data.Foldable (intercalate, for_)
 
-import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
+import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessage, fail)
 
 import Control.Monad.Writer (Writer, tell)
+import Control.Monad.State (get)
 
 import AST
   ( TypeTree
@@ -51,17 +53,66 @@ toList = Array.toUnfoldable
 tell' :: forall a. a -> Writer (List a) Unit
 tell' = tell <<< singleton
 
+padLeft :: String -> String
+padLeft = lines >>> map (\x -> "\t" <> x) >>> unlines
+
+padLeft' :: forall a. (Show a) => a -> String
+padLeft' = show >>> padLeft
+
+unlines :: Array String -> String
+unlines = intercalate "\n"
+
+lines :: String -> Array String
+lines = String.split (String.Pattern "\n")
+
 test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Writer (List String) Unit
 test name p input expected = case runParserIndent p input of
   Left parseError -> tell' $
-    "Parse fail (" <> name <> ":" <> show input <> "): "
-    <> show (parseErrorPosition parseError) <> " " <> parseErrorMessage parseError
+    "Parse fail (" <> name <> "): "
+    <> padLeft' (parseErrorPosition parseError) <> "\n"
+    <> padLeft (parseErrorMessage parseError) <> "\n"
+    <> "input:\n"
+    <> padLeft input
   Right result           ->
     if result == expected
       then pure unit --tell $ "Parse success (" <> name <> ")"
       else tell' $
-        "Parse fail (" <> name <> ":" <> show input <> "): "
-        <> show result <> " /= " <> show expected
+        "Parse fail (" <> name <> "):\n"
+        <> padLeft' result <> "\n"
+        <> "/= \n"
+        <> padLeft' expected <> "\n"
+        <> "input:\n"
+        <> padLeft input
+
+
+rejectTest :: forall a . (Show a)
+                      => String
+                      -> IndentParser String a
+                      -> String
+                      -> Writer (List String) Unit
+rejectTest name parser input = case runParserIndent (parser <* inputIsEmpty) input of
+  Left parserError -> pure unit
+  Right result ->
+    tell' $
+      "Parser accepted " <> name <> "\n"
+      <> "Input:\n"
+      <> padLeft input <> "\n"
+      <> "Output:\n"
+      <> padLeft' result
+
+rejectTests :: forall a . (Show a)
+                       => String
+                       -> IndentParser String a
+                       -> Array String
+                       -> Writer (List String) Unit
+rejectTests name parser inputs = do
+  for_ ((1 .. Array.length inputs) `Array.zip` inputs) $ \(Tuple idx iput) ->
+    rejectTest (name <> "-" <> show idx) parser iput
+
+inputIsEmpty :: IndentParser String Unit
+inputIsEmpty = do
+  ParseState s _ _ <- get
+  when (not (String.null s)) (fail $ "Leftover input:\n" <> padLeft s)
 
 aint :: Int -> TypeTree
 aint i = Atom Nothing $ AInt i
@@ -600,12 +651,18 @@ typedefTest = do
     "a\n\t-> a\n\t ->a"
     (TypArr (TypVar "a") (TypArr (TypVar "a") (TypVar "a")))
 
-  for_ [2, 3, 4, 5, 6, 7, 8] $ \i -> do
+  for_ (2 .. 8) $ \i -> do
     test (show i <> "-tuple") types
       ("(" <> intercalate ", " (Array.replicate i "Int") <> ")")
       (AD
         (TTuple
           (toList (Array.replicate i (TypCon "Int")))))
+
+  test "tuple-space" types
+    " (Int, Int)"
+    (AD
+      (TTuple
+        (toList [TypCon "Int", TypCon "Int"])))
 
   test "tuples1" types
     "((Int, Int), (Int, Int))"
@@ -784,4 +841,31 @@ typedefTest = do
         [ InfixCons ASSOC ":+" (TypVar "a") (TypVar "a")
         , InfixCons ASSOC ":-" (TypVar "a") (TypVar "a")
         , PrefixCons "Prefix" 1 (Cons (TypVar "a") Nil)]))
+  rejectTests "typesBracketMismatch" types
+    [ "[a"
+    , "a]"
+    , "[[a]"
+    , "[a -> b]]"
+    , "(a -> b))"
+    , "(a -> b"
+    , "a -> b)"
+    , "Foo (a b"
+    , "Foo a b)"
+    , "(Foo a b"
+    ]
 
+  rejectTests "typesMisindented" types
+    [ "Foo\na\nb\nc"
+    , " Foo\na"
+    , " a\n->b"
+    , " (a\n,b\n,c)"
+    ]
+
+  rejectTests "typdefMisindented" typeDefinition
+    [ "data Foo\n=Foo"
+    , "data Foo a\n =Foo\na"
+    , "data Foo\na b c=Foo a b c"
+    , "data Foo\n| Foo\n| Bar"
+    , "data Foo\n | Foo\n| Bar"
+    , "data\nFoo\na = Foo a"
+    ]
