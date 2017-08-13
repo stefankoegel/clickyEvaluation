@@ -46,6 +46,7 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expres
         else tell' $ "Eval fail (" <> name <> "): " <> show evalExp <> " should be " <> show expExp
   (Tuple (Tuple pi pe) pd) -> tell' $ "Parse fail (" <> name <> "): (input: " <> show pi <> ", expected: " <> show pe <> ", definitions: " <> show pd <> ")"
 
+
 runTests :: Writer (List String) Unit
 runTests = do
   eval1test "add" "1+1" "2"
@@ -79,7 +80,6 @@ runTests = do
   evalEnvTest "evalNegNumber2" "" "(-2) * (-2)" "4"
   evalEnvTest "evalNegNumber3" "" "-(-(5*5) + 6*6) + 7*7" (show (-(-(5*5) + 6*6) + 7*7)) -- 38
   evalEnvTest "evalNegNumber4" "" "-3 * 7 + 23" "2"
-
 
   evalEnvTest "if1" "" "if 10 > 5 then 10 else 5" "10"
   evalEnvTest "if2" "" "if 2 /= 2 then 1 else 0" "0"

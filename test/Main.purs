@@ -36,7 +36,6 @@ main = do
   let typeCheckerLog = execWriter TypeChecker.runTests
   log $ "  ...found " <> show (length typeCheckerLog) <> " errors"
   for typeCheckerLog log
-
   let errorCount = length parserLog + length evaluatorLog + length astLog + length typeCheckerLog
   if errorCount == 0
     then do
