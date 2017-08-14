@@ -461,7 +461,7 @@ tupleLit bnd = do
   pure $ NTupleLit Nothing (Cons b bs)
 
 constrLit :: FixedIndentParser String (Binding MType)
-constrLit bnd = nullary <|> PC.try (prefConstrLit bnd) <|> (infConstrLit bnd)
+constrLit bnd = PC.try (prefConstrLit bnd) <|> (infConstrLit bnd)
 
 nullary :: IndentParser String (Binding MType)
 nullary = do
@@ -492,6 +492,7 @@ binding = fix $ \bnd ->
   <|> (tupleLit bnd)
   <|> (listLit bnd)
   <|> lit
+  <|> nullary
 
 ---------------------------------------------------------
 -- Parsers for Definitions
