@@ -485,6 +485,14 @@ infConstrLit bnd = do
   ilexe $ char ')'
   pure $ ConstrLit Nothing (InfixCons o LEFTASSOC 9 l r)
 
+-- TODO:
+-- There is no support for patterns like
+--  (Foo 1 2, Bar 3 4)
+-- yet; for now, the constructors must be written in parantheses like
+--  ((Foo 1 2), (Bar 3 4))
+----
+-- FIX THIS!
+
 binding :: IndentParser String (Binding MType)
 binding = fix $ \bnd ->
       (PC.try $ consLit bnd)
