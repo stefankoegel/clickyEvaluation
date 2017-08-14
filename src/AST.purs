@@ -522,6 +522,10 @@ data DataCons param
   = PrefixCons String Int (List param)
   | InfixCons String Associativity Int param param
 
+instance functorDataCons :: Functor DataCons where
+  map f (PrefixCons s i ps) = PrefixCons s i (map f ps)
+  map f (InfixCons s a i p1 p2) = InfixCons s a i (f p1) (f p2)
+
 instance showDataCons :: (Show param) => Show (DataCons param) where
   show (PrefixCons n _ ts)
     = n <> " " <> intercalate " " (map show ts)
@@ -533,7 +537,6 @@ instance showDataCons :: (Show param) => Show (DataCons param) where
     = "(" <> show l <> ") " <> o <> " " <> show r
 
 derive instance eqDataCons :: (Eq params) => Eq (DataCons params)
-
 
 data TypeError
   = UnificationFail Type Type
