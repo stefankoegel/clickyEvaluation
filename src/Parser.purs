@@ -44,6 +44,12 @@ import AST
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
+-- Utils
+---------------------------------------------------------
+
+type FixedIndentParser s a = IndentParser s a -> IndentParser s a
+
+---------------------------------------------------------
 -- Helpful combinators
 ---------------------------------------------------------
 
@@ -454,9 +460,30 @@ tupleLit bnd = do
   indent $ char ')'
   pure $ NTupleLit Nothing (Cons b bs)
 
+constrLit :: FixedIndentParser String (Binding MType)
+constrLit bnd = PC.try (prefConstrLit bnd) <|> (infConstrLit bnd)
+
+prefConstrLit :: FixedIndentParser String (Binding MType)
+prefConstrLit bnd = do
+  ilexe $ char '('
+  n <- indent typeName
+  as   <- many (indent bnd)
+  ilexe $ char ')'
+  pure $ ConstrLit Nothing (PrefixCons n (length as) as)
+
+infConstrLit :: FixedIndentParser String (Binding MType)
+infConstrLit bnd = do
+  ilexe $ char '('
+  l <- indent bnd
+  o <- indent infixConstructor
+  r <- indent bnd
+  ilexe $ char ')'
+  pure $ ConstrLit Nothing (InfixCons o LEFTASSOC 9 l r)
+
 binding :: IndentParser String (Binding MType)
 binding = fix $ \bnd ->
-      (PC.try $ consLit bnd)
+      (PC.try $ constrLit bnd)
+  <|> (PC.try $ consLit bnd)
   <|> (tupleLit bnd)
   <|> (listLit bnd)
   <|> lit

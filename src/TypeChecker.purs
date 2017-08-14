@@ -25,6 +25,8 @@ import Prelude (
 import AST
 import AST as AST
 
+import JSHelpers (unsafeUndef)
+
 ---------------------------------------------------------------------------------------------------
 -- | Data Types and Helper Functions                                                             --
 ---------------------------------------------------------------------------------------------------
@@ -173,6 +175,7 @@ instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (ConsLit t b1 b2) = ConsLit (apply s t) (apply s b1) (apply s b2)
   apply s (ListLit t lb) = ListLit (apply s t) (apply s lb)
   apply s (NTupleLit t lb) = NTupleLit (apply s t) (apply s lb)
+  apply s (ConstrLit t c) = ConstrLit (apply s t) (map (apply s) c)
 
   ftv = extractFromBinding >>> ftv
 
@@ -811,6 +814,9 @@ makeBindingEnv binding = case binding of
     Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bs
     let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TTuple ts)
     pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs <+> c)
+
+  -- TODO
+  ConstrLit _ _ -> unsafeUndef
 
   where
   -- Go through the list of given types and set constraints for every to elements of the list.

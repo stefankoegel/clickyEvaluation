@@ -21,6 +21,8 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.State.Trans (StateT, get, modify, runStateT, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
+import JSHelpers (unsafeUndef)
+
 import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, MType)
 import AST as AST
 
@@ -138,6 +140,8 @@ evalToBinding env expr bind = case bind of
   (NTupleLit _ bs)     -> case expr of
     (NTuple _ es)  -> NTuple Nothing (zipWith (evalToBinding env) es bs)
     _              -> recurse env expr bind
+-- TODO
+  (ConstrLit _ _) -> unsafeUndef
 
 
 recurse :: Env -> TypeTree -> Binding MType -> TypeTree
@@ -475,6 +479,8 @@ match' (NTupleLit _ bs)    (NTuple _ es) = case length bs == length es of
                                            true  -> void $ zipWithA match' bs es
                                            false -> throwError $ MatchingError (NTupleLit Nothing bs) (NTuple Nothing es)
 match' (NTupleLit _ bs)    e             = throwError $ checkStrictness (NTupleLit Nothing bs) e
+-- TODO
+match' (ConstrLit _ _) _ = unsafeUndef
 
 --TODO: replace with purescript mapM
 mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
