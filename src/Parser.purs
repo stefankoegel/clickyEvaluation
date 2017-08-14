@@ -461,7 +461,12 @@ tupleLit bnd = do
   pure $ NTupleLit Nothing (Cons b bs)
 
 constrLit :: FixedIndentParser String (Binding MType)
-constrLit bnd = PC.try (prefConstrLit bnd) <|> (infConstrLit bnd)
+constrLit bnd = nullary <|> PC.try (prefConstrLit bnd) <|> (infConstrLit bnd)
+
+nullary :: IndentParser String (Binding MType)
+nullary = do
+  n <- indent typeName
+  pure $ ConstrLit Nothing (PrefixCons n 0 Nil)
 
 prefConstrLit :: FixedIndentParser String (Binding MType)
 prefConstrLit bnd = do
