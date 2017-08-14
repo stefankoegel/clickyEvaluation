@@ -404,6 +404,7 @@ runTests = do
     Let Nothing (Lit Nothing (Name "b")) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "a")) (Atom Nothing (AInt 1)))]
   test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp Nothing (aname "x") $ toList [ Gen Nothing (Lit Nothing (Name "x")) (ArithmSeq Nothing (aint 1) Nothing (Just (aint 10))), Guard Nothing (App Nothing (aname "even") $ toList [aname "x"])]
   typedefTest
+  bindingsWithConstrLit
 
 
 prelude :: String
@@ -576,6 +577,24 @@ parsedPrelude = toList [
 
 stringToList :: String -> List Char
 stringToList = Array.toUnfoldable <<< String.toCharArray
+
+type MType = Maybe Type
+
+litname :: String -> Binding MType
+litname = Lit Nothing <<< Name
+
+prefixCons :: String -> Array (Binding MType) -> Binding MType
+prefixCons name args = ConstrLit Nothing (PrefixCons name (Array.length args) (toList args))
+
+bindingsWithConstrLit :: Writer (List String) Unit
+bindingsWithConstrLit = do
+  test "binding-simple-1" binding
+    "(Foo a b)"
+    (prefixCons "Foo" [litname "a", litname "b"])
+
+  test "binding-simple-2" binding
+    "(Foo)"
+    (prefixCons "Foo" [])
 
 typedefTest :: Writer (List String) Unit
 typedefTest = do
