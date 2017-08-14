@@ -583,6 +583,12 @@ type MType = Maybe Type
 litname :: String -> Binding MType
 litname = Lit Nothing <<< Name
 
+litint :: Int -> Binding MType
+litint = Lit Nothing <<< AInt
+
+bpair :: Binding MType -> Binding MType -> Binding MType
+bpair l r = NTupleLit Nothing (Cons l (Cons r Nil))
+
 prefixCons :: String -> Array (Binding MType) -> Binding MType
 prefixCons name args = ConstrLit Nothing (PrefixCons name (Array.length args) (toList args))
 
@@ -595,6 +601,36 @@ bindingsWithConstrLit = do
   test "binding-simple-2" binding
     "(Foo)"
     (prefixCons "Foo" [])
+
+  test "binding-simple-3" binding
+    "Foo"
+    (prefixCons "Foo" [])
+
+  test "binding-nested-1" binding
+    "(Foo Foo 1)"
+    (prefixCons "Foo"
+      [ prefixCons "Foo" []
+      , litint 1 ])
+
+  test "binding-nested-2" binding
+    "(Foo (Foo 1) (Foo 2 3))"
+    (prefixCons "Foo"
+      [ prefixCons "Foo"
+        [ litint 1 ]
+      , prefixCons "Foo"
+        [ litint 2
+        , litint 3 ]])
+
+  test "binding-nested-3" binding
+    "(Foo (1,2))"
+    (prefixCons "Foo"
+      [ bpair (litint 1) (litint 2) ])
+
+  test "binding-nested-4" binding
+    "([a,c],b)"
+    (bpair
+      (ListLit Nothing (Cons (litname "a") (Cons (litname "c") Nil)))
+      (litname "b"))
 
 typedefTest :: Writer (List String) Unit
 typedefTest = do
