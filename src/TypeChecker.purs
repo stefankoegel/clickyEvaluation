@@ -816,7 +816,7 @@ makeBindingEnv binding = case binding of
     pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs <+> c)
 
   -- TODO
-  ConstrLit _ _ -> unsafeUndef
+  ConstrLit _ _ -> unsafeUndef "makeBindingEnv ... ConstrLit _ _ ->"
 
   where
   -- Go through the list of given types and set constraints for every to elements of the list.

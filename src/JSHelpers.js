@@ -94,6 +94,6 @@ exports.isChecked = function(checkbox) {
   };
 };
 
-exports.unsafeUndef = function() {
-  throw new Error("Undefined");
+exports.unsafeUndef = function(msg) {
+  throw new Error("Undefined:" + msg);
 };

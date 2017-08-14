@@ -141,7 +141,7 @@ evalToBinding env expr bind = case bind of
     (NTuple _ es)  -> NTuple Nothing (zipWith (evalToBinding env) es bs)
     _              -> recurse env expr bind
 -- TODO
-  (ConstrLit _ _) -> unsafeUndef
+  (ConstrLit _ _) -> unsafeUndef "evalToBinding ... (ConstrLit _ _) -> "
 
 
 recurse :: Env -> TypeTree -> Binding MType -> TypeTree
@@ -480,7 +480,7 @@ match' (NTupleLit _ bs)    (NTuple _ es) = case length bs == length es of
                                            false -> throwError $ MatchingError (NTupleLit Nothing bs) (NTuple Nothing es)
 match' (NTupleLit _ bs)    e             = throwError $ checkStrictness (NTupleLit Nothing bs) e
 -- TODO
-match' (ConstrLit _ _) _ = unsafeUndef
+match' (ConstrLit _ _) _ = unsafeUndef "match' (ConstrLit _ _)"
 
 --TODO: replace with purescript mapM
 mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)

@@ -482,8 +482,8 @@ infConstrLit bnd = do
 
 binding :: IndentParser String (Binding MType)
 binding = fix $ \bnd ->
-      (PC.try $ constrLit bnd)
-  <|> (PC.try $ consLit bnd)
+      (PC.try $ consLit bnd)
+  <|> (PC.try $ constrLit bnd)
   <|> (tupleLit bnd)
   <|> (listLit bnd)
   <|> lit
