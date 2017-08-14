@@ -566,7 +566,7 @@ infixDataConstructorDefinition = do
   l <- ilexe types
   o <- indent $ ilexe infixConstructor
   r <- indent $ ilexe types
-  pure $ InfixCons ASSOC o l r
+  pure $ InfixCons o LEFTASSOC 9 l r
 
 
 infixConstructor :: forall m. (Monad m) => ParserT String m String

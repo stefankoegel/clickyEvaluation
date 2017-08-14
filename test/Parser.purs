@@ -776,7 +776,7 @@ typedefTest = do
                 (toList
                   [ TypVar "a"
                   , TypArr (TypVar "a") (TypVar "b")]))))])
-        , InfixCons ASSOC ":+" (TypVar "a") (AD (TList (TypVar "b")))]))
+        , InfixCons ":+" LEFTASSOC 9 (TypVar "a") (AD (TList (TypVar "b")))]))
 
   test "symbol" symbol
     "!"
@@ -798,10 +798,10 @@ typedefTest = do
     ":"
   test "infixConstructor1" infixDataConstructorDefinition
     "a :+ b"
-    (InfixCons ASSOC ":+" (TypVar "a") (TypVar "b"))
+    (InfixCons ":+" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
   test "infixConstructor2" infixDataConstructorDefinition
     "a :::::: b"
-    (InfixCons ASSOC "::::::" (TypVar "a") (TypVar "b"))
+    (InfixCons "::::::" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
   test "nil" dataConstructorDefinition
     "Nil"
     (PrefixCons "Nil" 0 Nil)
@@ -838,8 +838,8 @@ typedefTest = do
     "data InfixStuff a = a :+ a | a :- a | Prefix a"
     (ADTDef "InfixStuff" (toList ["a"])
       (toList
-        [ InfixCons ASSOC ":+" (TypVar "a") (TypVar "a")
-        , InfixCons ASSOC ":-" (TypVar "a") (TypVar "a")
+        [ InfixCons ":+" LEFTASSOC 9 (TypVar "a") (TypVar "a")
+        , InfixCons ":-" LEFTASSOC 9 (TypVar "a") (TypVar "a")
         , PrefixCons "Prefix" 1 (Cons (TypVar "a") Nil)]))
   rejectTests "typesBracketMismatch" types
     [ "[a"

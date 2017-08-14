@@ -520,16 +520,16 @@ derive instance eqAssociativity :: Eq Associativity
 
 data DataCons param
   = PrefixCons String Int (List param)
-  | InfixCons Associativity String param param
+  | InfixCons String Associativity Int param param
 
 instance showDataCons :: (Show param) => Show (DataCons param) where
   show (PrefixCons n _ ts)
     = n <> " " <> intercalate " " (map show ts)
-  show (InfixCons ASSOC o l r)
+  show (InfixCons o ASSOC _ l r)
     = show l <> " " <> o <> " " <> show r
-  show (InfixCons RIGHTASSOC o l r)
+  show (InfixCons o RIGHTASSOC _ l r)
     = show l <> " " <> o <> " (" <> show r <> ")"
-  show (InfixCons LEFTASSOC o l r)
+  show (InfixCons o LEFTASSOC _ l r)
     = "(" <> show l <> ") " <> o <> " " <> show r
 
 derive instance eqDataCons :: (Eq params) => Eq (DataCons params)
