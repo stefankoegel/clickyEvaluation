@@ -71,17 +71,18 @@ test name p input expected = case runParserIndent p input of
     "Parse fail (" <> name <> "): "
     <> padLeft' (parseErrorPosition parseError) <> "\n"
     <> padLeft (parseErrorMessage parseError) <> "\n"
-    <> "input:\n"
+    <> "Input:\n"
     <> padLeft input
   Right result           ->
     if result == expected
       then pure unit --tell $ "Parse success (" <> name <> ")"
       else tell' $
         "Parse fail (" <> name <> "):\n"
+        <> "Output:\n"
         <> padLeft' result <> "\n"
-        <> "/= \n"
+        <> "Expected:\n"
         <> padLeft' expected <> "\n"
-        <> "input:\n"
+        <> "Input:\n"
         <> padLeft input
 
 
@@ -592,7 +593,7 @@ bpair l r = NTupleLit Nothing (Cons l (Cons r Nil))
 prefixCons :: String -> Array (Binding MType) -> Binding MType
 prefixCons name args = ConstrLit Nothing (PrefixCons name (Array.length args) (toList args))
 
-infixCons :: String -> Binding MType -> BindingMType -> BindingMType
+infixCons :: String -> Binding MType -> Binding MType -> Binding MType
 infixCons op l r = ConstrLit Nothing (InfixCons op LEFTASSOC 9 l r)
 
 bindingsWithConstrLit :: Writer (List String) Unit
