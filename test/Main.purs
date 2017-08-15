@@ -5,7 +5,7 @@ import Data.List (length)
 import Data.Traversable (for)
 
 import Test.Parser as Parser
-import Test.Evaluator as Evaluator
+-- import Test.Evaluator as Evaluator
 import Test.AST as AST
 import Test.TypeChecker as TypeChecker
 
@@ -26,17 +26,17 @@ main = do
   let parserLog = execWriter Parser.runTests
   log $ "  ...found " <> show (length parserLog) <> " errors"
   for parserLog log
-
+{-
   log $ "Running evaluator tests..."
   let evaluatorLog = execWriter Evaluator.runTests
   log $ "  ...found " <> show (length evaluatorLog) <> " errors"
   for evaluatorLog log
-
+  -}
   log $ "Running type checker tests..."
   let typeCheckerLog = execWriter TypeChecker.runTests
   log $ "  ...found " <> show (length typeCheckerLog) <> " errors"
   for typeCheckerLog log
-  let errorCount = length parserLog + length evaluatorLog + length astLog + length typeCheckerLog
+  let errorCount = length parserLog + {- length evaluatorLog + -} length astLog + length typeCheckerLog
   if errorCount == 0
     then do
       log $ "All tests succesfull"
