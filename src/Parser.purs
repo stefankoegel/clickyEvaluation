@@ -439,24 +439,24 @@ consLit bnd = do
   where
     consLit' :: IndentParser String (Binding MType)
     consLit' = do
-      b <- ilexe $ bnd
+      b <- ilexe $ binding' bnd
       indent $ char ':'
-      bs <- (PC.try $ indent consLit') <|> (indent bnd)
+      bs <- (PC.try $ indent consLit') <|> (indent (binding' bnd))
       pure $ ConsLit Nothing b bs
 
 listLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
 listLit bnd = do
   ilexe $ char '['
-  bs <- (indent bnd) `PC.sepBy` (PC.try $ indent $ char ',')
+  bs <- (indent (binding' bnd)) `PC.sepBy` (PC.try $ indent $ char ',')
   indent $ char ']'
   pure $ ListLit Nothing bs
 
 tupleLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
 tupleLit bnd = do
   ilexe $ char '('
-  b <- indent bnd
+  b <- indent (binding' bnd)
   indent $ char ','
-  bs <- (indent bnd) `PC.sepBy1` (PC.try $ indent $ char ',')
+  bs <- (indent (binding' bnd)) `PC.sepBy1` (PC.try $ indent $ char ',')
   indent $ char ')'
   pure $ NTupleLit Nothing (Cons b bs)
 
@@ -470,19 +470,15 @@ nullary = do
 
 prefConstrLit :: FixedIndentParser String (Binding MType)
 prefConstrLit bnd = do
-  ilexe $ char '('
   n <- indent typeName
   as   <- many (indent bnd)
-  ilexe $ char ')'
   pure $ ConstrLit Nothing (PrefixCons n (length as) as)
 
 infConstrLit :: FixedIndentParser String (Binding MType)
 infConstrLit bnd = do
-  ilexe $ char '('
   l <- indent bnd
   o <- indent infixConstructor
   r <- indent bnd
-  ilexe $ char ')'
   pure $ ConstrLit Nothing (InfixCons o LEFTASSOC 9 l r)
 
 -- TODO:
@@ -492,11 +488,20 @@ infConstrLit bnd = do
 --  ((Foo 1 2), (Bar 3 4))
 ----
 -- FIX THIS!
+--
+binding' :: FixedIndentParser String (Binding MType)
+binding' bnd =
+      (PC.try $ consLit bnd)
+  <|> (PC.try $ constrLit bnd)
+  <|> (tupleLit bnd)
+  <|> (listLit bnd)
+  <|> lit
+  <|> nullary
 
 binding :: IndentParser String (Binding MType)
 binding = fix $ \bnd ->
       (PC.try $ consLit bnd)
-  <|> (PC.try $ constrLit bnd)
+  <|> (PC.try $ ilexe (char '(') *> constrLit bnd <* ilexe (char ')'))
   <|> (tupleLit bnd)
   <|> (listLit bnd)
   <|> lit
