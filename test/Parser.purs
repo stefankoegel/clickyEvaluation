@@ -587,6 +587,9 @@ litname = Lit Nothing <<< Name
 litint :: Int -> Binding MType
 litint = Lit Nothing <<< AInt
 
+litlist :: Array (Binding MType) -> Binding MType
+litlist = ListLit Nothing <<< toList
+
 bpair :: Binding MType -> Binding MType -> Binding MType
 bpair l r = NTupleLit Nothing (Cons l (Cons r Nil))
 
@@ -595,6 +598,8 @@ prefixCons name args = ConstrLit Nothing (PrefixCons name (Array.length args) (t
 
 infixCons :: String -> Binding MType -> Binding MType -> Binding MType
 infixCons op l r = ConstrLit Nothing (InfixCons op LEFTASSOC 9 l r)
+
+
 
 bindingsWithConstrLit :: Writer (List String) Unit
 bindingsWithConstrLit = do
@@ -609,6 +614,10 @@ bindingsWithConstrLit = do
   test "binding-simple-3" binding
     "Foo"
     (prefixCons "Foo" [])
+
+  test "binding-simple-4" binding
+    "a"
+    (litname "a")
 
   test "binding-nested-1" binding
     "(Foo Foo 1)"
@@ -647,6 +656,35 @@ bindingsWithConstrLit = do
     (bpair
       (infixCons ":-" (litname "foo") (litname "bar"))
       (infixCons ":+" (litname "bar") (litname "foo")))
+
+  test "binding-nested-7" binding
+    "(Foo foo :- Bar bar)"
+    (infixCons ":-"
+      (prefixCons "Foo" [litname "foo"])
+      (prefixCons "Bar" [litname "bar"]))
+
+  test "binding-nested-8" binding
+    "(Foo (foo :- bar))"
+    (prefixCons "Foo"
+      [ infixCons ":-"
+        (litname "foo")
+        (litname "bar") ])
+
+  test "list-binding-nested-1" binding
+    "[Foo a b]"
+    (litlist
+      [ prefixCons "Foo"
+        [ litname "a"
+        , litname "b" ]])
+
+  test "list-binding-nested-2" binding
+    "[Foo a, a :- b]"
+    (litlist
+      [ prefixCons "Foo"
+        [ litname "a" ]
+      , infixCons ":-"
+        (litname "a")
+        (litname "b") ])
 
 
 typedefTest :: Writer (List String) Unit
@@ -866,8 +904,8 @@ typedefTest = do
     ":<>=?"
     ":<>=?"
   test "infixConstructor4" infixConstructor
-    ":"
-    ":"
+    ":-"
+    ":-"
   test "infixConstructor1" infixDataConstructorDefinition
     "a :+ b"
     (InfixCons ":+" LEFTASSOC 9 (TypVar "a") (TypVar "b"))

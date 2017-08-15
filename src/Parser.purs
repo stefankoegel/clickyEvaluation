@@ -427,8 +427,90 @@ parseExpr = runParserIndent expression
 -- Parsers for Bindings
 ---------------------------------------------------------
 
+{-
+<BINDING>
+  ::= <SIMPLE>
+    | '[' <LIST> ']'
+    | '(' <LIST> ')'
+
+<SIMPLE>
+  ::= <LIT>
+    | <NULLARY>
+
+<LIST>
+  ::= <CONSES> { ',' <CONSES> }
+
+<CONSES>
+  ::= <INFIXES> { ':' <INFIXES> }
+
+<INFIXES>
+  ::= <COMPLEX> { <INF_CONSTR> <COMPLEX> }
+
+<COMPLEX>
+  ::= <CONSTR> { <BINDING> }
+    | <BINDING>
+
+-}
+
+
+binding :: IndentParser String (Binding MType)
+binding = do
+  whiteSpace
+  fix $ \bnd -> do
+    la <- PC.lookAhead anyChar
+    case la of
+         '(' -> do
+            cs <- ilexe (char '(') *> indent (bndList bnd) <* indent (char ')')
+            case cs of
+                 Nil        -> pure $ NTupleLit Nothing Nil
+                 Cons c Nil -> pure c
+                 cs'        -> pure $ NTupleLit Nothing cs'
+         '[' -> do
+            cs <- ilexe (char '[') *> indent (bndList bnd) <* indent (char ']')
+            case cs of
+                 Nil        -> pure $ ListLit Nothing Nil
+                 cs'        -> pure $ ListLit Nothing cs'
+         _   -> PC.try $ indent simple
+
+
+simple :: IndentParser String (Binding MType)
+simple = PC.try lit <|> nullary
+
 lit :: forall m. (Monad m) => ParserT String m (Binding MType)
 lit = Lit Nothing <$> atom
+
+nullary :: IndentParser String (Binding MType)
+nullary = do
+  n <- indent typeName
+  pure $ ConstrLit Nothing (PrefixCons n 0 Nil)
+
+bndList :: IndentParser String (Binding MType) -> IndentParser String (List (Binding MType))
+bndList bnd = PC.sepBy
+  (PC.try (bndConses bnd))
+  (PC.try (indent (char ',')))
+
+bndConses :: FixedIndentParser String (Binding MType)
+bndConses bnd = PC.chainr1
+  (PC.try (bndInfixes bnd))
+  (do PC.try (indent (char ':'))
+      pure (ConsLit Nothing))
+
+bndInfixes :: FixedIndentParser String (Binding MType)
+bndInfixes bnd = PC.chainl1
+  (PC.try (bndComplex bnd))
+  (do o <- PC.try (indent infixConstructor)
+      pure (\l r -> ConstrLit Nothing (InfixCons o LEFTASSOC 9 l r)))
+
+bndComplex :: FixedIndentParser String (Binding MType)
+bndComplex bnd =
+  PC.try
+    (do name <- ilexe typeName
+        as   <- many1 bnd
+        pure $ ConstrLit Nothing (PrefixCons name (length as) as))
+  <|> indent bnd
+
+
+{-
 
 consLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
 consLit bnd = do
@@ -463,10 +545,6 @@ tupleLit bnd = do
 constrLit :: FixedIndentParser String (Binding MType)
 constrLit bnd = PC.try (prefConstrLit bnd) <|> (infConstrLit bnd)
 
-nullary :: IndentParser String (Binding MType)
-nullary = do
-  n <- indent typeName
-  pure $ ConstrLit Nothing (PrefixCons n 0 Nil)
 
 prefConstrLit :: FixedIndentParser String (Binding MType)
 prefConstrLit bnd = do
@@ -477,7 +555,7 @@ prefConstrLit bnd = do
 
 infConstrLit :: FixedIndentParser String (Binding MType)
 infConstrLit bnd = PC.chainl1
-  (indent bnd)
+  (indent (binding' bnd))
   (do
     op <- indent infixConstructor
     pure $ \l r -> ConstrLit Nothing (InfixCons op LEFTASSOC 9 l r))
@@ -499,8 +577,8 @@ binding' bnd = do
           <|> PC.try (consLit bnd)
           <|> indent bnd
        '[' -> PC.try (listLit bnd)
-       o   -> PC.try (constrLit bnd)
-          <|> PC.try lit
+       o   -> -- PC.try (constrLit bnd)
+              PC.try lit
           <|> nullary
 
 
@@ -516,7 +594,7 @@ binding = fix $ \bnd -> do
        '[' -> (listLit bnd)
        o   -> PC.try lit
           <|> nullary
-
+          -}
 ---------------------------------------------------------
 -- Parsers for Definitions
 ---------------------------------------------------------
@@ -628,5 +706,5 @@ infixDataConstructorDefinition = do
 infixConstructor :: forall m. (Monad m) => ParserT String m String
 infixConstructor = do
   char ':'
-  syms <- many symbol
+  syms <- many1 symbol
   pure $ String.fromCharArray $ Array.fromFoldable $ Cons ':' syms
