@@ -20,7 +20,7 @@ import Control.Monad.State (runState)
 import Text.Parsing.Parser (ParseError, ParserT, runParserT, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
-import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
+import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf, anyChar)
 import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
 import Text.Parsing.Parser.Pos (initialPos)
@@ -432,16 +432,16 @@ lit = Lit Nothing <$> atom
 
 consLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
 consLit bnd = do
-  ilexe $ char '('
+  -- ilexe $ char '('
   b <- indent consLit'
-  indent $ char ')'
+  -- indent $ char ')'
   pure b
   where
     consLit' :: IndentParser String (Binding MType)
     consLit' = do
-      b <- ilexe $ binding' bnd
+      b <- ilexe bnd
       indent $ char ':'
-      bs <- (PC.try $ indent consLit') <|> (indent (binding' bnd))
+      bs <- (PC.try $ indent consLit') <|> (indent bnd)
       pure $ ConsLit Nothing b bs
 
 listLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
@@ -472,14 +472,15 @@ prefConstrLit :: FixedIndentParser String (Binding MType)
 prefConstrLit bnd = do
   n <- indent typeName
   as   <- many (indent bnd)
+  when (length as <= 0) (fail "Nullary Constructor")
   pure $ ConstrLit Nothing (PrefixCons n (length as) as)
 
 infConstrLit :: FixedIndentParser String (Binding MType)
-infConstrLit bnd = do
-  l <- indent bnd
-  o <- indent infixConstructor
-  r <- indent bnd
-  pure $ ConstrLit Nothing (InfixCons o LEFTASSOC 9 l r)
+infConstrLit bnd = PC.chainl1
+  (indent bnd)
+  (do
+    op <- indent infixConstructor
+    pure $ \l r -> ConstrLit Nothing (InfixCons op LEFTASSOC 9 l r))
 
 -- TODO:
 -- There is no support for patterns like
@@ -490,22 +491,31 @@ infConstrLit bnd = do
 -- FIX THIS!
 --
 binding' :: FixedIndentParser String (Binding MType)
-binding' bnd =
-      (PC.try $ consLit bnd)
-  <|> (PC.try $ constrLit bnd)
-  <|> (tupleLit bnd)
-  <|> (listLit bnd)
-  <|> lit
-  <|> nullary
+binding' bnd = do
+  whiteSpace
+  la <- PC.lookAhead anyChar
+  case la of
+       '(' -> PC.try (tupleLit bnd)
+          <|> PC.try (consLit bnd)
+          <|> indent bnd
+       '[' -> PC.try (listLit bnd)
+       o   -> PC.try (constrLit bnd)
+          <|> PC.try lit
+          <|> nullary
+
 
 binding :: IndentParser String (Binding MType)
-binding = fix $ \bnd ->
-      (PC.try $ consLit bnd)
-  <|> (PC.try $ ilexe (char '(') *> constrLit bnd <* ilexe (char ')'))
-  <|> (tupleLit bnd)
-  <|> (listLit bnd)
-  <|> lit
-  <|> nullary
+binding = fix $ \bnd -> do
+  whiteSpace
+  la <- PC.lookAhead anyChar
+  case la of
+       '(' -> (PC.try $ ilexe (char '(') *> consLit bnd <* ilexe (char ')'))
+          <|> (PC.try $ ilexe (char '(') *> constrLit bnd <* ilexe (char ')'))
+          <|> (tupleLit bnd)
+          <|> ilexe (char '(') *> indent bnd <* ilexe (char ')')
+       '[' -> (listLit bnd)
+       o   -> PC.try lit
+          <|> nullary
 
 ---------------------------------------------------------
 -- Parsers for Definitions
