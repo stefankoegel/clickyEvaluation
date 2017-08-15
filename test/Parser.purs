@@ -725,6 +725,32 @@ bindingsWithConstrLit = do
           (litname "x")
           (litname "_"))))
 
+  test "cons-binding-nested-6" binding
+    "(_:_:+_)"
+    (litcons
+      (litname "_")
+      (infixCons ":+"
+        (litname "_")
+        (litname "_")))
+
+  test "infix-constr-binding-1" binding
+    "(a :- b :- c)"
+    (infixCons ":-"
+      (infixCons ":-"
+        (litname "a")
+        (litname "b"))
+      (litname "c"))
+
+  test "infix-constr-binding-2" binding
+    "(a :- b :+ c :- d)"
+    (infixCons ":-"
+      (infixCons ":+"
+        (infixCons ":-"
+          (litname "a")
+          (litname "b"))
+        (litname "c"))
+      (litname "d"))
+
 
 typedefTest :: Writer (List String) Unit
 typedefTest = do
