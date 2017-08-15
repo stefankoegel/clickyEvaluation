@@ -592,6 +592,9 @@ bpair l r = NTupleLit Nothing (Cons l (Cons r Nil))
 prefixCons :: String -> Array (Binding MType) -> Binding MType
 prefixCons name args = ConstrLit Nothing (PrefixCons name (Array.length args) (toList args))
 
+infixCons :: String -> Binding MType -> BindingMType -> BindingMType
+infixCons op l r = ConstrLit Nothing (InfixCons op LEFTASSOC 9 l r)
+
 bindingsWithConstrLit :: Writer (List String) Unit
 bindingsWithConstrLit = do
   test "binding-simple-1" binding
@@ -631,6 +634,19 @@ bindingsWithConstrLit = do
     (bpair
       (ListLit Nothing (Cons (litname "a") (Cons (litname "c") Nil)))
       (litname "b"))
+
+  test "binding-nested-5" binding
+    "(Foo foo, Bar bar)"
+    (bpair
+      (prefixCons "Foo" [litname "foo"])
+      (prefixCons "Bar" [litname "bar"]))
+
+  test "binding-nested-6" binding
+    "(foo :- bar, bar :+ foo)"
+    (bpair
+      (infixCons ":-" (litname "foo") (litname "bar"))
+      (infixCons ":+" (litname "bar") (litname "foo")))
+
 
 typedefTest :: Writer (List String) Unit
 typedefTest = do
