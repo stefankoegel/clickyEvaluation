@@ -81,7 +81,7 @@ symbol :: forall m. (Monad m) => ParserT String m Char
 symbol = oneOf
   [':','!','#','$','%','&','*'
   ,'+','.','/','<','>','=','?'
-  ,'@','\\','^','|','-','~','_'
+  ,'@','\\','^','|','-','~'
   ,'°']
 
 integer :: forall m. (Monad m) => ParserT String m Int
@@ -470,7 +470,7 @@ binding = do
             case cs of
                  Nil        -> pure $ ListLit Nothing Nil
                  cs'        -> pure $ ListLit Nothing cs'
-         _   -> PC.try $ indent simple
+         _   -> PC.try $ ilexe simple
 
 
 simple :: IndentParser String (Binding MType)
@@ -481,32 +481,32 @@ lit = Lit Nothing <$> atom
 
 nullary :: IndentParser String (Binding MType)
 nullary = do
-  n <- indent typeName
+  n <- ilexe typeName
   pure $ ConstrLit Nothing (PrefixCons n 0 Nil)
 
 bndList :: IndentParser String (Binding MType) -> IndentParser String (List (Binding MType))
 bndList bnd = PC.sepBy
-  (PC.try (bndConses bnd))
+  (PC.try (ilexe (bndConses bnd)))
   (PC.try (indent (char ',')))
 
 bndConses :: FixedIndentParser String (Binding MType)
 bndConses bnd = PC.chainr1
-  (PC.try (bndInfixes bnd))
+  (PC.try (ilexe (bndInfixes bnd)))
   (do PC.try (indent (char ':'))
       pure (ConsLit Nothing))
 
 bndInfixes :: FixedIndentParser String (Binding MType)
 bndInfixes bnd = PC.chainl1
-  (PC.try (bndComplex bnd))
+  (PC.try (ilexe ((bndComplex bnd))))
   (do o <- PC.try (indent infixConstructor)
       pure (\l r -> ConstrLit Nothing (InfixCons o LEFTASSOC 9 l r)))
 
 bndComplex :: FixedIndentParser String (Binding MType)
 bndComplex bnd =
   PC.try
-    (do name <- ilexe typeName
-        as   <- many1 bnd
-        pure $ ConstrLit Nothing (PrefixCons name (length as) as))
+    (do n  <- ilexe typeName
+        as <- many1 bnd
+        pure $ ConstrLit Nothing (PrefixCons n (length as) as))
   <|> indent bnd
 
 

@@ -599,10 +599,15 @@ prefixCons name args = ConstrLit Nothing (PrefixCons name (Array.length args) (t
 infixCons :: String -> Binding MType -> Binding MType -> Binding MType
 infixCons op l r = ConstrLit Nothing (InfixCons op LEFTASSOC 9 l r)
 
-
+litcons :: Binding MType -> Binding MType -> Binding MType
+litcons = ConsLit Nothing
 
 bindingsWithConstrLit :: Writer (List String) Unit
 bindingsWithConstrLit = do
+  test "binding-simple-0" binding
+    "_"
+    (litname "_")
+
   test "binding-simple-1" binding
     "(Foo a b)"
     (prefixCons "Foo" [litname "a", litname "b"])
@@ -685,6 +690,40 @@ bindingsWithConstrLit = do
       , infixCons ":-"
         (litname "a")
         (litname "b") ])
+
+  test "cons-binding-nested-1" binding
+    "(_:_)"
+    (litcons
+      (litname "_")
+      (litname "_"))
+
+  test "cons-binding-nested-2" binding
+    "(_:a)"
+    (litcons
+      (litname "_")
+      (litname "a"))
+      
+  test "cons-binding-nested-3" binding
+    "(a:_)"
+    (litcons
+      (litname "a")
+      (litname "_"))
+
+  test "cons-binding-nested-4" binding
+    "(a:a)"
+    (litcons
+      (litname "a")
+      (litname "a"))
+
+  test "cons-binding-nested-5" binding
+    "(_:(_:(x:_)))"
+    (litcons
+      (litname "_")
+      (litcons
+        (litname "_")
+        (litcons
+          (litname "x")
+          (litname "_"))))
 
 
 typedefTest :: Writer (List String) Unit
@@ -892,8 +931,8 @@ typedefTest = do
     "!"
     '!'
   test "symbols" (many symbol)
-    "!#$%&*+./<>=?@\\^|-~_°"
-    (stringToList "!#$%&*+./<>=?@\\^|-~_°")
+    "!#$%&*+./<>=?@\\^|-~°"
+    (stringToList "!#$%&*+./<>=?@\\^|-~°")
   test "infixConstructor1" infixConstructor
     ":+"
     ":+"
@@ -979,3 +1018,14 @@ typedefTest = do
     , "data Foo\n | Foo\n| Bar"
     , "data\nFoo\na = Foo a"
     ]
+
+  rejectTests "invalidInfixConstructors" infixConstructor
+    [ ":_"
+    , "_:_"
+    , ".:"
+    , "."
+    , "+"
+    , ":a"
+    , "_"
+    , "__"
+    , "_:::_" ]
