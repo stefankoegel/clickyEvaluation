@@ -691,6 +691,38 @@ bindingsWithConstrLit = do
         (litname "a")
         (litname "b") ])
 
+  test "list-binding-nested-3" binding
+    "[ Foo foo\n , Bar bar\n , foo :-: bar ]"
+    (litlist
+      [ prefixCons "Foo" [litname "foo"]
+      , prefixCons "Bar" [litname "bar"]
+      , infixCons ":-:"
+        (litname "foo")
+        (litname "bar") ])
+
+  test "list-binding-nested-4" binding
+    "[ [ 1, 2 ]\n , [ 3, 4 ]\n , [Foo 2 3] ]"
+    (litlist
+      [ litlist [litint 1, litint 2]
+      , litlist [litint 3, litint 4]
+      , litlist [prefixCons "Foo" [litint 2, litint 3]]])
+
+  test "list-binding-nested-5" binding
+    "[1:2:3:[], Foo 3]"
+    (litlist
+      [ litcons (litint 1)
+        (litcons (litint 2)
+          (litcons (litint 3)
+            (litlist [])))
+      , prefixCons "Foo" [litint 3]])
+
+  test "list-binding-nested-6" binding
+    "[[[[1]]]]"
+    (litlist
+      [litlist
+        [litlist
+          [litlist [litint 1]]]])
+
   test "cons-binding-nested-1" binding
     "(_:_)"
     (litcons
@@ -750,6 +782,8 @@ bindingsWithConstrLit = do
           (litname "b"))
         (litname "c"))
       (litname "d"))
+
+
 
 
 typedefTest :: Writer (List String) Unit

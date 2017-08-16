@@ -26,7 +26,6 @@ main = do
   let parserLog = execWriter Parser.runTests
   log $ "  ...found " <> show (length parserLog) <> " errors"
   for parserLog report
-
   log $ "Running AST tests..."
   let astLog = execWriter AST.runTests
   log $ "  ...found " <> show (length astLog) <> " errors"

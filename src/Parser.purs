@@ -426,30 +426,30 @@ parseExpr = runParserIndent expression
 ---------------------------------------------------------
 -- Parsers for Bindings
 ---------------------------------------------------------
-
+-- Grammar
+----------
 {-
 <BINDING>
   ::= <SIMPLE>
-    | '[' <LIST> ']'
-    | '(' <LIST> ')'
+    | `[` <LIST> `]`
+    | `(` <LIST> `)`
 
 <SIMPLE>
   ::= <LIT>
     | <NULLARY>
 
 <LIST>
-  ::= <CONSES> { ',' <CONSES> }
+  ::= <CONSES> { `,` <CONSES> }
 
 <CONSES>
-  ::= <INFIXES> { ':' <INFIXES> }
+  ::= <INFIXES> { `:` <INFIXES> }
 
 <INFIXES>
-  ::= <COMPLEX> { <INF_CONSTR> <COMPLEX> }
+  ::= { <COMPLEX> <INF_CONSTR> } <COMPLEX>
 
 <COMPLEX>
   ::= <CONSTR> { <BINDING> }
     | <BINDING>
-
 -}
 
 
@@ -470,23 +470,23 @@ binding = do
             case cs of
                  Nil        -> pure $ ListLit Nothing Nil
                  cs'        -> pure $ ListLit Nothing cs'
-         _   -> PC.try $ ilexe simple
+         _   -> PC.try $ ilexe bndSimple
 
 
-simple :: IndentParser String (Binding MType)
-simple = PC.try lit <|> nullary
+bndSimple :: IndentParser String (Binding MType)
+bndSimple = PC.try bndLit <|> bndNullary
 
-lit :: forall m. (Monad m) => ParserT String m (Binding MType)
-lit = Lit Nothing <$> atom
+bndLit :: forall m. (Monad m) => ParserT String m (Binding MType)
+bndLit = Lit Nothing <$> atom
 
-nullary :: IndentParser String (Binding MType)
-nullary = do
+bndNullary :: IndentParser String (Binding MType)
+bndNullary = do
   n <- ilexe typeName
   pure $ ConstrLit Nothing (PrefixCons n 0 Nil)
 
 bndList :: IndentParser String (Binding MType) -> IndentParser String (List (Binding MType))
 bndList bnd = PC.sepBy
-  (PC.try (ilexe (bndConses bnd)))
+  (PC.try (indent (bndConses bnd)))
   (PC.try (indent (char ',')))
 
 bndConses :: FixedIndentParser String (Binding MType)
@@ -509,92 +509,6 @@ bndComplex bnd =
         pure $ ConstrLit Nothing (PrefixCons n (length as) as))
   <|> indent bnd
 
-
-{-
-
-consLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
-consLit bnd = do
-  -- ilexe $ char '('
-  b <- indent consLit'
-  -- indent $ char ')'
-  pure b
-  where
-    consLit' :: IndentParser String (Binding MType)
-    consLit' = do
-      b <- ilexe bnd
-      indent $ char ':'
-      bs <- (PC.try $ indent consLit') <|> (indent bnd)
-      pure $ ConsLit Nothing b bs
-
-listLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
-listLit bnd = do
-  ilexe $ char '['
-  bs <- (indent (binding' bnd)) `PC.sepBy` (PC.try $ indent $ char ',')
-  indent $ char ']'
-  pure $ ListLit Nothing bs
-
-tupleLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
-tupleLit bnd = do
-  ilexe $ char '('
-  b <- indent (binding' bnd)
-  indent $ char ','
-  bs <- (indent (binding' bnd)) `PC.sepBy1` (PC.try $ indent $ char ',')
-  indent $ char ')'
-  pure $ NTupleLit Nothing (Cons b bs)
-
-constrLit :: FixedIndentParser String (Binding MType)
-constrLit bnd = PC.try (prefConstrLit bnd) <|> (infConstrLit bnd)
-
-
-prefConstrLit :: FixedIndentParser String (Binding MType)
-prefConstrLit bnd = do
-  n <- indent typeName
-  as   <- many (indent bnd)
-  when (length as <= 0) (fail "Nullary Constructor")
-  pure $ ConstrLit Nothing (PrefixCons n (length as) as)
-
-infConstrLit :: FixedIndentParser String (Binding MType)
-infConstrLit bnd = PC.chainl1
-  (indent (binding' bnd))
-  (do
-    op <- indent infixConstructor
-    pure $ \l r -> ConstrLit Nothing (InfixCons op LEFTASSOC 9 l r))
-
--- TODO:
--- There is no support for patterns like
---  (Foo 1 2, Bar 3 4)
--- yet; for now, the constructors must be written in parantheses like
---  ((Foo 1 2), (Bar 3 4))
-----
--- FIX THIS!
---
-binding' :: FixedIndentParser String (Binding MType)
-binding' bnd = do
-  whiteSpace
-  la <- PC.lookAhead anyChar
-  case la of
-       '(' -> PC.try (tupleLit bnd)
-          <|> PC.try (consLit bnd)
-          <|> indent bnd
-       '[' -> PC.try (listLit bnd)
-       o   -> -- PC.try (constrLit bnd)
-              PC.try lit
-          <|> nullary
-
-
-binding :: IndentParser String (Binding MType)
-binding = fix $ \bnd -> do
-  whiteSpace
-  la <- PC.lookAhead anyChar
-  case la of
-       '(' -> (PC.try $ ilexe (char '(') *> consLit bnd <* ilexe (char ')'))
-          <|> (PC.try $ ilexe (char '(') *> constrLit bnd <* ilexe (char ')'))
-          <|> (tupleLit bnd)
-          <|> ilexe (char '(') *> indent bnd <* ilexe (char ')')
-       '[' -> (listLit bnd)
-       o   -> PC.try lit
-          <|> nullary
-          -}
 ---------------------------------------------------------
 -- Parsers for Definitions
 ---------------------------------------------------------
@@ -616,15 +530,22 @@ parseDefs = runParserIndent $ definitions
 ---------------------------------------------------------
 -- Parsers for Types
 ---------------------------------------------------------
+-- Grammar
+----------
 {-
-  <TYPE>    --> <TYPE1> [ `->` <TYPE> ]
-  <TYPE1>   --> <SIMPLE>
-              | <TYPEVAR>
-              | `[` <TYPE> `]`
-              | <CONS> { <TYPE> }
-              | `(` <TYPE> `)`
-              | `(` <TYPE> { `,` <TYPE> } `)`
-  <SIMPLE>  --> `Int` | `Bool` | `Char`
+<TYPE>
+  ::= <TYPE1> [ `->` <TYPE> ]
+
+<TYPE1>
+  ::= <SIMPLE>
+    | <TYPEVAR>
+    | `[` <TYPE> `]`
+    | <CONS> { <TYPE> }
+    | `(` <TYPE> `)`
+    | `(` <TYPE> { `,` <TYPE> } `)`
+
+<SIMPLE>
+  ::= `Int` | `Bool` | `Char`
 -}
 
 simpleType :: IndentParser String Type
