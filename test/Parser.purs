@@ -406,6 +406,7 @@ runTests = do
   test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp Nothing (aname "x") $ toList [ Gen Nothing (Lit Nothing (Name "x")) (ArithmSeq Nothing (aint 1) Nothing (Just (aint 10))), Guard Nothing (App Nothing (aname "even") $ toList [aname "x"])]
   typedefTest
   bindingsWithConstrLit
+  dataConstructors
 
 
 prelude :: String
@@ -581,6 +582,106 @@ stringToList = Array.toUnfoldable <<< String.toCharArray
 
 type MType = Maybe Type
 
+econstr :: String -> TypeTree
+econstr n = Atom Nothing (Constr n)
+
+ename :: String -> TypeTree
+ename n = Atom Nothing (Name n)
+
+eint :: Int -> TypeTree
+eint i = Atom Nothing (AInt i)
+
+eapp :: TypeTree -> Array TypeTree -> TypeTree
+eapp f as = App Nothing f (toList as)
+
+ebin :: Op -> TypeTree -> TypeTree -> TypeTree
+ebin o l r = Binary Nothing (Tuple o Nothing) l r
+
+def :: String -> Array (Binding MType) -> TypeTree -> Definition
+def n bs e = Def n (toList bs) e
+
+dataConstructors :: Writer (List String) Unit
+dataConstructors = do
+  test "simple-expr-1" expression
+    "Foo"
+    (econstr "Foo")
+
+  test "simple-expr-2" expression
+    "Foo 1"
+    (eapp
+      (econstr "Foo")
+      [eint 1])
+
+  test "simple-expr-3" expression
+    "Foo 1 (1 + 2)"
+    (eapp
+      (econstr "Foo")
+      [ eint 1
+      , ebin Add
+        (eint 1)
+        (eint 2)])
+
+  test "nested-expr-1" expression
+    "Foo Bar"
+    (eapp
+      (econstr "Foo")
+      [ econstr "Bar" ])
+
+  test "nested-expr-2" expression
+    "Foo bar"
+    (eapp
+      (econstr "Foo")
+      [ ename "bar"])
+
+  test "nested-expr-3" expression
+    "foo Bar"
+    (eapp
+      (ename "foo")
+      [econstr "Bar"])
+
+  test "nested-deep-expr-1" expression
+    "Foo1 (Foo2 (Foo3 bar))"
+    (eapp (econstr "Foo1")
+      [ eapp (econstr "Foo2")
+        [ eapp (econstr "Foo3")
+          [ ename "bar" ]]])
+
+  test "nested-expr-4" expression
+    "Bar || Foo"
+    (ebin Or
+      (econstr "Bar")
+      (econstr "Foo"))
+
+  test "nested-expr-5" expression
+    "Bar 1 :- Foo 2 3"
+    (ebin (InfixConstr ":-")
+      (eapp (econstr "Bar") [eint 1])
+      (eapp (econstr "Foo") [eint 2, eint 3]))
+
+  test "nested-expr-6" expression
+    "Bar 1 (Foo ::: Foo 2)"
+    (eapp (econstr "Bar")
+      [ebin (InfixConstr ":::")
+        (econstr "Foo")
+        (eapp (econstr "Foo") [eint 2])])
+
+  test "definition-1" definition
+    "foo (Bar a b) = Foo a b"
+    (def "foo"
+      [prefixCons "Bar" [litname "a", litname "b"]]
+      (eapp (econstr "Foo")
+        [ename "a", ename "b"]))
+
+  test "definition-2" definition
+    "foo (r :+ i) = r :- i"
+    (def "foo"
+      [infixCons ":+" (litname "r") (litname "i")]
+      (ebin (InfixConstr ":-")
+        (ename "r")
+        (ename "i")))
+
+
+
 litname :: String -> Binding MType
 litname = Lit Nothing <<< Name
 
@@ -594,6 +695,7 @@ bpair :: Binding MType -> Binding MType -> Binding MType
 bpair l r = NTupleLit Nothing (Cons l (Cons r Nil))
 
 prefixCons :: String -> Array (Binding MType) -> Binding MType
+prefixCons name [] = (Lit Nothing (Constr name))
 prefixCons name args = ConstrLit Nothing (PrefixCons name (Array.length args) (toList args))
 
 infixCons :: String -> Binding MType -> Binding MType -> Binding MType
