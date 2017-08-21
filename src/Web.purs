@@ -146,6 +146,7 @@ atom t (AInt n) = typedNode (show n) ["atom", "num"] [] t
 atom t (Bool b) = typedNode (if b then "True" else "False") ["atom", "bool"] [] t
 atom t (Char c) = typedNode ("'" <> c <> "'") ["atom", "char"] [] t
 atom t (Name n) = typedNode n ["atom", "name"] [] t
+atom t (Constr n) = unsafeUndef "atom t (Constr n)"
 
 interleave :: forall a. a -> List a -> List a
 interleave _ Nil          = Nil

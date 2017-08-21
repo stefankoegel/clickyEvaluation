@@ -398,6 +398,7 @@ binary env (Tuple operator mtype) = case operator of
   Dollar -> (\f e -> pure $ App Nothing f (singleton e))
   Composition -> \e1 e2 -> throwError $ BinaryOpError And e1 e2
   InfixFunc name -> \e1 e2 -> apply env name (e1 : e2 : Nil)
+  InfixConstr name -> unsafeUndef "binary ... (InfixConstr name)" -- \e1 e2 -> pure $ Binary mtype operator e1 e2
   where
     aint :: Op -> (Int -> Int -> Int) -> TypeTree -> TypeTree -> Evaluator TypeTree
     aint _   f (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom Nothing $ AInt $ f i j

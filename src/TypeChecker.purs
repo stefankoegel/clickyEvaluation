@@ -580,6 +580,7 @@ infer' ex = case ex of
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
   Atom _ atom@(AInt _) -> returnWithConstraint ex intType
+  Atom _ atom@(Constr _) -> unsafeUndef "infer' ... (Atom _ atom@(Constr _))"
   Atom _ atom@(Name name) -> case name of
     -- Built-in functions.
     "mod" -> returnWithConstraint ex intToIntToIntType
@@ -797,6 +798,8 @@ makeBindingEnv binding = case binding of
     tv <- fresh
     let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
     pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
+
+  Lit _ atom@(Constr name) -> unsafeUndef "makeBindingEnv... Lit atom@(Constr name)"
 
   ConsLit _ b1 b2 -> do
     Triple t1 m1 c1 <- makeBindingEnvPartial b1

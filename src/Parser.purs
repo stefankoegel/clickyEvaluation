@@ -180,9 +180,13 @@ character = (Char <<< String.singleton) <$> charLiteral
 variable :: forall m. (Monad m) => ParserT String m Atom
 variable = Name <$> name
 
+-- | Parser for data constructors
+constructor :: forall m. (Monad m) => ParserT String m Atom
+constructor = Constr <$> typeName
+
 -- | Parser for atoms
 atom :: forall m. (Monad m) => ParserT String m Atom
-atom = int <|> variable <|> bool <|> character
+atom = int <|> variable <|> bool <|> constructor <|> character
 
 ---------------------------------------------------------
 -- Parsers for Expressions
@@ -191,7 +195,8 @@ atom = int <|> variable <|> bool <|> character
 -- | Table for operator parsers and their AST representation. Sorted by precedence.
 infixOperators :: forall m. (Monad m) => Array (Array (Tuple3 (ParserT String m String) (String -> Op) Assoc))
 infixOperators =
-  [ [ (tuple3 (PC.try $ string "." <* PC.notFollowedBy (char '.')) (const Composition) AssocRight) ]
+  [ [ (tuple3 (PC.try infixConstructor) InfixConstr AssocLeft)
+    , (tuple3 (PC.try $ string "." <* PC.notFollowedBy (char '.')) (const Composition) AssocRight) ]
   , [ (tuple3 (string "^") (const Power) AssocRight) ]
   , [ (tuple3 (string "*") (const Mul) AssocLeft) ]
   , [ (tuple3 (PC.try $ string "+" <* PC.notFollowedBy (char '+')) (const Add) AssocLeft)

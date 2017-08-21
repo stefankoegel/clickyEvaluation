@@ -47,6 +47,7 @@ instance showOp :: Show Op where
     Or     -> "Or"
     Dollar -> "Dollar"
     InfixFunc name -> "(InfixFunc " <> name <> ")"
+    InfixConstr op -> "(InfixConstr " <> op <> ")"
 
 pPrintOp :: Op -> String
 pPrintOp op = case op of
@@ -67,6 +68,7 @@ pPrintOp op = case op of
   Or     -> "||"
   Dollar -> "$"
   InfixFunc n -> "`" <> n <> "`"
+  InfixConstr o -> o
 
 -- | Atoms
 -- |
@@ -607,6 +609,7 @@ instance showAtom :: Show Atom where
     Bool bool   -> "Bool " <> show bool
     Char string -> "Char " <> show string
     Name string -> "Name " <> show string
+    Constr string -> "Constr " <> show string
 
 instance showQualTree :: (Show a, Show b, Show c) => Show (QualTree a b c) where
   show (Gen a b c) = "Gen (" <> show a <> " " <> show b <> " " <> show c <> ")"
@@ -676,6 +679,7 @@ prettyPrintAtom (AInt n) = show n
 prettyPrintAtom (Bool b) = show b
 prettyPrintAtom (Char c) = c
 prettyPrintAtom (Name s) = s
+prettyPrintAtom (Constr s) = s
 
 prettyPrintBinding :: forall m. Binding m -> String
 prettyPrintBinding (Lit _ atom) = prettyPrintAtom atom
