@@ -24,6 +24,7 @@ data Op = Composition
         | Or
         | Dollar
         | InfixFunc String
+        | InfixConstr String
 
 derive instance eqOp :: Eq Op
 
@@ -74,6 +75,7 @@ data Atom = AInt Int
           | Bool Boolean
           | Char String
           | Name String
+          | Constr String
 
 derive instance eqAtom :: Eq Atom
 
