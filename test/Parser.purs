@@ -668,7 +668,8 @@ testConstructorsExpression = do
   test "nested-expr-6" expression
     "Bar 1 (Foo ::: Foo 2)"
     (eapp (econstr "Bar")
-      [ebin (InfixConstr ":::")
+      [ eint 1
+      , ebin (InfixConstr ":::")
         (econstr "Foo")
         (eapp (econstr "Foo") [eint 2])])
 
