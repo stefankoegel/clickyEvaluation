@@ -189,27 +189,27 @@ atom = int <|> variable <|> bool <|> character
 ---------------------------------------------------------
 
 -- | Table for operator parsers and their AST representation. Sorted by precedence.
-infixOperators :: forall m. (Monad m) => Array (Array (Tuple3 (ParserT String m String) Op Assoc))
+infixOperators :: forall m. (Monad m) => Array (Array (Tuple3 (ParserT String m String) (String -> Op) Assoc))
 infixOperators =
-  [ [ (tuple3 (PC.try $ string "." <* PC.notFollowedBy (char '.')) Composition AssocRight) ]
-  , [ (tuple3 (string "^") Power AssocRight) ]
-  , [ (tuple3 (string "*") Mul AssocLeft) ]
-  , [ (tuple3 (PC.try $ string "+" <* PC.notFollowedBy (char '+')) Add AssocLeft)
-    , (tuple3 (string "-") Sub AssocLeft)
+  [ [ (tuple3 (PC.try $ string "." <* PC.notFollowedBy (char '.')) (const Composition) AssocRight) ]
+  , [ (tuple3 (string "^") (const Power) AssocRight) ]
+  , [ (tuple3 (string "*") (const Mul) AssocLeft) ]
+  , [ (tuple3 (PC.try $ string "+" <* PC.notFollowedBy (char '+')) (const Add) AssocLeft)
+    , (tuple3 (string "-") (const Sub) AssocLeft)
     ]
-  , [ (tuple3 (string ":") Colon AssocRight)
-    , (tuple3 (string "++") Append AssocRight)
+  , [ (tuple3 (string ":") (const Colon) AssocRight)
+    , (tuple3 (string "++") (const Append) AssocRight)
     ]
-  , [ (tuple3 (string "==") Equ AssocNone)
-    , (tuple3 (string "/=") Neq AssocNone)
-    , (tuple3 (PC.try $ string "<" <* PC.notFollowedBy (char '=')) Lt AssocNone)
-    , (tuple3 (PC.try $ string ">" <* PC.notFollowedBy (char '=')) Gt AssocNone)
-    , (tuple3 (string "<=") Leq AssocNone)
-    , (tuple3 (string ">=") Geq AssocNone)
+  , [ (tuple3 (string "==") (const Equ) AssocNone)
+    , (tuple3 (string "/=") (const Neq) AssocNone)
+    , (tuple3 (PC.try $ string "<" <* PC.notFollowedBy (char '=')) (const Lt) AssocNone)
+    , (tuple3 (PC.try $ string ">" <* PC.notFollowedBy (char '=')) (const Gt) AssocNone)
+    , (tuple3 (string "<=") (const Leq) AssocNone)
+    , (tuple3 (string ">=") (const Geq) AssocNone)
     ]
-  , [ (tuple3 (string "&&") And AssocRight) ]
-  , [ (tuple3 (string "||") Or AssocRight) ]
-  , [ (tuple3 (string "$") Dollar AssocRight) ]
+  , [ (tuple3 (string "&&") (const And) AssocRight) ]
+  , [ (tuple3 (string "||") (const Or) AssocRight) ]
+  , [ (tuple3 (string "$") (const Dollar) AssocRight) ]
   ]
 
 -- | Table of operators (math, boolean, ...)
@@ -220,7 +220,13 @@ operatorTable = infixTable2
     infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
 
     infixTable :: OperatorTable m String TypeTree
-    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> pure (Binary Nothing (toOpTuple op))) assoc)) <$> x) <$> infixOperators
+    infixTable =
+      (\x ->
+        (uncurry3
+          (\p op assoc ->
+            Infix (spaced p >>= \r -> pure (Binary Nothing (toOpTuple (op r)))) assoc))
+        <$> x)
+      <$> infixOperators
 
     unaryMinus :: Operator m String TypeTree
     unaryMinus = Prefix $ spaced minusParse
@@ -245,7 +251,7 @@ operatorTable = infixTable2
     spaced p = PC.try $ PC.between skipSpaces skipSpaces p
 
 opParser :: forall m. (Monad m) => ParserT String m Op
-opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> pure op)) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators) <|> infixFunc
+opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> p >>= \r -> pure (op r))) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators) <|> infixFunc
   where 
     infixFunc = do
       char '`'
