@@ -404,9 +404,16 @@ runTests = do
   test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp Nothing (Binary Nothing (toOpTuple Mul) (Atom Nothing (Name "a")) (Atom Nothing (Name "b"))) $ toList [Let Nothing (Lit Nothing (Name "a")) (Atom Nothing (AInt 5)),
     Let Nothing (Lit Nothing (Name "b")) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "a")) (Atom Nothing (AInt 1)))]
   test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp Nothing (aname "x") $ toList [ Gen Nothing (Lit Nothing (Name "x")) (ArithmSeq Nothing (aint 1) Nothing (Just (aint 10))), Guard Nothing (App Nothing (aname "even") $ toList [aname "x"])]
-  typedefTest
-  bindingsWithConstrLit
-  dataConstructors
+
+  testConstructorsExpression
+  testConstructorsDefinition
+  testConstructorsBinding
+  testTypes
+  testTypeDefinition
+  testSymbol
+  testInfixDataConstructorDefinition
+  testDataConstructorDefinition
+  testInfixConstructor
 
 
 prelude :: String
@@ -600,8 +607,8 @@ ebin o l r = Binary Nothing (Tuple o Nothing) l r
 def :: String -> Array (Binding MType) -> TypeTree -> Definition
 def n bs e = Def n (toList bs) e
 
-dataConstructors :: Writer (List String) Unit
-dataConstructors = do
+testConstructorsExpression :: Writer (List String) Unit
+testConstructorsExpression = do
   test "simple-expr-1" expression
     "Foo"
     (econstr "Foo")
@@ -665,6 +672,9 @@ dataConstructors = do
         (econstr "Foo")
         (eapp (econstr "Foo") [eint 2])])
 
+
+testConstructorsDefinition :: Writer (List String) Unit
+testConstructorsDefinition = do
   test "definition-1" definition
     "foo (Bar a b) = Foo a b"
     (def "foo"
@@ -704,8 +714,8 @@ infixCons op l r = ConstrLit Nothing (InfixCons op LEFTASSOC 9 l r)
 litcons :: Binding MType -> Binding MType -> Binding MType
 litcons = ConsLit Nothing
 
-bindingsWithConstrLit :: Writer (List String) Unit
-bindingsWithConstrLit = do
+testConstructorsBinding :: Writer (List String) Unit
+testConstructorsBinding = do
   test "binding-simple-0" binding
     "_"
     (litname "_")
@@ -888,8 +898,8 @@ bindingsWithConstrLit = do
 
 
 
-typedefTest :: Writer (List String) Unit
-typedefTest = do
+testTypes :: Writer (List String) Unit
+testTypes = do
   test "types1" types
     "a"
     (TypVar "a")
@@ -1052,6 +1062,28 @@ typedefTest = do
         (AD (TList (TypVar "b")))
         (AD (TList (TypVar "c")))))
 
+  rejectTests "typesMisindented" types
+    [ "Foo\na\nb\nc"
+    , " Foo\na"
+    , " a\n->b"
+    , " (a\n,b\n,c)"
+    ]
+
+  rejectTests "typesBracketMismatch" types
+    [ "[a"
+    , "a]"
+    , "[[a]"
+    , "[a -> b]]"
+    , "(a -> b))"
+    , "(a -> b"
+    , "a -> b)"
+    , "Foo (a b"
+    , "Foo a b)"
+    , "(Foo a b"
+    ]
+
+testTypeDefinition :: Writer (List String) Unit
+testTypeDefinition = do
   test "definition1" typeDefinition
     ("data Tree a\n"
      <> "  = Node Int\n"
@@ -1089,62 +1121,36 @@ typedefTest = do
                   , TypArr (TypVar "a") (TypVar "b")]))))])
         , InfixCons ":+" LEFTASSOC 9 (TypVar "a") (AD (TList (TypVar "b")))]))
 
-  test "symbol" symbol
-    "!"
-    '!'
-  test "symbols" (many symbol)
-    "!#$%&*+./<>=?@\\^|-~°"
-    (stringToList "!#$%&*+./<>=?@\\^|-~°")
-  test "infixConstructor1" infixConstructor
-    ":+"
-    ":+"
-  test "infixConstructor2" infixConstructor
-    ":@"
-    ":@"
-  test "infixConstructor3" infixConstructor
-    ":<>=?"
-    ":<>=?"
-  test "infixConstructor4" infixConstructor
-    ":-"
-    ":-"
-  test "infixConstructor1" infixDataConstructorDefinition
-    "a :+ b"
-    (InfixCons ":+" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
-  test "infixConstructor2" infixDataConstructorDefinition
-    "a :::::: b"
-    (InfixCons "::::::" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
-  test "nil" dataConstructorDefinition
-    "Nil"
-    (PrefixCons "Nil" 0 Nil)
-  test "cons" dataConstructorDefinition
-    "Cons a b"
-    (PrefixCons "Cons" 2
-      (toList
-        [ TypVar "a"
-        , TypVar "b"]))
-  test "void" typeDefinition "data Void\n" (ADTDef "Void" Nil Nil)
+  test "void" typeDefinition
+    "data Void\n"
+    (ADTDef "Void" Nil Nil)
+
   test "none" typeDefinition
     "data None a b c"
     (ADTDef "None"
       (toList ["a", "b", "c"])
       Nil)
+
   test "id" typeDefinition
     "data Ident a = Ident a"
     (ADTDef "Ident" (toList ["a"])
       (toList
         [ PrefixCons "Ident" 1 (toList [TypVar "a"])]))
+
   test "maybe" typeDefinition
     "data Maybe a = Nothing | Just a"
     (ADTDef "Maybe" (toList ["a"])
       (toList
         [ PrefixCons "Nothing" 0 Nil
         , PrefixCons "Just" 1 (toList [TypVar "a"])]))
+
   test "maybe1" typeDefinition
     "data Maybe a\n  = Nothing\n  | Just a"
     (ADTDef "Maybe" (toList ["a"])
       (toList
         [ PrefixCons "Nothing" 0 Nil
         , PrefixCons "Just" 1 (toList [TypVar "a"])]))
+
   test "list1" typeDefinition
     "data InfixStuff a = a :+ a | a :- a | Prefix a"
     (ADTDef "InfixStuff" (toList ["a"])
@@ -1152,25 +1158,6 @@ typedefTest = do
         [ InfixCons ":+" LEFTASSOC 9 (TypVar "a") (TypVar "a")
         , InfixCons ":-" LEFTASSOC 9 (TypVar "a") (TypVar "a")
         , PrefixCons "Prefix" 1 (Cons (TypVar "a") Nil)]))
-  rejectTests "typesBracketMismatch" types
-    [ "[a"
-    , "a]"
-    , "[[a]"
-    , "[a -> b]]"
-    , "(a -> b))"
-    , "(a -> b"
-    , "a -> b)"
-    , "Foo (a b"
-    , "Foo a b)"
-    , "(Foo a b"
-    ]
-
-  rejectTests "typesMisindented" types
-    [ "Foo\na\nb\nc"
-    , " Foo\na"
-    , " a\n->b"
-    , " (a\n,b\n,c)"
-    ]
 
   rejectTests "typdefMisindented" typeDefinition
     [ "data Foo\n=Foo"
@@ -1180,6 +1167,58 @@ typedefTest = do
     , "data Foo\n | Foo\n| Bar"
     , "data\nFoo\na = Foo a"
     ]
+
+testSymbol :: Writer (List String) Unit
+testSymbol = do
+  test "symbol" symbol
+    "!"
+    '!'
+
+  test "symbols" (many symbol)
+    "!#$%&*+./<>=?@\\^|-~°"
+    (stringToList "!#$%&*+./<>=?@\\^|-~°")
+
+testInfixDataConstructorDefinition :: Writer (List String) Unit
+testInfixDataConstructorDefinition = do
+  test "infixConstructor1" infixDataConstructorDefinition
+    "a :+ b"
+    (InfixCons ":+" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
+
+  test "infixConstructor2" infixDataConstructorDefinition
+    "a :::::: b"
+    (InfixCons "::::::" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
+
+testDataConstructorDefinition :: Writer (List String) Unit
+testDataConstructorDefinition = do
+  test "nil" dataConstructorDefinition
+    "Nil"
+    (PrefixCons "Nil" 0 Nil)
+
+  test "cons" dataConstructorDefinition
+    "Cons a b"
+    (PrefixCons "Cons" 2
+      (toList
+        [ TypVar "a"
+        , TypVar "b"]))
+
+
+testInfixConstructor :: Writer (List String) Unit
+testInfixConstructor = do
+  test "infixConstructor1" infixConstructor
+    ":+"
+    ":+"
+
+  test "infixConstructor2" infixConstructor
+    ":@"
+    ":@"
+
+  test "infixConstructor3" infixConstructor
+    ":<>=?"
+    ":<>=?"
+
+  test "infixConstructor4" infixConstructor
+    ":-"
+    ":-"
 
   rejectTests "invalidInfixConstructors" infixConstructor
     [ ":_"
