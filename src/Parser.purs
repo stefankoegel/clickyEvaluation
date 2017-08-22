@@ -73,6 +73,10 @@ ilexe p = p >>= \a -> skipWhite *> pure a
 indent :: forall a. IndentParser String a -> IndentParser String a
 indent p = ((sameLine <|> indented') PC.<?> "Missing indentation! Did you type a tab-character?") *> ilexe p
 
+-- returns the next non whitespace character
+lookAhead :: forall m. (Monad m) => ParserT String m Char
+lookAhead = PC.lookAhead $ whiteSpace *> anyChar
+
 ---------------------------------------------------------
 -- Parsers for Primitives
 ---------------------------------------------------------
@@ -468,7 +472,7 @@ binding :: IndentParser String (Binding MType)
 binding = do
   whiteSpace
   fix $ \bnd -> do
-    la <- PC.lookAhead anyChar
+    la <- lookAhead
     case la of
          '(' -> do
             cs <- ilexe (char '(') *> indent (bndList bnd) <* indent (char ')')
@@ -497,14 +501,14 @@ bndNullary = do
 
 bndList :: IndentParser String (Binding MType) -> IndentParser String (List (Binding MType))
 bndList bnd = PC.sepBy
-  (PC.try (indent (bndConses bnd)))
-  (PC.try (indent (char ',')))
+  (PC.try <<< indent <<< bndConses $ bnd)
+  (PC.try <<< indent <<< char $ ',')
 
 bndConses :: FixedIndentParser String (Binding MType)
 bndConses bnd = PC.chainr1
-  (PC.try (ilexe (bndInfixes bnd)))
-  (do PC.try (indent (char ':'))
-      pure (ConsLit Nothing))
+  (PC.try <<< ilexe <<< bndInfixes $ bnd)
+  (do PC.try <<< indent <<< char $ ':'
+      pure $ ConsLit Nothing)
 
 bndInfixes :: FixedIndentParser String (Binding MType)
 bndInfixes bnd = PC.chainl1
@@ -549,62 +553,84 @@ parseDefs = runParserIndent $ definitions
 
 <TYPE1>
   ::= <SIMPLE>
-    | <TYPEVAR>
     | `[` <TYPE> `]`
-    | <CONS> { <TYPE> }
-    | `(` <TYPE> `)`
     | `(` <TYPE> { `,` <TYPE> } `)`
+    | <CONS> { <TYPE> }
 
 <SIMPLE>
-  ::= `Int` | `Bool` | `Char`
+  ::= `Int` | `Bool` | `Char` | <TYPEVAR>
 -}
 
+
+type1 :: FixedIndentParser String Type
+type1 t = do
+  la <- lookAhead
+  case la of
+       '(' -> do
+          ts <- PC.between
+            (PC.try <<< ilexe <<< char $ '(')
+            (PC.try <<< indent <<< char $ ')')
+            (indent t `PC.sepBy1` (PC.try <<< indent <<< char) ',')
+          case ts of
+               Nil         -> fail "Empty Tuple"
+               Cons t' Nil -> pure t'
+               ts'         -> (pure <<< AD <<< TTuple) ts'
+       '[' -> PC.between
+          (PC.try <<< ilexe <<< char $ '[')
+          (PC.try <<< indent <<< char $ ']')
+          (AD <<< TList <$> indent t)
+       _ -> (PC.try <<< indent) simpleType <|> (indent <<< typeCons) t
+
 simpleType :: IndentParser String Type
-simpleType =
-  TypCon <$> (string "Bool"
-             <|> string "Int"
-             <|> string "Char")
-  <|> TypVar <$> name
+simpleType = do
+  la <- lookAhead
+  case la of
+       'B' -> TypCon <$> string "Bool"
+       'I' -> TypCon <$> string "Int"
+       'C' -> TypCon <$> string "Char"
+       _   -> TypVar <$> name
 
 typeCons :: IndentParser String Type -> IndentParser String Type
 typeCons t = do
   n <- ilexe typeName
-  ps <- many (indent $ typeExpr t <|> simpleType)
+  ps <- many <<< indent $ types1 t <|> simpleType
   pure $ AD $ TTypeCons n ps
 
 typeExpr :: IndentParser String Type -> IndentParser String Type
 typeExpr t = PC.between
-  (indent (char '('))
-  (indent (char ')'))
+  (PC.try <<< indent <<< char $ '(')
+  (PC.try <<< indent <<< char $ ')')
   (indent t)
 
 types :: IndentParser String Type
 types = do
   whiteSpace
-  fix $ \t -> PC.chainr1
-    (indent (types1 t))
-    (indent (string "->") *> pure TypArr)
+  fix $ \t -> (indent <<< type1) t `PC.chainr1` ((indent <<< string) "->" *> pure TypArr)
 
 typeTuple :: IndentParser String Type -> IndentParser String Type
 typeTuple t = PC.between
-  (ilexe (char '('))
-  (PC.try $ indent (char ')'))
-  (do ts <- PC.sepBy1 (indent t) (PC.try (indent (char ',')))
-      when (length ts <= 1) (fail "Tuple to short.")
-      pure (AD (TTuple ts)))
+  (ilexe <<< char $ '(')
+  (PC.try <<< indent <<< char $ ')')
+  (do ts <- indent t `PC.sepBy1` (PC.try <<< indent <<< char) ','
+      case ts of
+           Nil        -> fail "Empty Tuple"
+           Cons x Nil -> pure x
+           xs         -> (pure <<< AD <<< TTuple) xs)
 
 types1 :: IndentParser String Type -> IndentParser String Type
-types1 t =
-  PC.try simpleType
-  <|> AD <<< TList <$> (ilexe (char '[') *> indent t <* indent (char ']'))
-  <|> typeCons t
-  <|> PC.try (typeExpr t)
-  <|> typeTuple t
+types1 t = do
+  la <- lookAhead
+  case la of
+       '[' -> AD <<< TList <$> ((ilexe <<< char) '[' *> indent t <* (indent <<< char) ']')
+       '(' -> PC.try (typeExpr t) <|> typeTuple t
+       _   -> PC.try simpleType <|> typeCons t
 
 
 ---------------------------------------------------------
 -- Parsers for Type Definitions
 ---------------------------------------------------------
+-- Grammar
+----------
 
 typeDefinition :: IndentParser String ADTDef
 typeDefinition = do

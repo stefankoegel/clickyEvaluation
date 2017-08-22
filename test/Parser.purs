@@ -691,6 +691,11 @@ testConstructorsDefinition = do
         (ename "r")
         (ename "i")))
 
+  rejectTests "invalid-definition" definition
+    [ "foo a :- b = a b"
+    , "foo (x :-) b = x b"
+    ]
+
 
 
 litname :: String -> Binding MType
@@ -895,6 +900,19 @@ testConstructorsBinding = do
           (litname "b"))
         (litname "c"))
       (litname "d"))
+
+  rejectTests "invalid-infix-operator" binding
+    [ "(a :-) b"
+    , "(:-) a b"
+    , ":- a"
+    , "b :-"
+    , ":- a b"
+    ]
+
+  rejectTests "invalid-prefix-operator" binding
+    [ "a Foo"
+    , "foo a"
+    ]
 
 
 
