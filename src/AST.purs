@@ -378,13 +378,13 @@ traverseBinding f (NTupleLit t bs) = do
 traverseBinding f (ConstrLit t constr) = do
   t' <- f t
   constr' <- case constr of
-                  PrefixCons name len ps -> do
+                  PrefixDataConstr name len ps -> do
                     ps' <- for ps (traverseBinding f)
-                    pure $ PrefixCons name len ps'
-                  InfixCons op a p l r -> do
+                    pure $ PrefixDataConstr name len ps'
+                  InfixDataConstr op a p l r -> do
                     l' <- traverseBinding f l
                     r' <- traverseBinding f r
-                    pure $ InfixCons op a p l' r'
+                    pure $ InfixDataConstr op a p l' r'
   pure $ ConstrLit t' constr'
 
 traverseQualTree :: forall b b' e e' m m' f. Monad f =>
@@ -510,7 +510,7 @@ data AD
 -- and a list of Data Constructors, each having a name,
 -- and a list of types, which are their parameters.
 data ADTDef
-  = ADTDef String (List TVar) (List (DataCons Type))
+  = ADTDef String (List TVar) (List (DataConstr Type))
 
 derive instance eqADTDef :: Eq ADTDef
 
@@ -524,7 +524,7 @@ instance showADTDef :: Show ADTDef where
     <> intercalate "\n  | " (map show cs)
 
 
--- | DataConstructor parameterized over its parameters,
+-- | DataConstrtructor parameterized over its parameters,
 --   to use it for both, type definitions and data.
 
 data Associativity
@@ -534,25 +534,25 @@ data Associativity
 
 derive instance eqAssociativity :: Eq Associativity
 
-data DataCons param
-  = PrefixCons String Int (List param)
-  | InfixCons String Associativity Int param param
+data DataConstr param
+  = PrefixDataConstr String Int (List param)
+  | InfixDataConstr String Associativity Int param param
 
-instance functorDataCons :: Functor DataCons where
-  map f (PrefixCons s i ps) = PrefixCons s i (map f ps)
-  map f (InfixCons s a i p1 p2) = InfixCons s a i (f p1) (f p2)
+instance functorDataConstr :: Functor DataConstr where
+  map f (PrefixDataConstr s i ps) = PrefixDataConstr s i (map f ps)
+  map f (InfixDataConstr s a i p1 p2) = InfixDataConstr s a i (f p1) (f p2)
 
-instance showDataCons :: (Show param) => Show (DataCons param) where
-  show (PrefixCons n _ ts)
+instance showDataConstr :: (Show param) => Show (DataConstr param) where
+  show (PrefixDataConstr n _ ts)
     = n <> " " <> intercalate " " (map show ts)
-  show (InfixCons o ASSOC _ l r)
+  show (InfixDataConstr o ASSOC _ l r)
     = show l <> " " <> o <> " " <> show r
-  show (InfixCons o RIGHTASSOC _ l r)
+  show (InfixDataConstr o RIGHTASSOC _ l r)
     = show l <> " " <> o <> " (" <> show r <> ")"
-  show (InfixCons o LEFTASSOC _ l r)
+  show (InfixDataConstr o LEFTASSOC _ l r)
     = "(" <> show l <> ") " <> o <> " " <> show r
 
-derive instance eqDataCons :: (Eq params) => Eq (DataCons params)
+derive instance eqDataConstr :: (Eq params) => Eq (DataConstr params)
 
 data TypeError
   = UnificationFail Type Type
@@ -571,7 +571,7 @@ data Binding m = Lit       m Atom
                | ConsLit   m (Binding m) (Binding m)
                | ListLit   m (List (Binding m))
                | NTupleLit m (List (Binding m))
-               | ConstrLit m (DataCons (Binding m))
+               | ConstrLit m (DataConstr (Binding m))
 
 derive instance eqBinding :: (Eq a) => Eq (Binding a)
 
@@ -690,8 +690,8 @@ prettyPrintBinding (ConsLit _ b1 b2) = "("
     <> ")"
 prettyPrintBinding (ListLit _ bs) = "[" <> intercalate ", " (map prettyPrintBinding bs) <> "]"
 prettyPrintBinding (NTupleLit _ bs) = "(" <> intercalate ", " (map prettyPrintBinding bs) <> ")"
-prettyPrintBinding (ConstrLit _ (PrefixCons name _ ps)) = "(" <> name <> intercalate " " (map prettyPrintBinding ps) <> ")"
-prettyPrintBinding (ConstrLit _ (InfixCons name _ _ l r)) = "(" <> prettyPrintBinding l <> " " <> name <> " " <> prettyPrintBinding r <> ")"
+prettyPrintBinding (ConstrLit _ (PrefixDataConstr name _ ps)) = "(" <> name <> intercalate " " (map prettyPrintBinding ps) <> ")"
+prettyPrintBinding (ConstrLit _ (InfixDataConstr name _ _ l r)) = "(" <> prettyPrintBinding l <> " " <> name <> " " <> prettyPrintBinding r <> ")"
 
 prettyPrintType :: Type -> String
 prettyPrintType (UnknownType) = "?"

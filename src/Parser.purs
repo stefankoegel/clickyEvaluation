@@ -38,7 +38,7 @@ import AST
   , toOpTuple
   , ADTDef(..)
   , Associativity(..)
-  , DataCons(..)
+  , DataConstr(..)
   , Type(..)
   , AD(..))
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
@@ -497,7 +497,7 @@ bndLit = Lit Nothing <$> atom
 bndNullary :: IndentParser String (Binding MType)
 bndNullary = do
   n <- ilexe typeName
-  pure $ ConstrLit Nothing (PrefixCons n 0 Nil)
+  pure $ ConstrLit Nothing (PrefixDataConstr n 0 Nil)
 
 bndList :: IndentParser String (Binding MType) -> IndentParser String (List (Binding MType))
 bndList bnd = PC.sepBy
@@ -514,14 +514,14 @@ bndInfixes :: FixedIndentParser String (Binding MType)
 bndInfixes bnd = PC.chainl1
   (PC.try (ilexe ((bndComplex bnd))))
   (do o <- PC.try (indent infixConstructor)
-      pure (\l r -> ConstrLit Nothing (InfixCons o LEFTASSOC 9 l r)))
+      pure (\l r -> ConstrLit Nothing (InfixDataConstr o LEFTASSOC 9 l r)))
 
 bndComplex :: FixedIndentParser String (Binding MType)
 bndComplex bnd =
   PC.try
     (do n  <- ilexe typeName
         as <- many1 bnd
-        pure $ ConstrLit Nothing (PrefixCons n (length as) as))
+        pure $ ConstrLit Nothing (PrefixDataConstr n (length as) as))
   <|> indent bnd
 
 ---------------------------------------------------------
@@ -642,23 +642,23 @@ typeDefinition = do
            <|> pure Nil
   pure $ ADTDef n tvs conss
 
-dataConstructorDefinition :: IndentParser String (DataCons Type)
+dataConstructorDefinition :: IndentParser String (DataConstr Type)
 dataConstructorDefinition
-  = PC.try prefixDataConstructorDefinition
-  <|> infixDataConstructorDefinition
+  = PC.try prefixDataConstrtructorDefinition
+  <|> infixDataConstrtructorDefinition
 
-prefixDataConstructorDefinition :: IndentParser String (DataCons Type)
-prefixDataConstructorDefinition = do
+prefixDataConstrtructorDefinition :: IndentParser String (DataConstr Type)
+prefixDataConstrtructorDefinition = do
   n <- ilexe typeName
   ps <- many types
-  pure $ PrefixCons n (length ps) ps
+  pure $ PrefixDataConstr n (length ps) ps
 
-infixDataConstructorDefinition :: IndentParser String (DataCons Type)
-infixDataConstructorDefinition = do
+infixDataConstrtructorDefinition :: IndentParser String (DataConstr Type)
+infixDataConstrtructorDefinition = do
   l <- ilexe types
   o <- indent $ ilexe infixConstructor
   r <- indent $ ilexe types
-  pure $ InfixCons o LEFTASSOC 9 l r
+  pure $ InfixDataConstr o LEFTASSOC 9 l r
 
 
 infixConstructor :: forall m. (Monad m) => ParserT String m String
