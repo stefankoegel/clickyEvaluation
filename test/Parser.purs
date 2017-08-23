@@ -27,8 +27,7 @@ import AST
   , ADTDef(..)
   , DataConstr(..)
   , Associativity(..)
-  , Type(..)
-  , AD(..))
+  , Type(..))
 import Parser
   ( expression
   , atom
@@ -679,14 +678,14 @@ testConstructorsDefinition = do
   test "definition-1" definition
     "foo (Bar a b) = Foo a b"
     (def "foo"
-      [prefixDataConstr"Bar" [litname "a", litname "b"]]
+      [prefixDataConstr "Bar" [litname "a", litname "b"]]
       (eapp (econstr "Foo")
         [ename "a", ename "b"]))
 
   test "definition-2" definition
     "foo (r :+ i) = r :- i"
     (def "foo"
-      [infixDataConstr":+" (litname "r") (litname "i")]
+      [infixDataConstr ":+" (litname "r") (litname "i")]
       (ebin (InfixConstr ":-")
         (ename "r")
         (ename "i")))
@@ -710,12 +709,12 @@ litlist = ListLit Nothing <<< toList
 bpair :: Binding MType -> Binding MType -> Binding MType
 bpair l r = NTupleLit Nothing (Cons l (Cons r Nil))
 
-prefixDataConstr:: String -> Array (Binding MType) -> Binding MType
-prefixDataConstrname [] = (Lit Nothing (Constr name))
-prefixDataConstrname args = ConstrLit Nothing (PrefixDataConstr name (Array.length args) (toList args))
+prefixDataConstr :: String -> Array (Binding MType) -> Binding MType
+prefixDataConstr name [] = (Lit Nothing (Constr name))
+prefixDataConstr name args = ConstrLit Nothing (PrefixDataConstr name (Array.length args) (toList args))
 
-infixDataConstr:: String -> Binding MType -> Binding MType -> Binding MType
-infixDataConstrop l r = ConstrLit Nothing (InfixDataConstr op LEFTASSOC 9 l r)
+infixDataConstr :: String -> Binding MType -> Binding MType -> Binding MType
+infixDataConstr op l r = ConstrLit Nothing (InfixDataConstr op LEFTASSOC 9 l r)
 
 litcons :: Binding MType -> Binding MType -> Binding MType
 litcons = ConsLit Nothing
@@ -728,15 +727,15 @@ testConstructorsBinding = do
 
   test "binding-simple-1" binding
     "(Foo a b)"
-    (prefixDataConstr"Foo" [litname "a", litname "b"])
+    (prefixDataConstr "Foo" [litname "a", litname "b"])
 
   test "binding-simple-2" binding
     "(Foo)"
-    (prefixDataConstr"Foo" [])
+    (prefixDataConstr "Foo" [])
 
   test "binding-simple-3" binding
     "Foo"
-    (prefixDataConstr"Foo" [])
+    (prefixDataConstr "Foo" [])
 
   test "binding-simple-4" binding
     "a"
@@ -744,22 +743,22 @@ testConstructorsBinding = do
 
   test "binding-nested-1" binding
     "(Foo Foo 1)"
-    (prefixDataConstr"Foo"
-      [ prefixDataConstr"Foo" []
+    (prefixDataConstr "Foo"
+      [ prefixDataConstr "Foo" []
       , litint 1 ])
 
   test "binding-nested-2" binding
     "(Foo (Foo 1) (Foo 2 3))"
-    (prefixDataConstr"Foo"
-      [ prefixDataConstr"Foo"
+    (prefixDataConstr "Foo"
+      [ prefixDataConstr "Foo"
         [ litint 1 ]
-      , prefixDataConstr"Foo"
+      , prefixDataConstr "Foo"
         [ litint 2
         , litint 3 ]])
 
   test "binding-nested-3" binding
     "(Foo (1,2))"
-    (prefixDataConstr"Foo"
+    (prefixDataConstr "Foo"
       [ bpair (litint 1) (litint 2) ])
 
   test "binding-nested-4" binding
@@ -771,50 +770,50 @@ testConstructorsBinding = do
   test "binding-nested-5" binding
     "(Foo foo, Bar bar)"
     (bpair
-      (prefixDataConstr"Foo" [litname "foo"])
-      (prefixDataConstr"Bar" [litname "bar"]))
+      (prefixDataConstr "Foo" [litname "foo"])
+      (prefixDataConstr "Bar" [litname "bar"]))
 
   test "binding-nested-6" binding
     "(foo :- bar, bar :+ foo)"
     (bpair
-      (infixDataConstr":-" (litname "foo") (litname "bar"))
-      (infixDataConstr":+" (litname "bar") (litname "foo")))
+      (infixDataConstr ":-" (litname "foo") (litname "bar"))
+      (infixDataConstr ":+" (litname "bar") (litname "foo")))
 
   test "binding-nested-7" binding
     "(Foo foo :- Bar bar)"
-    (infixDataConstr":-"
-      (prefixDataConstr"Foo" [litname "foo"])
-      (prefixDataConstr"Bar" [litname "bar"]))
+    (infixDataConstr ":-"
+      (prefixDataConstr "Foo" [litname "foo"])
+      (prefixDataConstr "Bar" [litname "bar"]))
 
   test "binding-nested-8" binding
     "(Foo (foo :- bar))"
-    (prefixDataConstr"Foo"
-      [ infixDataConstr":-"
+    (prefixDataConstr "Foo"
+      [ infixDataConstr ":-"
         (litname "foo")
         (litname "bar") ])
 
   test "list-binding-nested-1" binding
     "[Foo a b]"
     (litlist
-      [ prefixDataConstr"Foo"
+      [ prefixDataConstr "Foo"
         [ litname "a"
         , litname "b" ]])
 
   test "list-binding-nested-2" binding
     "[Foo a, a :- b]"
     (litlist
-      [ prefixDataConstr"Foo"
+      [ prefixDataConstr "Foo"
         [ litname "a" ]
-      , infixDataConstr":-"
+      , infixDataConstr ":-"
         (litname "a")
         (litname "b") ])
 
   test "list-binding-nested-3" binding
     "[ Foo foo\n , Bar bar\n , foo :-: bar ]"
     (litlist
-      [ prefixDataConstr"Foo" [litname "foo"]
-      , prefixDataConstr"Bar" [litname "bar"]
-      , infixDataConstr":-:"
+      [ prefixDataConstr "Foo" [litname "foo"]
+      , prefixDataConstr "Bar" [litname "bar"]
+      , infixDataConstr ":-:"
         (litname "foo")
         (litname "bar") ])
 
@@ -823,7 +822,7 @@ testConstructorsBinding = do
     (litlist
       [ litlist [litint 1, litint 2]
       , litlist [litint 3, litint 4]
-      , litlist [prefixDataConstr"Foo" [litint 2, litint 3]]])
+      , litlist [prefixDataConstr "Foo" [litint 2, litint 3]]])
 
   test "list-binding-nested-5" binding
     "[1:2:3:[], Foo 3]"
@@ -832,7 +831,7 @@ testConstructorsBinding = do
         (litcons (litint 2)
           (litcons (litint 3)
             (litlist [])))
-      , prefixDataConstr"Foo" [litint 3]])
+      , prefixDataConstr "Foo" [litint 3]])
 
   test "list-binding-nested-6" binding
     "[[[[1]]]]"
@@ -879,23 +878,23 @@ testConstructorsBinding = do
     "(_:_:+_)"
     (litcons
       (litname "_")
-      (infixDataConstr":+"
+      (infixDataConstr ":+"
         (litname "_")
         (litname "_")))
 
   test "infix-constr-binding-1" binding
     "(a :- b :- c)"
-    (infixDataConstr":-"
-      (infixDataConstr":-"
+    (infixDataConstr ":-"
+      (infixDataConstr ":-"
         (litname "a")
         (litname "b"))
       (litname "c"))
 
   test "infix-constr-binding-2" binding
     "(a :- b :+ c :- d)"
-    (infixDataConstr":-"
-      (infixDataConstr":+"
-        (infixDataConstr":-"
+    (infixDataConstr ":-"
+      (infixDataConstr ":+"
+        (infixDataConstr ":-"
           (litname "a")
           (litname "b"))
         (litname "c"))
@@ -924,7 +923,7 @@ testTypes = do
     (TypVar "a")
   test "types2" types
     "A"
-    (AD (TTypeCons "A" Nil))
+    (TTypeCons "A" Nil)
   test "types3" types
     "Int" (TypCon "Int")
   test "types4" types
@@ -933,37 +932,30 @@ testTypes = do
     "Bool" (TypCon "Bool")
   test "types6" types
     "A a b c"
-    (AD (TTypeCons "A" (toList [TypVar "a", TypVar "b", TypVar "c"])))
+    (TTypeCons "A" (toList [TypVar "a", TypVar "b", TypVar "c"]))
   test "types7" types
     "A Int b Bool"
-    (AD (TTypeCons "A" (toList [TypCon "Int", TypVar "b", TypCon "Bool"])))
+    (TTypeCons "A" (toList [TypCon "Int", TypVar "b", TypCon "Bool"]))
   test "types8" types
     "A (B c)"
-    (AD
-      (TTypeCons "A"
+    (TTypeCons "A"
         (toList
-          [AD
-            (TTypeCons "B"
-              (toList [TypVar "c"]))])))
+          [TTypeCons "B"
+              (toList [TypVar "c"])]))
   test "types9" types
     "A (B Char)"
-    (AD
-      (TTypeCons "A"
+    (TTypeCons "A"
         (toList
-          [AD
-            (TTypeCons "B"
-              (toList [TypCon "Char"]))])))
+          [TTypeCons "B"
+              (toList [TypCon "Char"])]))
   test "types10" types
     "A (B c) (C d)"
-    (AD
       (TTypeCons "A"
         (toList
-          [ AD
-            (TTypeCons "B"
-              (toList [TypVar "c"]))
-          , AD
-            (TTypeCons "C"
-              (toList [TypVar "d"]))])))
+          [ TTypeCons "B"
+              (toList [TypVar "c"])
+          , TTypeCons "C"
+              (toList [TypVar "d"])]))
   test "function1" types
     "Int -> Int"
     (TypArr (TypCon "Int") (TypCon "Int"))
@@ -994,92 +986,81 @@ testTypes = do
   for_ (2 .. 8) $ \i -> do
     test (show i <> "-tuple") types
       ("(" <> intercalate ", " (Array.replicate i "Int") <> ")")
-      (AD
-        (TTuple
-          (toList (Array.replicate i (TypCon "Int")))))
+      (TTuple
+          (toList (Array.replicate i (TypCon "Int"))))
 
   test "tuple-space" types
     " (Int, Int)"
-    (AD
-      (TTuple
-        (toList [TypCon "Int", TypCon "Int"])))
+    (TTuple
+        (toList [TypCon "Int", TypCon "Int"]))
 
   test "tuples1" types
     "((Int, Int), (Int, Int))"
-    (AD
-      (TTuple
+    (TTuple
         (toList
-          [ (AD (TTuple (toList [(TypCon "Int"), (TypCon "Int")])))
-          , (AD (TTuple (toList [(TypCon "Int"), (TypCon "Int")])))])))
+          [ TTuple (toList [(TypCon "Int"), (TypCon "Int")])
+          , TTuple (toList [(TypCon "Int"), (TypCon "Int")])]))
 
   test "tuples2" types
     "(Maybe a, a, b)"
-    (AD
-      (TTuple
+    (TTuple
         (toList
-          [ (AD (TTypeCons "Maybe" (toList [TypVar "a"])))
-          , (TypVar "a")
-          , (TypVar "b")])))
+          [ TTypeCons "Maybe" (toList [TypVar "a"])
+          , TypVar "a"
+          , TypVar "b"]))
 
   test "simple-list1" types
     "[Int]"
-    (AD (TList (TypCon "Int")))
+    (TList (TypCon "Int"))
 
   test "simple-list2" types
     "[a]"
-    (AD (TList (TypVar "a")))
+    (TList (TypVar "a"))
 
   test "list1" types
     "[a -> b]"
-    (AD
-      (TList
+    (TList
         (TypArr
           (TypVar "a")
-          (TypVar "b"))))
+          (TypVar "b")))
 
   test "list2" types
     "[Either a Int]"
-    (AD
-      (TList
-        (AD
-          (TTypeCons "Either"
-            (toList
-              [ TypVar "a", TypCon "Int" ])))))
+    (TList
+      (TTypeCons "Either"
+        (toList
+          [ TypVar "a", TypCon "Int" ])))
 
   test "(list2)" types
     "([Either a Int])"
-    (AD
-      (TList
-        (AD
-          (TTypeCons "Either"
-            (toList
-              [ TypVar "a", TypCon "Int" ])))))
+    (TList
+      (TTypeCons "Either"
+        (toList
+          [ TypVar "a", TypCon "Int" ])))
 
   test "((list2))" types
     "(([Either a Int]))"
-    (AD
       (TList
-        (AD
           (TTypeCons "Either"
             (toList
-              [ TypVar "a", TypCon "Int" ])))))
+              [ TypVar "a", TypCon "Int" ])))
 
   test "list3" types
     "[Maybe a -> Either a b]"
-    (AD (TList
+    (TList
       (TypArr
-        (AD (TTypeCons "Maybe"
-          (toList [TypVar "a"])))
-        (AD (TTypeCons "Either"
-          (toList [TypVar "a", TypVar "b"]))))))
+        (TTypeCons "Maybe"
+          (toList [TypVar "a"]))
+        (TTypeCons "Either"
+          (toList [TypVar "a", TypVar "b"]))))
 
   test "list4" types
     "[a] -> [b] -> [c]"
     (TypArr
-      (AD (TList (TypVar "a")))
+      (TList (TypVar "a"))
       (TypArr
-        (AD (TList (TypVar "b")))
-        (AD (TList (TypVar "c")))))
+        (TList (TypVar "b"))
+        (TList (TypVar "c"))))
 
   rejectTests "typesMisindented" types
     [ "Foo\na\nb\nc"
@@ -1112,8 +1093,8 @@ testTypeDefinition = do
         [ PrefixDataConstr "Node" 1 (Cons (TypCon "Int") Nil)
         , PrefixDataConstr "Leaf" 2
           (toList
-            [ (AD (TTypeCons "Tree" (Cons (TypVar "a") Nil)))
-            , (AD (TTypeCons "Tree" (Cons (TypVar "a") Nil)))])]))
+            [ TTypeCons "Tree" (Cons (TypVar "a") Nil)
+            , TTypeCons "Tree" (Cons (TypVar "a") Nil)])]))
 
   test "definition2" typeDefinition
     ("data Test a b\n"
@@ -1126,19 +1107,19 @@ testTypeDefinition = do
         [ PrefixDataConstr "T1" 2
           (toList
             [ TypVar "a"
-            , AD (TList (TypVar "b"))])
+            , TList (TypVar "b")])
         , PrefixDataConstr "T2" 2
           (toList
-            [ AD (TList (TypVar "a"))
-            , AD (TTuple (toList [TypVar "a", TypVar "b"]))])
+            [ TList (TypVar "a")
+            , TTuple (toList [TypVar "a", TypVar "b"])])
         , PrefixDataConstr "T3" 1
           (toList
-            [ AD (TList
-              (AD (TTuple
+            [ TList
+              (TTuple
                 (toList
                   [ TypVar "a"
-                  , TypArr (TypVar "a") (TypVar "b")]))))])
-        , InfixDataConstr ":+" LEFTASSOC 9 (TypVar "a") (AD (TList (TypVar "b")))]))
+                  , TypArr (TypVar "a") (TypVar "b")]))])
+        , InfixDataConstr ":+" LEFTASSOC 9 (TypVar "a") (TList (TypVar "b"))]))
 
   test "void" typeDefinition
     "data Void\n"

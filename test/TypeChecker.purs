@@ -24,19 +24,19 @@ tell' = tell <<< singleton
 
 -- | Construct a list of type [typCon] given the name of the type constants.
 typConList :: String -> Type
-typConList name = AD $ TList (TypCon name)
+typConList name = TList (TypCon name)
 
 -- | Construct a tuple type given a list of type constant names.
 typConNTuple:: List String -> Type
-typConNTuple names = AD $ TTuple (map TypCon names)
+typConNTuple names = TTuple (map TypCon names)
 
 -- | Construct a tuple type given a list of type variable names.
 typVarTuple :: List TVar -> Type
-typVarTuple tvs = AD $ TTuple (map TypVar tvs)
+typVarTuple tvs = TTuple (map TypVar tvs)
 
 -- | Construct a list of type [a] given the type variable name a.
 typVarList :: TVar -> Type
-typVarList tv = AD $ TList (TypVar tv)
+typVarList tv = TList (TypVar tv)
 
 -- | Generate an arrow type from two given type variable names.
 typVarArrow :: TVar -> TVar -> Type
@@ -52,7 +52,7 @@ intTupleType = typConNTuple ("Int" : "Int" : Nil)
 
 -- | The type [Int]
 intList :: Type
-intList = AD $ TList $ TypCon "Int"
+intList = TList $ TypCon "Int"
 
 -- | Report a parse error.
 reportParseError :: String -> ParseError -> Writer (List String) Unit
@@ -339,12 +339,12 @@ runTests = do
 
   -- Check that let polymorphism works: `let f = \x -> x in (f True, f 42)` :: (Bool, Int).
   testInferExpr "Let polymorphism" "let f = \\x -> x in (f True, f 42)"
-    (AD $ TTuple (boolType : intType : Nil))
+    (TTuple (boolType : intType : Nil))
 
   testInferExprFail "List unification fail" "[(+), 4]" (UnificationFail intToIntToIntType intType)
   testInferExprFail "Cons unification fail"
     "let str = \"Hallo\" in 3 : [1 + 2, 3 + 4, str]"
-    (UnificationFail intType (AD $ TList charType))
+    (UnificationFail intType (TList charType))
 
   -- +-----------------------------------------------+
   -- | Test the inferred types of single definitions |
@@ -365,7 +365,7 @@ runTests = do
   testInferDef "Binding tuple 2" "snd (a, b) = b"
     (typVarTuple ("a" : "b" : Nil) `TypArr` TypVar "b")
   testInferDef "Binding tuple 3" "f (a, b, c) = a b c"
-    ((AD $ TTuple
+    ((TTuple
       (TypVar "a" `TypArr` (TypVar "b" `TypArr` TypVar "c") : TypVar "a" : TypVar "b" : Nil))
         `TypArr` TypVar "c")
 
@@ -494,10 +494,10 @@ runTests = do
       (Tuple (Lit Nothing (Name "x")) untypedListOne : Nil)
       (List Nothing (Atom Nothing (Name "x") : Nil)))
     (LetExpr
-      (Just $ AD $ TList $ typConList "Int")
+      (Just $ TList $ typConList "Int")
       (Tuple (Lit (Just $ typConList "Int") (Name "x")) listOne : Nil)
       (List
-        (Just $ AD $ TList $ typConList "Int")
+        (Just $ TList $ typConList "Int")
         (Atom (Just $ typConList "Int") (Name "x") : Nil)))
 
 -- lit "a"
@@ -711,8 +711,8 @@ runTests = do
     "Map scheme on tuple"
     -- The scheme: (forall t_4. t_4 -> t_4, (Int, Bool))
     (Forall ("t_4" : Nil)
-      (AD (TTuple (typVarArrow "t_4" "t_4" :
-        (AD (TTuple (intType : boolType : Nil))) : Nil)))
+      (TTuple (typVarArrow "t_4" "t_4" :
+        (TTuple (intType : boolType : Nil)) : Nil))
     )
     -- The binding: (f, (n, b))
     (NTupleLit (Tuple Nothing 1)

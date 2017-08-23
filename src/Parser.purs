@@ -39,8 +39,7 @@ import AST
   , ADTDef(..)
   , Associativity(..)
   , DataConstr(..)
-  , Type(..)
-  , AD(..))
+  , Type(..))
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
@@ -574,11 +573,11 @@ type1 t = do
           case ts of
                Nil         -> fail "Empty Tuple"
                Cons t' Nil -> pure t'
-               ts'         -> (pure <<< AD <<< TTuple) ts'
+               ts'         -> (pure <<< TTuple) ts'
        '[' -> PC.between
           (PC.try <<< ilexe <<< char $ '[')
           (PC.try <<< indent <<< char $ ']')
-          (AD <<< TList <$> indent t)
+          (TList <$> indent t)
        _ -> (PC.try <<< indent) simpleType <|> (indent <<< typeCons) t
 
 simpleType :: IndentParser String Type
@@ -594,7 +593,7 @@ typeCons :: IndentParser String Type -> IndentParser String Type
 typeCons t = do
   n <- ilexe typeName
   ps <- many <<< indent $ types1 t <|> simpleType
-  pure $ AD $ TTypeCons n ps
+  pure $ TTypeCons n ps
 
 typeExpr :: IndentParser String Type -> IndentParser String Type
 typeExpr t = PC.between
@@ -615,13 +614,13 @@ typeTuple t = PC.between
       case ts of
            Nil        -> fail "Empty Tuple"
            Cons x Nil -> pure x
-           xs         -> (pure <<< AD <<< TTuple) xs)
+           xs         -> (pure <<< TTuple) xs)
 
 types1 :: IndentParser String Type -> IndentParser String Type
 types1 t = do
   la <- lookAhead
   case la of
-       '[' -> AD <<< TList <$> ((ilexe <<< char) '[' *> indent t <* (indent <<< char) ']')
+       '[' -> TList <$> ((ilexe <<< char) '[' *> indent t <* (indent <<< char) ']')
        '(' -> PC.try (typeExpr t) <|> typeTuple t
        _   -> PC.try simpleType <|> typeCons t
 

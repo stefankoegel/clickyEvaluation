@@ -494,14 +494,11 @@ data Type
     = TypVar TVar -- Typ Variables x.x. a
     | TypCon String -- Typ Constants e.x Int
     | TypArr Type Type -- e.x Int -> Int
-    | AD AD
-    | TypeError TypeError
-    | UnknownType
-
-data AD
-    = TList Type
+    | TList Type
     | TTuple (List Type)
     | TTypeCons String (List Type)
+    | TypeError TypeError
+    | UnknownType
 
 -- ADT Definition
 --
@@ -652,17 +649,12 @@ instance showType :: Show Type where
   show (TypVar var) = "(TypVar  " <> show var <> ")"
   show (TypCon con) = "(TypCon " <> show con <> ")"
   show (TypArr t1 t2) = "(TypArr "<> show t1 <>" " <> show t2 <> ")"
-  show (AD ad) = "(AD "<> show ad <> ")"
-  show (TypeError err) ="(TypeError "<> show err <>")"
-
-derive instance eqType :: Eq Type
-
-instance showAD :: Show AD where
   show (TList t) = "(TList "<> show t <>")"
   show (TTuple tl) = "(TTuple ("<> show tl <> "))"
   show (TTypeCons name ps) = "(TTypeCons " <> show name <> " " <> intercalate " " (map show ps) <> ")"
+  show (TypeError err) ="(TypeError "<> show err <>")"
 
-derive instance eqAD :: Eq AD
+derive instance eqType :: Eq Type
 
 instance showTypeError :: Show TypeError where
   show (UnificationFail a b) = "(UnificationFail "<> show a <> " " <> show b <>")"
@@ -700,13 +692,13 @@ prettyPrintType (TypCon str) = str
 prettyPrintType (TypeError err) = prettyPrintTypeError err
 prettyPrintType (TypArr t1@(TypArr _ _) t2) = "(" <> prettyPrintType t1 <> ")" <> " -> " <> prettyPrintType t2
 prettyPrintType (TypArr t1 t2) = prettyPrintType t1 <> " -> " <> prettyPrintType t2
-prettyPrintType (AD (TList t)) = "[" <> prettyPrintType t <> "]"
-prettyPrintType (AD (TTuple ts)) = "(" <> (fold <<< separateWith ", " <<< map prettyPrintType $ ts) <> ")"
+prettyPrintType (TList t) = "[" <> prettyPrintType t <> "]"
+prettyPrintType (TTuple ts) = "(" <> (fold <<< separateWith ", " <<< map prettyPrintType $ ts) <> ")"
     where
     separateWith :: String -> List String -> List String
     separateWith _ Nil = "" : Nil
     separateWith sep (t:ts) = t : map ((<>) sep) ts
-prettyPrintType (AD (TTypeCons name ps))
+prettyPrintType (TTypeCons name ps)
   = name <> " " <> intercalate " " (map prettyPrintType ps)
 
 prettyPrintTypeError :: TypeError -> String
