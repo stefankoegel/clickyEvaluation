@@ -66,7 +66,7 @@ skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
 
 --lexeme parser (skips trailing whitespaces and linebreaks)
 ilexe :: forall a m. (Monad m) => ParserT String m a -> ParserT String m a
-ilexe p = p >>= \a -> skipWhite *> pure a
+ilexe p = p <* skipWhite
 
 -- parses <p> if it is on the same line or indented, does NOT change indentation state
 indent :: forall a. IndentParser String a -> IndentParser String a
@@ -233,7 +233,7 @@ operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
       (\x ->
         (uncurry3
           (\p op assoc ->
-            Infix (spaced p >>= \r -> pure (Binary Nothing (toOpTuple (op r)))) assoc))
+            Infix (Binary Nothing <<< toOpTuple <<< op <$> spaced p) assoc))
         <$> x)
       <$> infixOperators
 
