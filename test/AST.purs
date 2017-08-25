@@ -1,7 +1,7 @@
 module Test.AST where
 
 import Prelude
-import Data.List (List, singleton)
+import Data.List (List)
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))

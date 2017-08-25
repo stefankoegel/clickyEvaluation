@@ -11,35 +11,43 @@ import Test.TypeChecker as TypeChecker
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
--- import Control.Monad.Writer (execWriter)
 
 import Node.Process (PROCESS, exit)
+
+import Test.Utils (withWriterLog, WRITERLOG)
 
 report :: forall eff. String -> Eff (console :: CONSOLE | eff) Unit
 report msg = do
   log "\n"
   log msg
 
-main :: forall eff. Eff (console :: CONSOLE, process :: PROCESS | eff) Unit
+main :: forall eff.
+        Eff
+          ( console :: CONSOLE
+          , process :: PROCESS
+          , writerlog :: WRITERLOG | eff)
+          Unit
 main = do
   log $ "Running parser tests..."
-  Parser.runTests
-  -- log $ "  ...found " <> show (length parserLog) <> " errors"
+  parserLog <- withWriterLog Parser.runTests
+  log $ "  ...found " <> show (length parserLog) <> " errors"
+  for parserLog report
 
   log $ "Running AST tests..."
-  AST.runTests
-  -- log $ "  ...found " <> show (length astLog) <> " errors"
+  astLog <- withWriterLog AST.runTests
+  log $ "  ...found " <> show (length astLog) <> " errors"
+  for astLog report
 
   log $ "Running evaluator tests..."
-  Evaluator.runTests
-  -- log $ "  ...found " <> show (length evaluatorLog) <> " errors"
+  evaluatorLog <- withWriterLog Evaluator.runTests
+  log $ "  ...found " <> show (length evaluatorLog) <> " errors"
+  for evaluatorLog report
 
   log $ "Running type checker tests..."
-  TypeChecker.runTests
-  -- log $ "  ...found " <> show (length typeCheckerLog) <> " errors"
+  typeCheckerLog <- withWriterLog TypeChecker.runTests
+  log $ "  ...found " <> show (length typeCheckerLog) <> " errors"
+  for typeCheckerLog report
 
-  exit 0
-{-
   let errorCount = length parserLog + length evaluatorLog +  length astLog + length typeCheckerLog
   if errorCount == 0
     then do
@@ -48,4 +56,3 @@ main = do
     else do
       log $ "Found " <> show errorCount <> " errors!"
       exit 1
--}
