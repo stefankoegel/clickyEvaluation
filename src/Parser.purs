@@ -225,7 +225,7 @@ operatorTable :: forall m. (Monad m) => OperatorTable m String TypeTree
 operatorTable = infixTable2 
   where
     infixTable2 = maybe [] id (modifyAt 2 (flip snoc infixOperator) infixTable1)
-    infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
+    infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
 
     infixTable :: OperatorTable m String TypeTree
     infixTable =
@@ -242,7 +242,7 @@ operatorTable = infixTable2
         minusParse = do
           string "-"
           pure $ \e -> case e of
-            Atom _ (AInt ai) -> (Atom Nothing (AInt (-ai)))
+            Atom _ (AInt ai) -> Atom Nothing (AInt (-ai))
             _                -> Unary Nothing (toOpTuple Sub) e
 
     infixOperator :: Operator m String TypeTree
@@ -259,7 +259,7 @@ operatorTable = infixTable2
     spaced p = PC.try $ PC.between skipSpaces skipSpaces p
 
 opParser :: forall m. (Monad m) => ParserT String m Op
-opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> p >>= \r -> pure (op r))) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators) <|> infixFunc
+opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> op <$> p)) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators) <|> infixFunc
   where 
     infixFunc = do
       char '`'
