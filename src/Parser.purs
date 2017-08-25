@@ -610,6 +610,24 @@ types1 t = do
 ---------------------------------------------------------
 -- Grammar
 ----------
+{-
+<TYPEDEFINITION>
+  ::= 'data' <UCASENAME> { <NAME> } [ '=' <CONSTR> { '|' <CONSTR> } ]
+
+<CONSTR>
+  ::= <PREFIXCONSTR>
+    | <INFIXCONSTR>
+
+<PREFIXCONSTR>
+  ::= <UCASENAME> { <TYPE> }
+    | <TYPE> <CONSTROP> <TYPE>
+
+<CONSTROP>
+  ::= ':' <SYMBOL> { <SYMBOL> }       (* at least one symbol after ':' is needed,
+                                       * to no confuse it with a list-(:).
+                                       *)
+-}
+
 
 typeDefinition :: IndentParser String ADTDef
 typeDefinition = do
