@@ -1,27 +1,29 @@
 module Test.AST where
 
 import Prelude
-import Data.List (List, singleton)
+import Data.List (List)
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 
-import Control.Monad.Writer (Writer, tell)
+-- import Control.Monad.Writer (Writer, tell)
 
 import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, MType, toOpTuple)
+
+import Test.Utils (tell, Test)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
 
-tell' :: forall a. a -> Writer (List a) Unit
-tell' = tell <<< singleton
+tell' :: String -> Test Unit
+tell' = tell
 
-test :: forall a. (Show a, Eq a) => String -> a -> a -> Writer (List String) Unit
+test :: forall a. (Show a, Eq a) => String -> a -> a -> Test Unit
 test name input expected = case input == expected of
   false -> tell' $ "AST fail (" <> name <> "): " <> show input <> " should be " <> show expected
   true  -> pure unit
 
-runTests :: Writer (List String) Unit
+runTests :: Test Unit
 runTests = do
 --   test "idFoldTree_atom" (idFoldTree atom) atom
 --   test "idFoldTree_list" (idFoldTree list) list
