@@ -956,6 +956,16 @@ testTypes = do
               (toList [TypVar "c"])
           , TTypeCons "C"
               (toList [TypVar "d"])]))
+
+  test "types11" types
+    "B"
+    (TTypeCons "B" Nil)
+  test "types12" types
+    "C"
+    (TTypeCons "C" Nil)
+  test "types13" types
+    "I"
+    (TTypeCons "I" Nil)
   test "function1" types
     "Int -> Int"
     (TypArr (TypCon "Int") (TypCon "Int"))
