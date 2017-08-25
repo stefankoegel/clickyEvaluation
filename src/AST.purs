@@ -489,7 +489,6 @@ type IndexedQualTree = QualTree (Binding MIType) IndexedTypeTree MIType
 
 type TVar = String
 
--- TODO: May I join `Type` and `AD`?
 data Type
     = TypVar TVar -- Typ Variables x.x. a
     | TypCon String -- Typ Constants e.x Int
