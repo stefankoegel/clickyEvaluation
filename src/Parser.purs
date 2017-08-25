@@ -436,7 +436,6 @@ parseExpr = runParserIndent expression
 
 <SIMPLE>
   ::= <LIT>
-    | <NULLARY>
 
 <LIST>
   ::= <CONSES> { `,` <CONSES> }
@@ -474,15 +473,10 @@ binding = do
 
 
 bndSimple :: IndentParser String (Binding MType)
-bndSimple = PC.try bndLit <|> bndNullary
+bndSimple = PC.try bndLit
 
 bndLit :: forall m. (Monad m) => ParserT String m (Binding MType)
 bndLit = Lit Nothing <$> atom
-
-bndNullary :: IndentParser String (Binding MType)
-bndNullary = do
-  n <- ilexe upperCaseName
-  pure $ ConstrLit Nothing (PrefixDataConstr n 0 Nil)
 
 bndList :: IndentParser String (Binding MType) -> IndentParser String (List (Binding MType))
 bndList bnd = PC.sepBy
