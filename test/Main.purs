@@ -14,10 +14,10 @@ import Control.Monad.Eff.Console (CONSOLE, log)
 
 import Node.Process (PROCESS, exit)
 
-import Test.Utils (withWriterLog, WRITERLOG)
+import Test.Utils (withWriterLog, WRITERLOG, padLeft)
 
 report :: forall eff. String -> Eff (console :: CONSOLE | eff) Unit
-report = (\x -> "\n" <> x) >>> log
+report = padLeft >>> (\x -> x <> "\n") >>> log
 
 main :: forall eff.
         Eff
@@ -28,25 +28,22 @@ main :: forall eff.
 main = do
   log $ "Running parser tests..."
   parserLog <- withWriterLog Parser.runTests
-  log $ "  ...found " <> show (length parserLog) <> " errors"
+  log $ " ...found " <> show (length parserLog) <> " errors"
   for parserLog report
-  log "\n"
 
   log $ "Running AST tests..."
   astLog <- withWriterLog AST.runTests
-  log $ "  ...found " <> show (length astLog) <> " errors"
+  log $ " ...found " <> show (length astLog) <> " errors"
   for astLog report
-  log "\n"
 
   log $ "Running evaluator tests..."
   evaluatorLog <- withWriterLog Evaluator.runTests
-  log $ "  ...found " <> show (length evaluatorLog) <> " errors"
+  log $ " ...found " <> show (length evaluatorLog) <> " errors"
   for evaluatorLog report
-  log "\n"
 
   log $ "Running type checker tests..."
   typeCheckerLog <- withWriterLog TypeChecker.runTests
-  log $ "  ...found " <> show (length typeCheckerLog) <> " errors"
+  log $ " ...found " <> show (length typeCheckerLog) <> " errors"
   for typeCheckerLog report
 
   let errorCount = length parserLog + length evaluatorLog +  length astLog + length typeCheckerLog

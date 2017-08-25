@@ -6,7 +6,7 @@ import Data.List (List(..), singleton, (:), many)
 import Data.Array ((..))
 import Data.Array (length, zip, toUnfoldable, replicate) as Array
 import Data.Tuple (Tuple(..))
-import Data.String (Pattern(..), toCharArray, split, null) as String
+import Data.String (toCharArray, null) as String
 import Data.Maybe (Maybe(..))
 import Data.Foldable (intercalate, for_)
 
@@ -15,7 +15,7 @@ import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessag
 -- import Control.Monad.Writer (Writer, tell)
 import Control.Monad.State (get)
 
-import Test.Utils (Test, tell)
+import Test.Utils (Test, tell, padLeft)
 
 import AST
   ( TypeTree
@@ -54,17 +54,8 @@ toList = Array.toUnfoldable
 tell' :: String -> Test Unit
 tell' = tell
 
-padLeft :: String -> String
-padLeft = lines >>> map (\x -> "\t" <> x) >>> unlines
-
 padLeft' :: forall a. (Show a) => a -> String
 padLeft' = show >>> padLeft
-
-unlines :: Array String -> String
-unlines = intercalate "\n"
-
-lines :: String -> Array String
-lines = String.split (String.Pattern "\n")
 
 test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Test Unit
 test name p input expected = case runParserIndent p input of
@@ -1234,7 +1225,6 @@ testInfixConstructor = do
 
   rejectTests "invalidInfixConstructors" infixConstructor
     [ ":_"
-    , ":-"
     , "_:_"
     , ".:"
     , "."
