@@ -199,6 +199,7 @@ atom = int <|> variable <|> bool <|> constructor <|> character
 infixOperators :: forall m. (Monad m) => Array (Array (Tuple3 (ParserT String m String) (String -> Op) Assoc))
 infixOperators =
   [ [ (tuple3 (PC.try infixConstructor) InfixConstr AssocLeft)
+    , (tuple3 (PC.try infixFunc) InfixFunc AssocLeft)
     , (tuple3 (PC.try $ string "." <* PC.notFollowedBy (char '.')) (const Composition) AssocRight) ]
   , [ (tuple3 (string "^") (const Power) AssocRight) ]
   , [ (tuple3 (string "*") (const Mul) AssocLeft) ]
@@ -220,13 +221,13 @@ infixOperators =
   , [ (tuple3 (string "$") (const Dollar) AssocRight) ]
   ]
 
+infixFunc :: forall m. (Monad m) => ParserT String m String
+infixFunc = char '`' *> name <* char '`'
+
 -- | Table of operators (math, boolean, ...)
 operatorTable :: forall m. (Monad m) => OperatorTable m String TypeTree
-operatorTable = infixTable2 
+operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
   where
-    infixTable2 = maybe [] id (modifyAt 2 (flip snoc infixOperator) infixTable1)
-    infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
-
     infixTable :: OperatorTable m String TypeTree
     infixTable =
       (\x ->
@@ -245,27 +246,12 @@ operatorTable = infixTable2
             Atom _ (AInt ai) -> Atom Nothing (AInt (-ai))
             _                -> Unary Nothing (toOpTuple Sub) e
 
-    infixOperator :: Operator m String TypeTree
-    infixOperator = Infix (spaced infixParse) AssocLeft
-      where 
-        infixParse = do
-          char '`'
-          n <- name
-          char '`'
-          pure $ \e1 e2 -> Binary Nothing (toOpTuple $ InfixFunc n) e1 e2
-
     -- | Parse an expression between spaces (backtracks)
     spaced :: forall a. ParserT String m a -> ParserT String m a
     spaced p = PC.try $ PC.between skipSpaces skipSpaces p
 
 opParser :: forall m. (Monad m) => ParserT String m Op
-opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> op <$> p)) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators) <|> infixFunc
-  where 
-    infixFunc = do
-      char '`'
-      n <- name
-      char '`'
-      pure $ InfixFunc n
+opParser = PC.choice $ (\x -> (uncurry3 (\p op _ -> op <$> p)) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators
 
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
 base :: IndentParser String TypeTree -> IndentParser String TypeTree

@@ -42,7 +42,7 @@ main = do
   log $ "  ...found " <> show (length typeCheckerLog) <> " errors"
   for typeCheckerLog report
 
-  let errorCount = length parserLog -- + length evaluatorLog +  length astLog + length typeCheckerLog
+  let errorCount = length parserLog + length evaluatorLog +  length astLog + length typeCheckerLog
   if errorCount == 0
     then do
       log $ "All tests succesfull"
