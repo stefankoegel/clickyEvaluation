@@ -149,8 +149,8 @@ name = do
     reservedWords = Array.toUnfoldable $ (unGenLanguageDef haskellDef).reservedNames
 
 -- | Parser for type names
-typeName :: forall m. (Monad m) => ParserT String m String
-typeName = do
+upperCaseName :: forall m. (Monad m) => ParserT String m String
+upperCaseName = do
   c  <- upper
   cs <- many anyLetter
   let nm = String.fromCharArray $ Array.fromFoldable $ Cons c cs
@@ -185,7 +185,7 @@ variable = Name <$> name
 
 -- | Parser for data constructors
 constructor :: forall m. (Monad m) => ParserT String m Atom
-constructor = Constr <$> typeName
+constructor = Constr <$> upperCaseName
 
 -- | Parser for atoms
 atom :: forall m. (Monad m) => ParserT String m Atom
@@ -495,7 +495,7 @@ bndLit = Lit Nothing <$> atom
 
 bndNullary :: IndentParser String (Binding MType)
 bndNullary = do
-  n <- ilexe typeName
+  n <- ilexe upperCaseName
   pure $ ConstrLit Nothing (PrefixDataConstr n 0 Nil)
 
 bndList :: IndentParser String (Binding MType) -> IndentParser String (List (Binding MType))
@@ -518,7 +518,7 @@ bndInfixes bnd = PC.chainl1
 bndComplex :: FixedIndentParser String (Binding MType)
 bndComplex bnd =
   PC.try
-    (do n  <- ilexe typeName
+    (do n  <- ilexe upperCaseName
         as <- many1 bnd
         pure $ ConstrLit Nothing (PrefixDataConstr n (length as) as))
   <|> indent bnd
@@ -591,7 +591,7 @@ simpleType = do
 
 typeCons :: IndentParser String Type -> IndentParser String Type
 typeCons t = do
-  n <- ilexe typeName
+  n <- ilexe upperCaseName
   ps <- many <<< indent $ types1 t <|> simpleType
   pure $ TTypeCons n ps
 
@@ -634,7 +634,7 @@ types1 t = do
 typeDefinition :: IndentParser String ADTDef
 typeDefinition = do
   ilexe $ string "data"
-  n <- indent typeName
+  n <- indent upperCaseName
   tvs <- many $ indent name
   conss <- (do PC.try (indent $ char '=')
                indent dataConstructorDefinition `PC.sepBy` (PC.try $ indent $ char '|'))
@@ -648,7 +648,7 @@ dataConstructorDefinition
 
 prefixDataConstrtructorDefinition :: IndentParser String (DataConstr Type)
 prefixDataConstrtructorDefinition = do
-  n <- ilexe typeName
+  n <- ilexe upperCaseName
   ps <- many types
   pure $ PrefixDataConstr n (length ps) ps
 
