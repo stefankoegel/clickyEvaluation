@@ -11,7 +11,7 @@ foreign import tell :: String -> Test Unit
 
 type Test a = forall eff. Eff (writerlog :: WRITERLOG | eff) a
 
-withWriterLog :: forall eff a. Test a -> Test (Array String)
+withWriterLog :: forall a. Test a -> Test (Array String)
 withWriterLog tests = do
   resetLog
   tests

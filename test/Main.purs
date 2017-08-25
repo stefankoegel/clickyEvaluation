@@ -17,9 +17,7 @@ import Node.Process (PROCESS, exit)
 import Test.Utils (withWriterLog, WRITERLOG)
 
 report :: forall eff. String -> Eff (console :: CONSOLE | eff) Unit
-report msg = do
-  log "\n"
-  log msg
+report = (\x -> "\n" <> x) >>> log
 
 main :: forall eff.
         Eff
@@ -32,16 +30,19 @@ main = do
   parserLog <- withWriterLog Parser.runTests
   log $ "  ...found " <> show (length parserLog) <> " errors"
   for parserLog report
+  log "\n"
 
   log $ "Running AST tests..."
   astLog <- withWriterLog AST.runTests
   log $ "  ...found " <> show (length astLog) <> " errors"
   for astLog report
+  log "\n"
 
   log $ "Running evaluator tests..."
   evaluatorLog <- withWriterLog Evaluator.runTests
   log $ "  ...found " <> show (length evaluatorLog) <> " errors"
   for evaluatorLog report
+  log "\n"
 
   log $ "Running type checker tests..."
   typeCheckerLog <- withWriterLog TypeChecker.runTests

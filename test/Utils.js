@@ -3,15 +3,11 @@
 var writer_log = [];
 
 exports.resetLog = function(){
-  return function(){
-    writer_log = [];
-  };
+  writer_log = [];
 };
 
 exports.getLog = function(){
-  return function(){
-    return writer_log;
-  };
+  return writer_log;
 };
 
 exports.tell = function(message){
