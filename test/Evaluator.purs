@@ -65,6 +65,16 @@ runTests = do
   eval1test "string1" "\"as\" ++ \"df\"" "\"asdf\""
   eval1test "string2" "'a' : \"sdf\"" "\"asdf\""
 
+  -- ADT-stuff
+  eval1test "constr-1" "1 :+ 1" "1 :+ 1"
+  eval1test "constr-2" "Foo" "Foo"
+  eval1test "constr-3" "Foo 1" "Foo 1"
+  eval1test "constr-4" "Foo 1 2" "Foo 1 2"
+
+  eval1EnvTest "func1" "foo (Foo x) = x" "foo 1" "1"
+  eval1EnvTest "func2" "foo (Foo x y) = x + y" "foo 1 2" "1 + 2"
+  ------------
+
   eval1EnvTest "double_func" "double x = x + x" "double 10" "10 + 10"
   eval1EnvTest "map_func1" "map f [] = []\nmap f (x:xs) = f x : map f xs" "map (^2) []" "[]"
   eval1EnvTest "map_func2" "map f [] = []\nmap f (x:xs) = f x : map f xs" "map (^2) [1, 2, 3]" "(^2) 1 : map (^2) [2, 3]"
