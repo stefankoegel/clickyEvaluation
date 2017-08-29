@@ -6,7 +6,7 @@ import Data.Bifunctor (bimap, rmap)
 import Data.Foldable (intercalate)
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe(..))
-import Data.Traversable (traverse)
+import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
 
@@ -24,6 +24,7 @@ data Op = Composition
         | Or
         | Dollar
         | InfixFunc String
+        | InfixConstr String
 
 derive instance eqOp :: Eq Op
 
@@ -46,6 +47,7 @@ instance showOp :: Show Op where
     Or     -> "Or"
     Dollar -> "Dollar"
     InfixFunc name -> "(InfixFunc " <> name <> ")"
+    InfixConstr op -> "(InfixConstr " <> op <> ")"
 
 pPrintOp :: Op -> String
 pPrintOp op = case op of
@@ -66,6 +68,7 @@ pPrintOp op = case op of
   Or     -> "||"
   Dollar -> "$"
   InfixFunc n -> "`" <> n <> "`"
+  InfixConstr o -> o
 
 -- | Atoms
 -- |
@@ -74,6 +77,7 @@ data Atom = AInt Int
           | Bool Boolean
           | Char String
           | Name String
+          | Constr String
 
 derive instance eqAtom :: Eq Atom
 
@@ -266,6 +270,7 @@ extractFromBinding (Lit x _)       = x
 extractFromBinding (ConsLit x _ _) = x
 extractFromBinding (ListLit x _)   = x
 extractFromBinding (NTupleLit x _) = x
+extractFromBinding (ConstrLit x _) = x
 
 extractFromQualTree :: forall b t m. QualTree b t m -> m
 extractFromQualTree (Gen x _ _) = x
@@ -370,6 +375,17 @@ traverseBinding f (NTupleLit t bs) = do
   t' <- f t
   bs' <- traverse (traverseBinding f) bs
   pure $ NTupleLit t' bs'
+traverseBinding f (ConstrLit t constr) = do
+  t' <- f t
+  constr' <- case constr of
+                  PrefixDataConstr name len ps -> do
+                    ps' <- for ps (traverseBinding f)
+                    pure $ PrefixDataConstr name len ps'
+                  InfixDataConstr op a p l r -> do
+                    l' <- traverseBinding f l
+                    r' <- traverseBinding f r
+                    pure $ InfixDataConstr op a p l' r'
+  pure $ ConstrLit t' constr'
 
 traverseQualTree :: forall b b' e e' m m' f. Monad f =>
      (b -> f b')
@@ -477,14 +493,62 @@ data Type
     = TypVar TVar -- Typ Variables x.x. a
     | TypCon String -- Typ Constants e.x Int
     | TypArr Type Type -- e.x Int -> Int
-    | AD AD
+    | TList Type
+    | TTuple (List Type)
+    | TTypeCons String (List Type)
     | TypeError TypeError
     | UnknownType
 
-data AD
-    = TList Type
-    | TTuple (List Type)
+-- ADT Definition
+--
+-- The definition of a Type consists of the name of the type,
+-- followd by type variables, over which it is parametrized
+-- and a list of Data Constructors, each having a name,
+-- and a list of types, which are their parameters.
+data ADTDef
+  = ADTDef String (List TVar) (List (DataConstr Type))
 
+derive instance eqADTDef :: Eq ADTDef
+
+instance showADTDef :: Show ADTDef where
+  show (ADTDef n vs cs) =
+    "data "
+    <> n
+    <> " "
+    <> intercalate " " (map show vs)
+    <> "\n  = "
+    <> intercalate "\n  | " (map show cs)
+
+
+-- | DataConstrtructor parameterized over its parameters,
+--   to use it for both, type definitions and data.
+
+data Associativity
+  = LEFTASSOC
+  | RIGHTASSOC
+  | ASSOC
+
+derive instance eqAssociativity :: Eq Associativity
+
+data DataConstr param
+  = PrefixDataConstr String Int (List param)
+  | InfixDataConstr String Associativity Int param param
+
+instance functorDataConstr :: Functor DataConstr where
+  map f (PrefixDataConstr s i ps) = PrefixDataConstr s i (map f ps)
+  map f (InfixDataConstr s a i p1 p2) = InfixDataConstr s a i (f p1) (f p2)
+
+instance showDataConstr :: (Show param) => Show (DataConstr param) where
+  show (PrefixDataConstr n _ ts)
+    = n <> " " <> intercalate " " (map show ts)
+  show (InfixDataConstr o ASSOC _ l r)
+    = show l <> " " <> o <> " " <> show r
+  show (InfixDataConstr o RIGHTASSOC _ l r)
+    = show l <> " " <> o <> " (" <> show r <> ")"
+  show (InfixDataConstr o LEFTASSOC _ l r)
+    = "(" <> show l <> ") " <> o <> " " <> show r
+
+derive instance eqDataConstr :: (Eq params) => Eq (DataConstr params)
 
 data TypeError
   = UnificationFail Type Type
@@ -494,7 +558,7 @@ data TypeError
   | NoInstanceOfEnum Type
   | PatternMismatch IndexedTypedBinding Type
 
-derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c) 
+derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c)
 
 -- | Bindings
 -- |
@@ -503,6 +567,7 @@ data Binding m = Lit       m Atom
                | ConsLit   m (Binding m) (Binding m)
                | ListLit   m (List (Binding m))
                | NTupleLit m (List (Binding m))
+               | ConstrLit m (DataConstr (Binding m))
 
 derive instance eqBinding :: (Eq a) => Eq (Binding a)
 
@@ -511,6 +576,7 @@ instance functorBinding :: Functor Binding where
   map f (ConsLit x binding1 binding2) = ConsLit (f x) (f <$> binding1) (f <$> binding2)
   map f (ListLit x bindings) = ListLit (f x) (map f <$> bindings)
   map f (NTupleLit x bindings) = NTupleLit (f x) (map f <$> bindings)
+  map f (ConstrLit x c) = ConstrLit (f x) (map (map f) c)
 
 -- | Given a binding, return a list of (direct) children bindings.
 getBindingChildren :: forall m. Binding m -> List (Binding m)
@@ -539,6 +605,7 @@ instance showAtom :: Show Atom where
     Bool bool   -> "Bool " <> show bool
     Char string -> "Char " <> show string
     Name string -> "Name " <> show string
+    Constr string -> "Constr " <> show string
 
 instance showQualTree :: (Show a, Show b, Show c) => Show (QualTree a b c) where
   show (Gen a b c) = "Gen (" <> show a <> " " <> show b <> " " <> show c <> ")"
@@ -568,6 +635,7 @@ instance showBinding :: (Show a) => Show (Binding a) where
     ConsLit m b bs -> "(ConsLit " <> show m <> " " <> show b <> " " <> show bs <> ")"
     ListLit m bs   -> "(ListLit " <> show m <> " " <> show bs <> ")"
     NTupleLit m ls -> "(NTupleLit " <> show m <> " " <> show ls <> ")"
+    ConstrLit m c  -> "(ConstrLit " <> show m <> " " <> show c <> ")"
 
 instance showDefinition :: Show Definition where
   show (Def name bindings body) = "Def " <> show name <> " (" <> show bindings <> ") (" <> show body <> ")"
@@ -580,16 +648,12 @@ instance showType :: Show Type where
   show (TypVar var) = "(TypVar  " <> show var <> ")"
   show (TypCon con) = "(TypCon " <> show con <> ")"
   show (TypArr t1 t2) = "(TypArr "<> show t1 <>" " <> show t2 <> ")"
-  show (AD ad) = "(AD "<> show ad <> ")"
+  show (TList t) = "(TList "<> show t <>")"
+  show (TTuple tl) = "(TTuple ("<> show tl <> "))"
+  show (TTypeCons name ps) = "(TTypeCons " <> show name <> " " <> intercalate " " (map show ps) <> ")"
   show (TypeError err) ="(TypeError "<> show err <>")"
 
 derive instance eqType :: Eq Type
-
-instance showAD :: Show AD where
-  show (TList t) = "(TList "<> show t <>")"
-  show (TTuple tl) = "(TTuple ("<> show tl <> "))"
-
-derive instance eqAD :: Eq AD
 
 instance showTypeError :: Show TypeError where
   show (UnificationFail a b) = "(UnificationFail "<> show a <> " " <> show b <>")"
@@ -606,6 +670,7 @@ prettyPrintAtom (AInt n) = show n
 prettyPrintAtom (Bool b) = show b
 prettyPrintAtom (Char c) = c
 prettyPrintAtom (Name s) = s
+prettyPrintAtom (Constr s) = s
 
 prettyPrintBinding :: forall m. Binding m -> String
 prettyPrintBinding (Lit _ atom) = prettyPrintAtom atom
@@ -616,6 +681,8 @@ prettyPrintBinding (ConsLit _ b1 b2) = "("
     <> ")"
 prettyPrintBinding (ListLit _ bs) = "[" <> intercalate ", " (map prettyPrintBinding bs) <> "]"
 prettyPrintBinding (NTupleLit _ bs) = "(" <> intercalate ", " (map prettyPrintBinding bs) <> ")"
+prettyPrintBinding (ConstrLit _ (PrefixDataConstr name _ ps)) = "(" <> name <> intercalate " " (map prettyPrintBinding ps) <> ")"
+prettyPrintBinding (ConstrLit _ (InfixDataConstr name _ _ l r)) = "(" <> prettyPrintBinding l <> " " <> name <> " " <> prettyPrintBinding r <> ")"
 
 prettyPrintType :: Type -> String
 prettyPrintType (UnknownType) = "?"
@@ -624,12 +691,14 @@ prettyPrintType (TypCon str) = str
 prettyPrintType (TypeError err) = prettyPrintTypeError err
 prettyPrintType (TypArr t1@(TypArr _ _) t2) = "(" <> prettyPrintType t1 <> ")" <> " -> " <> prettyPrintType t2
 prettyPrintType (TypArr t1 t2) = prettyPrintType t1 <> " -> " <> prettyPrintType t2
-prettyPrintType (AD (TList t)) = "[" <> prettyPrintType t <> "]"
-prettyPrintType (AD (TTuple ts)) = "(" <> (fold <<< separateWith ", " <<< map prettyPrintType $ ts) <> ")"
+prettyPrintType (TList t) = "[" <> prettyPrintType t <> "]"
+prettyPrintType (TTuple ts) = "(" <> (fold <<< separateWith ", " <<< map prettyPrintType $ ts) <> ")"
     where
     separateWith :: String -> List String -> List String
     separateWith _ Nil = "" : Nil
     separateWith sep (t:ts) = t : map ((<>) sep) ts
+prettyPrintType (TTypeCons name ps)
+  = name <> " " <> intercalate " " (map prettyPrintType ps)
 
 prettyPrintTypeError :: TypeError -> String
 prettyPrintTypeError (UnificationFail t1 t2) = "UnificationFail: Can't unify " <> prettyPrintType t1 <> " with " <> prettyPrintType t2

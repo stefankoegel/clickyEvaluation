@@ -19,6 +19,9 @@ import DOM (DOM)
 import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding,
             Type(..), TypeQual, pPrintOp, prettyPrintType, prettyPrintTypeError)
 
+
+import JSHelpers (unsafeUndef)
+
 data RoseTree a = Node a (List (RoseTree a))
 
 type Div = RoseTree { content :: String, classes :: (List String), zipper :: Maybe (Tuple TypeTree (TypeTree -> TypeTree)), exprType :: MType }
@@ -143,6 +146,7 @@ atom t (AInt n) = typedNode (show n) ["atom", "num"] [] t
 atom t (Bool b) = typedNode (if b then "True" else "False") ["atom", "bool"] [] t
 atom t (Char c) = typedNode ("'" <> c <> "'") ["atom", "char"] [] t
 atom t (Name n) = typedNode n ["atom", "name"] [] t
+atom t (Constr n) = unsafeUndef "atom t (Constr n)"
 
 interleave :: forall a. a -> List a -> List a
 interleave _ Nil          = Nil
@@ -246,6 +250,8 @@ binding (Lit t a)         = typedNode "" ["binding", "lit"] [atom t a] t
 binding (ConsLit t b1 b2) = typedNode "" ["binding", "conslit"] (listify "(" ":" ")" (binding b1 : binding b2 : Nil)) t
 binding (ListLit t ls)    = typedNode "" ["binding", "listlit"] (listify "[" "," "]" (binding <$> ls)) t
 binding (NTupleLit t ls)   = typedNode "" ["binding", "tuplelit"] (listify "(" "," ")" (binding <$> ls)) t
+-- TODO
+binding (ConstrLit _ _) = unsafeUndef "binding (ConstrLit _ _)"
 
 type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM | eff) Unit)
 

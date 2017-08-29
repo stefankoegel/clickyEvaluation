@@ -2,32 +2,110 @@ module Test.Parser where
 
 import Prelude
 import Data.Either (Either(..))
-import Data.List (List(..), singleton, (:))
-import Data.Array (toUnfoldable) as Array
+import Data.List (List(..), singleton, (:), many)
+import Data.Array ((..))
+import Data.Array (length, zip, toUnfoldable, replicate) as Array
 import Data.Tuple (Tuple(..))
+import Data.String (toCharArray, null) as String
 import Data.Maybe (Maybe(..))
+import Data.Foldable (intercalate, for_)
 
-import Text.Parsing.Parser (parseErrorPosition, parseErrorMessage)
+import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessage, fail)
 
-import Control.Monad.Writer (Writer, tell)
+-- import Control.Monad.Writer (Writer, tell)
+import Control.Monad.State (get)
 
-import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), toOpTuple)
-import Parser (expression, atom, definitions, definition, binding, variable, bool, int, runParserIndent)
+import Test.Utils (Test, tell, padLeft)
+
+import AST
+  ( TypeTree
+  , Tree(..)
+  , Atom(..)
+  , Binding(..)
+  , Definition(Def)
+  , Op(..)
+  , QualTree(..)
+  , toOpTuple
+  , ADTDef(..)
+  , DataConstr(..)
+  , Associativity(..)
+  , Type(..))
+import Parser
+  ( expression
+  , atom
+  , definitions
+  , definition
+  , binding
+  , variable
+  , bool
+  , int
+  , runParserIndent
+  , typeDefinition
+  , dataConstructorDefinition
+  , infixDataConstrtructorDefinition
+  , symbol
+  , infixConstructor
+  , types)
 import IndentParser (IndentParser)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
 
-tell' :: forall a. a -> Writer (List a) Unit
-tell' = tell <<< singleton
+tell' :: String -> Test Unit
+tell' = tell
 
-test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Writer (List String) Unit
+padLeft' :: forall a. (Show a) => a -> String
+padLeft' = show >>> padLeft
+
+test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Test Unit
 test name p input expected = case runParserIndent p input of
-  Left parseError -> tell' $ "Parse fail (" <> name <> "): " <> show (parseErrorPosition parseError) <> " " <> parseErrorMessage parseError
+  Left parseError -> tell' $
+    "Parse fail (" <> name <> "): "
+    <> padLeft' (parseErrorPosition parseError) <> "\n"
+    <> padLeft (parseErrorMessage parseError) <> "\n"
+    <> "Input:\n"
+    <> padLeft input
   Right result           ->
     if result == expected
       then pure unit --tell $ "Parse success (" <> name <> ")"
-      else tell' $ "Parse fail (" <> name <> "): " <> show result <> " /= " <> show expected
+      else tell' $
+        "Parse fail (" <> name <> "):\n"
+        <> "Output:\n"
+        <> padLeft' result <> "\n"
+        <> "Expected:\n"
+        <> padLeft' expected <> "\n"
+        <> "Input:\n"
+        <> padLeft input
+
+
+rejectTest :: forall a . (Show a)
+                      => String
+                      -> IndentParser String a
+                      -> String
+                      -> Test Unit
+rejectTest name parser input = case runParserIndent (parser <* inputIsEmpty) input of
+  Left parserError -> pure unit
+  Right result ->
+    tell' $
+      "Parser accepted " <> name <> "\n"
+      <> "Input:\n"
+      <> padLeft input <> "\n"
+      <> "Output:\n"
+      <> padLeft' result
+
+rejectTests :: forall a . (Show a)
+                       => String
+                       -> IndentParser String a
+                       -> Array String
+                       -> Test Unit
+rejectTests name parser inputs = do
+  for_ ((1 .. Array.length inputs) `Array.zip` inputs) $ \(Tuple idx iput) ->
+    rejectTest (name <> "-" <> show idx) parser iput
+
+inputIsEmpty :: IndentParser String Unit
+inputIsEmpty = do
+  ParseState s _ _ <- get
+  when (not (String.null s)) (fail $ "Leftover input:\n" <> padLeft s)
 
 aint :: Int -> TypeTree
 aint i = Atom Nothing $ AInt i
@@ -38,7 +116,7 @@ abool = Atom Nothing <<< Bool
 aname :: String -> TypeTree
 aname s = Atom Nothing $ Name s
 
-runTests :: Writer (List String) Unit
+runTests :: Test Unit
 runTests = do
   test "0" int "0" (AInt 0)
   test "1" int "1" (AInt 1)
@@ -319,6 +397,16 @@ runTests = do
     Let Nothing (Lit Nothing (Name "b")) (Binary Nothing (toOpTuple Add) (Atom Nothing (Name "a")) (Atom Nothing (AInt 1)))]
   test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp Nothing (aname "x") $ toList [ Gen Nothing (Lit Nothing (Name "x")) (ArithmSeq Nothing (aint 1) Nothing (Just (aint 10))), Guard Nothing (App Nothing (aname "even") $ toList [aname "x"])]
 
+  testConstructorsExpression
+  testConstructorsDefinition
+  testConstructorsBinding
+  testTypes
+  testTypeDefinition
+  testSymbol
+  testInfixDataConstrtructorDefinition
+  testDataConstrtructorDefinition
+  testInfixConstructor
+
 
 prelude :: String
 prelude =
@@ -487,3 +575,661 @@ parsedPrelude = toList [
   (Def "odd" (Cons (Lit Nothing (Name "n")) (Nil)) (Binary Nothing (toOpTuple Equ) (Binary Nothing (toOpTuple (InfixFunc "mod")) (Atom Nothing (Name "n")) (Atom Nothing (AInt 2))) (Atom Nothing (AInt 1)))),
   (Def "fix" (Cons (Lit Nothing (Name "f")) (Nil)) (App Nothing (Atom Nothing (Name "f")) (Cons (App Nothing (Atom Nothing (Name "fix")) (Cons (Atom Nothing (Name "f")) (Nil))) (Nil))))
   ]
+
+stringToList :: String -> List Char
+stringToList = Array.toUnfoldable <<< String.toCharArray
+
+type MType = Maybe Type
+
+econstr :: String -> TypeTree
+econstr n = Atom Nothing (Constr n)
+
+ename :: String -> TypeTree
+ename n = Atom Nothing (Name n)
+
+eint :: Int -> TypeTree
+eint i = Atom Nothing (AInt i)
+
+eapp :: TypeTree -> Array TypeTree -> TypeTree
+eapp f as = App Nothing f (toList as)
+
+ebin :: Op -> TypeTree -> TypeTree -> TypeTree
+ebin o l r = Binary Nothing (Tuple o Nothing) l r
+
+def :: String -> Array (Binding MType) -> TypeTree -> Definition
+def n bs e = Def n (toList bs) e
+
+testConstructorsExpression :: Test Unit
+testConstructorsExpression = do
+  test "simple-expr-1" expression
+    "Foo"
+    (econstr "Foo")
+
+  test "simple-expr-2" expression
+    "Foo 1"
+    (eapp
+      (econstr "Foo")
+      [eint 1])
+
+  test "simple-expr-3" expression
+    "Foo 1 (1 + 2)"
+    (eapp
+      (econstr "Foo")
+      [ eint 1
+      , ebin Add
+        (eint 1)
+        (eint 2)])
+
+  test "nested-expr-1" expression
+    "Foo Bar"
+    (eapp
+      (econstr "Foo")
+      [ econstr "Bar" ])
+
+  test "nested-expr-2" expression
+    "Foo bar"
+    (eapp
+      (econstr "Foo")
+      [ ename "bar"])
+
+  test "nested-expr-3" expression
+    "foo Bar"
+    (eapp
+      (ename "foo")
+      [econstr "Bar"])
+
+  test "nested-deep-expr-1" expression
+    "Foo1 (Foo2 (Foo3 bar))"
+    (eapp (econstr "Foo1")
+      [ eapp (econstr "Foo2")
+        [ eapp (econstr "Foo3")
+          [ ename "bar" ]]])
+
+  test "nested-expr-4" expression
+    "Bar || Foo"
+    (ebin Or
+      (econstr "Bar")
+      (econstr "Foo"))
+
+  test "nested-expr-5" expression
+    "Bar 1 :- Foo 2 3"
+    (ebin (InfixConstr ":-")
+      (eapp (econstr "Bar") [eint 1])
+      (eapp (econstr "Foo") [eint 2, eint 3]))
+
+  test "nested-expr-6" expression
+    "Bar 1 (Foo ::: Foo 2)"
+    (eapp (econstr "Bar")
+      [ eint 1
+      , ebin (InfixConstr ":::")
+        (econstr "Foo")
+        (eapp (econstr "Foo") [eint 2])])
+
+
+testConstructorsDefinition :: Test Unit
+testConstructorsDefinition = do
+  test "definition-1" definition
+    "foo (Bar a b) = Foo a b"
+    (def "foo"
+      [prefixDataConstr "Bar" [litname "a", litname "b"]]
+      (eapp (econstr "Foo")
+        [ename "a", ename "b"]))
+
+  test "definition-2" definition
+    "foo (r :+ i) = r :- i"
+    (def "foo"
+      [infixDataConstr ":+" (litname "r") (litname "i")]
+      (ebin (InfixConstr ":-")
+        (ename "r")
+        (ename "i")))
+
+  rejectTests "invalid-definition" definition
+    [ "foo a :- b = a b"
+    , "foo (x :-) b = x b"
+    ]
+
+
+
+litname :: String -> Binding MType
+litname = Lit Nothing <<< Name
+
+litint :: Int -> Binding MType
+litint = Lit Nothing <<< AInt
+
+litlist :: Array (Binding MType) -> Binding MType
+litlist = ListLit Nothing <<< toList
+
+bpair :: Binding MType -> Binding MType -> Binding MType
+bpair l r = NTupleLit Nothing (Cons l (Cons r Nil))
+
+prefixDataConstr :: String -> Array (Binding MType) -> Binding MType
+prefixDataConstr name [] = (Lit Nothing (Constr name))
+prefixDataConstr name args = ConstrLit Nothing (PrefixDataConstr name (Array.length args) (toList args))
+
+infixDataConstr :: String -> Binding MType -> Binding MType -> Binding MType
+infixDataConstr op l r = ConstrLit Nothing (InfixDataConstr op LEFTASSOC 9 l r)
+
+litcons :: Binding MType -> Binding MType -> Binding MType
+litcons = ConsLit Nothing
+
+testConstructorsBinding :: Test Unit
+testConstructorsBinding = do
+  test "binding-simple-0" binding
+    "_"
+    (litname "_")
+
+  test "binding-simple-1" binding
+    "(Foo a b)"
+    (prefixDataConstr "Foo" [litname "a", litname "b"])
+
+  test "binding-simple-2" binding
+    "(Foo)"
+    (prefixDataConstr "Foo" [])
+
+  test "binding-simple-3" binding
+    "Foo"
+    (prefixDataConstr "Foo" [])
+
+  test "binding-simple-4" binding
+    "a"
+    (litname "a")
+
+  test "binding-nested-1" binding
+    "(Foo Foo 1)"
+    (prefixDataConstr "Foo"
+      [ prefixDataConstr "Foo" []
+      , litint 1 ])
+
+  test "binding-nested-2" binding
+    "(Foo (Foo 1) (Foo 2 3))"
+    (prefixDataConstr "Foo"
+      [ prefixDataConstr "Foo"
+        [ litint 1 ]
+      , prefixDataConstr "Foo"
+        [ litint 2
+        , litint 3 ]])
+
+  test "binding-nested-3" binding
+    "(Foo (1,2))"
+    (prefixDataConstr "Foo"
+      [ bpair (litint 1) (litint 2) ])
+
+  test "binding-nested-4" binding
+    "([a,c],b)"
+    (bpair
+      (ListLit Nothing (Cons (litname "a") (Cons (litname "c") Nil)))
+      (litname "b"))
+
+  test "binding-nested-5" binding
+    "(Foo foo, Bar bar)"
+    (bpair
+      (prefixDataConstr "Foo" [litname "foo"])
+      (prefixDataConstr "Bar" [litname "bar"]))
+
+  test "binding-nested-6" binding
+    "(foo :- bar, bar :+ foo)"
+    (bpair
+      (infixDataConstr ":-" (litname "foo") (litname "bar"))
+      (infixDataConstr ":+" (litname "bar") (litname "foo")))
+
+  test "binding-nested-7" binding
+    "(Foo foo :- Bar bar)"
+    (infixDataConstr ":-"
+      (prefixDataConstr "Foo" [litname "foo"])
+      (prefixDataConstr "Bar" [litname "bar"]))
+
+  test "binding-nested-8" binding
+    "(Foo (foo :- bar))"
+    (prefixDataConstr "Foo"
+      [ infixDataConstr ":-"
+        (litname "foo")
+        (litname "bar") ])
+
+  test "list-binding-nested-1" binding
+    "[Foo a b]"
+    (litlist
+      [ prefixDataConstr "Foo"
+        [ litname "a"
+        , litname "b" ]])
+
+  test "list-binding-nested-2" binding
+    "[Foo a, a :- b]"
+    (litlist
+      [ prefixDataConstr "Foo"
+        [ litname "a" ]
+      , infixDataConstr ":-"
+        (litname "a")
+        (litname "b") ])
+
+  test "list-binding-nested-3" binding
+    "[ Foo foo\n , Bar bar\n , foo :-: bar ]"
+    (litlist
+      [ prefixDataConstr "Foo" [litname "foo"]
+      , prefixDataConstr "Bar" [litname "bar"]
+      , infixDataConstr ":-:"
+        (litname "foo")
+        (litname "bar") ])
+
+  test "list-binding-nested-4" binding
+    "[ [ 1, 2 ]\n , [ 3, 4 ]\n , [Foo 2 3] ]"
+    (litlist
+      [ litlist [litint 1, litint 2]
+      , litlist [litint 3, litint 4]
+      , litlist [prefixDataConstr "Foo" [litint 2, litint 3]]])
+
+  test "list-binding-nested-5" binding
+    "[1:2:3:[], Foo 3]"
+    (litlist
+      [ litcons (litint 1)
+        (litcons (litint 2)
+          (litcons (litint 3)
+            (litlist [])))
+      , prefixDataConstr "Foo" [litint 3]])
+
+  test "list-binding-nested-6" binding
+    "[[[[1]]]]"
+    (litlist
+      [litlist
+        [litlist
+          [litlist [litint 1]]]])
+
+  test "cons-binding-nested-1" binding
+    "(_:_)"
+    (litcons
+      (litname "_")
+      (litname "_"))
+
+  test "cons-binding-nested-2" binding
+    "(_:a)"
+    (litcons
+      (litname "_")
+      (litname "a"))
+      
+  test "cons-binding-nested-3" binding
+    "(a:_)"
+    (litcons
+      (litname "a")
+      (litname "_"))
+
+  test "cons-binding-nested-4" binding
+    "(a:a)"
+    (litcons
+      (litname "a")
+      (litname "a"))
+
+  test "cons-binding-nested-5" binding
+    "(_:(_:(x:_)))"
+    (litcons
+      (litname "_")
+      (litcons
+        (litname "_")
+        (litcons
+          (litname "x")
+          (litname "_"))))
+
+  test "cons-binding-nested-6" binding
+    "(_:_:+_)"
+    (litcons
+      (litname "_")
+      (infixDataConstr ":+"
+        (litname "_")
+        (litname "_")))
+
+  test "infix-constr-binding-1" binding
+    "(a :- b :- c)"
+    (infixDataConstr ":-"
+      (infixDataConstr ":-"
+        (litname "a")
+        (litname "b"))
+      (litname "c"))
+
+  test "infix-constr-binding-2" binding
+    "(a :- b :+ c :- d)"
+    (infixDataConstr ":-"
+      (infixDataConstr ":+"
+        (infixDataConstr ":-"
+          (litname "a")
+          (litname "b"))
+        (litname "c"))
+      (litname "d"))
+
+  rejectTests "invalid-infix-operator" binding
+    [ "(a :-) b"
+    , "(:-) a b"
+    , ":- a"
+    , "b :-"
+    , ":- a b"
+    ]
+
+  rejectTests "invalid-prefix-operator" binding
+    [ "a Foo"
+    , "foo a"
+    ]
+
+
+
+
+testTypes :: Test Unit
+testTypes = do
+  test "types1" types
+    "a"
+    (TypVar "a")
+  test "types2" types
+    "A"
+    (TTypeCons "A" Nil)
+  test "types3" types
+    "Int" (TypCon "Int")
+  test "types4" types
+    "Char" (TypCon "Char")
+  test "types5" types
+    "Bool" (TypCon "Bool")
+  test "types6" types
+    "A a b c"
+    (TTypeCons "A" (toList [TypVar "a", TypVar "b", TypVar "c"]))
+  test "types7" types
+    "A Int b Bool"
+    (TTypeCons "A" (toList [TypCon "Int", TypVar "b", TypCon "Bool"]))
+  test "types8" types
+    "A (B c)"
+    (TTypeCons "A"
+        (toList
+          [TTypeCons "B"
+              (toList [TypVar "c"])]))
+  test "types9" types
+    "A (B Char)"
+    (TTypeCons "A"
+        (toList
+          [TTypeCons "B"
+              (toList [TypCon "Char"])]))
+  test "types10" types
+    "A (B c) (C d)"
+      (TTypeCons "A"
+        (toList
+          [ TTypeCons "B"
+              (toList [TypVar "c"])
+          , TTypeCons "C"
+              (toList [TypVar "d"])]))
+
+  test "types11" types
+    "B"
+    (TTypeCons "B" Nil)
+  test "types12" types
+    "C"
+    (TTypeCons "C" Nil)
+  test "types13" types
+    "I"
+    (TTypeCons "I" Nil)
+  test "function1" types
+    "Int -> Int"
+    (TypArr (TypCon "Int") (TypCon "Int"))
+  test "function1'" types
+    "(Int -> Int)"
+    (TypArr (TypCon "Int") (TypCon "Int"))
+  test "function2" types
+    "Int -> Int -> Int"
+    (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int")))
+  test "function2'" types
+    "(Int -> Int -> Int)"
+    (TypArr (TypCon "Int") (TypArr (TypCon "Int") (TypCon "Int")))
+
+  test "function3" types
+    "(Int -> Int) -> Int"
+    (TypArr
+      (TypArr (TypCon "Int") (TypCon "Int"))
+      (TypCon "Int"))
+
+  test "function4" types
+    "((a -> a) -> a) -> a"
+    (((TypVar "a" `TypArr` TypVar "a") `TypArr` TypVar "a") `TypArr` TypVar "a")
+
+  test "function5" types
+    "a\n\t-> a\n\t ->a"
+    (TypArr (TypVar "a") (TypArr (TypVar "a") (TypVar "a")))
+
+  for_ (2 .. 8) $ \i -> do
+    test (show i <> "-tuple") types
+      ("(" <> intercalate ", " (Array.replicate i "Int") <> ")")
+      (TTuple
+          (toList (Array.replicate i (TypCon "Int"))))
+
+  test "tuple-space" types
+    " (Int, Int)"
+    (TTuple
+        (toList [TypCon "Int", TypCon "Int"]))
+
+  test "tuples1" types
+    "((Int, Int), (Int, Int))"
+    (TTuple
+        (toList
+          [ TTuple (toList [(TypCon "Int"), (TypCon "Int")])
+          , TTuple (toList [(TypCon "Int"), (TypCon "Int")])]))
+
+  test "tuples2" types
+    "(Maybe a, a, b)"
+    (TTuple
+        (toList
+          [ TTypeCons "Maybe" (toList [TypVar "a"])
+          , TypVar "a"
+          , TypVar "b"]))
+
+  test "simple-list1" types
+    "[Int]"
+    (TList (TypCon "Int"))
+
+  test "simple-list2" types
+    "[a]"
+    (TList (TypVar "a"))
+
+  test "list1" types
+    "[a -> b]"
+    (TList
+        (TypArr
+          (TypVar "a")
+          (TypVar "b")))
+
+  test "list2" types
+    "[Either a Int]"
+    (TList
+      (TTypeCons "Either"
+        (toList
+          [ TypVar "a", TypCon "Int" ])))
+
+  test "(list2)" types
+    "([Either a Int])"
+    (TList
+      (TTypeCons "Either"
+        (toList
+          [ TypVar "a", TypCon "Int" ])))
+
+  test "((list2))" types
+    "(([Either a Int]))"
+      (TList
+          (TTypeCons "Either"
+            (toList
+              [ TypVar "a", TypCon "Int" ])))
+
+  test "list3" types
+    "[Maybe a -> Either a b]"
+    (TList
+      (TypArr
+        (TTypeCons "Maybe"
+          (toList [TypVar "a"]))
+        (TTypeCons "Either"
+          (toList [TypVar "a", TypVar "b"]))))
+
+  test "list4" types
+    "[a] -> [b] -> [c]"
+    (TypArr
+      (TList (TypVar "a"))
+      (TypArr
+        (TList (TypVar "b"))
+        (TList (TypVar "c"))))
+
+  rejectTests "typesMisindented" types
+    [ "Foo\na\nb\nc"
+    , " Foo\na"
+    , " a\n->b"
+    , " (a\n,b\n,c)"
+    ]
+
+  rejectTests "typesBracketMismatch" types
+    [ "[a"
+    , "a]"
+    , "[[a]"
+    , "[a -> b]]"
+    , "(a -> b))"
+    , "(a -> b"
+    , "a -> b)"
+    , "Foo (a b"
+    , "Foo a b)"
+    , "(Foo a b"
+    ]
+
+testTypeDefinition :: Test Unit
+testTypeDefinition = do
+  test "definition1" typeDefinition
+    ("data Tree a\n"
+     <> "  = Node Int\n"
+     <> "  | Leaf (Tree a) (Tree a)")
+    (ADTDef "Tree" (toList ["a"])
+      (toList
+        [ PrefixDataConstr "Node" 1 (Cons (TypCon "Int") Nil)
+        , PrefixDataConstr "Leaf" 2
+          (toList
+            [ TTypeCons "Tree" (Cons (TypVar "a") Nil)
+            , TTypeCons "Tree" (Cons (TypVar "a") Nil)])]))
+
+  test "definition2" typeDefinition
+    ("data Test a b\n"
+     <> "  = T1 a [b]\n"
+     <> "  | T2 [a] (a,b)\n"
+     <> "  | T3 [(a,a->b)]\n"
+     <> "  | a :+ [b]")
+    (ADTDef "Test" (toList ["a","b"])
+      (toList
+        [ PrefixDataConstr "T1" 2
+          (toList
+            [ TypVar "a"
+            , TList (TypVar "b")])
+        , PrefixDataConstr "T2" 2
+          (toList
+            [ TList (TypVar "a")
+            , TTuple (toList [TypVar "a", TypVar "b"])])
+        , PrefixDataConstr "T3" 1
+          (toList
+            [ TList
+              (TTuple
+                (toList
+                  [ TypVar "a"
+                  , TypArr (TypVar "a") (TypVar "b")]))])
+        , InfixDataConstr ":+" LEFTASSOC 9 (TypVar "a") (TList (TypVar "b"))]))
+
+  test "void" typeDefinition
+    "data Void\n"
+    (ADTDef "Void" Nil Nil)
+
+  test "none" typeDefinition
+    "data None a b c"
+    (ADTDef "None"
+      (toList ["a", "b", "c"])
+      Nil)
+
+  test "id" typeDefinition
+    "data Ident a = Ident a"
+    (ADTDef "Ident" (toList ["a"])
+      (toList
+        [ PrefixDataConstr "Ident" 1 (toList [TypVar "a"])]))
+
+  test "maybe" typeDefinition
+    "data Maybe a = Nothing | Just a"
+    (ADTDef "Maybe" (toList ["a"])
+      (toList
+        [ PrefixDataConstr "Nothing" 0 Nil
+        , PrefixDataConstr "Just" 1 (toList [TypVar "a"])]))
+
+  test "maybe1" typeDefinition
+    "data Maybe a\n  = Nothing\n  | Just a"
+    (ADTDef "Maybe" (toList ["a"])
+      (toList
+        [ PrefixDataConstr "Nothing" 0 Nil
+        , PrefixDataConstr "Just" 1 (toList [TypVar "a"])]))
+
+  test "list1" typeDefinition
+    "data InfixStuff a = a :+ a | a :- a | Prefix a"
+    (ADTDef "InfixStuff" (toList ["a"])
+      (toList
+        [ InfixDataConstr ":+" LEFTASSOC 9 (TypVar "a") (TypVar "a")
+        , InfixDataConstr ":-" LEFTASSOC 9 (TypVar "a") (TypVar "a")
+        , PrefixDataConstr "Prefix" 1 (Cons (TypVar "a") Nil)]))
+
+  rejectTests "typdefMisindented" typeDefinition
+    [ "data Foo\n=Foo"
+    , "data Foo a\n =Foo\na"
+    , "data Foo\na b c=Foo a b c"
+    , "data Foo\n| Foo\n| Bar"
+    , "data Foo\n | Foo\n| Bar"
+    , "data\nFoo\na = Foo a"
+    ]
+
+testSymbol :: Test Unit
+testSymbol = do
+  test "symbol" symbol
+    "!"
+    '!'
+
+  test "symbols" (many symbol)
+    "!#$%&*+./<>=?@\\^|-~°"
+    (stringToList "!#$%&*+./<>=?@\\^|-~°")
+
+testInfixDataConstrtructorDefinition :: Test Unit
+testInfixDataConstrtructorDefinition = do
+  test "infixConstructor1" infixDataConstrtructorDefinition
+    "a :+ b"
+    (InfixDataConstr ":+" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
+
+  test "infixConstructor2" infixDataConstrtructorDefinition
+    "a :::::: b"
+    (InfixDataConstr "::::::" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
+
+testDataConstrtructorDefinition :: Test Unit
+testDataConstrtructorDefinition = do
+  test "nil" dataConstructorDefinition
+    "Nil"
+    (PrefixDataConstr "Nil" 0 Nil)
+
+  test "cons" dataConstructorDefinition
+    "Cons a b"
+    (PrefixDataConstr "Cons" 2
+      (toList
+        [ TypVar "a"
+        , TypVar "b"]))
+
+
+testInfixConstructor :: Test Unit
+testInfixConstructor = do
+  test "infixConstructor1" infixConstructor
+    ":+"
+    ":+"
+
+  test "infixConstructor2" infixConstructor
+    ":@"
+    ":@"
+
+  test "infixConstructor3" infixConstructor
+    ":<>=?"
+    ":<>=?"
+
+  test "infixConstructor4" infixConstructor
+    ":-"
+    ":-"
+
+  rejectTests "invalidInfixConstructors" infixConstructor
+    [ ":_"
+    , "_:_"
+    , ".:"
+    , "."
+    , "+"
+    , ":a"
+    , "_"
+    , "__"
+    , "_:::_" ]

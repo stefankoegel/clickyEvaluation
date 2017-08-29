@@ -3,7 +3,7 @@ module Parser where
 import Prelude
 import Data.String as String
 import Data.Foldable (foldl)
-import Data.List (List(..), many, concat, elemIndex)
+import Data.List (List(..), many, concat, elemIndex, length)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..), fst)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
@@ -13,19 +13,40 @@ import Data.Either (Either)
 
 import Control.Alt ((<|>))
 import Control.Apply (lift2)
+-- import Control.Applicative ((<*), (*>))
 import Control.Lazy (fix)
 import Control.Monad.State (runState) 
 
 import Text.Parsing.Parser (ParseError, ParserT, runParserT, fail)
 import Text.Parsing.Parser.Combinators as PC
 import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, AssocLeft), Operator(Infix, Prefix), buildExprParser)
-import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf)
+import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf, anyChar)
 import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
 import Text.Parsing.Parser.Pos (initialPos)
 
-import AST (MType, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, TypeTree, toOpTuple)
+import AST
+  ( MType
+  , Tree(..)
+  , Atom(..)
+  , Binding(..)
+  , Definition(Def)
+  , Op(..)
+  , QualTree(..)
+  , TypeQual
+  , TypeTree
+  , toOpTuple
+  , ADTDef(..)
+  , Associativity(..)
+  , DataConstr(..)
+  , Type(..))
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
+
+---------------------------------------------------------
+-- Utils
+---------------------------------------------------------
+
+type FixedIndentParser s a = IndentParser s a -> IndentParser s a
 
 ---------------------------------------------------------
 -- Helpful combinators
@@ -45,15 +66,26 @@ skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
 
 --lexeme parser (skips trailing whitespaces and linebreaks)
 ilexe :: forall a m. (Monad m) => ParserT String m a -> ParserT String m a
-ilexe p = p >>= \a -> skipWhite *> pure a
+ilexe p = p <* skipWhite
 
 -- parses <p> if it is on the same line or indented, does NOT change indentation state
 indent :: forall a. IndentParser String a -> IndentParser String a
 indent p = ((sameLine <|> indented') PC.<?> "Missing indentation! Did you type a tab-character?") *> ilexe p
 
+-- returns the next non whitespace character
+lookAhead :: forall m. (Monad m) => ParserT String m Char
+lookAhead = PC.lookAhead $ whiteSpace *> anyChar
+
 ---------------------------------------------------------
 -- Parsers for Primitives
 ---------------------------------------------------------
+
+symbol :: forall m. (Monad m) => ParserT String m Char
+symbol = oneOf
+  [':','!','#','$','%','&','*'
+  ,'+','.','/','<','>','=','?'
+  ,'@','\\','^','|','-','~'
+  ,'°']
 
 integer :: forall m. (Monad m) => ParserT String m Int
 integer = convert <$> many1 digit
@@ -116,6 +148,21 @@ name = do
     reservedWords :: List String
     reservedWords = Array.toUnfoldable $ (unGenLanguageDef haskellDef).reservedNames
 
+-- | Parser for type names
+upperCaseName :: forall m. (Monad m) => ParserT String m String
+upperCaseName = do
+  c  <- upper
+  cs <- many anyLetter
+  let nm = String.fromCharArray $ Array.fromFoldable $ Cons c cs
+  case elemIndex nm reservedWords of
+    Nothing -> pure nm
+    Just _  -> fail $ nm <> " is a reserved word!"
+  where
+    -- | List of reserved key words
+    reservedWords :: List String
+    reservedWords = Array.toUnfoldable $ (unGenLanguageDef haskellDef).reservedNames
+
+
 ---------------------------------------------------------
 -- Parsers for Atoms
 ---------------------------------------------------------
@@ -136,47 +183,59 @@ character = (Char <<< String.singleton) <$> charLiteral
 variable :: forall m. (Monad m) => ParserT String m Atom
 variable = Name <$> name
 
+-- | Parser for data constructors
+constructor :: forall m. (Monad m) => ParserT String m Atom
+constructor = Constr <$> upperCaseName
+
 -- | Parser for atoms
 atom :: forall m. (Monad m) => ParserT String m Atom
-atom = int <|> variable <|> bool <|> character
+atom = int <|> variable <|> bool <|> constructor <|> character
 
 ---------------------------------------------------------
 -- Parsers for Expressions
 ---------------------------------------------------------
 
 -- | Table for operator parsers and their AST representation. Sorted by precedence.
-infixOperators :: forall m. (Monad m) => Array (Array (Tuple3 (ParserT String m String) Op Assoc))
+infixOperators :: forall m. (Monad m) => Array (Array (Tuple3 (ParserT String m String) (String -> Op) Assoc))
 infixOperators =
-  [ [ (tuple3 (PC.try $ string "." <* PC.notFollowedBy (char '.')) Composition AssocRight) ]
-  , [ (tuple3 (string "^") Power AssocRight) ]
-  , [ (tuple3 (string "*") Mul AssocLeft) ]
-  , [ (tuple3 (PC.try $ string "+" <* PC.notFollowedBy (char '+')) Add AssocLeft)
-    , (tuple3 (string "-") Sub AssocLeft)
+  [ [ (tuple3 (PC.try infixConstructor) InfixConstr AssocLeft)
+    , (tuple3 (PC.try infixFunc) InfixFunc AssocLeft)
+    , (tuple3 (PC.try $ string "." <* PC.notFollowedBy (char '.')) (const Composition) AssocRight) ]
+  , [ (tuple3 (string "^") (const Power) AssocRight) ]
+  , [ (tuple3 (string "*") (const Mul) AssocLeft) ]
+  , [ (tuple3 (PC.try $ string "+" <* PC.notFollowedBy (char '+')) (const Add) AssocLeft)
+    , (tuple3 (string "-") (const Sub) AssocLeft)
     ]
-  , [ (tuple3 (string ":") Colon AssocRight)
-    , (tuple3 (string "++") Append AssocRight)
+  , [ (tuple3 (string ":") (const Colon) AssocRight)
+    , (tuple3 (string "++") (const Append) AssocRight)
     ]
-  , [ (tuple3 (string "==") Equ AssocNone)
-    , (tuple3 (string "/=") Neq AssocNone)
-    , (tuple3 (PC.try $ string "<" <* PC.notFollowedBy (char '=')) Lt AssocNone)
-    , (tuple3 (PC.try $ string ">" <* PC.notFollowedBy (char '=')) Gt AssocNone)
-    , (tuple3 (string "<=") Leq AssocNone)
-    , (tuple3 (string ">=") Geq AssocNone)
+  , [ (tuple3 (string "==") (const Equ) AssocNone)
+    , (tuple3 (string "/=") (const Neq) AssocNone)
+    , (tuple3 (PC.try $ string "<" <* PC.notFollowedBy (char '=')) (const Lt) AssocNone)
+    , (tuple3 (PC.try $ string ">" <* PC.notFollowedBy (char '=')) (const Gt) AssocNone)
+    , (tuple3 (string "<=") (const Leq) AssocNone)
+    , (tuple3 (string ">=") (const Geq) AssocNone)
     ]
-  , [ (tuple3 (string "&&") And AssocRight) ]
-  , [ (tuple3 (string "||") Or AssocRight) ]
-  , [ (tuple3 (string "$") Dollar AssocRight) ]
+  , [ (tuple3 (string "&&") (const And) AssocRight) ]
+  , [ (tuple3 (string "||") (const Or) AssocRight) ]
+  , [ (tuple3 (string "$") (const Dollar) AssocRight) ]
   ]
+
+infixFunc :: forall m. (Monad m) => ParserT String m String
+infixFunc = char '`' *> name <* char '`'
 
 -- | Table of operators (math, boolean, ...)
 operatorTable :: forall m. (Monad m) => OperatorTable m String TypeTree
-operatorTable = infixTable2 
+operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
   where
-    infixTable2 = maybe [] id (modifyAt 2 (flip snoc infixOperator) infixTable1)
-    infixTable1 = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable) 
-
     infixTable :: OperatorTable m String TypeTree
-    infixTable = (\x -> (uncurry3 (\p op assoc -> Infix (spaced p *> pure (Binary Nothing (toOpTuple op))) assoc)) <$> x) <$> infixOperators
+    infixTable =
+      (\x ->
+        (uncurry3
+          (\p op assoc ->
+            Infix (Binary Nothing <<< toOpTuple <<< op <$> spaced p) assoc))
+        <$> x)
+      <$> infixOperators
 
     unaryMinus :: Operator m String TypeTree
     unaryMinus = Prefix $ spaced minusParse
@@ -184,30 +243,15 @@ operatorTable = infixTable2
         minusParse = do
           string "-"
           pure $ \e -> case e of
-            Atom _ (AInt ai) -> (Atom Nothing (AInt (-ai)))
+            Atom _ (AInt ai) -> Atom Nothing (AInt (-ai))
             _                -> Unary Nothing (toOpTuple Sub) e
-
-    infixOperator :: Operator m String TypeTree
-    infixOperator = Infix (spaced infixParse) AssocLeft
-      where 
-        infixParse = do
-          char '`'
-          n <- name
-          char '`'
-          pure $ \e1 e2 -> Binary Nothing (toOpTuple $ InfixFunc n) e1 e2
 
     -- | Parse an expression between spaces (backtracks)
     spaced :: forall a. ParserT String m a -> ParserT String m a
     spaced p = PC.try $ PC.between skipSpaces skipSpaces p
 
 opParser :: forall m. (Monad m) => ParserT String m Op
-opParser = (PC.choice $ (\x -> (uncurry3 (\p op _ -> p *> pure op)) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators) <|> infixFunc
-  where 
-    infixFunc = do
-      char '`'
-      n <- name
-      char '`'
-      pure $ InfixFunc n
+opParser = PC.choice $ (\x -> (uncurry3 (\p op _ -> op <$> p)) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators
 
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
 base :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -382,46 +426,82 @@ parseExpr = runParserIndent expression
 ---------------------------------------------------------
 -- Parsers for Bindings
 ---------------------------------------------------------
+-- Grammar
+----------
+{-
+<BINDING>
+  ::= <SIMPLE>
+    | `[` <LIST> `]`
+    | `(` <LIST> `)`
 
-lit :: forall m. (Monad m) => ParserT String m (Binding MType)
-lit = Lit Nothing <$> atom
+<SIMPLE>
+  ::= <LIT>
 
-consLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
-consLit bnd = do
-  ilexe $ char '('
-  b <- indent consLit'
-  indent $ char ')'
-  pure b
-  where
-    consLit' :: IndentParser String (Binding MType)
-    consLit' = do
-      b <- ilexe $ bnd
-      indent $ char ':'
-      bs <- (PC.try $ indent consLit') <|> (indent bnd)
-      pure $ ConsLit Nothing b bs
+<LIST>
+  ::= <CONSES> { `,` <CONSES> }
 
-listLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
-listLit bnd = do
-  ilexe $ char '['
-  bs <- (indent bnd) `PC.sepBy` (PC.try $ indent $ char ',')
-  indent $ char ']'
-  pure $ ListLit Nothing bs
+<CONSES>
+  ::= <INFIXES> { `:` <INFIXES> }
 
-tupleLit :: IndentParser String (Binding MType) -> IndentParser String (Binding MType)
-tupleLit bnd = do
-  ilexe $ char '('
-  b <- indent bnd
-  indent $ char ','
-  bs <- (indent bnd) `PC.sepBy1` (PC.try $ indent $ char ',')
-  indent $ char ')'
-  pure $ NTupleLit Nothing (Cons b bs)
+<INFIXES>
+  ::= { <COMPLEX> <INF_CONSTR> } <COMPLEX>
+
+<COMPLEX>
+  ::= <CONSTR> { <BINDING> }
+    | <BINDING>
+-}
+
 
 binding :: IndentParser String (Binding MType)
-binding = fix $ \bnd ->
-      (PC.try $ consLit bnd)
-  <|> (tupleLit bnd)
-  <|> (listLit bnd)
-  <|> lit
+binding = do
+  whiteSpace
+  fix $ \bnd -> do
+    la <- lookAhead
+    case la of
+         '(' -> do
+            cs <- ilexe (char '(') *> indent (bndList bnd) <* indent (char ')')
+            case cs of
+                 Nil        -> pure $ NTupleLit Nothing Nil
+                 Cons c Nil -> pure c
+                 cs'        -> pure $ NTupleLit Nothing cs'
+         '[' -> do
+            cs <- ilexe (char '[') *> indent (bndList bnd) <* indent (char ']')
+            case cs of
+                 Nil        -> pure $ ListLit Nothing Nil
+                 cs'        -> pure $ ListLit Nothing cs'
+         _   -> PC.try $ ilexe bndSimple
+
+
+bndSimple :: IndentParser String (Binding MType)
+bndSimple = PC.try bndLit
+
+bndLit :: forall m. (Monad m) => ParserT String m (Binding MType)
+bndLit = Lit Nothing <$> atom
+
+bndList :: IndentParser String (Binding MType) -> IndentParser String (List (Binding MType))
+bndList bnd = PC.sepBy
+  (PC.try <<< indent <<< bndConses $ bnd)
+  (PC.try <<< indent <<< char $ ',')
+
+bndConses :: FixedIndentParser String (Binding MType)
+bndConses bnd = PC.chainr1
+  (PC.try <<< ilexe <<< bndInfixes $ bnd)
+  (do PC.try <<< indent <<< char $ ':'
+      pure $ ConsLit Nothing)
+
+bndInfixes :: FixedIndentParser String (Binding MType)
+bndInfixes bnd = PC.chainl1
+  (PC.try (ilexe ((bndComplex bnd))))
+  (do o <- PC.try (indent infixConstructor)
+      pure (\l r -> ConstrLit Nothing (InfixDataConstr o LEFTASSOC 9 l r)))
+
+bndComplex :: FixedIndentParser String (Binding MType)
+bndComplex bnd =
+  PC.try
+    (do n  <- ilexe upperCaseName
+        as <- many1 bnd
+        pure $ ConstrLit Nothing (PrefixDataConstr n (length as) as))
+  <|> indent bnd
 
 ---------------------------------------------------------
 -- Parsers for Definitions
@@ -440,3 +520,146 @@ definitions = skipWhite *> block definition
 
 parseDefs :: String -> Either ParseError (List Definition)
 parseDefs = runParserIndent $ definitions
+
+---------------------------------------------------------
+-- Parsers for Types
+---------------------------------------------------------
+-- Grammar
+----------
+{-
+<TYPE>
+  ::= <TYPE1> [ `->` <TYPE> ]
+
+<TYPE1>
+  ::= <SIMPLE>
+    | `[` <TYPE> `]`
+    | `(` <TYPE> { `,` <TYPE> } `)`
+    | <CONS> { <TYPE> }
+
+<SIMPLE>
+  ::= `Int` | `Bool` | `Char` | <TYPEVAR>
+-}
+
+
+type1 :: FixedIndentParser String Type
+type1 t = do
+  la <- lookAhead
+  case la of
+       '(' -> do
+          ts <- PC.between
+            (PC.try <<< ilexe <<< char $ '(')
+            (PC.try <<< indent <<< char $ ')')
+            (indent t `PC.sepBy1` (PC.try <<< indent <<< char) ',')
+          case ts of
+               Nil         -> fail "Empty Tuple"
+               Cons t' Nil -> pure t'
+               ts'         -> (pure <<< TTuple) ts'
+       '[' -> PC.between
+          (PC.try <<< ilexe <<< char $ '[')
+          (PC.try <<< indent <<< char $ ']')
+          (TList <$> indent t)
+       _ -> (PC.try <<< indent) simpleType <|> (indent <<< typeCons) t
+
+simpleType :: IndentParser String Type
+simpleType = do
+  la <- lookAhead
+  case la of
+       'B' -> TypCon <$> string "Bool"
+       'I' -> TypCon <$> string "Int"
+       'C' -> TypCon <$> string "Char"
+       _   -> TypVar <$> name
+
+typeCons :: IndentParser String Type -> IndentParser String Type
+typeCons t = do
+  n <- ilexe upperCaseName
+  ps <- many <<< indent $ types1 t <|> simpleType
+  pure $ TTypeCons n ps
+
+typeExpr :: IndentParser String Type -> IndentParser String Type
+typeExpr t = PC.between
+  (PC.try <<< indent <<< char $ '(')
+  (PC.try <<< indent <<< char $ ')')
+  (indent t)
+
+types :: IndentParser String Type
+types = do
+  whiteSpace
+  fix $ \t -> (indent <<< type1) t `PC.chainr1` ((indent <<< string) "->" *> pure TypArr)
+
+typeTuple :: IndentParser String Type -> IndentParser String Type
+typeTuple t = PC.between
+  (ilexe <<< char $ '(')
+  (PC.try <<< indent <<< char $ ')')
+  (do ts <- indent t `PC.sepBy1` (PC.try <<< indent <<< char) ','
+      case ts of
+           Nil        -> fail "Empty Tuple"
+           Cons x Nil -> pure x
+           xs         -> (pure <<< TTuple) xs)
+
+types1 :: IndentParser String Type -> IndentParser String Type
+types1 t = do
+  la <- lookAhead
+  case la of
+       '[' -> TList <$> ((ilexe <<< char) '[' *> indent t <* (indent <<< char) ']')
+       '(' -> PC.try (typeExpr t) <|> typeTuple t
+       _   -> PC.try simpleType <|> typeCons t
+
+
+---------------------------------------------------------
+-- Parsers for Type Definitions
+---------------------------------------------------------
+-- Grammar
+----------
+{-
+<TYPEDEFINITION>
+  ::= 'data' <UCASENAME> { <NAME> } [ '=' <CONSTR> { '|' <CONSTR> } ]
+
+<CONSTR>
+  ::= <PREFIXCONSTR>
+    | <INFIXCONSTR>
+
+<PREFIXCONSTR>
+  ::= <UCASENAME> { <TYPE> }
+    | <TYPE> <CONSTROP> <TYPE>
+
+<CONSTROP>
+  ::= ':' <SYMBOL> { <SYMBOL> }       (* at least one symbol after ':' is needed,
+                                       * to no confuse it with a list-(:).
+                                       *)
+-}
+
+
+typeDefinition :: IndentParser String ADTDef
+typeDefinition = do
+  ilexe $ string "data"
+  n <- indent upperCaseName
+  tvs <- many $ indent name
+  conss <- (do PC.try (indent $ char '=')
+               indent dataConstructorDefinition `PC.sepBy` (PC.try $ indent $ char '|'))
+           <|> pure Nil
+  pure $ ADTDef n tvs conss
+
+dataConstructorDefinition :: IndentParser String (DataConstr Type)
+dataConstructorDefinition
+  = PC.try prefixDataConstrtructorDefinition
+  <|> infixDataConstrtructorDefinition
+
+prefixDataConstrtructorDefinition :: IndentParser String (DataConstr Type)
+prefixDataConstrtructorDefinition = do
+  n <- ilexe upperCaseName
+  ps <- many types
+  pure $ PrefixDataConstr n (length ps) ps
+
+infixDataConstrtructorDefinition :: IndentParser String (DataConstr Type)
+infixDataConstrtructorDefinition = do
+  l <- ilexe types
+  o <- indent $ ilexe infixConstructor
+  r <- indent $ ilexe types
+  pure $ InfixDataConstr o LEFTASSOC 9 l r
+
+
+infixConstructor :: forall m. (Monad m) => ParserT String m String
+infixConstructor = do
+  char ':'
+  syms <- many1 symbol
+  pure $ String.fromCharArray $ Array.fromFoldable $ Cons ':' syms

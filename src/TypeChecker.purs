@@ -25,6 +25,8 @@ import Prelude (
 import AST
 import AST as AST
 
+import JSHelpers (unsafeUndef)
+
 ---------------------------------------------------------------------------------------------------
 -- | Data Types and Helper Functions                                                             --
 ---------------------------------------------------------------------------------------------------
@@ -105,14 +107,18 @@ instance subType :: Substitutable Type where
    apply _ (TypCon a) = TypCon a
    apply s t@(TypVar a) = fromMaybe t $ Map.lookup a s
    apply s (TypArr t1 t2) =  TypArr (apply s t1) (apply s t2)
-   apply s (AD a) = AD (apply s a)
+   apply s (TList t) = TList (apply s t)
+   apply s (TTuple t) = TTuple (apply s t)
+   apply s (TTypeCons n ps) = TTypeCons n (apply s ps)
    apply _ (TypeError err) = TypeError err
 
    ftv UnknownType = Set.empty
    ftv (TypCon  _)         = Set.empty
    ftv (TypVar a)       = Set.singleton a
    ftv (TypArr t1 t2) =  Set.union (ftv t1) (ftv t2)
-   ftv (AD a) = ftv a
+   ftv (TList t) = ftv t
+   ftv (TTuple t) = ftv t
+   ftv (TTypeCons n ps) = ftv ps
    ftv (TypeError err) = Set.empty
 
 instance subMaybeType :: Substitutable (Maybe Type) where
@@ -127,12 +133,6 @@ instance listSub :: (Substitutable a) => Substitutable (List a) where
 instance subTypeEnv :: Substitutable TypeEnv where
   apply s (TypeEnv env) =  TypeEnv $ map (apply s) env
   ftv (TypeEnv env) = ftv $ snd $ unzip $ Map.toList env
-
-instance subAD :: Substitutable AD where
-  apply s (TList t) = TList (apply s t)
-  apply s(TTuple t) = TTuple (apply s t)
-  ftv (TList t) = ftv t
-  ftv (TTuple t) = ftv t
 
 instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => Substitutable (QualTree a b c) where
   apply s (Gen a b c) = Gen (apply s a) (apply s b) (apply s c)
@@ -171,6 +171,7 @@ instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (ConsLit t b1 b2) = ConsLit (apply s t) (apply s b1) (apply s b2)
   apply s (ListLit t lb) = ListLit (apply s t) (apply s lb)
   apply s (NTupleLit t lb) = NTupleLit (apply s t) (apply s lb)
+  apply s (ConstrLit t c) = ConstrLit (apply s t) (map (apply s) c)
 
   ftv = extractFromBinding >>> ftv
 
@@ -508,10 +509,10 @@ getOpType op = case op of
     Sub -> pure intToIntToIntType
     Colon -> do
       a <- fresh
-      pure $ a `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a))
+      pure $ a `TypArr` (TList a `TypArr` TList a)
     Append -> do
       a <- fresh
-      pure $ (AD $ TList a) `TypArr` ((AD $ TList a) `TypArr` (AD $ TList a))
+      pure $ TList a `TypArr` (TList a `TypArr` TList a)
     Equ -> toBoolType
     Neq -> toBoolType
     Lt -> toBoolType
@@ -575,6 +576,7 @@ infer' ex = case ex of
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
   Atom _ atom@(AInt _) -> returnWithConstraint ex intType
+  Atom _ atom@(Constr _) -> unsafeUndef "infer' ... (Atom _ atom@(Constr _))"
   Atom _ atom@(Name name) -> case name of
     -- Built-in functions.
     "mod" -> returnWithConstraint ex intToIntToIntType
@@ -686,7 +688,7 @@ infer' ex = case ex of
     tv <- fresh
     tv2 <- fresh
     -- tv ~ [tv2]
-    let listType = AD $ TList tv2
+    let listType = TList tv2
     let c = setTypeConstraintFor ex tv listType
     pure $ Tuple listType c
 
@@ -697,7 +699,7 @@ infer' ex = case ex of
     -- The list expression has the type `[t1]` where `t1` denotes the type of the first list
     -- element.
     tv <- fresh
-    let listType = AD $ TList t
+    let listType = TList t
     let c2 = setTypeConstraintFor ex tv listType
     pure $ Tuple listType (c1 <+> c2)
 
@@ -712,14 +714,14 @@ infer' ex = case ex of
     -- The list expression has the type `[t1]` where `t1` denotes the type of the first list
     -- element.
     tv <- fresh
-    let listType = AD $ TList t1
+    let listType = TList t1
     let c4 = setTypeConstraintFor ex tv listType
     pure $ Tuple listType (c1 <+> c2 <+> c3 <+> c4)
 
   NTuple _ es -> do
     Tuple ts cs <- unzip <$> traverse infer es
     tv <- fresh
-    let tupleType = AD $ TTuple ts
+    let tupleType = TTuple ts
     let c = setTypeConstraintFor ex tv tupleType
     pure $ Tuple tupleType (foldConstraints cs <+> c)
 
@@ -731,7 +733,7 @@ infer' ex = case ex of
     c2 <- tryInferRequireEnumType step t1
     c3 <- tryInferRequireEnumType last t1
     tv <- fresh
-    let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
+    let c4 = setTypeConstraintFor ex tv (TList t1)
     pure $ Tuple tv (c1 <+> c2 <+> c3 <+> c4)
 
   ListComp  _ body quals -> do
@@ -739,7 +741,7 @@ infer' ex = case ex of
     Tuple bindingEnv c1 <- makeBindingEnvListComp quals
     Tuple t1 c2 <- withEnv bindingEnv (infer body)
     tv <- fresh
-    let c4 = setTypeConstraintFor ex tv (AD $ TList t1)
+    let c4 = setTypeConstraintFor ex tv (TList t1)
     pure $ Tuple tv (c1 <+> c2 <+> c4)
 
 -- +-----------------------------------+
@@ -793,11 +795,13 @@ makeBindingEnv binding = case binding of
     let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
     pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
 
+  Lit _ atom@(Constr name) -> unsafeUndef "makeBindingEnv... Lit atom@(Constr name)"
+
   ConsLit _ b1 b2 -> do
     Triple t1 m1 c1 <- makeBindingEnvPartial b1
     Triple t2 m2 c2 <- makeBindingEnvPartial b2
-    let c3 = setTypeConstraintFor' (bindingIndex binding) (AD $ TList t1) t2
-    pure $ Triple (AD $ TList t1) (m1 <> m2) (c1 <+> c2 <+> c3)
+    let c3 = setTypeConstraintFor' (bindingIndex binding) (TList t1) t2
+    pure $ Triple (TList t1) (m1 <> m2) (c1 <+> c2 <+> c3)
 
   ListLit _ bs -> do
     Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bs
@@ -807,14 +811,17 @@ makeBindingEnv binding = case binding of
 
   NTupleLit _ bs -> do
     Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bs
-    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TTuple ts)
-    pure $ Triple (AD $ TTuple ts) (concat ms) (foldConstraints cs <+> c)
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) (TTuple ts)
+    pure $ Triple (TTuple ts) (concat ms) (foldConstraints cs <+> c)
+
+  -- TODO
+  ConstrLit _ _ -> unsafeUndef "makeBindingEnv ... ConstrLit _ _ ->"
 
   where
   -- Go through the list of given types and set constraints for every to elements of the list.
   setListConstraints Nil = pure emptyConstraints
   setListConstraints (t:Nil) = do
-    let c = setSingleTypeConstraintFor' (bindingIndex binding) (AD $ TList t)
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) (TList t)
     pure c
   setListConstraints (t1:t2:ts) = do
     cs <- setListConstraints (t2:ts)
@@ -822,8 +829,8 @@ makeBindingEnv binding = case binding of
     pure c
 
   -- Given a list of types occurring in a list, determine the list type (choose the first element).
-  listType Nil = fresh >>= \tv -> pure $ AD $ TList tv
-  listType (t:_) = pure $ AD $ TList t
+  listType Nil = fresh >>= \tv -> pure $ TList tv
+  listType (t:_) = pure $ TList t
 
 -- | Extend the type environment with the new mappings for the evaluation of `m`.
 withEnv :: forall a. TVarMappings -> Infer a -> Infer a
@@ -907,14 +914,14 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
     returnAs m emptyConstraints (schemeType scheme)
 
   ConsLit _ b1 b2 -> case expectListType scheme of
-    Just listType@(AD (TList t)) -> do
+    Just listType@(TList t) -> do
       Tuple m1 c1 <- mapSchemeOnTVarMappingsPartial b1 (toScheme t)
       Tuple m2 c2 <- mapSchemeOnTVarMappingsPartial b2 (toScheme listType)
       returnAs (m1 <> m2) (c1 <+> c2) listType
     _ -> reportMismatch
 
   NTupleLit _ bs -> case expectTupleType scheme of
-    Just tupleType@(AD (TTuple ts)) -> do
+    Just tupleType@(TTuple ts) -> do
       Tuple ms cs <- unzip <$> traverse (\(Tuple binding t) ->
         mapSchemeOnTVarMappingsPartial binding (toScheme t))
         (zip bs ts)
@@ -922,7 +929,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
     _ -> reportMismatch
 
   ListLit _ bs -> case expectListType scheme of
-    Just listType@(AD (TList t)) -> do
+    Just listType@(TList t) -> do
       Tuple ms cs <- unzip <$> traverse (\binding ->
         mapSchemeOnTVarMappingsPartial binding (toScheme t)) bs
       returnAs (fold ms) (foldConstraints cs) listType
@@ -940,9 +947,9 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
       Ex.throwError $ PatternMismatch binding t
 
   getBindingType = extractFromBinding >>> fst >>> fromMaybe UnknownType
-  expectListType (Forall tvs (AD (TList t))) = Just $ AD $ TList t
+  expectListType (Forall tvs (TList t)) = Just $ TList t
   expectListType _ = Nothing
-  expectTupleType (Forall tvs (AD (TTuple ts))) = Just $ AD $ TTuple ts
+  expectTupleType (Forall tvs (TTuple ts)) = Just $ TTuple ts
   expectTupleType _ = Nothing
   toScheme t = Forall typeVariables t
   filteredScheme (Forall tvs t) = (Forall (commonFreeTVars tvs t) t)
@@ -991,7 +998,7 @@ makeBindingEnvQual qual = case qual of
   Gen _ binding genExpr -> do
     Triple t1 m c1 <- makeBindingEnvPartial binding
     Tuple t2 c2 <- infer genExpr
-    let c3 = setConstraintFor genExpr (AD $ TList t1) t2
+    let c3 = setConstraintFor genExpr (TList t1) t2
     pure $ Tuple m (c1 <+> c2 <+> c3)
   -- Only infer the expression type and set the constraints.
   Guard _ guardExpr -> do
@@ -1085,22 +1092,17 @@ unifies (TypArr l1 r1) (TypArr l2 r2) = do
 unifies (TypVar tv) t = tv `bindTVar` t
 unifies t (TypVar tv) = tv `bindTVar` t
 unifies (TypCon c1) (TypCon c2) | c1 == c2 = pure nullSubst
-unifies (AD a) (AD b) | a == b = pure nullSubst
-unifies (AD a) (AD b) = unifiesAD a b
+unifies a b | a == b = pure nullSubst
+unifies (TList l1) (TList l2) = unifies l1 l2
+unifies (TTuple (a:as)) (TTuple (b:bs)) = do
+  s1 <- unifies (TTuple as) (TTuple bs)
+  s2 <- unifies a b
+  pure $ s1 `compose` s2
+unifies (TTuple Nil) (TTuple Nil) = pure nullSubst
 unifies UnknownType t = pure nullSubst
 unifies t UnknownType = pure nullSubst
 unifies t1 t2 = Left $ normalizeTypeError $ UnificationFail t1 t2
 
--- | Try to unify the given AD types and return the resulting substitution or the occurring type
--- | error.
-unifiesAD :: AD -> AD -> Either TypeError Subst
-unifiesAD (TList l1) (TList l2) = unifies l1 l2
-unifiesAD (TTuple (a:as)) (TTuple (b:bs)) = do
-  s1 <- unifiesAD (TTuple as) (TTuple bs)
-  s2 <- unifies a b
-  pure $ s1 `compose` s2
-unifiesAD (TTuple Nil) (TTuple Nil) = pure nullSubst
-unifiesAD t1 t2 = Left $ normalizeTypeError $ UnificationFail (AD t1) (AD t2)
 
 -- | Try to find a type variable associated with a specific expression node, given a set of
 -- | constraint and the node index.
@@ -1392,12 +1394,12 @@ normalizeType' t = case t of
     t1' <- normalizeType' t1
     t2' <- normalizeType' t2
     pure $ TypArr t1' t2'
-  AD (TList t) -> do
+  TList t -> do
     t' <- normalizeType' t
-    pure $ AD (TList t')
-  AD (TTuple ts) -> do
+    pure $ TList t'
+  TTuple ts -> do
     ts' <- traverse normalizeType' ts
-    pure $ AD (TTuple ts')
+    pure $ TTuple ts'
   a -> pure a
 
 -- | Use `normalizeType'` on `Maybe Type`.

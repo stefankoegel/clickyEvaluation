@@ -93,3 +93,7 @@ exports.isChecked = function(checkbox) {
     return $(checkbox).prop('checked');
   };
 };
+
+exports.unsafeUndef = function(msg) {
+  throw new Error("Undefined:" + msg);
+};
