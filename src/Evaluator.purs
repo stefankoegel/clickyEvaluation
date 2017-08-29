@@ -97,6 +97,7 @@ insertDef env (Def name bindings body) = case Map.lookup name env of
   Nothing   -> Map.insert name (singleton $ Tuple bindings body) env
   Just defs -> Map.insert name (defs <> (singleton $ Tuple bindings body)) env
 
+-- | Evaluates an expression by one step in a given environment.
 eval1 :: Env -> TypeTree -> Evaluator TypeTree
 eval1 env expr = case expr of
   (Binary _ op e1 e2)                  -> binary env op e1 e2
@@ -113,13 +114,16 @@ eval1 env expr = case expr of
   (App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))         -> {-binary env op e1 e2 <|>-} (pure $ Binary Nothing op e1 e2)
   (App _ (Atom _ (Name name)) args)      -> apply env name args
   (App _ (App _ func es) es')            -> pure $ App Nothing func (es <> es')
+  (App _ (Atom _ (Constr _)) _)      -> pure expr
   (ListComp _ e qs)                    -> evalListComp env e qs
   (LetExpr _ binds exp)                -> evalLetTypeTree binds exp
+  (Atom _ (Constr x))                -> pure $ Atom Nothing (Constr x)
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> TypeTree -> TypeTree
 eval env expr = evalToBinding env expr (Lit Nothing (Name "_|_"))
 
+-- | Evaluates an expression until it matches a given binding in a given environment.
 evalToBinding :: Env -> TypeTree -> Binding MType -> TypeTree
 evalToBinding env expr bind = case bind of
   (Lit _ (Name "_|_")) -> recurse env expr bind
@@ -469,6 +473,8 @@ whnf (Atom _ (Name _)) = false
 whnf (Atom _ _)        = true
 whnf (List _ _)        = true
 whnf (NTuple _ _)      = true
+whnf (Binary _ (Tuple (InfixConstr _) _) _ _) = true
+whnf (App _ (Atom _ (Constr _)) _) = true
 whnf _                 = false
 
 checkStrictness :: Binding MType -> TypeTree -> MatchingError
