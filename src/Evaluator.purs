@@ -21,9 +21,9 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.State.Trans (StateT, get, modify, runStateT, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
-import JSHelpers (unsafeUndef)
+-- import JSHelpers (unsafeUndef)
 
-import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, MType)
+import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, MType, DataConstr (..))
 import AST as AST
 
 data EvalError =
@@ -141,7 +141,28 @@ evalToBinding env expr bind = case bind of
     (NTuple _ es)  -> NTuple Nothing (zipWith (evalToBinding env) es bs)
     _              -> recurse env expr bind
 -- TODO
-  (ConstrLit _ _) -> unsafeUndef "evalToBinding ... (ConstrLit _ _) -> "
+  (ConstrLit _ (PrefixDataConstr n _ ps)) ->
+    case expr of
+      (App _ (Atom _ (Constr n')) ps') ->
+        case n == n' && length ps == length ps' of
+          true -> App Nothing (Atom Nothing (Constr n')) (zipWith (evalToBinding env) ps' ps)
+          false -> expr
+      _ -> recurse env expr bind
+  (ConstrLit _ (InfixDataConstr n _ _ l r)) ->
+    case expr of
+      (App _ (PrefixOp _ (Tuple (InfixConstr n') Nothing)) (Cons l' (Cons r' Nil))) ->
+        case n == n' of
+             true -> App
+              Nothing
+              (PrefixOp Nothing (Tuple (InfixConstr n') Nothing))
+              (Cons (evalToBinding env l' l) (Cons (evalToBinding env r' r) Nil))
+             false -> expr
+      (Binary _ (Tuple (InfixConstr n') _) l' r') ->
+        case n == n' of
+             true -> Binary Nothing (Tuple (InfixConstr n') Nothing) (evalToBinding env l' l) (evalToBinding env r' r)
+             false -> expr
+      _ -> recurse env expr bind
+
 
 
 recurse :: Env -> TypeTree -> Binding MType -> TypeTree
@@ -398,7 +419,7 @@ binary env (Tuple operator mtype) = case operator of
   Dollar -> (\f e -> pure $ App Nothing f (singleton e))
   Composition -> \e1 e2 -> throwError $ BinaryOpError And e1 e2
   InfixFunc name -> \e1 e2 -> apply env name (e1 : e2 : Nil)
-  InfixConstr name -> unsafeUndef "binary ... (InfixConstr name)" -- \e1 e2 -> pure $ Binary mtype operator e1 e2
+  InfixConstr name -> \e1 e2 -> pure $ Binary Nothing (Tuple operator mtype) e1 e2
   where
     aint :: Op -> (Int -> Int -> Int) -> TypeTree -> TypeTree -> Evaluator TypeTree
     aint _   f (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom Nothing $ AInt $ f i j
@@ -481,7 +502,22 @@ match' (NTupleLit _ bs)    (NTuple _ es) = case length bs == length es of
                                            false -> throwError $ MatchingError (NTupleLit Nothing bs) (NTuple Nothing es)
 match' (NTupleLit _ bs)    e             = throwError $ checkStrictness (NTupleLit Nothing bs) e
 -- TODO
-match' (ConstrLit _ _) _ = unsafeUndef "match' (ConstrLit _ _)"
+match' b@(ConstrLit _ (PrefixDataConstr n a ps)) e@(App _ (Atom _ (Constr n')) ps')
+  = case  n == n' && length ps == length ps' of
+         true -> void $ zipWithA match' ps ps'
+         false -> throwError $ MatchingError b e
+
+match' b@(ConstrLit _ (InfixDataConstr n _ _ l r)) e@(Binary _ (Tuple (InfixConstr n') _) l' r')
+  = case n == n' of
+         true -> match' l l' *> match' r r'
+         false -> throwError $ MatchingError b e
+
+match' b@(ConstrLit _ (InfixDataConstr n _ _ l r)) e@(App _ (PrefixOp _ (Tuple (InfixConstr n') _)) (Cons l' (Cons r' Nil)))
+  = case n == n' of
+         true -> match' l l' *> match' r r'
+         false -> throwError $ MatchingError b e
+match' b@(ConstrLit _ _) e = throwError $ checkStrictness b e
+
 
 --TODO: replace with purescript mapM
 mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
