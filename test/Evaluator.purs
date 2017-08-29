@@ -4,18 +4,20 @@ import Prelude
 import Data.Either (Either(..))
 import Data.Tuple (Tuple(..))
 import Data.StrMap as M
-import Data.List (List, singleton)
+-- import Data.List (List, singleton)
 
-import Control.Monad.Writer (Writer, tell)
+-- import Control.Monad.Writer (Writer, tell)
 
 import Parser (definitions, expression, runParserIndent)
 import Evaluator (eval, eval1, runEvalM, defsToEnv)
 import Test.Parser (prelude)
 
-tell' :: forall a. a -> Writer (List a) Unit
-tell' = tell <<< singleton
+import Test.Utils (Test, tell)
 
-eval1test :: String -> String -> String -> Writer (List String) Unit
+tell' :: String -> Test Unit
+tell' = tell
+
+eval1test :: String -> String -> String -> Test Unit
 eval1test name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
   (Tuple (Right inExp) (Right expExp)) ->
     case runEvalM (eval1 M.empty inExp) of
@@ -26,7 +28,7 @@ eval1test name input expected = case (Tuple (runParserIndent expression input) (
       (Left err) -> tell' $ "Eval fail (" <> name <> "): " <> show err <> ")"
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
-eval1EnvTest :: String -> String -> String -> String -> Writer (List String) Unit
+eval1EnvTest :: String -> String -> String -> String -> Test Unit
 eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
     case runEvalM (eval1 (defsToEnv defs) inExp) of
@@ -37,7 +39,7 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expre
       (Left err) -> tell' $ "Eval fail (" <> name <> "): " <> show err <> ")"
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
-evalEnvTest :: String -> String -> String -> String -> Writer (List String) Unit
+evalEnvTest :: String -> String -> String -> String -> Test Unit
 evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
     let evalExp = eval (defsToEnv defs) inExp in
@@ -47,7 +49,7 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expres
   (Tuple (Tuple pi pe) pd) -> tell' $ "Parse fail (" <> name <> "): (input: " <> show pi <> ", expected: " <> show pe <> ", definitions: " <> show pd <> ")"
 
 
-runTests :: Writer (List String) Unit
+runTests :: Test Unit
 runTests = do
   eval1test "add" "1+1" "2"
   eval1test "power" "2^10" "1024"

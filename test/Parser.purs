@@ -6,14 +6,16 @@ import Data.List (List(..), singleton, (:), many)
 import Data.Array ((..))
 import Data.Array (length, zip, toUnfoldable, replicate) as Array
 import Data.Tuple (Tuple(..))
-import Data.String (Pattern(..), toCharArray, split, null) as String
+import Data.String (toCharArray, null) as String
 import Data.Maybe (Maybe(..))
 import Data.Foldable (intercalate, for_)
 
 import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessage, fail)
 
-import Control.Monad.Writer (Writer, tell)
+-- import Control.Monad.Writer (Writer, tell)
 import Control.Monad.State (get)
+
+import Test.Utils (Test, tell, padLeft)
 
 import AST
   ( TypeTree
@@ -49,22 +51,13 @@ import IndentParser (IndentParser)
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
 
-tell' :: forall a. a -> Writer (List a) Unit
-tell' = tell <<< singleton
-
-padLeft :: String -> String
-padLeft = lines >>> map (\x -> "\t" <> x) >>> unlines
+tell' :: String -> Test Unit
+tell' = tell
 
 padLeft' :: forall a. (Show a) => a -> String
 padLeft' = show >>> padLeft
 
-unlines :: Array String -> String
-unlines = intercalate "\n"
-
-lines :: String -> Array String
-lines = String.split (String.Pattern "\n")
-
-test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Writer (List String) Unit
+test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Test Unit
 test name p input expected = case runParserIndent p input of
   Left parseError -> tell' $
     "Parse fail (" <> name <> "): "
@@ -89,7 +82,7 @@ rejectTest :: forall a . (Show a)
                       => String
                       -> IndentParser String a
                       -> String
-                      -> Writer (List String) Unit
+                      -> Test Unit
 rejectTest name parser input = case runParserIndent (parser <* inputIsEmpty) input of
   Left parserError -> pure unit
   Right result ->
@@ -104,7 +97,7 @@ rejectTests :: forall a . (Show a)
                        => String
                        -> IndentParser String a
                        -> Array String
-                       -> Writer (List String) Unit
+                       -> Test Unit
 rejectTests name parser inputs = do
   for_ ((1 .. Array.length inputs) `Array.zip` inputs) $ \(Tuple idx iput) ->
     rejectTest (name <> "-" <> show idx) parser iput
@@ -123,7 +116,7 @@ abool = Atom Nothing <<< Bool
 aname :: String -> TypeTree
 aname s = Atom Nothing $ Name s
 
-runTests :: Writer (List String) Unit
+runTests :: Test Unit
 runTests = do
   test "0" int "0" (AInt 0)
   test "1" int "1" (AInt 1)
@@ -606,7 +599,7 @@ ebin o l r = Binary Nothing (Tuple o Nothing) l r
 def :: String -> Array (Binding MType) -> TypeTree -> Definition
 def n bs e = Def n (toList bs) e
 
-testConstructorsExpression :: Writer (List String) Unit
+testConstructorsExpression :: Test Unit
 testConstructorsExpression = do
   test "simple-expr-1" expression
     "Foo"
@@ -673,7 +666,7 @@ testConstructorsExpression = do
         (eapp (econstr "Foo") [eint 2])])
 
 
-testConstructorsDefinition :: Writer (List String) Unit
+testConstructorsDefinition :: Test Unit
 testConstructorsDefinition = do
   test "definition-1" definition
     "foo (Bar a b) = Foo a b"
@@ -719,7 +712,7 @@ infixDataConstr op l r = ConstrLit Nothing (InfixDataConstr op LEFTASSOC 9 l r)
 litcons :: Binding MType -> Binding MType -> Binding MType
 litcons = ConsLit Nothing
 
-testConstructorsBinding :: Writer (List String) Unit
+testConstructorsBinding :: Test Unit
 testConstructorsBinding = do
   test "binding-simple-0" binding
     "_"
@@ -916,7 +909,7 @@ testConstructorsBinding = do
 
 
 
-testTypes :: Writer (List String) Unit
+testTypes :: Test Unit
 testTypes = do
   test "types1" types
     "a"
@@ -1092,7 +1085,7 @@ testTypes = do
     , "(Foo a b"
     ]
 
-testTypeDefinition :: Writer (List String) Unit
+testTypeDefinition :: Test Unit
 testTypeDefinition = do
   test "definition1" typeDefinition
     ("data Tree a\n"
@@ -1178,7 +1171,7 @@ testTypeDefinition = do
     , "data\nFoo\na = Foo a"
     ]
 
-testSymbol :: Writer (List String) Unit
+testSymbol :: Test Unit
 testSymbol = do
   test "symbol" symbol
     "!"
@@ -1188,7 +1181,7 @@ testSymbol = do
     "!#$%&*+./<>=?@\\^|-~°"
     (stringToList "!#$%&*+./<>=?@\\^|-~°")
 
-testInfixDataConstrtructorDefinition :: Writer (List String) Unit
+testInfixDataConstrtructorDefinition :: Test Unit
 testInfixDataConstrtructorDefinition = do
   test "infixConstructor1" infixDataConstrtructorDefinition
     "a :+ b"
@@ -1198,7 +1191,7 @@ testInfixDataConstrtructorDefinition = do
     "a :::::: b"
     (InfixDataConstr "::::::" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
 
-testDataConstrtructorDefinition :: Writer (List String) Unit
+testDataConstrtructorDefinition :: Test Unit
 testDataConstrtructorDefinition = do
   test "nil" dataConstructorDefinition
     "Nil"
@@ -1212,7 +1205,7 @@ testDataConstrtructorDefinition = do
         , TypVar "b"]))
 
 
-testInfixConstructor :: Writer (List String) Unit
+testInfixConstructor :: Test Unit
 testInfixConstructor = do
   test "infixConstructor1" infixConstructor
     ":+"
