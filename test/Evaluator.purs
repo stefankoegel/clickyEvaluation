@@ -68,13 +68,76 @@ runTests = do
   eval1test "string2" "'a' : \"sdf\"" "\"asdf\""
 
   -- ADT-stuff
-  eval1test "constr-1" "1 :+ 1" "1 :+ 1"
-  eval1test "constr-2" "Foo" "Foo"
-  eval1test "constr-3" "Foo 1" "Foo 1"
-  eval1test "constr-4" "Foo 1 2" "Foo 1 2"
+  eval1test "constr-1"
+    "1 :+ 1"
+    "1 :+ 1"
+  eval1test "constr-2"
+    "Foo"
+    "Foo"
+  eval1test "constr-3"
+    "Foo 1"
+    "Foo 1"
+  eval1test "constr-4"
+    "Foo 1 2"
+    "Foo 1 2"
 
-  eval1EnvTest "func1" "foo (Foo x) = x" "foo 1" "1"
-  eval1EnvTest "func2" "foo (Foo x y) = x + y" "foo 1 2" "1 + 2"
+  eval1test "constr-5"
+    "if True then Foo else Bar"
+    "Foo"
+
+  eval1test "constr-6"
+    "if False then Foo else Bar"
+    "Bar"
+
+  eval1EnvTest "func-1"
+    "foo (Foo x) = x"
+    "foo (Foo 1)"
+    "1"
+
+  eval1EnvTest "func-2"
+    "foo (Foo x y) = x + y"
+    "foo (Foo 1 2)"
+    "1 + 2"
+
+  eval1EnvTest "map-func-3"
+    "map f Nil = Nil\nmap f (Cons x xs) = Cons (f x) (map f xs)"
+    "map (1 +) (Cons 1 (Cons 2 (Cons 3 Nil)))"
+    "Cons ((1 +) 1) (map (1 +) (Cons 2 (Cons 3 Nil)))"
+
+  eval1EnvTest "map-func-4"
+    "map f Nil = Nil\nmap f (x::xs) = f x :: map f xs"
+    "map (^2) Nil"
+    "Nil"
+
+  eval1EnvTest "map-func-5"
+    "map f Nil = Nil\nmap f (x::xs) = f x :: map f xs"
+    "map (^2) (1 :: (2 :: (3 :: Nil)))"
+    "(^2) 1 :: map (^2) (2 :: (3 :: Nil))"
+
+  eval1EnvTest "tuple-1"
+    "fst (Tuple a _) = a\n"
+    "fst (Tuple (Tuple 1 2) 3)"
+    "Tuple 1 2"
+
+  eval1EnvTest "tuple-2"
+    "snd (Tuple _ a) = a\n"
+    "snd (Tuple (Tuple 1 2) 3)"
+    "3"
+
+  eval1EnvTest "prefix-1"
+    "fst (a ::: _) = a"
+    "fst (1 ::: 3)"
+    "1"
+
+  eval1EnvTest "prefix-2"
+    "snd (_ ::: a) = a"
+    "snd (1 ::: 3)"
+    "3"
+
+  evalEnvTest "constr-nested-1"
+    "foo (Bar (Bar a) Foo) = Foo a a"
+    "foo (Bar (Bar Foo) Foo)"
+    "Foo Foo Foo"
   ------------
 
   eval1EnvTest "double_func" "double x = x + x" "double 10" "10 + 10"
