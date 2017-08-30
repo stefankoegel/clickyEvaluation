@@ -186,6 +186,8 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
         NTuple Nothing ((\e -> evalToBinding env e bind) <$> es)
       (IfExpr _ c t e)     ->
         IfExpr Nothing (evalToBinding env c bind) t e
+      (App _ c@(Atom _ (Constr _)) args) ->
+        App Nothing c ((\e -> evalToBinding env e bind) <$> args)
       (App _ f args)       -> do
         App Nothing (evalToBinding env f bind) args
       (ArithmSeq _ c t e)     ->
