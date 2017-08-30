@@ -203,17 +203,22 @@ runTests = do
     "snd (Tuple (Tuple 1 2) 3)"
     "3"
 
-  eval1EnvTest "prefix-1"
+  eval1EnvTest "infix-1"
     "fst (a ::: _) = a"
     "fst (1 ::: 3)"
     "1"
 
-  eval1EnvTest "prefix-2"
+  eval1EnvTest "infix-2"
     "snd (_ ::: a) = a"
     "snd (1 ::: 3)"
     "3"
 
-  evalEnvTest "prefix-3"
+  evalEnvTest "infix-3"
+    "map f g (a :-: b) = f a :-: g b\ndouble = map (*2) (*2)"
+    "double (2 :-: 3)"
+    "4 :-: 6"
+
+  evalEnvTest "prefix-1"
     "map f g (Tuple x y) = Tuple (f x) (g y)\ndouble = map (*2) (*2)"
     "double (Tuple 2 3)"
     "Tuple 4 6"
