@@ -89,44 +89,6 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expres
     <> padLeft (show pd)
 
 
-envPdP1 :: String
-envPdP1 = """
-foldBauwerk fRechteck fSpitze fSplit (Rechteck br ho bw) = fRechteck br ho (foldBauwerk fRechteck fSpitze fSplit bw)
-foldBauwerk fRechteck fSpitze fSplit (Spitze br ho)      = fSpitze br ho
-foldBauwerk fRechteck fSpitze fSplit (Split l r)         = fSplit (foldBauwerk fRechteck fSpitze fSplit l) (foldBauwerk fRechteck fSpitze fSplit r)
-
-numParts (Rechteck _ _ bw) = 1 + numParts bw
-numParts (Spitze _ _) = 1
-numParts (Split l r)  = numParts l + numParts r
-
-max a b = if a < b then b else a
-
-maxHoehe = foldBauwerk (\_ ho hor -> ho + hor) (\_ h -> h) max
-
-numPeaks = foldBauwerk (\_ _ ps -> ps) (\_ _ -> 1) (+)
-
-wellformed = (> 0) . foldBauwerk (\br _ br' -> if br' < 0 || br' > br then -1 else br) (\br _ -> br) (\l r -> l + r)
-"""
-
-bspPdP1 :: String
-bspPdP1 = """(Rechteck 50 20
-  (Split
-    (Rechteck 20 15
-      (Split
-        (Rechteck 10 20
-          (Rechteck 8 18
-            (Spitze 8 14)))
-        (Rechteck 8 17
-          (Spitze 8 14))))
-    (Rechteck 20 15
-      (Split
-        (Rechteck 8 17
-          (Spitze 8 14))
-        (Rechteck 10 20
-          (Split
-            (Spitze 5 17)
-            (Spitze 5 17)))))))
-"""
 
 runTests :: Test Unit
 runTests = do
@@ -146,109 +108,6 @@ runTests = do
   eval1test "string1" "\"as\" ++ \"df\"" "\"asdf\""
   eval1test "string2" "'a' : \"sdf\"" "\"asdf\""
 
-  -- ADT-stuff
-  eval1test "constr-1"
-    "1 :+ 1"
-    "1 :+ 1"
-  eval1test "constr-2"
-    "Foo"
-    "Foo"
-  eval1test "constr-3"
-    "Foo 1"
-    "Foo 1"
-  eval1test "constr-4"
-    "Foo 1 2"
-    "Foo 1 2"
-
-  eval1test "constr-5"
-    "if True then Foo else Bar"
-    "Foo"
-
-  eval1test "constr-6"
-    "if False then Foo else Bar"
-    "Bar"
-
-  eval1EnvTest "func-1"
-    "foo (Foo x) = x"
-    "foo (Foo 1)"
-    "1"
-
-  eval1EnvTest "func-2"
-    "foo (Foo x y) = x + y"
-    "foo (Foo 1 2)"
-    "1 + 2"
-
-  eval1EnvTest "map-func-3"
-    "map f Nil = Nil\nmap f (Cons x xs) = Cons (f x) (map f xs)"
-    "map (1 +) (Cons 1 (Cons 2 (Cons 3 Nil)))"
-    "Cons ((1 +) 1) (map (1 +) (Cons 2 (Cons 3 Nil)))"
-
-  eval1EnvTest "map-func-4"
-    "map f Nil = Nil\nmap f (x::xs) = f x :: map f xs"
-    "map (^2) Nil"
-    "Nil"
-
-  eval1EnvTest "map-func-5"
-    "map f Nil = Nil\nmap f (x::xs) = f x :: map f xs"
-    "map (^2) (1 :: (2 :: (3 :: Nil)))"
-    "(^2) 1 :: map (^2) (2 :: (3 :: Nil))"
-
-  eval1EnvTest "tuple-1"
-    "fst (Tuple a _) = a\n"
-    "fst (Tuple (Tuple 1 2) 3)"
-    "Tuple 1 2"
-
-  eval1EnvTest "tuple-2"
-    "snd (Tuple _ a) = a\n"
-    "snd (Tuple (Tuple 1 2) 3)"
-    "3"
-
-  eval1EnvTest "infix-1"
-    "fst (a ::: _) = a"
-    "fst (1 ::: 3)"
-    "1"
-
-  eval1EnvTest "infix-2"
-    "snd (_ ::: a) = a"
-    "snd (1 ::: 3)"
-    "3"
-
-  evalEnvTest "infix-3"
-    "map f g (a :-: b) = f a :-: g b\ndouble = map (*2) (*2)"
-    "double (2 :-: 3)"
-    "4 :-: 6"
-
-  evalEnvTest "prefix-1"
-    "map f g (Tuple x y) = Tuple (f x) (g y)\ndouble = map (*2) (*2)"
-    "double (Tuple 2 3)"
-    "Tuple 4 6"
-
-  evalEnvTest "constr-nested-1"
-    "foo (Bar (Bar a) Foo) = Foo a a"
-    "foo (Bar (Bar Foo) Foo)"
-    "Foo Foo Foo"
-
-
-  evalEnvTest "pdp1-a" envPdP1
-    ("numParts " <> bspPdP1)
-    "13"
-
-  evalEnvTest "pdp1-b" envPdP1
-    ("foldBauwerk Rechteck Spitze Split " <> bspPdP1)
-    bspPdP1
-
-  evalEnvTest "pdp1-c" envPdP1
-    ("maxHoehe " <> bspPdP1)
-    "87"
-
-  evalEnvTest "pdp1-d" envPdP1
-    ("numPeaks " <> bspPdP1)
-    "5"
-
-  evalEnvTest "pdp1-e" envPdP1
-    ("wellformed " <> bspPdP1)
-    "True"
-  ------------
 
   eval1EnvTest "double_func" "double x = x + x" "double 10" "10 + 10"
   eval1EnvTest "map_func1" "map f [] = []\nmap f (x:xs) = f x : map f xs" "map (^2) []" "[]"
@@ -378,3 +237,158 @@ runTests = do
   --                                                                                                       should be: "True"
   evalEnvTest "let_expression_5" prelude "(let x = [1,2,3] in x) == (let x = 1; y = 2; z = 3 in [x,y,z])" "[1,2,3] == [1,2,3]"
   evalEnvTest "let_expression_6" prelude "let sum = \\x -> x ; y = sum [1,2,3] in y" "[1,2,3]"
+
+  testsADT
+
+
+
+testsADT :: Test Unit
+testsADT = do
+  eval1test "constr-1"
+    "1 :+ 1"
+    "1 :+ 1"
+  eval1test "constr-2"
+    "Foo"
+    "Foo"
+  eval1test "constr-3"
+    "Foo 1"
+    "Foo 1"
+  eval1test "constr-4"
+    "Foo 1 2"
+    "Foo 1 2"
+
+  eval1test "constr-5"
+    "if True then Foo else Bar"
+    "Foo"
+
+  eval1test "constr-6"
+    "if False then Foo else Bar"
+    "Bar"
+
+  eval1EnvTest "func-1"
+    "foo (Foo x) = x"
+    "foo (Foo 1)"
+    "1"
+
+  eval1EnvTest "func-2"
+    "foo (Foo x y) = x + y"
+    "foo (Foo 1 2)"
+    "1 + 2"
+
+  eval1EnvTest "map-func-3"
+    "map f Nil = Nil\nmap f (Cons x xs) = Cons (f x) (map f xs)"
+    "map (1 +) (Cons 1 (Cons 2 (Cons 3 Nil)))"
+    "Cons ((1 +) 1) (map (1 +) (Cons 2 (Cons 3 Nil)))"
+
+  eval1EnvTest "map-func-4"
+    "map f Nil = Nil\nmap f (x::xs) = f x :: map f xs"
+    "map (^2) Nil"
+    "Nil"
+
+  eval1EnvTest "map-func-5"
+    "map f Nil = Nil\nmap f (x::xs) = f x :: map f xs"
+    "map (^2) (1 :: (2 :: (3 :: Nil)))"
+    "(^2) 1 :: map (^2) (2 :: (3 :: Nil))"
+
+  eval1EnvTest "tuple-1"
+    "fst (Tuple a _) = a\n"
+    "fst (Tuple (Tuple 1 2) 3)"
+    "Tuple 1 2"
+
+  eval1EnvTest "tuple-2"
+    "snd (Tuple _ a) = a\n"
+    "snd (Tuple (Tuple 1 2) 3)"
+    "3"
+
+  eval1EnvTest "infix-1"
+    "fst (a ::: _) = a"
+    "fst (1 ::: 3)"
+    "1"
+
+  eval1EnvTest "infix-2"
+    "snd (_ ::: a) = a"
+    "snd (1 ::: 3)"
+    "3"
+
+  evalEnvTest "infix-3"
+    "map f g (a :-: b) = f a :-: g b\ndouble = map (*2) (*2)"
+    "double (2 :-: 3)"
+    "4 :-: 6"
+
+  evalEnvTest "prefix-1"
+    "map f g (Tuple x y) = Tuple (f x) (g y)\ndouble = map (*2) (*2)"
+    "double (Tuple 2 3)"
+    "Tuple 4 6"
+
+  evalEnvTest "constr-nested-1"
+    "foo (Bar (Bar a) Foo) = Foo a a"
+    "foo (Bar (Bar Foo) Foo)"
+    "Foo Foo Foo"
+
+
+  evalEnvTest "pdp1-a" envPdP1
+    ("numParts " <> bspPdP1)
+    "13"
+
+  evalEnvTest "pdp1-b" envPdP1
+    ("foldBauwerk Rechteck Spitze Split " <> bspPdP1)
+    bspPdP1
+
+  evalEnvTest "pdp1-c" envPdP1
+    ("maxHoehe " <> bspPdP1)
+    "87"
+
+  evalEnvTest "pdp1-d" envPdP1
+    ("numPeaks " <> bspPdP1)
+    "5"
+
+  evalEnvTest "pdp1-e" envPdP1
+    ("wellformed " <> bspPdP1)
+    "True"
+
+envPdP1 :: String
+envPdP1 = """
+foldBauwerk fRechteck fSpitze fSplit (Rechteck br ho bw)
+  = fRechteck br ho (foldBauwerk fRechteck fSpitze fSplit bw)
+foldBauwerk fRechteck fSpitze fSplit (Spitze br ho)
+  = fSpitze br ho
+foldBauwerk fRechteck fSpitze fSplit (Split l r)
+  = fSplit (foldBauwerk fRechteck fSpitze fSplit l) (foldBauwerk fRechteck fSpitze fSplit r)
+
+numParts (Rechteck _ _ bw) = 1 + numParts bw
+numParts (Spitze _ _) = 1
+numParts (Split l r)  = numParts l + numParts r
+
+max a b = if a < b then b else a
+
+maxHoehe = foldBauwerk (\_ ho hor -> ho + hor) (\_ h -> h) max
+
+numPeaks = foldBauwerk (\_ _ ps -> ps) (\_ _ -> 1) (+)
+
+wellformed
+  = (> 0)
+  . foldBauwerk
+    (\br _ br' -> if br' < 0 || br' > br then -1 else br)
+    (\br _ -> br)
+    (\l r -> l + r)
+"""
+
+bspPdP1 :: String
+bspPdP1 = """(Rechteck 50 20
+  (Split
+    (Rechteck 20 15
+      (Split
+        (Rechteck 10 20
+          (Rechteck 8 18
+            (Spitze 8 14)))
+        (Rechteck 8 17
+          (Spitze 8 14))))
+    (Rechteck 20 15
+      (Split
+        (Rechteck 8 17
+          (Spitze 8 14))
+        (Rechteck 10 20
+          (Split
+            (Spitze 5 17)
+            (Spitze 5 17)))))))
+"""
