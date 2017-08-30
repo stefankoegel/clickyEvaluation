@@ -12,7 +12,7 @@ import Parser (definitions, expression, runParserIndent)
 import Evaluator (eval, eval1, runEvalM, defsToEnv)
 import Test.Parser (prelude)
 
-import Test.Utils (Test, tell)
+import Test.Utils (Test, tell, padLeft)
 
 tell' :: String -> Test Unit
 tell' = tell
@@ -24,8 +24,17 @@ eval1test name input expected = case (Tuple (runParserIndent expression input) (
       (Right eval1Exp) -> 
         if eval1Exp == expExp
           then pure unit -- log $ "Eval success (" ++ name ++ ")"
-          else tell' $ "Eval fail (" <> name <> "): " <> show eval1Exp <> " should be " <> show expExp
-      (Left err) -> tell' $ "Eval fail (" <> name <> "): " <> show err <> ")"
+          else tell'
+             $ "Eval fail (" <> name <> "):\n"
+            <> "Input:\n"
+            <> padLeft (show inExp) <> "\n"
+            <> "Output:\n"
+            <> padLeft (show eval1Exp) <> "\n"
+            <> "Expected:\n"
+            <> padLeft (show expExp)
+      (Left err) -> tell'
+        $ "Eval fail (" <> name <> "):\n"
+        <> padLeft (show err)
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
 eval1EnvTest :: String -> String -> String -> String -> Test Unit
@@ -35,8 +44,17 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expre
       (Right eval1Exp) -> 
         if eval1Exp == expExp
           then pure unit -- log $ "Eval success (" <> name <> ")"
-          else tell' $ "Eval fail (" <> name <> "): " <> show eval1Exp <> " should be " <> show expExp
-      (Left err) -> tell' $ "Eval fail (" <> name <> "): " <> show err <> ")"
+          else tell'
+             $ "Eval fail (" <> name <> "):\n"
+            <> "Input:\n"
+            <> padLeft (show inExp) <> "\n"
+            <> "Output:\n"
+            <> padLeft (show eval1Exp) <> "\n"
+            <> "Expected:\n"
+            <> padLeft (show expExp)
+      (Left err) -> tell'
+        $ "Eval fail (" <> name <> "):\n"
+        <> padLeft (show err)
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
 evalEnvTest :: String -> String -> String -> String -> Test Unit
@@ -45,9 +63,70 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expres
     let evalExp = eval (defsToEnv defs) inExp in
       if evalExp == expExp
         then pure unit -- log $ "Eval success (" ++ name ++ ")"
-        else tell' $ "Eval fail (" <> name <> "): " <> show evalExp <> " should be " <> show expExp
-  (Tuple (Tuple pi pe) pd) -> tell' $ "Parse fail (" <> name <> "): (input: " <> show pi <> ", expected: " <> show pe <> ", definitions: " <> show pd <> ")"
+        else tell'
+             $ "Eval fail (" <> name <> "):\n"
+            <> "Input String:\n"
+            <> padLeft input <> "\n"
+            <> "Input Parsed:\n"
+            <> padLeft (show inExp) <> "\n"
+            <> "Output:\n"
+            <> padLeft (show evalExp) <> "\n"
+            <> "Expected String:\n"
+            <> padLeft expected <> "\n"
+            <> "Expected Parsed:\n"
+            <> padLeft (show expExp) <> "\n"
+            <> "Definitions String:\n"
+            <> padLeft env <> "\n"
+            <> "Definitions Parsed:\n"
+            <> padLeft (show defs)
+  (Tuple (Tuple pi pe) pd) -> tell'
+     $ "Parse fail (" <> name <> "):\n"
+    <> "Input:\n"
+    <> padLeft (show pi) <> "\n"
+    <> "Expected:\n"
+    <> padLeft (show pe) <> "\n"
+    <> "Definitions:\n"
+    <> padLeft (show pd)
 
+
+envPdP1 :: String
+envPdP1 = """
+foldBauwerk fRechteck fSpitze fSplit (Rechteck br ho bw) = fRechteck br ho (foldBauwerk fRechteck fSpitze fSplit bw)
+foldBauwerk fRechteck fSpitze fSplit (Spitze br ho)      = fSpitze br ho
+foldBauwerk fRechteck fSpitze fSplit (Split l r)         = fSplit (foldBauwerk fRechteck fSpitze fSplit l) (foldBauwerk fRechteck fSpitze fSplit r)
+
+numParts (Rechteck _ _ bw) = 1 + numParts bw
+numParts (Spitze _ _) = 1
+numParts (Split l r)  = numParts l + numParts r
+
+max a b = if a < b then b else a
+
+maxHoehe = foldBauwerk (\_ ho hor -> ho + hor) (\_ h -> h) max
+
+numPeaks = foldBauwerk (\_ _ ps -> ps) (\_ _ -> 1) (+)
+
+wellformed = (> 0) . foldBauwerk (\br _ br' -> if br' < 0 || br' > br then -1 else br) (\br _ -> br) (\l r -> l + r)
+"""
+
+bspPdP1 :: String
+bspPdP1 = """(Rechteck 50 20
+  (Split
+    (Rechteck 20 15
+      (Split
+        (Rechteck 10 20
+          (Rechteck 8 18
+            (Spitze 8 14)))
+        (Rechteck 8 17
+          (Spitze 8 14))))
+    (Rechteck 20 15
+      (Split
+        (Rechteck 8 17
+          (Spitze 8 14))
+        (Rechteck 10 20
+          (Split
+            (Spitze 5 17)
+            (Spitze 5 17)))))))
+"""
 
 runTests :: Test Unit
 runTests = do
@@ -134,10 +213,36 @@ runTests = do
     "snd (1 ::: 3)"
     "3"
 
+  evalEnvTest "prefix-3"
+    "map f g (Tuple x y) = Tuple (f x) (g y)\ndouble = map (*2) (*2)"
+    "double (Tuple 2 3)"
+    "Tuple 4 6"
+
   evalEnvTest "constr-nested-1"
     "foo (Bar (Bar a) Foo) = Foo a a"
     "foo (Bar (Bar Foo) Foo)"
     "Foo Foo Foo"
+
+
+  evalEnvTest "pdp1-a" envPdP1
+    ("numParts " <> bspPdP1)
+    "13"
+
+  evalEnvTest "pdp1-b" envPdP1
+    ("foldBauwerk Rechteck Spitze Split " <> bspPdP1)
+    bspPdP1
+
+  evalEnvTest "pdp1-c" envPdP1
+    ("maxHoehe " <> bspPdP1)
+    "87"
+
+  evalEnvTest "pdp1-d" envPdP1
+    ("numPeaks " <> bspPdP1)
+    "5"
+
+  evalEnvTest "pdp1-e" envPdP1
+    ("wellformed " <> bspPdP1)
+    "True"
   ------------
 
   eval1EnvTest "double_func" "double x = x + x" "double 10" "10 + 10"
