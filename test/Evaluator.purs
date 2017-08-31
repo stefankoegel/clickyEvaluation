@@ -346,6 +346,74 @@ testsADT = do
     ("wellformed " <> bspPdP1)
     "True"
 
+  evalEnvTest "fp-a" envPdP2
+    ("foldMixTree QuadSplit Split Color " <> bspPdP2)
+    bspPdP2
+
+  evalEnvTest "fp-b" envPdP2
+    ("areas " <> bspPdP2)
+    "22"
+
+  evalEnvTest "fp-c" envPdP2
+    ("wellformedTree " <> bspPdP2)
+    "True"
+
+  evalEnvTest "rose-fold" envRoseFold
+    ("foldRoseTree Node Leaf " <> bspRoseFold)
+    bspRoseFold
+
+  evalEnvTest "bin-tree-fold-1" envBinTree
+    ("foldBinTree Nil (:::) " <> bspBinTree)
+    bspBinTree
+
+  evalEnvTest "bin-tree-fold-2" envBinTree
+    ("nils " <> bspBinTree)
+    "6"
+
+  evalEnvTest "bin-tree-fold-1" envBinTree
+    ("foldBinTree Nil (:::) " <> bspBinTree2)
+    bspBinTree2
+
+  evalEnvTest "bin-tree-fold-2" envBinTree
+    ("nils (" <> bspBinTree2 <> ")")
+    "2"
+
+envRoseFold :: String
+envRoseFold = """
+map _ [] = []
+map f (x:xs) = f x : map f xs
+
+foldRoseTree fN fL (Leaf a) = fL a
+foldRoseTree fN fL (Node ts) = fN (map (foldRoseTree fN fL) ts)
+"""
+
+bspRoseFold :: String
+bspRoseFold = """(Node
+  [ Leaf 1
+  , Leaf 2
+  , Leaf 3
+  , Node
+    [ Leaf 4
+    , Leaf 5
+    , Leaf 6 ]])
+"""
+
+envBinTree :: String
+envBinTree = """
+foldBinTree fNil fNode Nil = fNil
+foldBinTree fNil fNode (l ::: r) = fNode
+  (foldBinTree fNil fNode l)
+  (foldBinTree fNil fNode r)
+
+nils = foldBinTree 1 (+)
+"""
+
+bspBinTree :: String
+bspBinTree = "(((Nil ::: Nil) ::: Nil) ::: (Nil ::: (Nil ::: Nil)))"
+
+bspBinTree2 :: String
+bspBinTree2 = "Nil ::: Nil"
+
 envPdP1 :: String
 envPdP1 = """
 foldBauwerk fRechteck fSpitze fSplit (Rechteck br ho bw)
@@ -361,7 +429,10 @@ numParts (Split l r)  = numParts l + numParts r
 
 max a b = if a < b then b else a
 
-maxHoehe = foldBauwerk (\_ ho hor -> ho + hor) (\_ h -> h) max
+maxHoehe = foldBauwerk
+  (\_ ho hor -> ho + hor)
+  (\_ h -> h)
+  max
 
 numPeaks = foldBauwerk (\_ _ ps -> ps) (\_ _ -> 1) (+)
 
@@ -392,3 +463,74 @@ bspPdP1 = """(Rechteck 50 20
             (Spitze 5 17)
             (Spitze 5 17)))))))
 """
+
+envPdP2 :: String
+envPdP2 = """
+foldMixTree fQ fS fC (QuadSplit ro ru lu lo) = fQ
+  (foldMixTree fQ fS fC ro)
+  (foldMixTree fQ fS fC ru)
+  (foldMixTree fQ fS fC lu)
+  (foldMixTree fQ fS fC lo)
+foldMixTree fQ fS fC (Split a ts)
+  = fS a (map (\(d, t) -> (d, foldMixTree fQ fS fC t)) ts)
+foldMixTree fQ fS fC (Color c) = fC c
+
+wellformed xs = all (\(x,_) -> x > 0) xs && (10 == sum (map fst xs))
+
+all _ [] = True
+all p (x:xs) = if p x then all p xs else False
+
+sum [] = 0
+sum (x:xs) = x + sum xs
+
+map f [] = []
+map f (x:xs) = f x : map f xs
+
+fst (x,_) = x
+snd (_,x) = x
+
+areas = foldMixTree
+  (\ro ru lu lo -> ro + ru + lu + lo)
+  (\_ -> sum . map snd)
+  (\_ -> 1)
+
+wellformedTree = foldMixTree
+  (\ro ru lu lo -> ro && ru && lu && lo)
+  (\_ -> wellformed)
+  (\_ -> True)
+"""
+
+bspPdP2 :: String
+bspPdP2 = """(Split H
+  [ (2, Color White)
+  , (2, Split V
+      [ (3, Color White)
+      , (2, QuadSplit
+          (Color White)
+          (Color DarkGrey)
+          (Color White)
+          (Color DarkGrey))
+      , (2, Split H
+          [ (5, Color White)
+          , (5, Color LightGrey)])
+      , (3, Color White)])
+  , (1, Split V
+      [ (4, Color Black)
+      , (4, Color LightGrey)
+      , (2, Color White) ])
+  , (2, Split V
+      [ (2, Color White)
+      , (2, QuadSplit
+          (Color DarkGrey)
+          (Color White)
+          (Color DarkGrey)
+          (Color White))
+      , (1, Color White)
+      , (2, Split H
+          [ (5, Color LightGrey)
+          , (5, Color White) ])
+      , (3, Color White)])
+  , (3, Color White)])
+"""
+
+
