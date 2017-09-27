@@ -117,7 +117,7 @@ eval1 env expr = case expr of
   (App _ (Atom _ (Constr _)) _)      -> pure expr
   (ListComp _ e qs)                    -> evalListComp env e qs
   (LetExpr _ binds exp)                -> evalLetTypeTree binds exp
-  (Atom _ (Constr x))                -> pure $ Atom Nothing (Constr x)
+  (Atom _ (Constr x))                -> pure expr
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> TypeTree -> TypeTree
