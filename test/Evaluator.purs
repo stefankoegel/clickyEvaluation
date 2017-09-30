@@ -247,6 +247,7 @@ testsADT = do
   eval1test "constr-1"
     "1 :+ 1"
     "1 :+ 1"
+{-
   eval1test "constr-2"
     "Foo"
     "Foo"
@@ -256,7 +257,7 @@ testsADT = do
   eval1test "constr-4"
     "Foo 1 2"
     "Foo 1 2"
-
+-}
   eval1test "constr-5"
     "if True then Foo else Bar"
     "Foo"
