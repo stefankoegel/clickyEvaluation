@@ -114,10 +114,10 @@ eval1 env expr = case expr of
   (App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))         -> {-binary env op e1 e2 <|>-} (pure $ Binary Nothing op e1 e2)
   (App _ (Atom _ (Name name)) args)      -> apply env name args
   (App _ (App _ func es) es')            -> pure $ App Nothing func (es <> es')
-  (App _ (Atom _ (Constr _)) _)      -> pure expr
+--  (App _ (Atom _ (Constr _)) _)      -> pure expr
   (ListComp _ e qs)                    -> evalListComp env e qs
   (LetExpr _ binds exp)                -> evalLetTypeTree binds exp
-  (Atom _ (Constr x))                -> pure expr
+--  (Atom _ (Constr x))                -> pure expr
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> TypeTree -> TypeTree
