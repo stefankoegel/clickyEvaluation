@@ -244,10 +244,10 @@ runTests = do
 
 testsADT :: Test Unit
 testsADT = do
+{-
   eval1test "constr-1"
     "1 :+ 1"
     "1 :+ 1"
-{-
   eval1test "constr-2"
     "Foo"
     "Foo"
