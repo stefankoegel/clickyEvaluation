@@ -12,7 +12,7 @@ import Parser (definitions, expression, runParserIndent)
 import Evaluator (eval, eval1, runEvalM, defsToEnv)
 import Test.Parser (prelude)
 
-import Test.Utils (Test, tell)
+import Test.Utils (Test, tell, padLeft)
 
 tell' :: String -> Test Unit
 tell' = tell
@@ -24,8 +24,17 @@ eval1test name input expected = case (Tuple (runParserIndent expression input) (
       (Right eval1Exp) -> 
         if eval1Exp == expExp
           then pure unit -- log $ "Eval success (" ++ name ++ ")"
-          else tell' $ "Eval fail (" <> name <> "): " <> show eval1Exp <> " should be " <> show expExp
-      (Left err) -> tell' $ "Eval fail (" <> name <> "): " <> show err <> ")"
+          else tell'
+             $ "Eval fail (" <> name <> "):\n"
+            <> "Input:\n"
+            <> padLeft (show inExp) <> "\n"
+            <> "Output:\n"
+            <> padLeft (show eval1Exp) <> "\n"
+            <> "Expected:\n"
+            <> padLeft (show expExp)
+      (Left err) -> tell'
+        $ "Eval fail (" <> name <> "):\n"
+        <> padLeft (show err)
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
 eval1EnvTest :: String -> String -> String -> String -> Test Unit
@@ -35,8 +44,17 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expre
       (Right eval1Exp) -> 
         if eval1Exp == expExp
           then pure unit -- log $ "Eval success (" <> name <> ")"
-          else tell' $ "Eval fail (" <> name <> "): " <> show eval1Exp <> " should be " <> show expExp
-      (Left err) -> tell' $ "Eval fail (" <> name <> "): " <> show err <> ")"
+          else tell'
+             $ "Eval fail (" <> name <> "):\n"
+            <> "Input:\n"
+            <> padLeft (show inExp) <> "\n"
+            <> "Output:\n"
+            <> padLeft (show eval1Exp) <> "\n"
+            <> "Expected:\n"
+            <> padLeft (show expExp)
+      (Left err) -> tell'
+        $ "Eval fail (" <> name <> "):\n"
+        <> padLeft (show err)
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
 evalEnvTest :: String -> String -> String -> String -> Test Unit
@@ -45,8 +63,31 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expres
     let evalExp = eval (defsToEnv defs) inExp in
       if evalExp == expExp
         then pure unit -- log $ "Eval success (" ++ name ++ ")"
-        else tell' $ "Eval fail (" <> name <> "): " <> show evalExp <> " should be " <> show expExp
-  (Tuple (Tuple pi pe) pd) -> tell' $ "Parse fail (" <> name <> "): (input: " <> show pi <> ", expected: " <> show pe <> ", definitions: " <> show pd <> ")"
+        else tell'
+             $ "Eval fail (" <> name <> "):\n"
+            <> "Input String:\n"
+            <> padLeft input <> "\n"
+            <> "Input Parsed:\n"
+            <> padLeft (show inExp) <> "\n"
+            <> "Output:\n"
+            <> padLeft (show evalExp) <> "\n"
+            <> "Expected String:\n"
+            <> padLeft expected <> "\n"
+            <> "Expected Parsed:\n"
+            <> padLeft (show expExp) <> "\n"
+            <> "Definitions String:\n"
+            <> padLeft env <> "\n"
+            <> "Definitions Parsed:\n"
+            <> padLeft (show defs)
+  (Tuple (Tuple pi pe) pd) -> tell'
+     $ "Parse fail (" <> name <> "):\n"
+    <> "Input:\n"
+    <> padLeft (show pi) <> "\n"
+    <> "Expected:\n"
+    <> padLeft (show pe) <> "\n"
+    <> "Definitions:\n"
+    <> padLeft (show pd)
+
 
 
 runTests :: Test Unit
@@ -66,6 +107,7 @@ runTests = do
   eval1test "lambda2" "(\\x y -> [0, x, y, x + y]) 1 2" "[0, 1, 2, 1 + 2]"
   eval1test "string1" "\"as\" ++ \"df\"" "\"asdf\""
   eval1test "string2" "'a' : \"sdf\"" "\"asdf\""
+
 
   eval1EnvTest "double_func" "double x = x + x" "double 10" "10 + 10"
   eval1EnvTest "map_func1" "map f [] = []\nmap f (x:xs) = f x : map f xs" "map (^2) []" "[]"
@@ -195,3 +237,301 @@ runTests = do
   --                                                                                                       should be: "True"
   evalEnvTest "let_expression_5" prelude "(let x = [1,2,3] in x) == (let x = 1; y = 2; z = 3 in [x,y,z])" "[1,2,3] == [1,2,3]"
   evalEnvTest "let_expression_6" prelude "let sum = \\x -> x ; y = sum [1,2,3] in y" "[1,2,3]"
+
+  testsADT
+
+
+
+testsADT :: Test Unit
+testsADT = do
+{-
+  eval1test "constr-1"
+    "1 :+ 1"
+    "1 :+ 1"
+  eval1test "constr-2"
+    "Foo"
+    "Foo"
+  eval1test "constr-3"
+    "Foo 1"
+    "Foo 1"
+  eval1test "constr-4"
+    "Foo 1 2"
+    "Foo 1 2"
+-}
+  eval1test "constr-5"
+    "if True then Foo else Bar"
+    "Foo"
+
+  eval1test "constr-6"
+    "if False then Foo else Bar"
+    "Bar"
+
+  eval1EnvTest "func-1"
+    "foo (Foo x) = x"
+    "foo (Foo 1)"
+    "1"
+
+  eval1EnvTest "func-2"
+    "foo (Foo x y) = x + y"
+    "foo (Foo 1 2)"
+    "1 + 2"
+
+  eval1EnvTest "map-func-3"
+    "map f Nil = Nil\nmap f (Cons x xs) = Cons (f x) (map f xs)"
+    "map (1 +) (Cons 1 (Cons 2 (Cons 3 Nil)))"
+    "Cons ((1 +) 1) (map (1 +) (Cons 2 (Cons 3 Nil)))"
+
+  eval1EnvTest "map-func-4"
+    "map f Nil = Nil\nmap f (x::xs) = f x :: map f xs"
+    "map (^2) Nil"
+    "Nil"
+
+  eval1EnvTest "map-func-5"
+    "map f Nil = Nil\nmap f (x::xs) = f x :: map f xs"
+    "map (^2) (1 :: (2 :: (3 :: Nil)))"
+    "(^2) 1 :: map (^2) (2 :: (3 :: Nil))"
+
+  eval1EnvTest "tuple-1"
+    "fst (Tuple a _) = a\n"
+    "fst (Tuple (Tuple 1 2) 3)"
+    "Tuple 1 2"
+
+  eval1EnvTest "tuple-2"
+    "snd (Tuple _ a) = a\n"
+    "snd (Tuple (Tuple 1 2) 3)"
+    "3"
+
+  eval1EnvTest "infix-1"
+    "fst (a ::: _) = a"
+    "fst (1 ::: 3)"
+    "1"
+
+  eval1EnvTest "infix-2"
+    "snd (_ ::: a) = a"
+    "snd (1 ::: 3)"
+    "3"
+
+  evalEnvTest "infix-3"
+    "map f g (a :-: b) = f a :-: g b\ndouble = map (*2) (*2)"
+    "double (2 :-: 3)"
+    "4 :-: 6"
+
+  evalEnvTest "prefix-1"
+    "map f g (Tuple x y) = Tuple (f x) (g y)\ndouble = map (*2) (*2)"
+    "double (Tuple 2 3)"
+    "Tuple 4 6"
+
+  evalEnvTest "constr-nested-1"
+    "foo (Bar (Bar a) Foo) = Foo a a"
+    "foo (Bar (Bar Foo) Foo)"
+    "Foo Foo Foo"
+
+
+  evalEnvTest "pdp1-a" envPdP1
+    ("numParts " <> bspPdP1)
+    "13"
+
+  evalEnvTest "pdp1-b" envPdP1
+    ("foldBauwerk Rechteck Spitze Split " <> bspPdP1)
+    bspPdP1
+
+  evalEnvTest "pdp1-c" envPdP1
+    ("maxHoehe " <> bspPdP1)
+    "87"
+
+  evalEnvTest "pdp1-d" envPdP1
+    ("numPeaks " <> bspPdP1)
+    "5"
+
+  evalEnvTest "pdp1-e" envPdP1
+    ("wellformed " <> bspPdP1)
+    "True"
+
+  evalEnvTest "fp-a" envPdP2
+    ("foldMixTree QuadSplit Split Color " <> bspPdP2)
+    bspPdP2
+
+  evalEnvTest "fp-b" envPdP2
+    ("areas " <> bspPdP2)
+    "22"
+
+  evalEnvTest "fp-c" envPdP2
+    ("wellformedTree " <> bspPdP2)
+    "True"
+
+  evalEnvTest "rose-fold" envRoseFold
+    ("foldRoseTree Node Leaf " <> bspRoseFold)
+    bspRoseFold
+
+  evalEnvTest "bin-tree-fold-1" envBinTree
+    ("foldBinTree Nil (:::) " <> bspBinTree)
+    bspBinTree
+
+  evalEnvTest "bin-tree-fold-2" envBinTree
+    ("nils " <> bspBinTree)
+    "6"
+
+  evalEnvTest "bin-tree-fold-1" envBinTree
+    ("foldBinTree Nil (:::) " <> bspBinTree2)
+    bspBinTree2
+
+  evalEnvTest "bin-tree-fold-2" envBinTree
+    ("nils (" <> bspBinTree2 <> ")")
+    "2"
+
+envRoseFold :: String
+envRoseFold = """
+map _ [] = []
+map f (x:xs) = f x : map f xs
+
+foldRoseTree fN fL (Leaf a) = fL a
+foldRoseTree fN fL (Node ts) = fN (map (foldRoseTree fN fL) ts)
+"""
+
+bspRoseFold :: String
+bspRoseFold = """(Node
+  [ Leaf 1
+  , Leaf 2
+  , Leaf 3
+  , Node
+    [ Leaf 4
+    , Leaf 5
+    , Leaf 6 ]])
+"""
+
+envBinTree :: String
+envBinTree = """
+foldBinTree fNil fNode Nil = fNil
+foldBinTree fNil fNode (l ::: r) = fNode
+  (foldBinTree fNil fNode l)
+  (foldBinTree fNil fNode r)
+
+nils = foldBinTree 1 (+)
+"""
+
+bspBinTree :: String
+bspBinTree = "(((Nil ::: Nil) ::: Nil) ::: (Nil ::: (Nil ::: Nil)))"
+
+bspBinTree2 :: String
+bspBinTree2 = "Nil ::: Nil"
+
+envPdP1 :: String
+envPdP1 = """
+foldBauwerk fRechteck fSpitze fSplit (Rechteck br ho bw)
+  = fRechteck br ho (foldBauwerk fRechteck fSpitze fSplit bw)
+foldBauwerk fRechteck fSpitze fSplit (Spitze br ho)
+  = fSpitze br ho
+foldBauwerk fRechteck fSpitze fSplit (Split l r)
+  = fSplit (foldBauwerk fRechteck fSpitze fSplit l) (foldBauwerk fRechteck fSpitze fSplit r)
+
+numParts (Rechteck _ _ bw) = 1 + numParts bw
+numParts (Spitze _ _) = 1
+numParts (Split l r)  = numParts l + numParts r
+
+max a b = if a < b then b else a
+
+maxHoehe = foldBauwerk
+  (\_ ho hor -> ho + hor)
+  (\_ h -> h)
+  max
+
+numPeaks = foldBauwerk (\_ _ ps -> ps) (\_ _ -> 1) (+)
+
+wellformed
+  = (> 0)
+  . foldBauwerk
+    (\br _ br' -> if br' < 0 || br' > br then -1 else br)
+    (\br _ -> br)
+    (\l r -> l + r)
+"""
+
+bspPdP1 :: String
+bspPdP1 = """(Rechteck 50 20
+  (Split
+    (Rechteck 20 15
+      (Split
+        (Rechteck 10 20
+          (Rechteck 8 18
+            (Spitze 8 14)))
+        (Rechteck 8 17
+          (Spitze 8 14))))
+    (Rechteck 20 15
+      (Split
+        (Rechteck 8 17
+          (Spitze 8 14))
+        (Rechteck 10 20
+          (Split
+            (Spitze 5 17)
+            (Spitze 5 17)))))))
+"""
+
+envPdP2 :: String
+envPdP2 = """
+foldMixTree fQ fS fC (QuadSplit ro ru lu lo) = fQ
+  (foldMixTree fQ fS fC ro)
+  (foldMixTree fQ fS fC ru)
+  (foldMixTree fQ fS fC lu)
+  (foldMixTree fQ fS fC lo)
+foldMixTree fQ fS fC (Split a ts)
+  = fS a (map (\(d, t) -> (d, foldMixTree fQ fS fC t)) ts)
+foldMixTree fQ fS fC (Color c) = fC c
+
+wellformed xs = all (\(x,_) -> x > 0) xs && (10 == sum (map fst xs))
+
+all _ [] = True
+all p (x:xs) = if p x then all p xs else False
+
+sum [] = 0
+sum (x:xs) = x + sum xs
+
+map f [] = []
+map f (x:xs) = f x : map f xs
+
+fst (x,_) = x
+snd (_,x) = x
+
+areas = foldMixTree
+  (\ro ru lu lo -> ro + ru + lu + lo)
+  (\_ -> sum . map snd)
+  (\_ -> 1)
+
+wellformedTree = foldMixTree
+  (\ro ru lu lo -> ro && ru && lu && lo)
+  (\_ -> wellformed)
+  (\_ -> True)
+"""
+
+bspPdP2 :: String
+bspPdP2 = """(Split H
+  [ (2, Color White)
+  , (2, Split V
+      [ (3, Color White)
+      , (2, QuadSplit
+          (Color White)
+          (Color DarkGrey)
+          (Color White)
+          (Color DarkGrey))
+      , (2, Split H
+          [ (5, Color White)
+          , (5, Color LightGrey)])
+      , (3, Color White)])
+  , (1, Split V
+      [ (4, Color Black)
+      , (4, Color LightGrey)
+      , (2, Color White) ])
+  , (2, Split V
+      [ (2, Color White)
+      , (2, QuadSplit
+          (Color DarkGrey)
+          (Color White)
+          (Color DarkGrey)
+          (Color White))
+      , (1, Color White)
+      , (2, Split H
+          [ (5, Color LightGrey)
+          , (5, Color White) ])
+      , (3, Color White)])
+  , (3, Color White)])
+"""
+
+
