@@ -37,6 +37,7 @@ import AST
   , TypeTree
   , toOpTuple
   , ADTDef(..)
+  , compileADTDef
   , Associativity(..)
   , DataConstr(..)
   , Type(..))
@@ -516,7 +517,7 @@ definition = do
   pure $ Def defName binds body
 
 definitions :: IndentParser String (List Definition)
-definitions = skipWhite *> block definition
+definitions = skipWhite *> (PC.try (compileADTDef <$> typeDefinition) <|> block definition)
 
 parseDefs :: String -> Either ParseError (List Definition)
 parseDefs = runParserIndent $ definitions

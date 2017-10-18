@@ -576,7 +576,11 @@ infer' ex = case ex of
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
   Atom _ atom@(AInt _) -> returnWithConstraint ex intType
-  Atom _ atom@(Constr _) -> unsafeUndef "infer' ... (Atom _ atom@(Constr _))"
+  Atom _ atom@(Constr name) -> do
+    mt <- lookupEnv name
+    case mt of
+         Nothing -> returnWithTypeError ex (UnboundVariable name)
+         Just t  -> returnWithConstraint ex t
   Atom _ atom@(Name name) -> case name of
     -- Built-in functions.
     "mod" -> returnWithConstraint ex intToIntToIntType

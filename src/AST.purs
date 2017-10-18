@@ -3,12 +3,14 @@ module AST where
 import Prelude
 import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor (bimap, rmap)
-import Data.Foldable (intercalate)
+import Data.Foldable (intercalate, foldr)
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
+
+import JSHelpers (unsafeUndef)
 
 -- | Operators
 -- |
@@ -508,6 +510,13 @@ data Type
 data ADTDef
   = ADTDef String (List TVar) (List (DataConstr Type))
 
+compileADTDef :: ADTDef -> List Definition
+compileADTDef (ADTDef tname tvars constrs) =
+  map (compileDataConstr (TTypeCons tname (map TypVar tvars))) constrs
+
+-- compileADTDef :: ADTDef -> Def
+-- compileADTDef (ADTDef tname tvars 
+
 derive instance eqADTDef :: Eq ADTDef
 
 instance showADTDef :: Show ADTDef where
@@ -533,6 +542,12 @@ derive instance eqAssociativity :: Eq Associativity
 data DataConstr param
   = PrefixDataConstr String Int (List param)
   | InfixDataConstr String Associativity Int param param
+
+compileDataConstr :: Type -> DataConstr Type -> Definition
+compileDataConstr t (PrefixDataConstr name _ ps) =
+  Def name Nil (Atom (Just $ foldr TypArr t ps) (Constr name))
+compileDataConstr t (InfixDataConstr op assoc prec l r) =
+  unsafeUndef "compileDataConstr not yet implemented."
 
 instance functorDataConstr :: Functor DataConstr where
   map f (PrefixDataConstr s i ps) = PrefixDataConstr s i (map f ps)
