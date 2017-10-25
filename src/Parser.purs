@@ -516,8 +516,16 @@ definition = do
   body    <- indent expression
   pure $ Def defName binds body
 
+typeDefinition' :: IndentParser String (List Definition)
+typeDefinition' = compileADTDef <$> typeDefinition
+
 definitions :: IndentParser String (List Definition)
-definitions = skipWhite *> (PC.try (compileADTDef <$> typeDefinition) <|> block definition)
+definitions = do
+  skipWhite
+  defs <- many $ (PC.try typeDefinition') <|> (pure <$> definition)
+  pure $ concat defs
+
+  
 
 parseDefs :: String -> Either ParseError (List Definition)
 parseDefs = runParserIndent $ definitions

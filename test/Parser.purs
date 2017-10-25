@@ -16,6 +16,7 @@ import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessag
 import Control.Monad.State (get)
 
 import Test.Utils (Test, tell, padLeft)
+import JSHelpers (unsafeUndef)
 
 import AST
   ( TypeTree
@@ -407,9 +408,17 @@ runTests = do
   testDataConstrtructorDefinition
   testInfixConstructor
 
+parsedPrelude' :: List Definition
+parsedPrelude' = case runParserIndent definitions prelude of
+                      Left m -> unsafeUndef $ "Failed to parse prelude: " <> show m
+                      Right r -> r
 
 prelude :: String
 prelude =
+  "data Maybe a\n" <>
+  "  = Nothing\n" <>
+  "  | Just a\n" <>
+  "\n" <>
   "and (True:xs)  = and xs\n" <>
   "and (False:xs) = False\n" <>
   "and []         = True\n" <>
@@ -510,6 +519,22 @@ prelude =
 
 parsedPrelude :: List Definition
 parsedPrelude = toList [
+  (Def "Nothing" Nil
+    (Atom
+      (Just
+        (TTypeCons
+          "Maybe"
+          (Cons
+            (TypVar "a")
+            Nil)))
+      (Constr "Nothing"))),
+  (Def "Just" Nil
+    (Atom
+      (Just
+        (TypArr
+          (TypVar "a")
+          (TTypeCons "Maybe" (Cons (TypVar "a") Nil))))
+      (Constr "Just"))),
   (Def "and" (ConsLit Nothing (Lit Nothing (Bool true)) (Lit Nothing (Name "xs")) : Nil) (App Nothing (Atom Nothing (Name "and")) (Cons (Atom Nothing (Name "xs")) (Nil)))),
   (Def "and" (ConsLit Nothing (Lit Nothing (Bool false)) (Lit Nothing (Name "xs")) : Nil) (Atom Nothing (Bool false))),
   (Def "and" (ListLit Nothing Nil : Nil) (Atom Nothing (Bool true))),
