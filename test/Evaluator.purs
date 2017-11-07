@@ -14,8 +14,6 @@ import Test.Parser (prelude)
 
 import Test.Utils (Test, tell, padLeft)
 
-import Control.Monad.Eff.Console (log)
-
 tell' :: String -> Test Unit
 tell' = tell
 
@@ -277,11 +275,6 @@ runTests = do
   evalPreludeTest  "let_expression_6" "let sum = \\x -> x ; y = sum [1,2,3] in y" "[1,2,3]"
 
   testsADT
-
-  where
-    bind m f = log "." *> (m >>= f)
-
-
 
 testsADT :: Test Unit
 testsADT = do
