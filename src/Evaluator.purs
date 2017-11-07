@@ -334,7 +334,7 @@ evalListComp env expr (Cons q qs) = case q of
       List _ (Cons x Nil) -> pure $ Binary Nothing (Tuple Colon Nothing) x listcomp2
       _ -> pure $ AST.binary Append listcomp1 listcomp2
   -- Gen _ b (Binary Colon e (List Nil)) -> evalListComp env expr (Cons (Let Nothing b e) qs)
-  Gen _ b (Binary Nothing (Tuple Colon _) e es)  -> do
+  Gen _ b (Binary _ (Tuple Colon _) e es)  -> do
     listcomp1 <- evalListComp env expr (Cons (Let Nothing b e) qs)
     listcomp2 <- pure $ ListComp Nothing expr (Cons (Gen Nothing b es) qs)
     case listcomp1 of

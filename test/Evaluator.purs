@@ -141,7 +141,10 @@ runTests = do
   eval1test "lambda2" "(\\x y -> [0, x, y, x + y]) 1 2" "[0, 1, 2, 1 + 2]"
   eval1test "string1" "\"as\" ++ \"df\"" "\"asdf\""
   eval1test "string2" "'a' : \"sdf\"" "\"asdf\""
-  -- eval1test "listComp1" "[x | x <- [1..10]]" "1 : [x | x <- [2..10]]"
+  eval1test "listComp1" "[x | x <-      [1..10]]"      "[x | x <- (1 : [2..10])]"
+  eval1test "listComp2" "[x | x <- (1 : [2..10])]" "1 : [x | x <-      [2..10]]"
+  eval1test "listComp3" "[x | x <-      [2..10]]"      "[x | x <- (2 : [3..10])]"
+  eval1test "listComp4" "[x | x <- (2 : [3..10])]" "2 : [x | x <-      [3..10]]"
 
 
   eval1EnvTest "double_func" "double x = x + x" "double 10" "10 + 10"
