@@ -172,8 +172,9 @@ showExprIn expr env history container histContainer = do
   -- Try to infer the types of the environment.
   -- doWithJust (buildTypeEnvironment expr env) \typedEnv -> do
     -- Try to infer the type of the given expression.
-    doWithJust (typeCheckExpression preludeTyped expr) \typedExpr ->
-      buildDivTreeFromExpression typedExpr env history container histContainer
+    -- doWithJust (typeCheckExpression preludeTyped expr) \typedExpr ->
+      -- buildDivTreeFromExpression typedExpr env history container histContainer
+    buildDivTreeFromExpression expr env history container histContainer
 
 stringToEnv :: String -> Eval.Env
 stringToEnv str = case Parser.parseDefs str of
