@@ -148,6 +148,19 @@ testInferExprWithPrelude name expressionString expected = case parseExpr express
   Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
+    
+
+-- | Infer the type of the given expression in the context of a custom prelude.
+testInferExprWithCustomPrelude :: String -> String -> String -> Type -> Test Unit
+testInferExprWithCustomPrelude name prelude expressionString expected =
+  case parseDefs prelude of
+    Left parseError -> reportParseError name parseError
+    Right parsedPrelude ->
+      case parseExpr expressionString of
+        Left parseError -> reportParseError name parseError
+        Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
+          Left typeError -> reportTypeError name typeError
+          Right t -> compareTypes name expected t
 
 -- | Test type inference on expression trees, given an expression string as well as the expected
 -- | resulting typed tree.
@@ -739,3 +752,36 @@ runTests = do
     )
 
   partiallyTypedExprTests
+  adtTests
+
+adtPrelude :: String
+adtPrelude = """
+data Unit = Unit
+
+data Bool = T | F
+
+useless T = Unit
+useless F = Unit
+"""
+
+adtTests :: Test Unit
+adtTests = do
+  testInferExprWithCustomPrelude "adt-prelude-1"
+    adtPrelude
+    "Unit"
+    (TTypeCons "Unit" Nil)
+
+  testInferExprWithCustomPrelude "adt-prelude-2"
+    adtPrelude
+    "T"
+    (TTypeCons "Bool" Nil)
+
+  testInferExprWithCustomPrelude "adt-prelude-3"
+    adtPrelude
+    "F"
+    (TTypeCons "Bool" Nil)
+
+  testInferExprWithCustomPrelude "adt-prelude-4"
+    adtPrelude
+    "useless"
+    (TypArr (TTypeCons "Bool" Nil) (TTypeCons "Unit" Nil))
