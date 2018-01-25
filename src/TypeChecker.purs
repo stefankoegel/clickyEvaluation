@@ -799,7 +799,14 @@ makeBindingEnv binding = case binding of
     let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
     pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
 
-  Lit _ atom@(Constr name) -> unsafeUndef "makeBindingEnv... Lit atom@(Constr name)"
+  Lit _ atom@(Constr name) -> do
+    mt <- lookupEnv name
+    t <- case mt of
+        -- TODO find some more suitable error type (but this will do for now)
+         Nothing -> Ex.throwError (UnboundVariable name)
+         Just t  -> pure t
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) t
+    pure $ Triple t Nil c
 
   ConsLit _ b1 b2 -> do
     Triple t1 m1 c1 <- makeBindingEnvPartial b1
