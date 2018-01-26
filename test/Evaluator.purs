@@ -231,7 +231,7 @@ runTests = do
   evalPreludeTest "arithmetic_sequences_3" "length [ 7 * 7, 8 * 8 .. 42 * 42]" "115"
   evalPreludeTest "arithmetic_sequences_5" "sum $ take 100 [500 ..]" "54950"
   evalPreludeTest "arithmetic_sequences_6" "[1, -1 .. 0]" "[1]"
-  evalPreludeTest "arithmetic_sequences_7" "sum [10, 9 .. -10]" "0"
+  evalPreludeTest "! arithmetic_sequences_7" "sum [10, 9 .. -10]" "0"
   evalPreludeTest "arithmetic_sequences_8" "[True .. False]" "[]"
   evalPreludeTest "arithmetic_sequences_9" "[True, False ..]" "[True, False]"
   evalPreludeTest "arithmetic_sequences_11" "[False, True ..]" "[False, True]"
