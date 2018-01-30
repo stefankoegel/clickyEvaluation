@@ -8,10 +8,10 @@ import Data.Array as Array
 import Data.Char as Char
 import Data.Either (Either(..))
 import Data.Foldable (intercalate, fold, foldl, foldr)
-import Data.List (List(..), (:), concat, unzip, zip)
+import Data.List (List(..), (:), concat, unzip, zip, last)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, isJust)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Set as Set
 import Data.String as String
 import Data.Traversable (traverse)
@@ -25,7 +25,7 @@ import Prelude (
 import AST
 import AST as AST
 
-import JSHelpers (unsafeUndef)
+import JSHelpers (unsafeUndef, unsafeLog)
 
 ---------------------------------------------------------------------------------------------------
 -- | Data Types and Helper Functions                                                             --
@@ -41,6 +41,14 @@ unzip3 = foldr
             Triple (a : as) (b : bs) (c : cs))
          (Triple Nil Nil Nil)
 
+uncurry3 :: forall a b c d. (a -> b -> c -> d) -> (Triple a b c -> d)
+uncurry3 f (Triple x y z) = f x y z
+
+zip3 :: forall a b c. List a -> List b -> List c -> List (Triple a b c)
+zip3 Nil _ _ = Nil
+zip3 _ Nil _ = Nil
+zip3 _ _ Nil = Nil
+zip3 (Cons x xs) (Cons y ys) (Cons z zs) = Cons (Triple x y z) (zip3 xs ys zs)
 -- +--------------+
 -- | Type Schemes |
 -- +--------------+
@@ -572,7 +580,6 @@ infer expr
 -- | called by `infer`, which checks for already present type information.
 infer' :: IndexedTypeTree -> Infer (Tuple Type Constraints)
 infer' ex = case ex of
-
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
   Atom _ atom@(AInt _) -> returnWithConstraint ex intType
@@ -802,7 +809,7 @@ makeBindingEnv binding = case binding of
   Lit _ atom@(Constr name) -> do
     mt <- lookupEnv name
     t <- case mt of
-        -- TODO find some more suitable error type (but this will do for now)
+        -- TODO: find some more suitable error type (but this will do for now)
          Nothing -> Ex.throwError (UnboundVariable name)
          Just t  -> pure t
     let c = setSingleTypeConstraintFor' (bindingIndex binding) t
@@ -825,10 +832,30 @@ makeBindingEnv binding = case binding of
     let c = setSingleTypeConstraintFor' (bindingIndex binding) (TTuple ts)
     pure $ Triple (TTuple ts) (concat ms) (foldConstraints cs <+> c)
 
-  -- TODO
-  ConstrLit _ _ -> unsafeUndef "makeBindingEnv ... ConstrLit _ _ ->"
+  ConstrLit _ cnstr -> case cnstr of
+    PrefixDataConstr name _ bs -> do
+      Triple ts ms cs2 <- unzip3 <$> traverse makeBindingEnvPartial bs
+      mt <- lookupEnv name
+      t <- case mt of
+        -- TODO: find some more suitable error type (but this will do for now)
+        Nothing -> Ex.throwError (UnboundVariable name)
+        Just t -> pure t
+      let cs1 = map
+            (uncurry3 setTypeConstraintFor')
+            (zip3 (map bindingIndex bs) (typToList t) ts)
+      case last (typToList t) of
+        Nothing -> unsafeCrashWith "This should not have happened..."
+        Just t -> do
+          pure $ Triple
+            t
+            (concat ms)
+            (foldConstraints cs1 <+> foldConstraints cs2)
+
+    InfixDataConstr _ _ _ _ _ -> unsafeCrashWith "InfixDataConstr not supported yet"
 
   where
+  typToList (TypArr t1 t2) = Cons t1 (typToList t2)
+  typToList t = Cons t Nil
   -- Go through the list of given types and set constraints for every to elements of the list.
   setListConstraints Nil = pure emptyConstraints
   setListConstraints (t:Nil) = do
@@ -839,6 +866,7 @@ makeBindingEnv binding = case binding of
     let c = setConstraintFor' (bindingIndex binding) t1 t2 <+> cs
     pure c
 
+  -- TODO: Use Applicative
   -- Given a list of types occurring in a list, determine the list type (choose the first element).
   listType Nil = fresh >>= \tv -> pure $ TList tv
   listType (t:_) = pure $ TList t
@@ -946,6 +974,17 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
       returnAs (fold ms) (foldConstraints cs) listType
     _ -> reportMismatch
 
+  ConstrLit _ constr -> case constr of
+    PrefixDataConstr n _ bs -> case expectConstrType scheme of
+      Just constrType@(TTypeCons n' ts) -> do
+        Tuple ms cs <- unzip <$> traverse (\(Tuple binding t) ->
+          mapSchemeOnTVarMappingsPartial binding (toScheme t))
+          (zip bs ts)
+        returnAs (fold ms) (foldConstraints cs) constrType
+      _ -> reportMismatch
+    InfixDataConstr _ _ _ _ _ -> unsafeUndef $ "InfixDataConstrs not supported yet"
+
+
   _ -> pure $ Tuple Nil emptyConstraints
   where
   -- Set a type constraint for the current binding.
@@ -962,6 +1001,9 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
   expectListType _ = Nothing
   expectTupleType (Forall tvs (TTuple ts)) = Just $ TTuple ts
   expectTupleType _ = Nothing
+  expectConstrType (Forall tvs (TTypeCons n ts)) = Just $ TTypeCons n ts
+  expectConstrType _ = Nothing
+  toScheme t = Forall typeVariables t
   toScheme t = Forall typeVariables t
   filteredScheme (Forall tvs t) = (Forall (commonFreeTVars tvs t) t)
   schemeType (Forall tvs t) = t
@@ -1110,6 +1152,15 @@ unifies (TTuple (a:as)) (TTuple (b:bs)) = do
   s2 <- unifies a b
   pure $ s1 `compose` s2
 unifies (TTuple Nil) (TTuple Nil) = pure nullSubst
+unifies t1@(TTypeCons n1 (p1:ps1)) t2@(TTypeCons n2 (p2:ps2))
+  | n1 == n2 = do
+      s1 <- unifies (TTypeCons n1 ps1) (TTypeCons n2 ps2)
+      s2 <- unifies p1 p2
+      pure $ s1 `compose` s2
+  | otherwise = Left $ normalizeTypeError $ UnificationFail t1 t2
+unifies t1@(TTypeCons n1 Nil) t2@(TTypeCons n2 Nil)
+  | n1 == n2 = pure nullSubst
+  | otherwise = Left $ normalizeTypeError $ UnificationFail t1 t2
 unifies UnknownType t = pure nullSubst
 unifies t UnknownType = pure nullSubst
 unifies t1 t2 = Left $ normalizeTypeError $ UnificationFail t1 t2

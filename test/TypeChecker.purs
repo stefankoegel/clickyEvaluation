@@ -70,6 +70,15 @@ reportTypeError testName typeError = tell' $ "Type inference failed in test case
   <> "Encountered type error: "
   <> prettyPrintTypeError typeError
 
+reportTypeErrorWithNote :: String -> TypeError -> String -> Test Unit
+reportTypeErrorWithNote testName typeError note =
+  tell' $ "Type inference failed in test case `"
+    <> testName <> "`:\n"
+    <> "Encountered Type error: "
+    <> prettyPrintTypeError typeError
+    <> "Additional Note: \n"
+    <> note
+
 -- | Compare the given two types and report an error if they are not equal.
 compareTypes :: String -> Type -> Type -> Test Unit
 compareTypes testName expected actual = if expected == actual
@@ -77,6 +86,14 @@ compareTypes testName expected actual = if expected == actual
   else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
                "Expected type: " <> prettyPrintType expected <> "\n" <>
                "Actual type: " <> prettyPrintType actual
+
+compareTypesWithNote :: String -> Type -> Type -> String -> Test Unit
+compareTypesWithNote testName expected actual note = if expected == actual
+  then pure unit
+  else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
+               "Expected type: " <> prettyPrintType expected <> "\n" <>
+               "Actual type: " <> prettyPrintType actual <> "\n" <>
+               "Additional note: \n" <> note
 
 -- | Compare the given type errors and report an error if they are not equal.
 compareTypeError :: String -> TypeError -> TypeError -> Test Unit
@@ -159,7 +176,8 @@ testInferExprWithCustomPrelude name prelude expressionString expected =
       case parseExpr expressionString of
         Left parseError -> reportParseError name parseError
         Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
-          Left typeError -> reportTypeError name typeError
+          Left typeError -> do
+            reportTypeError name typeError
           Right t -> compareTypes name expected t
 
 -- | Test type inference on expression trees, given an expression string as well as the expected
@@ -762,26 +780,61 @@ data Bool = T | F
 
 useless T = Unit
 useless F = Unit
+
+data Tuple a b = Tuple a b
+
+tuple a b = (a,b)
+
+fst (Tuple a b) = a
+snd (Tuple a b) = b
 """
+
 
 adtTests :: Test Unit
 adtTests = do
-  testInferExprWithCustomPrelude "adt-prelude-1"
+  testInferExprWithCustomPrelude "adt-0-ary-1"
     adtPrelude
     "Unit"
     (TTypeCons "Unit" Nil)
 
-  testInferExprWithCustomPrelude "adt-prelude-2"
+  testInferExprWithCustomPrelude "adt-0-ary-2"
     adtPrelude
     "T"
     (TTypeCons "Bool" Nil)
 
-  testInferExprWithCustomPrelude "adt-prelude-3"
+  testInferExprWithCustomPrelude "adt-0-ary-3"
     adtPrelude
     "F"
     (TTypeCons "Bool" Nil)
 
-  testInferExprWithCustomPrelude "adt-prelude-4"
+  testInferExprWithCustomPrelude "adt-0-ary-4"
     adtPrelude
     "useless"
     (TypArr (TTypeCons "Bool" Nil) (TTypeCons "Unit" Nil))
+
+  testInferExprWithCustomPrelude "adt-params-1-1"
+    adtPrelude
+    "fst (Tuple T F)"
+    (TTypeCons "Bool" Nil)
+
+  testInferExprWithCustomPrelude "adt-params-1-2"
+    adtPrelude
+    "snd (Tuple T F)"
+    (TTypeCons "Bool" Nil)
+
+  testInferExprWithCustomPrelude "adt-params-1-3"
+    adtPrelude
+    "snd (Tuple 1 2)"
+    intType
+
+  testInferExprWithCustomPrelude "adt-params-2-1"
+    adtPrelude
+    "Tuple"
+    (TypArr
+      (TypVar "a")
+      (TypArr
+        (TypVar "b")
+        (TTypeCons "Tuple"
+          (Cons (TypVar "a")
+            (Cons (TypVar "b") Nil)))))
+

@@ -26,3 +26,5 @@ foreign import showTypes :: forall eff. Eff (dom:: DOM | eff) Unit
 foreign import isChecked :: forall eff. JQuery -> Eff (dom :: DOM | eff) Boolean
 
 foreign import unsafeUndef :: forall a. String -> a
+
+foreign import unsafeLog :: forall a. String -> a
