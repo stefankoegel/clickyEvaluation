@@ -827,6 +827,7 @@ adtTests = do
     "snd (Tuple 1 2)"
     intType
 
+
   testInferExprWithCustomPrelude "adt-params-1-4"
     adtPrelude
     "fst"
@@ -840,6 +841,18 @@ adtTests = do
     (TypArr
       (TTypeCons "Tuple" (TypVar "a" : TypVar "b" : Nil))
       (TypVar "b"))
+
+  testInferExprWithCustomPrelude "adt-params-1-6"
+    adtPrelude
+    "Tuple 1 2"
+    (TTypeCons "Tuple" (intType : intType : Nil))
+
+  testInferExprWithCustomPrelude "adt-params-1-7"
+    adtPrelude
+    "Tuple 1"
+    (TypArr
+      (TypVar "a")
+      (TTypeCons "Tuple" (intType : TypVar "a" : Nil)))
 
   testInferExprWithCustomPrelude "adt-params-2-1"
     adtPrelude
