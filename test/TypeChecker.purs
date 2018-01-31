@@ -14,7 +14,10 @@ import Data.Either (Either(..))
 import Data.List (List(..), (:))
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..), fst)
+import Data.Foldable (intercalate)
 import Text.Parsing.Parser (ParseError, parseErrorMessage)
+
+import Control.Semigroupoid ((>>>), (<<<))
 
 import Test.Utils (Test, tell)
 
@@ -178,7 +181,7 @@ testInferExprWithCustomPrelude name prelude expressionString expected =
         Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
           Left typeError -> do
             reportTypeError name typeError
-          Right t -> compareTypes name expected t
+          Right t -> compareTypes name expected
 
 -- | Test type inference on expression trees, given an expression string as well as the expected
 -- | resulting typed tree.
@@ -787,6 +790,8 @@ tuple a b = (a,b)
 
 fst (Tuple a b) = a
 snd (Tuple a b) = b
+
+data Id a = Id a
 """
 
 
@@ -854,6 +859,11 @@ adtTests = do
       (TypVar "a")
       (TTypeCons "Tuple" (intType : TypVar "a" : Nil)))
 
+  testInferExprWithCustomPrelude "adt-params-1-8"
+    adtPrelude
+    "Tuple Unit Unit"
+    (TTypeCons "Tuple"  (TTypeCons "Unit" Nil:TTypeCons "Unit" Nil:Nil))
+
   testInferExprWithCustomPrelude "adt-params-2-1"
     adtPrelude
     "Tuple"
@@ -864,4 +874,9 @@ adtTests = do
         (TTypeCons "Tuple"
           (Cons (TypVar "a")
             (Cons (TypVar "b") Nil)))))
+
+  testInferExprWithCustomPrelude "adt-params-2-2"
+    adtPrelude
+    "Id"
+    (TypArr (TypVar "a") (TTypeCons "Id" (TypVar "a":Nil)))
 
