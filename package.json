@@ -12,6 +12,7 @@
   "scripts": {
     "postinstall": "pulp --version && bower --version && bower update",
     "build": "pulp --version && pulp build --to html/libs/Main.js",
+    "repl": "pulp psci",
     "test": "pulp test",
     "watch": "pulp -w test"
   }
