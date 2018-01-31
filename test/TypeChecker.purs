@@ -181,7 +181,10 @@ testInferExprWithCustomPrelude name prelude expressionString expected =
         Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
           Left typeError -> do
             reportTypeError name typeError
-          Right t -> compareTypes name expected
+          Right t -> compareTypesWithNote name expected t
+            (case TC.ppTypeEnv <$> TC.tryInferEnvironment parsedPrelude of
+              Left msg -> show msg
+              Right msg -> msg)
 
 -- | Test type inference on expression trees, given an expression string as well as the expected
 -- | resulting typed tree.
@@ -190,10 +193,28 @@ testInferTT' name unparsedTree expectedTypeTree = case parseExpr unparsedTree of
   Left parseError -> reportParseError name parseError
   Right expression -> testInferTT name expression expectedTypeTree
 
+testInferTTWithCustomPrelude' :: String -> String -> String -> TypeTree -> Test Unit
+testInferTTWithCustomPrelude' name prelude unparsedTree expectedTypeTree =
+  case parseDefs prelude of
+    Left parseError -> reportParseError name parseError
+    Right parsedPrelude -> case parseExpr unparsedTree of
+      Left parseError -> reportParseError name parseError
+      Right expression -> testInferTTWithCustomPrelude name parsedPrelude expression expectedTypeTree
+
 -- | Test type inference on expression trees. Here not only the expected type of the whole
 -- | expression is checked, but also the type of every subexpression.
 testInferTT :: String -> TypeTree -> TypeTree -> Test Unit
 testInferTT name untypedTree expectedTypedTree =
+  case TC.tryInferExprInContext parsedPrelude untypedTree of
+    Left typeError -> reportTypeError name typeError
+    Right typedTree -> if expectedTypedTree == typedTree
+      then pure unit
+      else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+                   "Expected type tree: " <> show expectedTypedTree <> "\n" <>
+                   "Actual type tree: " <> show typedTree <> "\n"
+
+testInferTTWithCustomPrelude :: String -> List Definition -> TypeTree -> TypeTree -> Test Unit
+testInferTTWithCustomPrelude name parsedPrelude untypedTree expectedTypedTree =
   case TC.tryInferExprInContext parsedPrelude untypedTree of
     Left typeError -> reportTypeError name typeError
     Right typedTree -> if expectedTypedTree == typedTree
@@ -792,11 +813,23 @@ fst (Tuple a b) = a
 snd (Tuple a b) = b
 
 data Id a = Id a
+
+id a = a
 """
 
 
 adtTests :: Test Unit
 adtTests = do
+  testInferTTWithCustomPrelude' "adt-params-3-1"
+    adtPrelude
+    "Id"
+    (Atom
+      (Just
+        (TypArr
+          (TypVar "a")
+          (TTypeCons "Id" (TypVar "a":Nil))))
+      (Constr "Id"))
+
   testInferExprWithCustomPrelude "adt-0-ary-1"
     adtPrelude
     "Unit"
@@ -832,7 +865,6 @@ adtTests = do
     "snd (Tuple 1 2)"
     intType
 
-
   testInferExprWithCustomPrelude "adt-params-1-4"
     adtPrelude
     "fst"
@@ -862,7 +894,7 @@ adtTests = do
   testInferExprWithCustomPrelude "adt-params-1-8"
     adtPrelude
     "Tuple Unit Unit"
-    (TTypeCons "Tuple"  (TTypeCons "Unit" Nil:TTypeCons "Unit" Nil:Nil))
+    (TTypeCons "Tuple" (TTypeCons "Unit" Nil:TTypeCons "Unit" Nil:Nil))
 
   testInferExprWithCustomPrelude "adt-params-2-1"
     adtPrelude
@@ -879,4 +911,9 @@ adtTests = do
     adtPrelude
     "Id"
     (TypArr (TypVar "a") (TTypeCons "Id" (TypVar "a":Nil)))
+
+  testInferExprWithCustomPrelude "adt-params-2-2"
+    adtPrelude
+    "Id id"
+    (TTypeCons "Id" (TypArr (TypVar "a") (TypVar "a"):Nil))
 
