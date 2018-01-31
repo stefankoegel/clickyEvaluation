@@ -27,6 +27,7 @@ import AST as AST
 
 import JSHelpers (unsafeUndef, unsafeLog)
 
+
 ---------------------------------------------------------------------------------------------------
 -- | Data Types and Helper Functions                                                             --
 ---------------------------------------------------------------------------------------------------
@@ -844,18 +845,21 @@ makeBindingEnv binding = case binding of
             (uncurry3 setTypeConstraintFor')
             (zip3 (map bindingIndex bs) (typToList t) ts)
       case last (typToList t) of
-        Nothing -> unsafeCrashWith "This should not have happened..."
-        Just t -> do
-          pure $ Triple
-            t
-            (concat ms)
-            (foldConstraints cs1 <+> foldConstraints cs2)
+        Just t@(TTypeCons tname ts') -> do
+          let c3 = setSingleTypeConstraintFor' (bindingIndex binding) t
+          let cs4 = map
+                (uncurry3 setTypeConstraintFor')
+                (zip3 (map bindingIndex bs) (typToList t) ts')
+          let cs = foldConstraints cs1 <+> foldConstraints cs2 <+> c3 <+> foldConstraints cs4
+          pure $ Triple t (concat ms) cs
+        _ -> unsafeCrashWith "This should not have happened..."
 
     InfixDataConstr _ _ _ _ _ -> unsafeCrashWith "InfixDataConstr not supported yet"
 
   where
   typToList (TypArr t1 t2) = Cons t1 (typToList t2)
   typToList t = Cons t Nil
+
   -- Go through the list of given types and set constraints for every to elements of the list.
   setListConstraints Nil = pure emptyConstraints
   setListConstraints (t:Nil) = do
