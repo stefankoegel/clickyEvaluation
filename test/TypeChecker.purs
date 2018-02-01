@@ -840,6 +840,8 @@ id a = a
 tuple' a = Tuple a a
 """
 
+myTuple idx l r = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Tuple" 2 (l:r:Nil))
+myTupleT l r = TTypeCons "Tuple" (l:r:Nil)
 
 adtTests :: Test Unit
 adtTests = do
@@ -1008,4 +1010,23 @@ adtTests = do
           (TTypeCons "Id" (TypVar "id":Nil))))
     :Nil)
     
+  testMapSchemeOnTVarMappings "adt-map-scheme-1-5"
+    -- The scheme: forall t_4. Tuple (t_4 -> t_4) (Tuple Int Bool)
+    (Forall ("t_4" : Nil)
+      (myTupleT
+        (typVarArrow "t_4" "t_4")
+        (myTupleT intType boolType)))
+    -- The binding: (f, (n, b))
+    (myTuple 1
+        (Lit (Tuple Nothing 2) (Name "f"))
+        (myTuple 2
+          (Lit (Tuple Nothing 4) (Name "n"))
+          (Lit (Tuple Nothing 5) (Name "b"))))
+    -- The expected result: { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }
+    (
+      (Tuple "f" (Forall ("t_4" : Nil) (typVarArrow "t_4" "t_4"))) :
+      (Tuple "n" (Forall Nil intType)) :
+      (Tuple "b" (Forall Nil boolType)) :
+      Nil
+    )
 
