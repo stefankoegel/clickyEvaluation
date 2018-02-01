@@ -834,32 +834,29 @@ makeBindingEnv binding = case binding of
     pure $ Triple (TTuple ts) (concat ms) (foldConstraints cs <+> c)
 
   ConstrLit _ cnstr -> case cnstr of
-    PrefixDataConstr name _ bs -> do
-      Triple ts ms cs2 <- unzip3 <$> traverse makeBindingEnvPartial bs
-      mt <- lookupEnv name
-      t <- case mt of
-        -- TODO: find some more suitable error type (but this will do for now)
-        Nothing -> Ex.throwError (UnboundVariable name)
+    PrefixDataConstr constrName _ args -> do
+      mt <- lookupEnv constrName
+      -- collect information about the constructor
+      tConstr <- case mt of
+        -- TODO: find a more suitable error type (but this will do for now)
+        Nothing -> Ex.throwError (UnboundVariable constrName)
         Just t -> pure t
-      let cs1 = map
-            (uncurry3 setTypeConstraintFor')
-            (zip3 (map bindingIndex bs) (typToList t) ts)
-      case last (typToList t) of
-        Just t@(TTypeCons tname ts') -> do
-          let c3 = setSingleTypeConstraintFor' (bindingIndex binding) t
-          let cs4 = map
-                (uncurry3 setTypeConstraintFor')
-                (zip3 (map bindingIndex bs) (typToList t) ts')
-          let cs = foldConstraints cs1 <+> foldConstraints cs2 <+> c3 <+> foldConstraints cs4
-          pure $ Triple t (concat ms) cs
-        _ -> unsafeCrashWith "This should not have happened..."
+        -- collect information about the constructor's arguments
+      Triple tArgs mArgs cArgs' <- unzip3 <$> traverse makeBindingEnvPartial args
+      let cArgs = foldConstraints cArgs'
+      tResult <- fresh
+      -- match constructor type with the argument type
+      let cConstr = setConstraintFor' (bindingIndex binding) tConstr (toArrowType (tArgs <> (tResult:Nil)))
+      -- Result Type
+      let cBinding = setSingleTypeConstraintFor' (bindingIndex binding) tResult
+      pure $ Triple tResult (concat mArgs) (cArgs <+> cConstr <+> cBinding)
+
+
+
 
     InfixDataConstr _ _ _ _ _ -> unsafeCrashWith "InfixDataConstr not supported yet"
 
   where
-  typToList (TypArr t1 t2) = Cons t1 (typToList t2)
-  typToList t = Cons t Nil
-
   -- Go through the list of given types and set constraints for every to elements of the list.
   setListConstraints Nil = pure emptyConstraints
   setListConstraints (t:Nil) = do
