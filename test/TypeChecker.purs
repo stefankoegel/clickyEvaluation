@@ -253,6 +253,26 @@ testMapSchemeOnTVarMappings name scheme binding expected =
         "Expected type variable mapping: " <> TC.ppTVarMappings expected <> "\n" <>
         "Actual type variable mapping: " <> TC.ppTVarMappings result <> "\n"
 
+-- | Test the function `mapSchemeOnTVarMappings`.
+testMapSchemeOnTVarMappings' :: String -> String -> Scheme -> IndexedTypedBinding
+                            -> TVarMappings -> Test Unit
+testMapSchemeOnTVarMappings' name prelude scheme binding expected =
+  case parseDefs prelude of
+    Left parseError -> reportParseError name parseError
+    Right parsedPrelude -> case TC.tryInferEnvironment parsedPrelude of
+      Left typeError -> reportTypeError name typeError
+      Right env -> case TC.runInferWith env true (fst <$> TC.mapSchemeOnTVarMappings binding scheme) of
+        Left typeError -> reportTypeError name typeError
+        Right result -> if result == expected
+          then pure unit
+          else tell' $
+            "The function `mapSchemeOnTVarMappings` failed in test case `" <> name <> "`:\n" <>
+            "Scheme: " <> TC.ppScheme scheme <> "\n" <>
+            "Binding: " <> prettyPrintBinding binding <> "\n" <>
+            "Expected type variable mapping: " <> TC.ppTVarMappings expected <> "\n" <>
+            "Actual type variable mapping: " <> TC.ppTVarMappings result <> "\n" <>
+            "Environment:\n" <> TC.ppTypeEnv env <> "\n"
+
 -- | Typed type tree representing `[1]`.
 listOne :: TypeTree
 listOne = List (Just $ typConList "Int") (Atom (Just $ TypCon "Int") (AInt 1) : Nil)
@@ -762,11 +782,11 @@ runTests = do
     (Lit (Tuple Nothing 0) (Name "x"))
     (Tuple "x" (Forall Nil intType) : Nil)
 
-  -- Map scheme `(forall t_4. t_4 -> t_4, (Int, Bool)) on `(f, (n, b))`. We expect the mapping
+  -- Map scheme `forall t_4. (t_4 -> t_4, (Int, Bool)) on `(f, (n, b))`. We expect the mapping
   -- { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }.
   testMapSchemeOnTVarMappings
     "Map scheme on tuple"
-    -- The scheme: (forall t_4. t_4 -> t_4, (Int, Bool))
+    -- The scheme: forall t_4. (t_4 -> t_4, (Int, Bool))
     (Forall ("t_4" : Nil)
       (TTuple (typVarArrow "t_4" "t_4" :
         (TTuple (intType : boolType : Nil)) : Nil))
@@ -793,6 +813,7 @@ runTests = do
       Nil
     )
 
+
   partiallyTypedExprTests
   adtTests
 
@@ -815,6 +836,8 @@ snd (Tuple a b) = b
 data Id a = Id a
 
 id a = a
+
+tuple' a = Tuple a a
 """
 
 
@@ -912,8 +935,77 @@ adtTests = do
     "Id"
     (TypArr (TypVar "a") (TTypeCons "Id" (TypVar "a":Nil)))
 
-  testInferExprWithCustomPrelude "adt-params-2-2"
+  testInferExprWithCustomPrelude "adt-params-2-3"
     adtPrelude
     "Id id"
     (TTypeCons "Id" (TypArr (TypVar "a") (TypVar "a"):Nil))
+
+  testInferExprWithCustomPrelude "adt-params-2-4"
+    adtPrelude
+    "tuple'"
+    (TypArr (TypVar "a") (TTypeCons "Tuple" (TypVar "a":TypVar "a":Nil)))
+
+  testInferExprWithCustomPrelude "adt-params-2-5"
+    adtPrelude
+    "tuple' 1"
+    (TTypeCons "Tuple" (intType:intType:Nil))
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-1"
+    adtPrelude
+    (Forall ("t_1":Nil)
+      (TTypeCons "Id" (TypVar "t_1":Nil)))
+    (ConstrLit
+      (Tuple Nothing 0)
+      (PrefixDataConstr "Id" 1
+        (Lit
+          (Tuple Nothing 1)
+          (Name "x")
+        :Nil)))
+    (Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
+    :Nil)
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-2"
+    adtPrelude
+    (Forall Nil
+      (TTypeCons "Id" (TTypeCons "Unit" Nil:Nil)))
+    (ConstrLit
+      (Tuple Nothing 0)
+      (PrefixDataConstr "Id" 1
+        (Lit
+          (Tuple Nothing 1)
+          (Name "x")
+        :Nil)))
+    (Tuple "x" (Forall Nil (TTypeCons "Unit" Nil))
+    :Nil)
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-3"
+    adtPrelude
+    (Forall Nil
+    (TTypeCons "Id" (intType:Nil)))
+    (ConstrLit
+      (Tuple Nothing 0)
+      (PrefixDataConstr "Id" 1
+        (Lit
+          (Tuple Nothing 1)
+          (Name "x")
+        :Nil)))
+    (Tuple "x" (Forall Nil intType)
+    :Nil)
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-4"
+    adtPrelude
+    (Forall ("id":Nil)
+      (TypArr
+        (TypVar "id")
+        (TTypeCons "Id" (TypVar "id":Nil))))
+
+    (Lit (Tuple Nothing 0) (Name "id"))
+
+    (Tuple "id"
+      (Forall ("id":Nil)
+        (TypArr
+          (TypVar "id")
+          (TTypeCons "Id" (TypVar "id":Nil))))
+    :Nil)
+    
 
