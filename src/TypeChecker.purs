@@ -50,6 +50,11 @@ zip3 Nil _ _ = Nil
 zip3 _ Nil _ = Nil
 zip3 _ _ Nil = Nil
 zip3 (Cons x xs) (Cons y ys) (Cons z zs) = Cons (Triple x y z) (zip3 xs ys zs)
+
+last' :: forall a. List a -> a
+last' Nil = unsafeCrashWith "last': empty list"
+last' (x:Nil) = x
+last' (_:xs) = last' xs
 -- +--------------+
 -- | Type Schemes |
 -- +--------------+
@@ -281,6 +286,10 @@ toArrowType :: List Type -> Type
 toArrowType Nil = unsafeCrashWith "Function `toArrowType` must not be called with an empty list."
 toArrowType (t : Nil) = t
 toArrowType (t:ts) = t `TypArr` (toArrowType ts)
+
+fromArrowType :: Type -> List Type
+fromArrowType (TypArr t t') = t : fromArrowType t'
+fromArrowType t = t : Nil
 
 -- +------------------+
 -- | Type Constraints |
@@ -976,12 +985,18 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
     _ -> reportMismatch
 
   ConstrLit _ constr -> case constr of
-    PrefixDataConstr n _ bs -> case expectConstrType scheme of
-      Just constrType@(TTypeCons n' ts) -> do
-        Tuple ms cs <- unzip <$> traverse (\(Tuple binding t) ->
-          mapSchemeOnTVarMappingsPartial binding (toScheme t))
-          (zip bs ts)
-        returnAs (fold ms) (foldConstraints cs) constrType
+    PrefixDataConstr constrName _ bs -> case expectConstrType scheme of
+      Just constrType@(TTypeCons constrName' ts) -> do
+        mt <- lookupEnv constrName
+        constrType <- case mt of
+          Just t -> pure t
+          Nothing -> Ex.throwError (UnboundVariable constrName)
+        let ts' = fromArrowType constrType
+        Tuple ms cs <- unzip <$> traverse
+          (\(Tuple b t) -> mapSchemeOnTVarMappingsPartial b (toScheme t))
+          (zip bs ts')
+        let c = setConstraintFor' (bindingIndex binding) (last' ts') constrType
+        returnAs (fold ms) (c <+> foldConstraints cs) constrType
       _ -> reportMismatch
     InfixDataConstr _ _ _ _ _ -> unsafeUndef $ "InfixDataConstrs not supported yet"
 
