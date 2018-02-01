@@ -696,7 +696,7 @@ prettyPrintBinding (ConsLit _ b1 b2) = "("
     <> ")"
 prettyPrintBinding (ListLit _ bs) = "[" <> intercalate ", " (map prettyPrintBinding bs) <> "]"
 prettyPrintBinding (NTupleLit _ bs) = "(" <> intercalate ", " (map prettyPrintBinding bs) <> ")"
-prettyPrintBinding (ConstrLit _ (PrefixDataConstr name _ ps)) = "(" <> name <> intercalate " " (map prettyPrintBinding ps) <> ")"
+prettyPrintBinding (ConstrLit _ (PrefixDataConstr name _ ps)) = "(" <> name <> " " <> intercalate " " (map prettyPrintBinding ps) <> ")"
 prettyPrintBinding (ConstrLit _ (InfixDataConstr name _ _ l r)) = "(" <> prettyPrintBinding l <> " " <> name <> " " <> prettyPrintBinding r <> ")"
 
 prettyPrintType :: Type -> String
