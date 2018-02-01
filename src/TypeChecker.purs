@@ -986,7 +986,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
 
   ConstrLit _ constr -> case constr of
     PrefixDataConstr constrName _ bs -> case expectConstrType scheme of
-      Just constrType@(TTypeCons constrName' ts) -> do
+      Just bndType@(TTypeCons constrName' ts) -> do
         mt <- lookupEnv constrName
         constrType <- case mt of
           Just t -> pure t
@@ -995,9 +995,11 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
         Tuple ms cs <- unzip <$> traverse
           (\(Tuple b t) -> mapSchemeOnTVarMappingsPartial b (toScheme t))
           (zip bs ts')
-        let c = setConstraintFor' (bindingIndex binding) (last' ts') constrType
-        returnAs (fold ms) (c <+> foldConstraints cs) constrType
-      _ -> reportMismatch
+
+        let c = setTypeConstraintFor' (bindingIndex binding) (last' ts') bndType
+        returnAs (fold ms) (c <+> foldConstraints cs) bndType
+      _ -> Ex.throwError $ UnknownError $ "TestingStuff " <> ppScheme scheme
+      -- _ -> reportMismatch
     InfixDataConstr _ _ _ _ _ -> unsafeUndef $ "InfixDataConstrs not supported yet"
 
 
@@ -1478,6 +1480,9 @@ normalizeType' t = case t of
   TTuple ts -> do
     ts' <- traverse normalizeType' ts
     pure $ TTuple ts'
+  TTypeCons n ts -> do
+    ts' <- traverse normalizeType' ts
+    pure $ TTypeCons n ts'
   a -> pure a
 
 -- | Use `normalizeType'` on `Maybe Type`.
