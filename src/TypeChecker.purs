@@ -998,8 +998,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
 
         let c = setTypeConstraintFor' (bindingIndex binding) (last' ts') bndType
         returnAs (fold ms) (c <+> foldConstraints cs) bndType
-      _ -> Ex.throwError $ UnknownError $ "TestingStuff " <> ppScheme scheme
-      -- _ -> reportMismatch
+      _ -> reportMismatch
     InfixDataConstr _ _ _ _ _ -> unsafeUndef $ "InfixDataConstrs not supported yet"
 
 
@@ -1021,7 +1020,6 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
   expectTupleType _ = Nothing
   expectConstrType (Forall tvs (TTypeCons n ts)) = Just $ TTypeCons n ts
   expectConstrType _ = Nothing
-  toScheme t = Forall typeVariables t
   toScheme t = Forall typeVariables t
   filteredScheme (Forall tvs t) = (Forall (commonFreeTVars tvs t) t)
   schemeType (Forall tvs t) = t
