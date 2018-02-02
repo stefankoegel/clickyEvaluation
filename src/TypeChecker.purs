@@ -992,14 +992,15 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
           Just t -> pure t
           Nothing -> Ex.throwError (UnboundVariable constrName)
         let ts' = fromArrowType constrType
+            c = setTypeConstraintFor' (bindingIndex binding) (last' ts') bndType
+        uni <- solveConstraints c
         Tuple ms cs <- unzip <$> traverse
           (\(Tuple b t) -> mapSchemeOnTVarMappingsPartial b (toScheme t))
-          (zip bs ts')
+          (zip bs (apply uni.subst ts'))
 
-        let c = setTypeConstraintFor' (bindingIndex binding) (last' ts') bndType
         returnAs (fold ms) (c <+> foldConstraints cs) bndType
       _ -> reportMismatch
-    InfixDataConstr _ _ _ _ _ -> unsafeUndef $ "InfixDataConstrs not supported yet"
+    InfixDataConstr _ _ _ _ _ -> Ex.throwError $ UnknownError "InfixDataConstrs not supported yet"
 
 
   _ -> pure $ Tuple Nil emptyConstraints
