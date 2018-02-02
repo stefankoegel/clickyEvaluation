@@ -1010,7 +1010,8 @@ adtTests = do
           (TTypeCons "Id" (TypVar "id":Nil))))
     :Nil)
     
-  testMapSchemeOnTVarMappings "adt-map-scheme-1-5"
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-5"
+    adtPrelude
     -- The scheme: forall t_4. Tuple (t_4 -> t_4) (Tuple Int Bool)
     (Forall ("t_4" : Nil)
       (myTupleT
