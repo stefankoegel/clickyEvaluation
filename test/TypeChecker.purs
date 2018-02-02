@@ -843,6 +843,9 @@ tuple' a = Tuple a a
 myTuple idx l r = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Tuple" 2 (l:r:Nil))
 myTupleT l r = TTypeCons "Tuple" (l:r:Nil)
 
+myId idx c = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Id" 1 (c:Nil))
+myIdT c = TTypeCons "Id" (c:Nil)
+
 adtTests :: Test Unit
 adtTests = do
   testInferTTWithCustomPrelude' "adt-params-3-1"
@@ -1024,10 +1027,19 @@ adtTests = do
           (Lit (Tuple Nothing 4) (Name "n"))
           (Lit (Tuple Nothing 5) (Name "b"))))
     -- The expected result: { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }
-    (
-      (Tuple "f" (Forall ("t_4" : Nil) (typVarArrow "t_4" "t_4"))) :
-      (Tuple "n" (Forall Nil intType)) :
-      (Tuple "b" (Forall Nil boolType)) :
-      Nil
-    )
+    ( Tuple "f" (Forall ("t_4" : Nil) (typVarArrow "t_4" "t_4"))
+    : Tuple "n" (Forall Nil intType)
+    : Tuple "b" (Forall Nil boolType)
+    : Nil )
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-6"
+    adtPrelude
+    (Forall ("t_1": Nil)
+      (myIdT
+        (myIdT (TypVar "t_1"))))
+    (myId 0
+      (myId 1
+        (Lit (Tuple Nothing 3) (Name "x"))))
+    ( Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
+    : Nil )
 
