@@ -828,6 +828,8 @@ useless F = Unit
 
 data Tuple a b = Tuple a b
 
+data Maybe a = Just a | Nothing
+
 tuple a b = (a,b)
 
 fst (Tuple a b) = a
@@ -845,6 +847,8 @@ myTupleT l r = TTypeCons "Tuple" (l:r:Nil)
 
 myId idx c = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Id" 1 (c:Nil))
 myIdT c = TTypeCons "Id" (c:Nil)
+
+myMaybeT c = TTypeCons "Maybe" (c:Nil)
 
 adtTests :: Test Unit
 adtTests = do
@@ -924,6 +928,28 @@ adtTests = do
     "Tuple Unit Unit"
     (TTypeCons "Tuple" (TTypeCons "Unit" Nil:TTypeCons "Unit" Nil:Nil))
 
+  testInferExprWithCustomPrelude "adt-params-1-9"
+    adtPrelude
+    "Nothing"
+    (myMaybeT (TypVar "a"))
+
+  testInferExprWithCustomPrelude "adt-params-1-10"
+    adtPrelude
+    "Just"
+    (TypArr
+      (TypVar "a")
+      (myMaybeT (TypVar "a")))
+
+  testInferExprWithCustomPrelude "adt-params-1-11"
+    adtPrelude
+    "Just Nothing"
+    (myMaybeT (myMaybeT (TypVar "a")))
+
+  testInferExprWithCustomPrelude "adt-params-1-12"
+    adtPrelude
+    "Just (1,2)"
+    (myMaybeT (TTuple (intType:intType:Nil)))
+
   testInferExprWithCustomPrelude "adt-params-2-1"
     adtPrelude
     "Tuple"
@@ -954,6 +980,17 @@ adtTests = do
     adtPrelude
     "tuple' 1"
     (TTypeCons "Tuple" (intType:intType:Nil))
+
+  testInferExprWithCustomPrelude "adt-params-2-6"
+    adtPrelude
+    "Id Tuple"
+    (myIdT
+      (TypArr
+        (TypVar "a")
+        (TypArr
+          (TypVar "b")
+          (myTupleT (TypVar "a") (TypVar "b")))))
+
 
   testMapSchemeOnTVarMappings' "adt-map-scheme-1-1"
     adtPrelude
