@@ -88,6 +88,9 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expres
     <> "Definitions:\n"
     <> padLeft (show pd)
 
+evalTest :: String -> String -> String -> Test Unit
+evalTest n = evalEnvTest n ""
+
 preludeEnv :: Env
 preludeEnv = defsToEnv parsedPrelude
 
@@ -285,6 +288,15 @@ testsADT = do
     "Foo 1 2"
     "Foo 1 2"
 -}
+  
+  evalTest "constr-section-1"
+    "(:+ 2) 1"
+    "1 :+ 2"
+
+  evalTest "constr-section-2"
+    "(1 :+) 2"
+    "1 :+ 2"
+
   eval1test "constr-5"
     "if True then Foo else Bar"
     "Foo"
