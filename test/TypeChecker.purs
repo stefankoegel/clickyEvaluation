@@ -1102,9 +1102,14 @@ adtTests = do
     :Tuple "y" (Forall ("t_1":Nil) (TypVar "t_1"))
     :Nil)
 
-  testInferExprWithCustomPrelude "adt-infix-params-1-1"
+  testInferExprWithCustomPrelude "adt-infix-params-1-1a"
     adtPrelude
     "1 :+ 1"
+    (myComplexT intType)
+
+  testInferExprWithCustomPrelude "adt-infix-params-1-1b"
+    adtPrelude
+    "(:+) 1 1"
     (myComplexT intType)
 
   testInferExprWithCustomPrelude "adt-infix-params-1-2"
