@@ -849,7 +849,7 @@ makeBindingEnv binding = case binding of
         -- TODO: find a more suitable error type (but this will do for now)
         Nothing -> Ex.throwError (UnboundVariable constrName)
         Just t -> pure t
-        -- collect information about the constructor's arguments
+      -- collect information about the constructor's arguments
       Triple tArgs mArgs cArgs' <- unzip3 <$> traverse makeBindingEnvPartial args
       let cArgs = foldConstraints cArgs'
       tResult <- fresh
@@ -859,10 +859,26 @@ makeBindingEnv binding = case binding of
       let cBinding = setSingleTypeConstraintFor' (bindingIndex binding) tResult
       pure $ Triple tResult (concat mArgs) (cArgs <+> cConstr <+> cBinding)
 
+    InfixDataConstr constrName _ _ l r -> do
+      mt <- lookupEnv constrName
+      -- collect information about the constructor
+      Triple tl tr t <- case mt of
+        -- TODO: find a more suitable error type (but this will do for now)
+        Nothing -> Ex.throwError (UnboundVariable constrName)
+        Just (TypArr l (TypArr r t)) -> pure $ Triple l r t
+        -- TODO: find a more suitable error type (but this will do for now)
+        Just t -> Ex.throwError (UnknownError $ prettyPrintType t <> " can not be the type of " <> constrName)
+      -- collect information about the constructor's arguments
+      Triple tl' ml cl <- makeBindingEnvPartial l
+      Triple tr' mr cr <- makeBindingEnvPartial r
+      tResult <- fresh
+      -- match constructor type with the argument type
+      let cConstr = setConstraintFor' (bindingIndex binding) (TypArr tl (TypArr tr t)) (TypArr tl' (TypArr tr' tResult))
+      -- Result Type
+      let cBinding = setSingleTypeConstraintFor' (bindingIndex binding) tResult
+      pure $ Triple tResult (ml <> mr) (cl <+> cr <+> cConstr <+> cBinding)
 
 
-
-    InfixDataConstr _ _ _ _ _ -> Ex.throwError $ UnknownError "makeBindingEnv: InfixDataConstr not supported yet"
 
   where
   -- Go through the list of given types and set constraints for every to elements of the list.
