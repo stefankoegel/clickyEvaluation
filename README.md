@@ -12,7 +12,7 @@ clicking on them.
 This is intended as a simple learning tool for beginners,
 which shows them how their Haskell code **might** be evaluated.
 
-You can try it [here](http://stefankoegel.github.io/clickyEvaluation/).
+You can try it [here](http://srechenberger.github.io/clickyEvaluation/).
 
 The projects name is a play on *lazy evaluation* and *clicking* to evaluate an expression.
 
