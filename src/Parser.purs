@@ -519,6 +519,8 @@ definition = do
 typeDefinition' :: IndentParser String (List Definition)
 typeDefinition' = compileADTDef <$> typeDefinition
 
+-- TODO: Infix function definition
+
 definitions :: IndentParser String (List Definition)
 definitions = do
   skipWhite
