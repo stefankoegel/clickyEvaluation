@@ -547,7 +547,9 @@ compileDataConstr :: Type -> DataConstr Type -> Definition
 compileDataConstr t (PrefixDataConstr name _ ps) =
   Def name Nil (Atom (Just $ foldr TypArr t ps) (Constr name))
 compileDataConstr t (InfixDataConstr op assoc prec l r) =
-  unsafeUndef "compileDataConstr not yet implemented."
+  Def op Nil (PrefixOp (Just typ) (Tuple (InfixConstr op) (Just typ)))
+ where
+  typ = TypArr l (TypArr r t)
 
 instance functorDataConstr :: Functor DataConstr where
   map f (PrefixDataConstr s i ps) = PrefixDataConstr s i (map f ps)
