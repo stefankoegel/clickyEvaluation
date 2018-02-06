@@ -1090,7 +1090,7 @@ adtTests = do
     ( Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
     : Nil )
 
-  testMapSchemeOnTVarMappings' "adt-infix-map-scheme-1-1"
+  testMapSchemeOnTVarMappings' "adt-infix-map-scheme-1"
     adtPrelude
     (Forall ("t_1": Nil)
       (myComplexT
@@ -1102,27 +1102,32 @@ adtTests = do
     :Tuple "y" (Forall ("t_1":Nil) (TypVar "t_1"))
     :Nil)
 
-  testInferExprWithCustomPrelude "adt-infix-params-1-1a"
+  testInferExprWithCustomPrelude "adt-infix-params-1-1"
     adtPrelude
     "1 :+ 1"
     (myComplexT intType)
 
-  testInferExprWithCustomPrelude "adt-infix-params-1-1b"
+  testInferExprWithCustomPrelude "adt-infix-params-1-2"
     adtPrelude
     "(:+) 1 1"
     (myComplexT intType)
 
-  testInferExprWithCustomPrelude "adt-infix-params-1-2"
+  testInferExprWithCustomPrelude "adt-infix-params-1-3"
+    adtPrelude
+    "(Id 1) :+ (Id 2)"
+    (myComplexT (myIdT intType))
+
+  testInferExprWithCustomPrelude "adt-infix-params-2"
     adtPrelude
     "(1 :+)"
     (TypArr intType (myComplexT intType))
 
-  testInferExprWithCustomPrelude "adt-infix-params-1-3"
+  testInferExprWithCustomPrelude "adt-infix-params-3"
     adtPrelude
     "(:+ 1)"
     (TypArr intType (myComplexT intType))
 
-  testInferExprWithCustomPrelude "adt-infix-params-1-4"
+  testInferExprWithCustomPrelude "adt-infix-params-4"
     adtPrelude
     "(:+)"
     (TypArr
@@ -1130,3 +1135,16 @@ adtTests = do
       (TypArr
         (TypVar "a")
         (myComplexT (TypVar "a"))))
+
+  testInferExprWithCustomPrelude "adt-infix-params-5"
+    adtPrelude
+    "(:+ Id)"
+    (TypArr
+      (TypArr
+        (TypVar "a")
+        (myIdT (TypVar "a")))
+      (myComplexT
+        (TypArr
+          (TypVar "a")
+          (myIdT (TypVar "a")))))
+
