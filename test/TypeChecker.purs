@@ -840,6 +840,9 @@ data Id a = Id a
 id a = a
 
 tuple' a = Tuple a a
+
+data Complex a
+  = a :+ a
 """
 
 myTuple idx l r = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Tuple" 2 (l:r:Nil))
@@ -849,6 +852,13 @@ myId idx c = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Id" 1 (c:Nil))
 myIdT c = TTypeCons "Id" (c:Nil)
 
 myMaybeT c = TTypeCons "Maybe" (c:Nil)
+
+myComplexT c = TTypeCons "Complex" (c:Nil)
+
+myComplex idx a b =
+  ConstrLit
+    (Tuple Nothing idx)
+    (InfixDataConstr ":+" LEFTASSOC 9 a b)
 
 adtTests :: Test Unit
 adtTests = do
@@ -1080,3 +1090,38 @@ adtTests = do
     ( Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
     : Nil )
 
+  testMapSchemeOnTVarMappings' "adt-infix-map-scheme-1-1"
+    adtPrelude
+    (Forall ("t_1": Nil)
+      (myComplexT
+        (TypVar "t_1")))
+    (myComplex 0
+      (Lit (Tuple Nothing 1) (Name "x"))
+      (Lit (Tuple Nothing 2) (Name "y")))
+    (Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
+    :Tuple "y" (Forall ("t_1":Nil) (TypVar "t_1"))
+    :Nil)
+
+  testInferExprWithCustomPrelude "adt-infix-params-1-1"
+    adtPrelude
+    "1 :+ 1"
+    (myComplexT intType)
+
+  testInferExprWithCustomPrelude "adt-infix-params-1-2"
+    adtPrelude
+    "(1 :+)"
+    (TypArr intType (myComplexT intType))
+
+  testInferExprWithCustomPrelude "adt-infix-params-1-3"
+    adtPrelude
+    "(:+ 1)"
+    (TypArr intType (myComplexT intType))
+
+  testInferExprWithCustomPrelude "adt-infix-params-1-4"
+    adtPrelude
+    "(:+)"
+    (TypArr
+      (TypVar "a")
+      (TypArr
+        (TypVar "a")
+        (myComplexT (TypVar "a"))))
