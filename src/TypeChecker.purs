@@ -25,7 +25,6 @@ import Prelude (
 import AST
 import AST as AST
 
-import JSHelpers (unsafeUndef, unsafeLog)
 
 
 ---------------------------------------------------------------------------------------------------
@@ -863,7 +862,7 @@ makeBindingEnv binding = case binding of
 
 
 
-    InfixDataConstr _ _ _ _ _ -> unsafeCrashWith "InfixDataConstr not supported yet"
+    InfixDataConstr _ _ _ _ _ -> Ex.throwError $ UnknownError "makeBindingEnv: InfixDataConstr not supported yet"
 
   where
   -- Go through the list of given types and set constraints for every to elements of the list.
@@ -1000,7 +999,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
 
         returnAs (fold ms) (c <+> foldConstraints cs) bndType
       _ -> reportMismatch
-    InfixDataConstr _ _ _ _ _ -> Ex.throwError $ UnknownError "InfixDataConstrs not supported yet"
+    InfixDataConstr _ _ _ _ _ -> Ex.throwError $ UnknownError "mapSchemeOnTVarMappings: InfixDataConstrs not supported yet"
 
 
   _ -> pure $ Tuple Nil emptyConstraints
