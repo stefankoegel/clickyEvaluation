@@ -1015,7 +1015,21 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
 
         returnAs (fold ms) (c <+> foldConstraints cs) bndType
       _ -> reportMismatch
-    InfixDataConstr _ _ _ _ _ -> Ex.throwError $ UnknownError "mapSchemeOnTVarMappings: InfixDataConstrs not supported yet"
+
+    InfixDataConstr constrName _ _ lArg rArg -> case expectConstrType scheme of
+      Just bndType@(TTypeCons constrName' ts) -> do
+        mt <- lookupEnv constrName
+        Triple lType rType resType <- case mt of
+          Just (TypArr l (TypArr r t)) -> pure $ Triple l r t
+          Just t -> Ex.throwError (UnknownError $ prettyPrintType t <> " can not be the type of " <> constrName)
+          Nothing -> Ex.throwError (UnboundVariable constrName)
+        let c = setTypeConstraintFor' (bindingIndex binding) resType bndType
+        uni <- solveConstraints c
+        Tuple lM lC <- mapSchemeOnTVarMappingsPartial lArg (toScheme (apply uni.subst lType))
+        Tuple rM rC <- mapSchemeOnTVarMappingsPartial rArg (toScheme (apply uni.subst rType))
+        returnAs (lM <> rM) (c <+> lC <+> rC) bndType
+      _ -> reportMismatch
+
 
 
   _ -> pure $ Tuple Nil emptyConstraints
