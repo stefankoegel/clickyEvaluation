@@ -181,6 +181,9 @@ preludeEnv = stringToEnv prelude
 
 prelude :: String
 prelude =
+  "data Maybe a = Nothing | Just a\n" <>
+  "data List a = Nil | Cons a (List a)\n" <>
+  "data IList a = INil | a :: (IList a)\n" <>
   "and (True:xs)  = and xs\n" <>
   "and (False:xs) = False\n" <>
   "and []         = True\n" <>
