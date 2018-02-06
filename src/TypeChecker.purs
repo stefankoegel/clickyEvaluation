@@ -542,6 +542,11 @@ getOpType op = case op of
       a <- fresh
       b <- fresh
       pure $ (a `TypArr` b) `TypArr` (a `TypArr` b)
+    InfixConstr name -> do
+      mt <- lookupEnv name
+      case mt of
+        Nothing -> Ex.throwError $ UnboundVariable name
+        Just t  -> pure t
     _ -> pure UnknownType
   where
   -- The type `a -> a -> Bool`.
@@ -843,6 +848,9 @@ makeBindingEnv binding = case binding of
 
   ConstrLit _ cnstr -> case cnstr of
     PrefixDataConstr constrName _ args -> do
+      if String.charAt 0 constrName == Just ':'
+         then Ex.throwError $ UnknownError $ "(" <> constrName <> ") has been safed as a prefix constructor."
+         else pure unit
       mt <- lookupEnv constrName
       -- collect information about the constructor
       tConstr <- case mt of
