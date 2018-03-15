@@ -571,6 +571,7 @@ data TypeError
   = UnificationFail Type Type
   | InfiniteType TVar Type
   | UnboundVariable String
+  | UnknownDataConstructor String
   | UnknownError String
   | NoInstanceOfEnum Type
   | PatternMismatch IndexedTypedBinding Type
@@ -676,6 +677,7 @@ instance showTypeError :: Show TypeError where
   show (UnificationFail a b) = "(UnificationFail "<> show a <> " " <> show b <>")"
   show (InfiniteType a b ) = "(InfiniteType " <> show a <> " " <> show b <> ")"
   show (UnboundVariable a) = "(UnboundVariable " <> show a <> ")"
+  show (UnknownDataConstructor a) = "(UnknownDataConstructor " <> show a <> ")"
   show (UnknownError s) = "(UnknownError " <> s <> ")"
   show (PatternMismatch b t) = "(PatternMismatch " <> show b <> " " <> show t <> ")"
   show (NoInstanceOfEnum t) = "(" <> show t <> "is no instance of Enum)"
@@ -721,6 +723,7 @@ prettyPrintTypeError :: TypeError -> String
 prettyPrintTypeError (UnificationFail t1 t2) = "UnificationFail: Can't unify " <> prettyPrintType t1 <> " with " <> prettyPrintType t2
 prettyPrintTypeError (InfiniteType tvar t) = "InfiniteType: cannot construct the infinite type: " <> tvar <> " ~ " <> prettyPrintType t
 prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope " <> var
+prettyPrintTypeError (UnknownDataConstructor var) = "UnknownDataConstructor: Not in scope " <> var
 prettyPrintTypeError (NoInstanceOfEnum t) = "No instance for Enum " <> prettyPrintType t <> " defined."
 prettyPrintTypeError (PatternMismatch b t) = "PatternMismatch: The pattern " <> prettyPrintBinding b <> " doesn't match with " <> prettyPrintType t
 prettyPrintTypeError (UnknownError str) = "UnknownError: " <> str
