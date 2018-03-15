@@ -545,7 +545,7 @@ getOpType op = case op of
     InfixConstr name -> do
       mt <- lookupEnv name
       case mt of
-        Nothing -> Ex.throwError $ UnboundVariable name
+        Nothing -> Ex.throwError $ UnknownDataConstructor name
         Just t  -> pure t
     _ -> pure UnknownType
   where
@@ -600,7 +600,7 @@ infer' ex = case ex of
   Atom _ atom@(Constr name) -> do
     mt <- lookupEnv name
     case mt of
-         Nothing -> returnWithTypeError ex (UnboundVariable name)
+         Nothing -> returnWithTypeError ex (UnknownDataConstructor name)
          Just t  -> returnWithConstraint ex t
   Atom _ atom@(Name name) -> case name of
     -- Built-in functions.
@@ -823,8 +823,7 @@ makeBindingEnv binding = case binding of
   Lit _ atom@(Constr name) -> do
     mt <- lookupEnv name
     t <- case mt of
-        -- TODO: find some more suitable error type (but this will do for now)
-         Nothing -> Ex.throwError (UnboundVariable name)
+         Nothing -> Ex.throwError (UnknownDataConstructor name)
          Just t  -> pure t
     let c = setSingleTypeConstraintFor' (bindingIndex binding) t
     pure $ Triple t Nil c
@@ -849,13 +848,12 @@ makeBindingEnv binding = case binding of
   ConstrLit _ cnstr -> case cnstr of
     PrefixDataConstr constrName _ args -> do
       if String.charAt 0 constrName == Just ':'
-         then Ex.throwError $ UnknownError $ "(" <> constrName <> ") has been safed as a prefix constructor."
+         then Ex.throwError $ UnknownDataConstr $ "(" <> constrName <> ") has been safed as a prefix constructor."
          else pure unit
       mt <- lookupEnv constrName
       -- collect information about the constructor
       tConstr <- case mt of
-        -- TODO: find a more suitable error type (but this will do for now)
-        Nothing -> Ex.throwError (UnboundVariable constrName)
+        Nothing -> Ex.throwError (UnknownDataConstructor constrName)
         Just t -> pure t
       -- collect information about the constructor's arguments
       Triple tArgs mArgs cArgs' <- unzip3 <$> traverse makeBindingEnvPartial args
@@ -871,10 +869,8 @@ makeBindingEnv binding = case binding of
       mt <- lookupEnv constrName
       -- collect information about the constructor
       Triple tl tr t <- case mt of
-        -- TODO: find a more suitable error type (but this will do for now)
-        Nothing -> Ex.throwError (UnboundVariable constrName)
+        Nothing -> Ex.throwError (UnknownDataConstructor constrName)
         Just (TypArr l (TypArr r t)) -> pure $ Triple l r t
-        -- TODO: find a more suitable error type (but this will do for now)
         Just t -> Ex.throwError (UnknownError $ prettyPrintType t <> " can not be the type of " <> constrName)
       -- collect information about the constructor's arguments
       Triple tl' ml cl <- makeBindingEnvPartial l
@@ -1013,7 +1009,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
         mt <- lookupEnv constrName
         constrType <- case mt of
           Just t -> pure t
-          Nothing -> Ex.throwError (UnboundVariable constrName)
+          Nothing -> Ex.throwError (UnknownDataConstructor constrName)
         let ts' = fromArrowType constrType
             c = setTypeConstraintFor' (bindingIndex binding) (last' ts') bndType
         uni <- solveConstraints c
@@ -1030,7 +1026,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
         Triple lType rType resType <- case mt of
           Just (TypArr l (TypArr r t)) -> pure $ Triple l r t
           Just t -> Ex.throwError (UnknownError $ prettyPrintType t <> " can not be the type of " <> constrName)
-          Nothing -> Ex.throwError (UnboundVariable constrName)
+          Nothing -> Ex.throwError (UnknownDataConstructor constrName)
         let c = setTypeConstraintFor' (bindingIndex binding) resType bndType
         uni <- solveConstraints c
         Tuple lM lC <- mapSchemeOnTVarMappingsPartial lArg (toScheme (apply uni.subst lType))
