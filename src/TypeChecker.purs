@@ -895,9 +895,8 @@ makeBindingEnv binding = case binding of
     let c = setConstraintFor' (bindingIndex binding) t1 t2 <+> cs
     pure c
 
-  -- TODO: Use Applicative
   -- Given a list of types occurring in a list, determine the list type (choose the first element).
-  listType Nil = fresh >>= \tv -> pure $ TList tv
+  listType Nil = TList <$> fresh
   listType (t:_) = pure $ TList t
 
 -- | Extend the type environment with the new mappings for the evaluation of `m`.
