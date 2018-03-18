@@ -848,7 +848,7 @@ makeBindingEnv binding = case binding of
   ConstrLit _ cnstr -> case cnstr of
     PrefixDataConstr constrName _ args -> do
       if String.charAt 0 constrName == Just ':'
-         then Ex.throwError $ UnknownDataConstr $ "(" <> constrName <> ") has been safed as a prefix constructor."
+         then Ex.throwError $ UnknownDataConstructor $ "(" <> constrName <> ") has been safed as a prefix constructor."
          else pure unit
       mt <- lookupEnv constrName
       -- collect information about the constructor
