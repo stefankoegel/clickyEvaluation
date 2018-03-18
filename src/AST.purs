@@ -510,6 +510,25 @@ data Type
 data ADTDef
   = ADTDef String (List TVar) (List (DataConstr Type))
 
+-- Translates an ADT definition into a list of Definitions
+--
+-- e.g: 
+--
+-- the definition
+--
+--  data Maybe a
+--    = Nothing
+--    | Just a
+--
+-- will be translated to
+--
+--  Nothing :: Maybe a
+--  Nothing = Nothing
+--  Just :: a -> Maybe a
+--  Just = Just
+--
+-- where the left hand side is just the name,
+-- and the right hand side is an actual expression.
 compileADTDef :: ADTDef -> List Definition
 compileADTDef (ADTDef tname tvars constrs) =
   map (compileDataConstr (TTypeCons tname (map TypVar tvars))) constrs
@@ -529,8 +548,8 @@ instance showADTDef :: Show ADTDef where
     <> intercalate "\n  | " (map show cs)
 
 
--- | DataConstrtructor parameterized over its parameters,
---   to use it for both, type definitions and data.
+-- DataConstrtructor parameterized over its parameters,
+-- to use it for both, type definitions and data.
 
 data Associativity
   = LEFTASSOC
@@ -543,6 +562,7 @@ data DataConstr param
   = PrefixDataConstr String Int (List param)
   | InfixDataConstr String Associativity Int param param
 
+-- This will be called by compileADTDef and does the actual work.
 compileDataConstr :: Type -> DataConstr Type -> Definition
 compileDataConstr t (PrefixDataConstr name _ ps) =
   Def name Nil (Atom (Just $ foldr TypArr t ps) (Constr name))
