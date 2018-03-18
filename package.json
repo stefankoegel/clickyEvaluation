@@ -7,7 +7,7 @@
   "dependencies": {
     "bower": "*",
     "pulp": "9.0.1",
-    "purescript": "^0.10.1"
+    "purescript": "0.10.1"
   },
   "scripts": {
     "postinstall": "pulp --version && bower --version && bower update",
