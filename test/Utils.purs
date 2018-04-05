@@ -3,6 +3,7 @@ module Test.Utils where
 import Prelude
 
 import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Console (CONSOLE)
 import Data.String (Pattern(..), split) as String
 import Data.Foldable (intercalate)
 
@@ -11,7 +12,7 @@ foreign import resetLog :: Test Unit
 foreign import getLog :: Test (Array String)
 foreign import tell :: String -> Test Unit
 
-type Test a = forall eff. Eff (writerlog :: WRITERLOG | eff) a
+type Test a = forall eff. Eff (writerlog :: WRITERLOG, console :: CONSOLE | eff) a
 
 unlines :: Array String -> String
 unlines = intercalate "\n"

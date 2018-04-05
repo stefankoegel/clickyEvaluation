@@ -4,7 +4,7 @@ import Prelude
 import Data.Either (Either(..))
 import Data.Tuple (Tuple(..))
 import Data.StrMap as M
--- import Data.List (List, singleton)
+import Data.List (List(Nil))
 
 -- import Control.Monad.Writer (Writer, tell)
 
@@ -16,6 +16,11 @@ import Test.Utils (Test, tell, padLeft)
 
 tell' :: String -> Test Unit
 tell' = tell
+
+preludeEnv :: Env
+preludeEnv = case runParserIndent definitions prelude of
+  Right env -> defsToEnv env
+  Left _    -> defsToEnv Nil
 
 eval1test :: String -> String -> String -> Test Unit
 eval1test name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
@@ -112,6 +117,8 @@ evalPreludeTest name input expected = case (Tuple (runParserIndent expression in
             <> padLeft expected <> "\n"
             <> "Expected Parsed:\n"
             <> padLeft (show expExp) <> "\n"
+            <> "Definitions from Prelude!\n"
+
   (Tuple pi pe) -> tell'
      $ "Parse fail (" <> name <> "):\n"
     <> "Input:\n"
@@ -137,6 +144,10 @@ runTests = do
   eval1test "lambda2" "(\\x y -> [0, x, y, x + y]) 1 2" "[0, 1, 2, 1 + 2]"
   eval1test "string1" "\"as\" ++ \"df\"" "\"asdf\""
   eval1test "string2" "'a' : \"sdf\"" "\"asdf\""
+  eval1test "listComp1" "[x | x <-      [1..10]]"      "[x | x <- (1 : [2..10])]"
+  eval1test "listComp2" "[x | x <- (1 : [2..10])]" "1 : [x | x <-      [2..10]]"
+  eval1test "listComp3" "[x | x <-      [2..10]]"      "[x | x <- (2 : [3..10])]"
+  eval1test "listComp4" "[x | x <- (2 : [3..10])]" "2 : [x | x <-      [3..10]]"
 
 
   eval1EnvTest "double_func" "double x = x + x" "double 10" "10 + 10"
@@ -269,8 +280,6 @@ runTests = do
   evalPreludeTest "let_expression_6" "let sum = \\x -> x ; y = sum [1,2,3] in y" "[1,2,3]"
 
   testsADT
-
-
 
 testsADT :: Test Unit
 testsADT = do

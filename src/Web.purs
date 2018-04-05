@@ -13,6 +13,7 @@ import Data.Array as Arr
 import Data.String as Str
 
 import Control.Monad.Eff (Eff)
+import Control.Monad.Eff.Console (CONSOLE)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
@@ -137,14 +138,14 @@ letQual t bind expr = typedNode "" ["let"] [letDiv, bind, eqDiv, expr] t
 genQual :: MType -> Div -> Div -> Div
 genQual t bind expr = typedNode "" ["gen"] [bind, arrow, expr] t
   where
-    arrow = node "<-" ["comma"] []
+    arrow = node "<-" ["separator"] []
 
 atom :: MType -> Atom -> Div
 atom t (AInt n) = typedNode (show n) ["atom", "num"] [] t
 atom t (Bool b) = typedNode (if b then "True" else "False") ["atom", "bool"] [] t
 atom t (Char c) = typedNode ("'" <> c <> "'") ["atom", "char"] [] t
 atom t (Name n) = typedNode n ["atom", "name"] [] t
-atom t (Constr n) = typedNode n ["atom", "constr"] [] t
+atom t (Constr n) = typedNode n ["atom", "name", "dataConstructor"] [] t
 
 interleave :: forall a. a -> List a -> List a
 interleave _ Nil          = Nil
@@ -217,8 +218,8 @@ letexpr t binds expr = typedNodeHole "" ["letexpr"] ([letDiv] <> (intercalate [s
 listcomp :: MType -> Div -> List Div -> DivHole
 listcomp t expr quals = typedNodeHole "" ["listcomp", "list"] ([open, expr, pipe] <> Arr.fromFoldable (intersperse comma quals) <> [close]) t
   where
-    open  = node "[" ["brace"] []
-    close = node "]" ["brace"] []
+    open  = node "[" ["brace", "left"] []
+    close = node "]" ["brace", "right"] []
     pipe  = node "|" ["brace"] []
     comma = node "," ["comma"] []
 
@@ -236,12 +237,12 @@ app t func args = typedNodeHole "" ["app"] (Cons func args) t
 arithmseq :: MType -> Div -> Maybe Div -> Maybe Div -> DivHole
 arithmseq t start mnext mend = typedNodeHole "" ["arithmseq", "list"] ([open, start] <> commaNext <> [dots] <> end <> [close]) t
  where
-    open      = node "[" ["brace"] []
+    open      = node "[" ["brace", "left"] []
     comma     = node "," ["comma"] []
     commaNext = maybe [] (\next -> [comma, next]) mnext
-    dots      = node ".." ["dots"] []
+    dots      = node ".." ["dots", "comma"] []
     end       = fromMaybe mend
-    close     = node "]" ["brace"] []
+    close     = node "]" ["brace", "right"] []
 
 binding :: TypedBinding -> Div
 binding (Lit t a)         = typedNode "" ["binding", "lit"] [atom t a] t
@@ -249,19 +250,24 @@ binding (ConsLit t b1 b2) = typedNode "" ["binding", "conslit"] (listify "(" ":"
 binding (ListLit t ls)    = typedNode "" ["binding", "listlit"] (listify "[" "," "]" (binding <$> ls)) t
 binding (NTupleLit t ls)   = typedNode "" ["binding", "tuplelit"] (listify "(" "," ")" (binding <$> ls)) t
 binding (ConstrLit t constr) = case constr of
-  PrefixDataConstr name len ps -> typedNode "" ["binding", "constrLit"] (listify "" " " "" (binding <$> ps)) t
-  -- TODO: "node op [] []"
-  InfixDataConstr op a p l r -> typedNode "" ["binding", "infixConstrLit"] [binding l, node op [] [], binding r] t
+  PrefixDataConstr name _ ls -> typedNode ""
+                                  ["binding", "constrlit"]
+                                  (atom t (Name name) : (binding <$> ls))
+                                  t
+  InfixDataConstr name _ _ b1 b2 -> typedNode ""
+                                      ["binding", "constrlit"]
+                                      [binding b1, atom t (Name name), binding b2]
+                                      t
 
-type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM | eff) Unit)
+type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit)
 
 -- | Create a type div with the pretty printed type as content.
-createTypeDiv :: forall eff. MType -> Eff (dom :: DOM | eff) J.JQuery
+createTypeDiv :: forall eff. MType -> Eff (dom :: DOM , console :: CONSOLE| eff) J.JQuery
 createTypeDiv (Just (TypeError typeError)) = makeDiv (prettyPrintTypeError typeError) ["typeContainer", "hasTypeError"]
 createTypeDiv mType = makeDiv (" :: " <> maybe "" prettyPrintType mType) ["typeContainer"]
 
 -- | Add a type tooltip to the given div.
-addTypeTooltip :: forall eff. MType -> J.JQuery -> Eff (dom :: DOM | eff) Unit
+addTypeTooltip :: forall eff. MType -> J.JQuery -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
 addTypeTooltip (Just (TypeError typeError)) div = J.setAttr "title" (prettyPrintTypeError typeError) div
 addTypeTooltip mType div = J.setAttr "title" (" :: " <> maybe "" prettyPrintType mType) div
 
@@ -286,7 +292,7 @@ isTypeError :: MType -> Boolean
 isTypeError (Just (TypeError _)) = true
 isTypeError _ = false
 
-divToJQuery :: forall eff. Boolean -> Callback -> Div -> Eff (dom :: DOM | eff) J.JQuery
+divToJQuery :: forall eff. Boolean -> Callback -> Div -> Eff (dom :: DOM, console :: CONSOLE | eff) J.JQuery
 divToJQuery isTopLevelDiv callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
   let needsContainer = needsTypeContainer classes exprType || isTopLevelDiv || isTypeError exprType
   let isTyped = isJust exprType
@@ -294,17 +300,19 @@ divToJQuery isTopLevelDiv callback (Node { content: content, classes: classes, z
   container <- makeDiv "" ["container"]
   div <- makeDiv content classes
 
-  if needsContainer
-    then do
-      typeDiv <- createTypeDiv exprType
-      J.append typeDiv container
-      J.append div container
-      J.addClass "hasTypeContainer" div
-    else pure unit
+  -- if needsContainer
+  --   then do
+  --     typeDiv <- createTypeDiv exprType
+  --     J.append typeDiv container
+  --     J.append div container
+  --     J.addClass "hasTypeContainer" div
+  --   else pure unit
 
-  if isTyped
-    then addTypeTooltip exprType div
-    else pure unit
+  J.append div container
+
+  -- if isTyped
+  --   then addTypeTooltip exprType div
+  --   else pure unit
 
   for children (divToJQuery false callback >=> flip J.append div)
   case zipper of
@@ -332,7 +340,7 @@ toString ls = Str.fromCharArray <$> go [] ls
 
 type Class = String
 
-makeDiv :: forall f eff. Foldable f => String -> f Class -> Eff (dom :: DOM | eff) J.JQuery
+makeDiv :: forall f eff. Foldable f => String -> f Class -> Eff (dom :: DOM , console :: CONSOLE| eff) J.JQuery
 makeDiv text classes = do
   d <- J.create "<div></div>"
   J.setText text d
