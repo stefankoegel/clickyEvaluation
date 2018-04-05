@@ -96,8 +96,6 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expres
 evalTest :: String -> String -> String -> Test Unit
 evalTest n = evalEnvTest n ""
 
-preludeEnv :: Env
-preludeEnv = defsToEnv parsedPrelude
 
 evalPreludeTest :: String -> String -> String -> Test Unit
 evalPreludeTest name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
