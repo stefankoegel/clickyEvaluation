@@ -3,12 +3,14 @@ module AST where
 import Prelude
 import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor (bimap, rmap)
-import Data.Foldable (intercalate)
+import Data.Foldable (intercalate, foldr)
 import Data.List (List(..), fold, (:))
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
+
+import JSHelpers (unsafeUndef)
 
 -- | Operators
 -- |
@@ -508,6 +510,32 @@ data Type
 data ADTDef
   = ADTDef String (List TVar) (List (DataConstr Type))
 
+-- Translates an ADT definition into a list of Definitions
+--
+-- e.g: 
+--
+-- the definition
+--
+--  data Maybe a
+--    = Nothing
+--    | Just a
+--
+-- will be translated to
+--
+--  Nothing :: Maybe a
+--  Nothing = Nothing
+--  Just :: a -> Maybe a
+--  Just = Just
+--
+-- where the left hand side is just the name,
+-- and the right hand side is an actual expression.
+compileADTDef :: ADTDef -> List Definition
+compileADTDef (ADTDef tname tvars constrs) =
+  map (compileDataConstr (TTypeCons tname (map TypVar tvars))) constrs
+
+-- compileADTDef :: ADTDef -> Def
+-- compileADTDef (ADTDef tname tvars 
+
 derive instance eqADTDef :: Eq ADTDef
 
 instance showADTDef :: Show ADTDef where
@@ -520,8 +548,8 @@ instance showADTDef :: Show ADTDef where
     <> intercalate "\n  | " (map show cs)
 
 
--- | DataConstrtructor parameterized over its parameters,
---   to use it for both, type definitions and data.
+-- DataConstrtructor parameterized over its parameters,
+-- to use it for both, type definitions and data.
 
 data Associativity
   = LEFTASSOC
@@ -533,6 +561,15 @@ derive instance eqAssociativity :: Eq Associativity
 data DataConstr param
   = PrefixDataConstr String Int (List param)
   | InfixDataConstr String Associativity Int param param
+
+-- This will be called by compileADTDef and does the actual work.
+compileDataConstr :: Type -> DataConstr Type -> Definition
+compileDataConstr t (PrefixDataConstr name _ ps) =
+  Def name Nil (Atom (Just $ foldr TypArr t ps) (Constr name))
+compileDataConstr t (InfixDataConstr op assoc prec l r) =
+  Def op Nil (PrefixOp (Just typ) (Tuple (InfixConstr op) (Just typ)))
+ where
+  typ = TypArr l (TypArr r t)
 
 instance functorDataConstr :: Functor DataConstr where
   map f (PrefixDataConstr s i ps) = PrefixDataConstr s i (map f ps)
@@ -554,6 +591,7 @@ data TypeError
   = UnificationFail Type Type
   | InfiniteType TVar Type
   | UnboundVariable String
+  | UnknownDataConstructor String
   | UnknownError String
   | NoInstanceOfEnum Type
   | PatternMismatch IndexedTypedBinding Type
@@ -659,6 +697,7 @@ instance showTypeError :: Show TypeError where
   show (UnificationFail a b) = "(UnificationFail "<> show a <> " " <> show b <>")"
   show (InfiniteType a b ) = "(InfiniteType " <> show a <> " " <> show b <> ")"
   show (UnboundVariable a) = "(UnboundVariable " <> show a <> ")"
+  show (UnknownDataConstructor a) = "(UnknownDataConstructor " <> show a <> ")"
   show (UnknownError s) = "(UnknownError " <> s <> ")"
   show (PatternMismatch b t) = "(PatternMismatch " <> show b <> " " <> show t <> ")"
   show (NoInstanceOfEnum t) = "(" <> show t <> "is no instance of Enum)"
@@ -681,7 +720,7 @@ prettyPrintBinding (ConsLit _ b1 b2) = "("
     <> ")"
 prettyPrintBinding (ListLit _ bs) = "[" <> intercalate ", " (map prettyPrintBinding bs) <> "]"
 prettyPrintBinding (NTupleLit _ bs) = "(" <> intercalate ", " (map prettyPrintBinding bs) <> ")"
-prettyPrintBinding (ConstrLit _ (PrefixDataConstr name _ ps)) = "(" <> name <> intercalate " " (map prettyPrintBinding ps) <> ")"
+prettyPrintBinding (ConstrLit _ (PrefixDataConstr name _ ps)) = "(" <> name <> " " <> intercalate " " (map prettyPrintBinding ps) <> ")"
 prettyPrintBinding (ConstrLit _ (InfixDataConstr name _ _ l r)) = "(" <> prettyPrintBinding l <> " " <> name <> " " <> prettyPrintBinding r <> ")"
 
 prettyPrintType :: Type -> String
@@ -704,6 +743,7 @@ prettyPrintTypeError :: TypeError -> String
 prettyPrintTypeError (UnificationFail t1 t2) = "UnificationFail: Can't unify " <> prettyPrintType t1 <> " with " <> prettyPrintType t2
 prettyPrintTypeError (InfiniteType tvar t) = "InfiniteType: cannot construct the infinite type: " <> tvar <> " ~ " <> prettyPrintType t
 prettyPrintTypeError (UnboundVariable var) = "UnboundVariable: Not in scope " <> var
+prettyPrintTypeError (UnknownDataConstructor var) = "UnknownDataConstructor: Not in scope " <> var
 prettyPrintTypeError (NoInstanceOfEnum t) = "No instance for Enum " <> prettyPrintType t <> " defined."
 prettyPrintTypeError (PatternMismatch b t) = "PatternMismatch: The pattern " <> prettyPrintBinding b <> " doesn't match with " <> prettyPrintType t
 prettyPrintTypeError (UnknownError str) = "UnknownError: " <> str

@@ -14,7 +14,10 @@ import Data.Either (Either(..))
 import Data.List (List(..), (:))
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..), fst)
+import Data.Foldable (intercalate)
 import Text.Parsing.Parser (ParseError, parseErrorMessage)
+
+import Control.Semigroupoid ((>>>), (<<<))
 
 import Test.Utils (Test, tell)
 
@@ -70,6 +73,15 @@ reportTypeError testName typeError = tell' $ "Type inference failed in test case
   <> "Encountered type error: "
   <> prettyPrintTypeError typeError
 
+reportTypeErrorWithNote :: String -> TypeError -> String -> Test Unit
+reportTypeErrorWithNote testName typeError note =
+  tell' $ "Type inference failed in test case `"
+    <> testName <> "`:\n"
+    <> "Encountered Type error: "
+    <> prettyPrintTypeError typeError
+    <> "Additional Note: \n"
+    <> note
+
 -- | Compare the given two types and report an error if they are not equal.
 compareTypes :: String -> Type -> Type -> Test Unit
 compareTypes testName expected actual = if expected == actual
@@ -77,6 +89,14 @@ compareTypes testName expected actual = if expected == actual
   else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
                "Expected type: " <> prettyPrintType expected <> "\n" <>
                "Actual type: " <> prettyPrintType actual
+
+compareTypesWithNote :: String -> Type -> Type -> String -> Test Unit
+compareTypesWithNote testName expected actual note = if expected == actual
+  then pure unit
+  else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
+               "Expected type: " <> prettyPrintType expected <> "\n" <>
+               "Actual type: " <> prettyPrintType actual <> "\n" <>
+               "Additional note: \n" <> note
 
 -- | Compare the given type errors and report an error if they are not equal.
 compareTypeError :: String -> TypeError -> TypeError -> Test Unit
@@ -148,6 +168,23 @@ testInferExprWithPrelude name expressionString expected = case parseExpr express
   Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
+    
+
+-- | Infer the type of the given expression in the context of a custom prelude.
+testInferExprWithCustomPrelude :: String -> String -> String -> Type -> Test Unit
+testInferExprWithCustomPrelude name prelude expressionString expected =
+  case parseDefs prelude of
+    Left parseError -> reportParseError name parseError
+    Right parsedPrelude ->
+      case parseExpr expressionString of
+        Left parseError -> reportParseError name parseError
+        Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
+          Left typeError -> do
+            reportTypeError name typeError
+          Right t -> compareTypesWithNote name expected t
+            (case TC.ppTypeEnv <$> TC.tryInferEnvironment parsedPrelude of
+              Left msg -> show msg
+              Right msg -> msg)
 
 -- | Test type inference on expression trees, given an expression string as well as the expected
 -- | resulting typed tree.
@@ -156,10 +193,28 @@ testInferTT' name unparsedTree expectedTypeTree = case parseExpr unparsedTree of
   Left parseError -> reportParseError name parseError
   Right expression -> testInferTT name expression expectedTypeTree
 
+testInferTTWithCustomPrelude' :: String -> String -> String -> TypeTree -> Test Unit
+testInferTTWithCustomPrelude' name prelude unparsedTree expectedTypeTree =
+  case parseDefs prelude of
+    Left parseError -> reportParseError name parseError
+    Right parsedPrelude -> case parseExpr unparsedTree of
+      Left parseError -> reportParseError name parseError
+      Right expression -> testInferTTWithCustomPrelude name parsedPrelude expression expectedTypeTree
+
 -- | Test type inference on expression trees. Here not only the expected type of the whole
 -- | expression is checked, but also the type of every subexpression.
 testInferTT :: String -> TypeTree -> TypeTree -> Test Unit
 testInferTT name untypedTree expectedTypedTree =
+  case TC.tryInferExprInContext parsedPrelude untypedTree of
+    Left typeError -> reportTypeError name typeError
+    Right typedTree -> if expectedTypedTree == typedTree
+      then pure unit
+      else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
+                   "Expected type tree: " <> show expectedTypedTree <> "\n" <>
+                   "Actual type tree: " <> show typedTree <> "\n"
+
+testInferTTWithCustomPrelude :: String -> List Definition -> TypeTree -> TypeTree -> Test Unit
+testInferTTWithCustomPrelude name parsedPrelude untypedTree expectedTypedTree =
   case TC.tryInferExprInContext parsedPrelude untypedTree of
     Left typeError -> reportTypeError name typeError
     Right typedTree -> if expectedTypedTree == typedTree
@@ -197,6 +252,26 @@ testMapSchemeOnTVarMappings name scheme binding expected =
         "The function `mapSchemeOnTVarMappings` failed in test case `" <> name <> "`:\n" <>
         "Expected type variable mapping: " <> TC.ppTVarMappings expected <> "\n" <>
         "Actual type variable mapping: " <> TC.ppTVarMappings result <> "\n"
+
+-- | Test the function `mapSchemeOnTVarMappings`.
+testMapSchemeOnTVarMappings' :: String -> String -> Scheme -> IndexedTypedBinding
+                            -> TVarMappings -> Test Unit
+testMapSchemeOnTVarMappings' name prelude scheme binding expected =
+  case parseDefs prelude of
+    Left parseError -> reportParseError name parseError
+    Right parsedPrelude -> case TC.tryInferEnvironment parsedPrelude of
+      Left typeError -> reportTypeError name typeError
+      Right env -> case TC.runInferWith env true (fst <$> TC.mapSchemeOnTVarMappings binding scheme) of
+        Left typeError -> reportTypeError name typeError
+        Right result -> if result == expected
+          then pure unit
+          else tell' $
+            "The function `mapSchemeOnTVarMappings` failed in test case `" <> name <> "`:\n" <>
+            "Scheme: " <> TC.ppScheme scheme <> "\n" <>
+            "Binding: " <> prettyPrintBinding binding <> "\n" <>
+            "Expected type variable mapping: " <> TC.ppTVarMappings expected <> "\n" <>
+            "Actual type variable mapping: " <> TC.ppTVarMappings result <> "\n" <>
+            "Environment:\n" <> TC.ppTypeEnv env <> "\n"
 
 -- | Typed type tree representing `[1]`.
 listOne :: TypeTree
@@ -707,11 +782,11 @@ runTests = do
     (Lit (Tuple Nothing 0) (Name "x"))
     (Tuple "x" (Forall Nil intType) : Nil)
 
-  -- Map scheme `(forall t_4. t_4 -> t_4, (Int, Bool)) on `(f, (n, b))`. We expect the mapping
+  -- Map scheme `forall t_4. (t_4 -> t_4, (Int, Bool)) on `(f, (n, b))`. We expect the mapping
   -- { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }.
   testMapSchemeOnTVarMappings
     "Map scheme on tuple"
-    -- The scheme: (forall t_4. t_4 -> t_4, (Int, Bool))
+    -- The scheme: forall t_4. (t_4 -> t_4, (Int, Bool))
     (Forall ("t_4" : Nil)
       (TTuple (typVarArrow "t_4" "t_4" :
         (TTuple (intType : boolType : Nil)) : Nil))
@@ -738,4 +813,338 @@ runTests = do
       Nil
     )
 
+
   partiallyTypedExprTests
+  adtTests
+
+adtPrelude :: String
+adtPrelude = """
+data Unit = Unit
+
+data Bool = T | F
+
+useless T = Unit
+useless F = Unit
+
+data Tuple a b = Tuple a b
+
+data Maybe a = Just a | Nothing
+
+tuple a b = (a,b)
+
+fst (Tuple a b) = a
+snd (Tuple a b) = b
+
+data Id a = Id a
+
+id a = a
+
+tuple' a = Tuple a a
+
+data Complex a
+  = a :+ a
+"""
+
+myTuple idx l r = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Tuple" 2 (l:r:Nil))
+myTupleT l r = TTypeCons "Tuple" (l:r:Nil)
+
+myId idx c = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Id" 1 (c:Nil))
+myIdT c = TTypeCons "Id" (c:Nil)
+
+myMaybeT c = TTypeCons "Maybe" (c:Nil)
+
+myComplexT c = TTypeCons "Complex" (c:Nil)
+
+myComplex idx a b =
+  ConstrLit
+    (Tuple Nothing idx)
+    (InfixDataConstr ":+" LEFTASSOC 9 a b)
+
+adtTests :: Test Unit
+adtTests = do
+  testInferTTWithCustomPrelude' "adt-params-3-1"
+    adtPrelude
+    "Id"
+    (Atom
+      (Just
+        (TypArr
+          (TypVar "a")
+          (TTypeCons "Id" (TypVar "a":Nil))))
+      (Constr "Id"))
+
+  testInferExprWithCustomPrelude "adt-0-ary-1"
+    adtPrelude
+    "Unit"
+    (TTypeCons "Unit" Nil)
+
+  testInferExprWithCustomPrelude "adt-0-ary-2"
+    adtPrelude
+    "T"
+    (TTypeCons "Bool" Nil)
+
+  testInferExprWithCustomPrelude "adt-0-ary-3"
+    adtPrelude
+    "F"
+    (TTypeCons "Bool" Nil)
+
+  testInferExprWithCustomPrelude "adt-0-ary-4"
+    adtPrelude
+    "useless"
+    (TypArr (TTypeCons "Bool" Nil) (TTypeCons "Unit" Nil))
+
+  testInferExprWithCustomPrelude "adt-params-1-1"
+    adtPrelude
+    "fst (Tuple T F)"
+    (TTypeCons "Bool" Nil)
+
+  testInferExprWithCustomPrelude "adt-params-1-2"
+    adtPrelude
+    "snd (Tuple T F)"
+    (TTypeCons "Bool" Nil)
+
+  testInferExprWithCustomPrelude "adt-params-1-3"
+    adtPrelude
+    "snd (Tuple 1 2)"
+    intType
+
+  testInferExprWithCustomPrelude "adt-params-1-4"
+    adtPrelude
+    "fst"
+    (TypArr
+      (TTypeCons "Tuple" (TypVar "a" : TypVar "b" : Nil))
+      (TypVar "a"))
+
+  testInferExprWithCustomPrelude "adt-params-1-5"
+    adtPrelude
+    "snd"
+    (TypArr
+      (TTypeCons "Tuple" (TypVar "a" : TypVar "b" : Nil))
+      (TypVar "b"))
+
+  testInferExprWithCustomPrelude "adt-params-1-6"
+    adtPrelude
+    "Tuple 1 2"
+    (TTypeCons "Tuple" (intType : intType : Nil))
+
+  testInferExprWithCustomPrelude "adt-params-1-7"
+    adtPrelude
+    "Tuple 1"
+    (TypArr
+      (TypVar "a")
+      (TTypeCons "Tuple" (intType : TypVar "a" : Nil)))
+
+  testInferExprWithCustomPrelude "adt-params-1-8"
+    adtPrelude
+    "Tuple Unit Unit"
+    (TTypeCons "Tuple" (TTypeCons "Unit" Nil:TTypeCons "Unit" Nil:Nil))
+
+  testInferExprWithCustomPrelude "adt-params-1-9"
+    adtPrelude
+    "Nothing"
+    (myMaybeT (TypVar "a"))
+
+  testInferExprWithCustomPrelude "adt-params-1-10"
+    adtPrelude
+    "Just"
+    (TypArr
+      (TypVar "a")
+      (myMaybeT (TypVar "a")))
+
+  testInferExprWithCustomPrelude "adt-params-1-11"
+    adtPrelude
+    "Just Nothing"
+    (myMaybeT (myMaybeT (TypVar "a")))
+
+  testInferExprWithCustomPrelude "adt-params-1-12"
+    adtPrelude
+    "Just (1,2)"
+    (myMaybeT (TTuple (intType:intType:Nil)))
+
+  testInferExprWithCustomPrelude "adt-params-2-1"
+    adtPrelude
+    "Tuple"
+    (TypArr
+      (TypVar "a")
+      (TypArr
+        (TypVar "b")
+        (TTypeCons "Tuple"
+          (Cons (TypVar "a")
+            (Cons (TypVar "b") Nil)))))
+
+  testInferExprWithCustomPrelude "adt-params-2-2"
+    adtPrelude
+    "Id"
+    (TypArr (TypVar "a") (TTypeCons "Id" (TypVar "a":Nil)))
+
+  testInferExprWithCustomPrelude "adt-params-2-3"
+    adtPrelude
+    "Id id"
+    (TTypeCons "Id" (TypArr (TypVar "a") (TypVar "a"):Nil))
+
+  testInferExprWithCustomPrelude "adt-params-2-4"
+    adtPrelude
+    "tuple'"
+    (TypArr (TypVar "a") (TTypeCons "Tuple" (TypVar "a":TypVar "a":Nil)))
+
+  testInferExprWithCustomPrelude "adt-params-2-5"
+    adtPrelude
+    "tuple' 1"
+    (TTypeCons "Tuple" (intType:intType:Nil))
+
+  testInferExprWithCustomPrelude "adt-params-2-6"
+    adtPrelude
+    "Id Tuple"
+    (myIdT
+      (TypArr
+        (TypVar "a")
+        (TypArr
+          (TypVar "b")
+          (myTupleT (TypVar "a") (TypVar "b")))))
+
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-1"
+    adtPrelude
+    (Forall ("t_1":Nil)
+      (TTypeCons "Id" (TypVar "t_1":Nil)))
+    (ConstrLit
+      (Tuple Nothing 0)
+      (PrefixDataConstr "Id" 1
+        (Lit
+          (Tuple Nothing 1)
+          (Name "x")
+        :Nil)))
+    (Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
+    :Nil)
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-2"
+    adtPrelude
+    (Forall Nil
+      (TTypeCons "Id" (TTypeCons "Unit" Nil:Nil)))
+    (ConstrLit
+      (Tuple Nothing 0)
+      (PrefixDataConstr "Id" 1
+        (Lit
+          (Tuple Nothing 1)
+          (Name "x")
+        :Nil)))
+    (Tuple "x" (Forall Nil (TTypeCons "Unit" Nil))
+    :Nil)
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-3"
+    adtPrelude
+    (Forall Nil
+    (TTypeCons "Id" (intType:Nil)))
+    (ConstrLit
+      (Tuple Nothing 0)
+      (PrefixDataConstr "Id" 1
+        (Lit
+          (Tuple Nothing 1)
+          (Name "x")
+        :Nil)))
+    (Tuple "x" (Forall Nil intType)
+    :Nil)
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-4"
+    adtPrelude
+    (Forall ("id":Nil)
+      (TypArr
+        (TypVar "id")
+        (TTypeCons "Id" (TypVar "id":Nil))))
+
+    (Lit (Tuple Nothing 0) (Name "id"))
+
+    (Tuple "id"
+      (Forall ("id":Nil)
+        (TypArr
+          (TypVar "id")
+          (TTypeCons "Id" (TypVar "id":Nil))))
+    :Nil)
+    
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-5"
+    adtPrelude
+    -- The scheme: forall t_4. Tuple (t_4 -> t_4) (Tuple Int Bool)
+    (Forall ("t_4" : Nil)
+      (myTupleT
+        (typVarArrow "t_4" "t_4")
+        (myTupleT intType boolType)))
+    -- The binding: (f, (n, b))
+    (myTuple 1
+        (Lit (Tuple Nothing 2) (Name "f"))
+        (myTuple 2
+          (Lit (Tuple Nothing 4) (Name "n"))
+          (Lit (Tuple Nothing 5) (Name "b"))))
+    -- The expected result: { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }
+    ( Tuple "f" (Forall ("t_4" : Nil) (typVarArrow "t_4" "t_4"))
+    : Tuple "n" (Forall Nil intType)
+    : Tuple "b" (Forall Nil boolType)
+    : Nil )
+
+  testMapSchemeOnTVarMappings' "adt-map-scheme-1-6"
+    adtPrelude
+    (Forall ("t_1": Nil)
+      (myIdT
+        (myIdT (TypVar "t_1"))))
+    (myId 0
+      (myId 1
+        (Lit (Tuple Nothing 3) (Name "x"))))
+    ( Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
+    : Nil )
+
+  testMapSchemeOnTVarMappings' "adt-infix-map-scheme-1"
+    adtPrelude
+    (Forall ("t_1": Nil)
+      (myComplexT
+        (TypVar "t_1")))
+    (myComplex 0
+      (Lit (Tuple Nothing 1) (Name "x"))
+      (Lit (Tuple Nothing 2) (Name "y")))
+    (Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
+    :Tuple "y" (Forall ("t_1":Nil) (TypVar "t_1"))
+    :Nil)
+
+  testInferExprWithCustomPrelude "adt-infix-params-1-1"
+    adtPrelude
+    "1 :+ 1"
+    (myComplexT intType)
+
+  testInferExprWithCustomPrelude "adt-infix-params-1-2"
+    adtPrelude
+    "(:+) 1 1"
+    (myComplexT intType)
+
+  testInferExprWithCustomPrelude "adt-infix-params-1-3"
+    adtPrelude
+    "(Id 1) :+ (Id 2)"
+    (myComplexT (myIdT intType))
+
+  testInferExprWithCustomPrelude "adt-infix-params-2"
+    adtPrelude
+    "(1 :+)"
+    (TypArr intType (myComplexT intType))
+
+  testInferExprWithCustomPrelude "adt-infix-params-3"
+    adtPrelude
+    "(:+ 1)"
+    (TypArr intType (myComplexT intType))
+
+  testInferExprWithCustomPrelude "adt-infix-params-4"
+    adtPrelude
+    "(:+)"
+    (TypArr
+      (TypVar "a")
+      (TypArr
+        (TypVar "a")
+        (myComplexT (TypVar "a"))))
+
+  testInferExprWithCustomPrelude "adt-infix-params-5"
+    adtPrelude
+    "(:+ Id)"
+    (TypArr
+      (TypArr
+        (TypVar "a")
+        (myIdT (TypVar "a")))
+      (myComplexT
+        (TypArr
+          (TypVar "a")
+          (myIdT (TypVar "a")))))
+

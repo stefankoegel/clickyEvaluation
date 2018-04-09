@@ -8,10 +8,10 @@ import Data.Array as Array
 import Data.Char as Char
 import Data.Either (Either(..))
 import Data.Foldable (intercalate, fold, foldl, foldr)
-import Data.List (List(..), (:), concat, unzip, zip)
+import Data.List (List(..), (:), concat, unzip, zip, last)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, isJust)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Set as Set
 import Data.String as String
 import Data.Traversable (traverse)
@@ -25,7 +25,7 @@ import Prelude (
 import AST
 import AST as AST
 
-import JSHelpers (unsafeUndef)
+
 
 ---------------------------------------------------------------------------------------------------
 -- | Data Types and Helper Functions                                                             --
@@ -41,6 +41,19 @@ unzip3 = foldr
             Triple (a : as) (b : bs) (c : cs))
          (Triple Nil Nil Nil)
 
+uncurry3 :: forall a b c d. (a -> b -> c -> d) -> (Triple a b c -> d)
+uncurry3 f (Triple x y z) = f x y z
+
+zip3 :: forall a b c. List a -> List b -> List c -> List (Triple a b c)
+zip3 Nil _ _ = Nil
+zip3 _ Nil _ = Nil
+zip3 _ _ Nil = Nil
+zip3 (Cons x xs) (Cons y ys) (Cons z zs) = Cons (Triple x y z) (zip3 xs ys zs)
+
+last' :: forall a. List a -> a
+last' Nil = unsafeCrashWith "last': empty list"
+last' (x:Nil) = x
+last' (_:xs) = last' xs
 -- +--------------+
 -- | Type Schemes |
 -- +--------------+
@@ -272,6 +285,10 @@ toArrowType :: List Type -> Type
 toArrowType Nil = unsafeCrashWith "Function `toArrowType` must not be called with an empty list."
 toArrowType (t : Nil) = t
 toArrowType (t:ts) = t `TypArr` (toArrowType ts)
+
+fromArrowType :: Type -> List Type
+fromArrowType (TypArr t t') = t : fromArrowType t'
+fromArrowType t = t : Nil
 
 -- +------------------+
 -- | Type Constraints |
@@ -525,6 +542,11 @@ getOpType op = case op of
       a <- fresh
       b <- fresh
       pure $ (a `TypArr` b) `TypArr` (a `TypArr` b)
+    InfixConstr name -> do
+      mt <- lookupEnv name
+      case mt of
+        Nothing -> Ex.throwError $ UnknownDataConstructor name
+        Just t  -> pure t
     _ -> pure UnknownType
   where
   -- The type `a -> a -> Bool`.
@@ -572,11 +594,14 @@ infer expr
 -- | called by `infer`, which checks for already present type information.
 infer' :: IndexedTypeTree -> Infer (Tuple Type Constraints)
 infer' ex = case ex of
-
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
   Atom _ atom@(AInt _) -> returnWithConstraint ex intType
-  Atom _ atom@(Constr _) -> unsafeUndef "infer' ... (Atom _ atom@(Constr _))"
+  Atom _ atom@(Constr name) -> do
+    mt <- lookupEnv name
+    case mt of
+         Nothing -> returnWithTypeError ex (UnknownDataConstructor name)
+         Just t  -> returnWithConstraint ex t
   Atom _ atom@(Name name) -> case name of
     -- Built-in functions.
     "mod" -> returnWithConstraint ex intToIntToIntType
@@ -795,7 +820,13 @@ makeBindingEnv binding = case binding of
     let c = setSingleTypeConstraintFor' (bindingIndex binding) tv
     pure $ Triple tv (Tuple name (Forall Nil tv) : Nil) c
 
-  Lit _ atom@(Constr name) -> unsafeUndef "makeBindingEnv... Lit atom@(Constr name)"
+  Lit _ atom@(Constr name) -> do
+    mt <- lookupEnv name
+    t <- case mt of
+         Nothing -> Ex.throwError (UnknownDataConstructor name)
+         Just t  -> pure t
+    let c = setSingleTypeConstraintFor' (bindingIndex binding) t
+    pure $ Triple t Nil c
 
   ConsLit _ b1 b2 -> do
     Triple t1 m1 c1 <- makeBindingEnvPartial b1
@@ -814,8 +845,44 @@ makeBindingEnv binding = case binding of
     let c = setSingleTypeConstraintFor' (bindingIndex binding) (TTuple ts)
     pure $ Triple (TTuple ts) (concat ms) (foldConstraints cs <+> c)
 
-  -- TODO
-  ConstrLit _ _ -> unsafeUndef "makeBindingEnv ... ConstrLit _ _ ->"
+  ConstrLit _ cnstr -> case cnstr of
+    PrefixDataConstr constrName _ args -> do
+      if String.charAt 0 constrName == Just ':'
+         then Ex.throwError $ UnknownDataConstructor $ "(" <> constrName <> ") has been safed as a prefix constructor."
+         else pure unit
+      mt <- lookupEnv constrName
+      -- collect information about the constructor
+      tConstr <- case mt of
+        Nothing -> Ex.throwError (UnknownDataConstructor constrName)
+        Just t -> pure t
+      -- collect information about the constructor's arguments
+      Triple tArgs mArgs cArgs' <- unzip3 <$> traverse makeBindingEnvPartial args
+      let cArgs = foldConstraints cArgs'
+      tResult <- fresh
+      -- match constructor type with the argument type
+      let cConstr = setConstraintFor' (bindingIndex binding) tConstr (toArrowType (tArgs <> (tResult:Nil)))
+      -- Result Type
+      let cBinding = setSingleTypeConstraintFor' (bindingIndex binding) tResult
+      pure $ Triple tResult (concat mArgs) (cArgs <+> cConstr <+> cBinding)
+
+    InfixDataConstr constrName _ _ l r -> do
+      mt <- lookupEnv constrName
+      -- collect information about the constructor
+      Triple tl tr t <- case mt of
+        Nothing -> Ex.throwError (UnknownDataConstructor constrName)
+        Just (TypArr l (TypArr r t)) -> pure $ Triple l r t
+        Just t -> Ex.throwError (UnknownError $ prettyPrintType t <> " can not be the type of " <> constrName)
+      -- collect information about the constructor's arguments
+      Triple tl' ml cl <- makeBindingEnvPartial l
+      Triple tr' mr cr <- makeBindingEnvPartial r
+      tResult <- fresh
+      -- match constructor type with the argument type
+      let cConstr = setConstraintFor' (bindingIndex binding) (TypArr tl (TypArr tr t)) (TypArr tl' (TypArr tr' tResult))
+      -- Result Type
+      let cBinding = setSingleTypeConstraintFor' (bindingIndex binding) tResult
+      pure $ Triple tResult (ml <> mr) (cl <+> cr <+> cConstr <+> cBinding)
+
+
 
   where
   -- Go through the list of given types and set constraints for every to elements of the list.
@@ -829,7 +896,7 @@ makeBindingEnv binding = case binding of
     pure c
 
   -- Given a list of types occurring in a list, determine the list type (choose the first element).
-  listType Nil = fresh >>= \tv -> pure $ TList tv
+  listType Nil = TList <$> fresh
   listType (t:_) = pure $ TList t
 
 -- | Extend the type environment with the new mappings for the evaluation of `m`.
@@ -935,6 +1002,39 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
       returnAs (fold ms) (foldConstraints cs) listType
     _ -> reportMismatch
 
+  ConstrLit _ constr -> case constr of
+    PrefixDataConstr constrName _ bs -> case expectConstrType scheme of
+      Just bndType@(TTypeCons constrName' ts) -> do
+        mt <- lookupEnv constrName
+        constrType <- case mt of
+          Just t -> pure t
+          Nothing -> Ex.throwError (UnknownDataConstructor constrName)
+        let ts' = fromArrowType constrType
+            c = setTypeConstraintFor' (bindingIndex binding) (last' ts') bndType
+        uni <- solveConstraints c
+        Tuple ms cs <- unzip <$> traverse
+          (\(Tuple b t) -> mapSchemeOnTVarMappingsPartial b (toScheme t))
+          (zip bs (apply uni.subst ts'))
+
+        returnAs (fold ms) (c <+> foldConstraints cs) bndType
+      _ -> reportMismatch
+
+    InfixDataConstr constrName _ _ lArg rArg -> case expectConstrType scheme of
+      Just bndType@(TTypeCons constrName' ts) -> do
+        mt <- lookupEnv constrName
+        Triple lType rType resType <- case mt of
+          Just (TypArr l (TypArr r t)) -> pure $ Triple l r t
+          Just t -> Ex.throwError (UnknownError $ prettyPrintType t <> " can not be the type of " <> constrName)
+          Nothing -> Ex.throwError (UnknownDataConstructor constrName)
+        let c = setTypeConstraintFor' (bindingIndex binding) resType bndType
+        uni <- solveConstraints c
+        Tuple lM lC <- mapSchemeOnTVarMappingsPartial lArg (toScheme (apply uni.subst lType))
+        Tuple rM rC <- mapSchemeOnTVarMappingsPartial rArg (toScheme (apply uni.subst rType))
+        returnAs (lM <> rM) (c <+> lC <+> rC) bndType
+      _ -> reportMismatch
+
+
+
   _ -> pure $ Tuple Nil emptyConstraints
   where
   -- Set a type constraint for the current binding.
@@ -951,6 +1051,8 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
   expectListType _ = Nothing
   expectTupleType (Forall tvs (TTuple ts)) = Just $ TTuple ts
   expectTupleType _ = Nothing
+  expectConstrType (Forall tvs (TTypeCons n ts)) = Just $ TTypeCons n ts
+  expectConstrType _ = Nothing
   toScheme t = Forall typeVariables t
   filteredScheme (Forall tvs t) = (Forall (commonFreeTVars tvs t) t)
   schemeType (Forall tvs t) = t
@@ -1099,6 +1201,15 @@ unifies (TTuple (a:as)) (TTuple (b:bs)) = do
   s2 <- unifies a b
   pure $ s1 `compose` s2
 unifies (TTuple Nil) (TTuple Nil) = pure nullSubst
+unifies t1@(TTypeCons n1 (p1:ps1)) t2@(TTypeCons n2 (p2:ps2))
+  | n1 == n2 = do
+      s1 <- unifies (TTypeCons n1 ps1) (TTypeCons n2 ps2)
+      s2 <- unifies p1 p2
+      pure $ s1 `compose` s2
+  | otherwise = Left $ normalizeTypeError $ UnificationFail t1 t2
+unifies t1@(TTypeCons n1 Nil) t2@(TTypeCons n2 Nil)
+  | n1 == n2 = pure nullSubst
+  | otherwise = Left $ normalizeTypeError $ UnificationFail t1 t2
 unifies UnknownType t = pure nullSubst
 unifies t UnknownType = pure nullSubst
 unifies t1 t2 = Left $ normalizeTypeError $ UnificationFail t1 t2
@@ -1400,6 +1511,9 @@ normalizeType' t = case t of
   TTuple ts -> do
     ts' <- traverse normalizeType' ts
     pure $ TTuple ts'
+  TTypeCons n ts -> do
+    ts' <- traverse normalizeType' ts
+    pure $ TTypeCons n ts'
   a -> pure a
 
 -- | Use `normalizeType'` on `Maybe Type`.

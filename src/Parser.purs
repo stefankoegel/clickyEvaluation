@@ -37,6 +37,7 @@ import AST
   , TypeTree
   , toOpTuple
   , ADTDef(..)
+  , compileADTDef
   , Associativity(..)
   , DataConstr(..)
   , Type(..))
@@ -515,8 +516,18 @@ definition = do
   body    <- indent expression
   pure $ Def defName binds body
 
+typeDefinition' :: IndentParser String (List Definition)
+typeDefinition' = compileADTDef <$> typeDefinition
+
+-- TODO: Infix function definition
+
 definitions :: IndentParser String (List Definition)
-definitions = skipWhite *> block definition
+definitions = do
+  skipWhite
+  defs <- many $ (PC.try typeDefinition') <|> (pure <$> definition)
+  pure $ concat defs
+
+  
 
 parseDefs :: String -> Either ParseError (List Definition)
 parseDefs = runParserIndent $ definitions

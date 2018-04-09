@@ -9,8 +9,8 @@ import Data.List (List(Nil))
 -- import Control.Monad.Writer (Writer, tell)
 
 import Parser (definitions, expression, runParserIndent)
-import Evaluator (eval, eval1, runEvalM, defsToEnv, Env)
-import Test.Parser (prelude)
+import Evaluator (eval, eval1, runEvalM, defsToEnv,Env)
+import Test.Parser (prelude, parsedPrelude)
 
 import Test.Utils (Test, tell, padLeft)
 
@@ -93,6 +93,10 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expres
     <> "Definitions:\n"
     <> padLeft (show pd)
 
+evalTest :: String -> String -> String -> Test Unit
+evalTest n = evalEnvTest n ""
+
+
 evalPreludeTest :: String -> String -> String -> Test Unit
 evalPreludeTest name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
   (Tuple (Right inExp) (Right expExp)) ->
@@ -112,14 +116,13 @@ evalPreludeTest name input expected = case (Tuple (runParserIndent expression in
             <> "Expected Parsed:\n"
             <> padLeft (show expExp) <> "\n"
             <> "Definitions from Prelude!\n"
+
   (Tuple pi pe) -> tell'
      $ "Parse fail (" <> name <> "):\n"
     <> "Input:\n"
     <> padLeft (show pi) <> "\n"
     <> "Expected:\n"
     <> padLeft (show pe) <> "\n"
-
-
 
 
 runTests :: Test Unit
@@ -180,7 +183,7 @@ runTests = do
   -- evalEnvTest "fix" "f x = f x" "f 10" "f 10"
 
   evalEnvTest "fac" "fac 1 = 1\nfac n = n * fac (n - 1)" "fac 6" "720"
-  evalPreludeTest  "prelude" "sum (map (^2) [1,2,3,4])" "30"
+  evalPreludeTest "prelude" "sum (map (^2) [1,2,3,4])" "30"
 
   evalEnvTest "TAE2a"
     ( prelude <> "\n" <>
@@ -188,19 +191,19 @@ runTests = do
       "pair _        = []")
     "pair [1, 2, 3, 4]"
     "[(1, 2), (2, 3), (3, 4)]"
-  evalPreludeTest  "TAE2b" "foldr (\\a b -> a + b * 10) 0 [3, 2, 1]" "123"
+  evalPreludeTest "TAE2b" "foldr (\\a b -> a + b * 10) 0 [3, 2, 1]" "123"
   evalEnvTest "TAE2c"
     (prelude <> "\nsublist f t ls = drop f (take (t + f) ls)\n")
     "sublist 1 3 [0, 1, 2, 3, 4]"
     "[1, 2, 3]"
 
-  evalPreludeTest  "TAE3a" "map (>= 2) [1, 2, 3]" "[False, True, True]"
-  evalPreludeTest  "TAE3b" "foldr (\\a b -> b ++ [a]) [] [1, 2, 3]" "[3, 2, 1]"
-  evalPreludeTest  "TAE3c" "take 3 (iterate (3*) 1)" "[1, 3, 9]"
-  evalPreludeTest  "TAE3d" "filter (const True) [1, 3, 5, 7]" "[1, 3, 5, 7]"
-  evalPreludeTest  "TAE3e" "map (length . snd) [(7, \"sieben\"), (1, \"eins\")]" "[6, 4]"
-  evalPreludeTest  "TAE3f" "foldr (:) [3, 4] [1, 2]" "[1, 2, 3, 4]"
-  evalPreludeTest  "TAE3g" "foldl (\\(i, c) s -> (i + 1, c + length s)) (0, 0) [\"a\", \"bc\", \"defg\"]" "(3, 7)"
+  evalPreludeTest "TAE3a" "map (>= 2) [1, 2, 3]" "[False, True, True]"
+  evalPreludeTest "TAE3b" "foldr (\\a b -> b ++ [a]) [] [1, 2, 3]" "[3, 2, 1]"
+  evalPreludeTest "TAE3c" "take 3 (iterate (3*) 1)" "[1, 3, 9]"
+  evalPreludeTest "TAE3d" "filter (const True) [1, 3, 5, 7]" "[1, 3, 5, 7]"
+  evalPreludeTest "TAE3e" "map (length . snd) [(7, \"sieben\"), (1, \"eins\")]" "[6, 4]"
+  evalPreludeTest "TAE3f" "foldr (:) [3, 4] [1, 2]" "[1, 2, 3, 4]"
+  evalPreludeTest "TAE3g" "foldl (\\(i, c) s -> (i + 1, c + length s)) (0, 0) [\"a\", \"bc\", \"defg\"]" "(3, 7)"
 
   evalEnvTest "TAT2a"
     (prelude <> "\nnth ls n = head (drop n ls)\n")
@@ -212,15 +215,15 @@ runTests = do
       "smallest [x]      = x")
     "smallest [5, 3, 7]"
     "3"
-  evalPreludeTest  "TAT2c" "foldl (\\(s, p) i -> (i + s, i * p)) (0, 1) [2, 3, 4]" "(9, 24)"
+  evalPreludeTest "TAT2c" "foldl (\\(s, p) i -> (i + s, i * p)) (0, 1) [2, 3, 4]" "(9, 24)"
 
-  evalPreludeTest  "TAT3a" "map (2^) [1, 2, 3]" "[2, 4, 8]"
-  evalPreludeTest  "TAT3b" "foldl (*) 1 [1, 2, 3, 4]" "24"
-  evalPreludeTest  "TAT3c" "map (== 3) [1, 2, 3, 4]" "[False, False, True, False]"
-  evalPreludeTest  "TAT3d" "filter (/= 's') \"asdf\"" "\"adf\""
-  evalPreludeTest  "TAT3e" "map (fst . head) [[(1, 2)], [(3, 4)]]" "[1, 3]"
-  evalPreludeTest  "TAT3f" "foldl (-) 10 [1, 2, 3]" "4"
-  evalPreludeTest  "TAT3g" "zipWith (\\a b -> map (+a) b) [1, 2] [[3, 4], [5, 6]]" "[[4, 5], [7, 8]]"
+  evalPreludeTest "TAT3a" "map (2^) [1, 2, 3]" "[2, 4, 8]"
+  evalPreludeTest "TAT3b" "foldl (*) 1 [1, 2, 3, 4]" "24"
+  evalPreludeTest "TAT3c" "map (== 3) [1, 2, 3, 4]" "[False, False, True, False]"
+  evalPreludeTest "TAT3d" "filter (/= 's') \"asdf\"" "\"adf\""
+  evalPreludeTest "TAT3e" "map (fst . head) [[(1, 2)], [(3, 4)]]" "[1, 3]"
+  evalPreludeTest "TAT3f" "foldl (-) 10 [1, 2, 3]" "4"
+  evalPreludeTest "TAT3g" "zipWith (\\a b -> map (+a) b) [1, 2] [[3, 4], [5, 6]]" "[[4, 5], [7, 8]]"
 
   evalEnvTest "string_third1" "thrd (_:(_:(x:_))) = x" "thrd \"1234\"" "'3'"
   evalEnvTest "string_third2" "thrd [_,_,x,_] = x" "thrd \"1234\"" "'3'"
@@ -232,47 +235,47 @@ runTests = do
 
   evalEnvTest "eval_names" "nat = [1, 2, 3, 4, 5]" "nat" "[1, 2, 3, 4, 5]"
 
-  evalPreludeTest  "infix_functions_1" "3 `take` (2 `drop` [1, 2, 3, 4, 5, 6, 7])" "[3, 4, 5]"
-  evalPreludeTest  "infix_functions_2" "(\\x -> x `mod` 2 == 0) `filter` [1, 2, 3, 4, 5, 6]" "[2, 4, 6]"
-  evalPreludeTest  "infix_functions_3" "(*2) `map` [1, 2, 3]" "[2, 4, 6]"
+  evalPreludeTest "infix_functions_1" "3 `take` (2 `drop` [1, 2, 3, 4, 5, 6, 7])" "[3, 4, 5]"
+  evalPreludeTest "infix_functions_2" "(\\x -> x `mod` 2 == 0) `filter` [1, 2, 3, 4, 5, 6]" "[2, 4, 6]"
+  evalPreludeTest "infix_functions_3" "(*2) `map` [1, 2, 3]" "[2, 4, 6]"
 
-  evalPreludeTest  "arithmetic_sequences_1" "sum [1, 3 .. 100]" "2500"
-  evalPreludeTest  "arithmetic_sequences_3" "length [ 7 * 7, 8 * 8 .. 42 * 42]" "115"
-  evalPreludeTest  "arithmetic_sequences_5" "sum $ take 100 [500 ..]" "54950"
-  evalPreludeTest  "arithmetic_sequences_6" "[1, -1 .. 0]" "[1]"
-  evalPreludeTest  "arithmetic_sequences_7" "sum [10, 9 .. -10]" "0"
-  evalPreludeTest  "arithmetic_sequences_8" "[True .. False]" "[]"
-  evalPreludeTest  "arithmetic_sequences_9" "[True, False ..]" "[True, False]"
-  evalPreludeTest  "arithmetic_sequences_11" "[False, True ..]" "[False, True]"
-  evalPreludeTest  "arithmetic_sequences_12" "[True, False ..]" "[True, False]"
-  evalPreludeTest  "arithmetic_sequences_13" "[1 .. 10]" "[1,2,3,4,5,6,7,8,9,10]"
-  evalPreludeTest  "arithmetic_sequences_14" "[5, 9 .. 20]" "[5, 9, 13, 17]"
-  evalPreludeTest  "arithmetic_sequences_15" "take 5 [3, -1 ..]" "[3, -1, -5, -9, -13]"
-  evalPreludeTest  "arithmetic_sequences_16" "take 11 [-5 ..]" "[-5, -4, -3, -2, -1, 0, 1, 2 ,3, 4, 5]"
-  evalPreludeTest  "arithmetic_sequences_17" "[2147483647 ..]" "[2147483647]"
-  evalPreludeTest  "arithmetic_sequences_18" "[2147483644, 2147483646 ..]" "[2147483644, 2147483646]"
-  evalPreludeTest  "arithmetic_sequences_19" "[-2147483648]" "[-2147483648]"
-  evalPreludeTest  "arithmetic_sequences_20" "[-2147483645, -2147483647 ..]" "[-2147483645, -2147483647]"
+  evalPreludeTest "arithmetic_sequences_1" "sum [1, 3 .. 100]" "2500"
+  evalPreludeTest "arithmetic_sequences_3" "length [ 7 * 7, 8 * 8 .. 42 * 42]" "115"
+  evalPreludeTest "arithmetic_sequences_5" "sum $ take 100 [500 ..]" "54950"
+  evalPreludeTest "arithmetic_sequences_6" "[1, -1 .. 0]" "[1]"
+  evalPreludeTest "! arithmetic_sequences_7" "sum [10, 9 .. -10]" "0"
+  evalPreludeTest "arithmetic_sequences_8" "[True .. False]" "[]"
+  evalPreludeTest "arithmetic_sequences_9" "[True, False ..]" "[True, False]"
+  evalPreludeTest "arithmetic_sequences_11" "[False, True ..]" "[False, True]"
+  evalPreludeTest "arithmetic_sequences_12" "[True, False ..]" "[True, False]"
+  evalPreludeTest "arithmetic_sequences_13" "[1 .. 10]" "[1,2,3,4,5,6,7,8,9,10]"
+  evalPreludeTest "arithmetic_sequences_14" "[5, 9 .. 20]" "[5, 9, 13, 17]"
+  evalPreludeTest "arithmetic_sequences_15" "take 5 [3, -1 ..]" "[3, -1, -5, -9, -13]"
+  evalPreludeTest "arithmetic_sequences_16" "take 11 [-5 ..]" "[-5, -4, -3, -2, -1, 0, 1, 2 ,3, 4, 5]"
+  evalPreludeTest "arithmetic_sequences_17" "[2147483647 ..]" "[2147483647]"
+  evalPreludeTest "arithmetic_sequences_18" "[2147483644, 2147483646 ..]" "[2147483644, 2147483646]"
+  evalPreludeTest "arithmetic_sequences_19" "[-2147483648]" "[-2147483648]"
+  evalPreludeTest "arithmetic_sequences_20" "[-2147483645, -2147483647 ..]" "[-2147483645, -2147483647]"
 
-  evalPreludeTest  "list_comprehension_1" "[ x | x <- [1 .. 10], even x]" "[2, 4, 6, 8, 10]"
-  evalPreludeTest  "list_comprehension_2" "[ (x, y) | x <- [1 .. 3], y <- [1 .. 3], x + y == 4]" "[(1,3), (2,2), (3,1)]"
-  evalPreludeTest  "list_comprehension_3" "(\\x -> [ x | let x = 1]) 2"    "[1]"
-  evalPreludeTest  "list_comprehension_4" "[ x | let x = 1, True, let x = 'a']" "['a']"
-  evalPreludeTest  "list_comprehension_5" "[ y | y <- [1 .. 10], y < y]"  "[]"
-  evalPreludeTest  "list_comprehension_6" "[ [ y | y <- reverse x] | x <- [[1 .. 10]]]" "[[10, 9, 8, 7, 6, 5, 4, 3, 2, 1]]"
-  evalPreludeTest  "list_comprehension_7" "[ x | x <- [1 .. 5], y <- [x .. 5]]" "[1,1,1,1,1, 2,2,2,2, 3,3,3, 4,4, 5]"
-  evalPreludeTest  "list_comprehension_8" "[x | x <- \"wer misst zu viele gabeln\", elem x \"itzgw\"]" "\"witzig\""
-  evalPreludeTest  "list_comprehension_9" "[(x, z) | x <- [1 .. 5], z <- [y | y <- [1 .. 5], mod x y == 0] ]" "[(1,1), (2,1), (2,2), (3,1), (3,3), (4,1), (4,2), (4,4), (5,1), (5,5)]"
-  evalPreludeTest  "list_comprehension_10" "[z | let y = [True, True, False], z <- y, z]" "[True, True]"
+  evalPreludeTest "list_comprehension_1" "[ x | x <- [1 .. 10], even x]" "[2, 4, 6, 8, 10]"
+  evalPreludeTest "list_comprehension_2" "[ (x, y) | x <- [1 .. 3], y <- [1 .. 3], x + y == 4]" "[(1,3), (2,2), (3,1)]"
+  evalPreludeTest "list_comprehension_3" "(\\x -> [ x | let x = 1]) 2"    "[1]"
+  evalPreludeTest "list_comprehension_4" "[ x | let x = 1, True, let x = 'a']" "['a']"
+  evalPreludeTest "list_comprehension_5" "[ y | y <- [1 .. 10], y < y]"  "[]"
+  evalPreludeTest "list_comprehension_6" "[ [ y | y <- reverse x] | x <- [[1 .. 10]]]" "[[10, 9, 8, 7, 6, 5, 4, 3, 2, 1]]"
+  evalPreludeTest "list_comprehension_7" "[ x | x <- [1 .. 5], y <- [x .. 5]]" "[1,1,1,1,1, 2,2,2,2, 3,3,3, 4,4, 5]"
+  evalPreludeTest "list_comprehension_8" "[x | x <- \"wer misst zu viele gabeln\", elem x \"itzgw\"]" "\"witzig\""
+  evalPreludeTest "list_comprehension_9" "[(x, z) | x <- [1 .. 5], z <- [y | y <- [1 .. 5], mod x y == 0] ]" "[(1,1), (2,1), (2,2), (3,1), (3,3), (4,1), (4,2), (4,4), (5,1), (5,5)]"
+  evalPreludeTest "list_comprehension_10" "[z | let y = [True, True, False], z <- y, z]" "[True, True]"
 
   --should fail, due to overlapping defs
-  --evalPreludeTest  "let_expression_1" "let x = 1; x = 'c' in x" "'c'"
-  evalPreludeTest  "let_expression_2" "let (x, y) = (\\g -> g, \"Hello\") in x y" "\"Hello\""
-  evalPreludeTest  "let_expression_3" "let x = 1 ; y = x + 1; z = y + 1 in x + y + z" "6"
-  evalPreludeTest  "let_expression_4" "let x = 1 in let y = 2 in x + y" "3"
+  --evalPreludeTest "let_expression_1" "let x = 1; x = 'c' in x" "'c'"
+  evalPreludeTest "let_expression_2" "let (x, y) = (\\g -> g, \"Hello\") in x y" "\"Hello\""
+  evalPreludeTest "let_expression_3" "let x = 1 ; y = x + 1; z = y + 1 in x + y + z" "6"
+  evalPreludeTest "let_expression_4" "let x = 1 in let y = 2 in x + y" "3"
   --                                                                                                       should be: "True"
-  evalPreludeTest  "let_expression_5" "(let x = [1,2,3] in x) == (let x = 1; y = 2; z = 3 in [x,y,z])" "[1,2,3] == [1,2,3]"
-  evalPreludeTest  "let_expression_6" "let sum = \\x -> x ; y = sum [1,2,3] in y" "[1,2,3]"
+  evalPreludeTest "let_expression_5" "(let x = [1,2,3] in x) == (let x = 1; y = 2; z = 3 in [x,y,z])" "[1,2,3] == [1,2,3]"
+  evalPreludeTest "let_expression_6" "let sum = \\x -> x ; y = sum [1,2,3] in y" "[1,2,3]"
 
   testsADT
 
@@ -292,6 +295,15 @@ testsADT = do
     "Foo 1 2"
     "Foo 1 2"
 -}
+  
+  evalTest "constr-section-1"
+    "(:+ 2) 1"
+    "1 :+ 2"
+
+  evalTest "constr-section-2"
+    "(1 :+) 2"
+    "1 :+ 2"
+
   eval1test "constr-5"
     "if True then Foo else Bar"
     "Foo"

@@ -18,8 +18,8 @@ import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
 import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding,
-            DataConstr(..),
-            Type(..), TypeQual, pPrintOp, prettyPrintType, prettyPrintTypeError)
+            Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError)
+
 
 data RoseTree a = Node a (List (RoseTree a))
 
