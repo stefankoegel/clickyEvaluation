@@ -300,8 +300,11 @@ getTreeChildren _ = Nil
 type Expr = Tree Atom (Binding Unit) Op Unit
 
 type MType = Maybe Type
+type MIntex = Maybe (Tuple Int Int)
 
-type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) MType
+type Meta = { mindex:: MIndex, mtype :: MType }
+
+type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) Meta
 
 type Index = Int
 type MIType = Tuple MType Index
