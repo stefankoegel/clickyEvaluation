@@ -108,41 +108,41 @@ toOpTuple :: Op -> Tuple Op MType
 toOpTuple op = Tuple op Nothing
 
 exprToTypeTree :: Expr -> TypeTree
-exprToTypeTree (Atom _ atom) = Atom Nothing atom
-exprToTypeTree (List _ exprs) = List Nothing (map exprToTypeTree exprs)
-exprToTypeTree (NTuple _ exprs) = NTuple Nothing (map exprToTypeTree exprs)
-exprToTypeTree (Binary _ op t1 t2) = Binary Nothing (toOpTuple op)
+exprToTypeTree (Atom _ atom) = Atom emptyMeta atom
+exprToTypeTree (List _ exprs) = List emptyMeta (map exprToTypeTree exprs)
+exprToTypeTree (NTuple _ exprs) = NTuple emptyMeta (map exprToTypeTree exprs)
+exprToTypeTree (Binary _ op t1 t2) = Binary emptyMeta (toOpTuple op)
   (exprToTypeTree t1)
   (exprToTypeTree t2)
-exprToTypeTree (Unary _ op t) = Unary Nothing (toOpTuple op) (exprToTypeTree t)
-exprToTypeTree (SectL _ t op) = SectL Nothing (exprToTypeTree t) (toOpTuple op)
-exprToTypeTree (SectR _ op t) = SectR Nothing (toOpTuple op) (exprToTypeTree t)
-exprToTypeTree (PrefixOp _ op) = PrefixOp Nothing (toOpTuple op)
-exprToTypeTree (IfExpr _ t1 t2 t3) = IfExpr Nothing
+exprToTypeTree (Unary _ op t) = Unary emptyMeta (toOpTuple op) (exprToTypeTree t)
+exprToTypeTree (SectL _ t op) = SectL emptyMeta (exprToTypeTree t) (toOpTuple op)
+exprToTypeTree (SectR _ op t) = SectR emptyMeta (toOpTuple op) (exprToTypeTree t)
+exprToTypeTree (PrefixOp _ op) = PrefixOp emptyMeta (toOpTuple op)
+exprToTypeTree (IfExpr _ t1 t2 t3) = IfExpr emptyMeta
   (exprToTypeTree t1)
   (exprToTypeTree t2)
   (exprToTypeTree t3)
-exprToTypeTree (ArithmSeq _ t1 mt2 mt3) = ArithmSeq Nothing
+exprToTypeTree (ArithmSeq _ t1 mt2 mt3) = ArithmSeq emptyMeta
   (exprToTypeTree t1)
   (map exprToTypeTree mt2)
   (map exprToTypeTree mt3)
-exprToTypeTree (LetExpr _ bs t) = LetExpr Nothing
+exprToTypeTree (LetExpr _ bs t) = LetExpr emptyMeta
   (map (\(Tuple b bt) -> Tuple (map (const Nothing) b) (exprToTypeTree bt)) bs)
   (exprToTypeTree t)
-exprToTypeTree (Lambda _ bindings t) = Lambda Nothing
+exprToTypeTree (Lambda _ bindings t) = Lambda emptyMeta
   (map (map (const Nothing)) bindings)
   (exprToTypeTree t)
-exprToTypeTree (App _ t ts) = App Nothing (exprToTypeTree t) (map exprToTypeTree ts)
-exprToTypeTree (ListComp _ t qualTrees) = ListComp Nothing
+exprToTypeTree (App _ t ts) = App emptyMeta (exprToTypeTree t) (map exprToTypeTree ts)
+exprToTypeTree (ListComp _ t qualTrees) = ListComp emptyMeta
   (exprToTypeTree t)
   (map go qualTrees)
     where
-    go (Gen _ b t) = Gen Nothing (map (const Nothing) b) (exprToTypeTree t)
-    go (Let _ b t) = Let Nothing (map (const Nothing) b) (exprToTypeTree t)
-    go (Guard _ t) = Guard Nothing (exprToTypeTree t)
+    go (Gen _ b t) = Gen emptyMeta (map (const Nothing) b) (exprToTypeTree t)
+    go (Let _ b t) = Let emptyMeta (map (const Nothing) b) (exprToTypeTree t)
+    go (Guard _ t) = Guard emptyMeta (exprToTypeTree t)
 
 binary :: Op -> TypeTree -> TypeTree -> TypeTree
-binary op left right = Binary Nothing (Tuple op Nothing) left right
+binary op left right = Binary emptyMeta (Tuple op Nothing) left right
 
 -- | Get the expression element from a given qual tree.
 getQualTreeExpression :: forall b t m. QualTree b t m -> t
@@ -301,16 +301,28 @@ type Expr = Tree Atom (Binding Unit) Op Unit
 type MType = Maybe Type
 type MIndex = Maybe (Tuple Int Int)
 
-newtype Meta = Meta { mindex :: MIndex, mtype :: MType }
+type Meta' = { mindex :: MIndex ,mtype :: MType }
+newtype Meta = Meta Meta'
+
+
+emptyMeta' :: Meta'
+emptyMeta' = {mindex: Nothing, mtype: Nothing}
+
+emptyMeta :: Meta
+emptyMeta = Meta emptyMeta'
 
 instance showMeta :: Show Meta where
   show (Meta meta) = "Meta { mindex: " <> show meta.mindex <> ", mtype: " <> show meta.mtype <> "}"
 
-metaMIndex :: Meta -> MIndex
-metaMIndex (Meta meta) = meta.mindex
+instance eqMeta :: Eq Meta where
+  eq a b = getMetaMIndex a `eq` getMetaMIndex b && getMetaMType a `eq` getMetaMType b
 
-metaMType :: Meta -> MType
-metaMType (Meta meta) = meta.mtype
+
+getMetaMIndex :: Meta -> MIndex
+getMetaMIndex (Meta meta) = meta.mindex
+
+getMetaMType :: Meta -> MType
+getMetaMType (Meta meta) = meta.mtype
 
 type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) Meta
 
@@ -322,6 +334,13 @@ makeIndexTuple :: MType -> State Index MIType
 makeIndexTuple mt = do
   idx <- get
   let new = Tuple mt idx
+  put (idx + 1)
+  pure new
+
+makeIndexTuple' :: Meta -> State Index MIType
+makeIndexTuple' meta = do
+  idx <- get
+  let new = Tuple (getMetaMType meta) idx
   put (idx + 1)
   pure new
 
@@ -340,17 +359,17 @@ makeIndexedDefinition (Def name bindings expr) beginWith =
   in Tuple (IndexedDef name (fst idxAndBindings) (fst idxAndExpr)) (snd idxAndExpr)
   where
   toIndexedBindings = traverse $ traverseBinding makeIndexTuple
-  toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
+  toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple' expr
 
 makeIndexedTree :: TypeTree -> IndexedTypeTree
 makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
   where
     -- Traverse the tree and assign indices in ascending order.
     makeIndexedTree' :: TypeTree -> State Index IndexedTypeTree
-    makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
+    makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple' expr
 
 removeIndices :: IndexedTypeTree -> TypeTree
-removeIndices = treeMap id (map fst) (\(Tuple op mit) -> Tuple op (fst mit)) fst
+removeIndices = treeMap id (map fst) (\(Tuple op mit) -> Tuple op (fst mit)) (\(Tuple mt _) -> Meta (emptyMeta' {mtype = mt}))
 
 insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Tuple t idx) expr
@@ -576,9 +595,9 @@ data DataConstr param
 -- This will be called by compileADTDef and does the actual work.
 compileDataConstr :: Type -> DataConstr Type -> Definition
 compileDataConstr t (PrefixDataConstr name _ ps) =
-  Def name Nil (Atom (Just $ foldr TypArr t ps) (Constr name))
+  Def name Nil (Atom (Meta (emptyMeta' {mtype = Just (foldr TypArr t ps)})) (Constr name))
 compileDataConstr t (InfixDataConstr op assoc prec l r) =
-  Def op Nil (PrefixOp (Just typ) (Tuple (InfixConstr op) (Just typ)))
+  Def op Nil (PrefixOp (Meta (emptyMeta' {mtype = Just typ})) (Tuple (InfixConstr op) (Just typ)))
  where
   typ = TypArr l (TypArr r t)
 
