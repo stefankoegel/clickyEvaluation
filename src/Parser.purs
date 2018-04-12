@@ -41,6 +41,7 @@ import AST
   , Associativity(..)
   , DataConstr(..)
   , Type(..))
+import AST as AST
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
@@ -234,7 +235,7 @@ operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
       (\x ->
         (uncurry3
           (\p op assoc ->
-            Infix (Binary Nothing <<< toOpTuple <<< op <$> spaced p) assoc))
+            Infix (Binary AST.emptyMeta <<< toOpTuple <<< op <$> spaced p) assoc))
         <$> x)
       <$> infixOperators
 
@@ -244,8 +245,8 @@ operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
         minusParse = do
           string "-"
           pure $ \e -> case e of
-            Atom _ (AInt ai) -> Atom Nothing (AInt (-ai))
-            _                -> Unary Nothing (toOpTuple Sub) e
+            Atom _ (AInt ai) -> Atom AST.emptyMeta (AInt (-ai))
+            _                -> Unary AST.emptyMeta (toOpTuple Sub) e
 
     -- | Parse an expression between spaces (backtracks)
     spaced :: forall a. ParserT String m a -> ParserT String m a
@@ -264,7 +265,7 @@ base expr =
   <|> PC.try (arithmeticSequence expr)
   <|> list expr
   <|> charList
-  <|> (Atom Nothing <$> atom)
+  <|> (Atom AST.emptyMeta <$> atom)
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
 syntax :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -280,7 +281,7 @@ applicationOrSingleExpression expr = do
   mArgs <- PC.optionMaybe (PC.try $ ((PC.try (indent (base expr))) `PC.sepEndBy1` skipWhite))
   case mArgs of
     Nothing   -> pure e
-    Just args -> pure $ App Nothing e args
+    Just args -> pure $ App AST.emptyMeta e args
 
 -- | Parse an if_then_else construct - layout sensitive
 ifThenElse :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -291,7 +292,7 @@ ifThenElse expr = do
   thenExpr <- indent expr
   indent $ string "else"
   elseExpr <- indent expr
-  pure $ IfExpr Nothing testExpr thenExpr elseExpr
+  pure $ IfExpr AST.emptyMeta testExpr thenExpr elseExpr
 
 -- | Parser for tuples or bracketed expressions - layout sensitive
 tuplesOrBrackets :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -304,7 +305,7 @@ tuplesOrBrackets expr = do
   indent $ char ')'
   case mes of
     Nothing -> pure e
-    Just es -> pure $ NTuple Nothing (Cons e es)
+    Just es -> pure $ NTuple AST.emptyMeta (Cons e es)
 
 -- | Parser for operator sections - layout sensitive
 section :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -318,11 +319,11 @@ section expr = do
   case me1 of
     Nothing ->
       case me2 of
-        Nothing -> pure $ PrefixOp Nothing op
-        Just e2 -> pure $ SectR Nothing op e2
+        Nothing -> pure $ PrefixOp AST.emptyMeta op
+        Just e2 -> pure $ SectR AST.emptyMeta op e2
     Just e1 ->
       case me2 of
-        Nothing -> pure $ SectL Nothing e1 op
+        Nothing -> pure $ SectL AST.emptyMeta e1 op
         Just _ -> fail "Cannot have a section with two expressions!"
 
 -- | Parser for lists - layout sensitive
@@ -331,7 +332,7 @@ list expr = do
   ilexe $ char '['
   exprs <- (indent expr) `PC.sepBy` (PC.try $ indent $ char ',')
   indent $ char ']'
-  pure $ List Nothing exprs
+  pure $ List AST.emptyMeta exprs
 
 -- | Parser for Arithmetic Sequences - layout sensitive
 arithmeticSequence :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -342,7 +343,7 @@ arithmeticSequence expr = do
   indent $ string ".."
   end   <- PC.optionMaybe $ indent expr
   indent $ char ']'
-  pure $ ArithmSeq Nothing start step end
+  pure $ ArithmSeq AST.emptyMeta start step end
 
 -- | Parser for list comprehensions - layout sensitive
 listComp :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -353,7 +354,7 @@ listComp expr = do
   skipWhite
   quals <- (indent $ qual expr) `PC.sepBy1` (PC.try $ indent $ char ',')
   indent $ char ']'
-  pure $ ListComp Nothing start quals
+  pure $ ListComp AST.emptyMeta start quals
   where
     -- | Parser for list comprehension qualifiers
     qual :: IndentParser String TypeTree -> IndentParser String TypeQual
@@ -364,13 +365,13 @@ listComp expr = do
           b <- indent binding
           indent $ char '='
           e <- indent expr
-          pure $ Let Nothing b e
+          pure $ Let AST.emptyMeta b e
         parseGen = do
           b <- ilexe binding
           indent $ string "<-"
           e <- indent expr
-          pure $ Gen Nothing b e
-        parseGuard = ilexe expr >>= (pure <<< Guard Nothing)
+          pure $ Gen AST.emptyMeta b e
+        parseGuard = ilexe expr >>= (pure <<< Guard AST.emptyMeta)
 
 -- | Parser for strings ("example")
 charList :: forall m. (Monad m) => ParserT String m TypeTree
@@ -378,7 +379,7 @@ charList = do
   char '"'
   strs <- many character'
   char '"'
-  pure (List Nothing ((Atom Nothing <<< Char <<< String.singleton) <$> strs))
+  pure (List AST.emptyMeta ((Atom AST.emptyMeta <<< Char <<< String.singleton) <$> strs))
 
 -- | Parse a lambda expression - layout sensitive
 lambda :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -387,7 +388,7 @@ lambda expr = do
   binds <- many1 $ indent binding
   indent $ string "->"
   body <- indent expr
-  pure $ Lambda Nothing binds body
+  pure $ Lambda AST.emptyMeta binds body
 
 -- Parser for let expressions - layout sensitive
 letExpr :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -396,7 +397,7 @@ letExpr expr = do
   binds <- indent $ bindingBlock expr
   indent $ string "in"
   body  <- indent $ withPos expr
-  pure $ LetExpr Nothing binds body
+  pure $ LetExpr AST.emptyMeta binds body
   where
     bindingItem :: IndentParser String TypeTree -> IndentParser String (Tuple (Binding MType) TypeTree)
     bindingItem expr = do
