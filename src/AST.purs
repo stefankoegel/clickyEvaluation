@@ -127,18 +127,18 @@ exprToTypeTree (ArithmSeq _ t1 mt2 mt3) = ArithmSeq emptyMeta
   (map exprToTypeTree mt2)
   (map exprToTypeTree mt3)
 exprToTypeTree (LetExpr _ bs t) = LetExpr emptyMeta
-  (map (\(Tuple b bt) -> Tuple (map (const Nothing) b) (exprToTypeTree bt)) bs)
+  (map (\(Tuple b bt) -> Tuple (map (const emptyMeta) b) (exprToTypeTree bt)) bs)
   (exprToTypeTree t)
 exprToTypeTree (Lambda _ bindings t) = Lambda emptyMeta
-  (map (map (const Nothing)) bindings)
+  (map (map (const emptyMeta)) bindings)
   (exprToTypeTree t)
 exprToTypeTree (App _ t ts) = App emptyMeta (exprToTypeTree t) (map exprToTypeTree ts)
 exprToTypeTree (ListComp _ t qualTrees) = ListComp emptyMeta
   (exprToTypeTree t)
   (map go qualTrees)
     where
-    go (Gen _ b t) = Gen emptyMeta (map (const Nothing) b) (exprToTypeTree t)
-    go (Let _ b t) = Let emptyMeta (map (const Nothing) b) (exprToTypeTree t)
+    go (Gen _ b t) = Gen emptyMeta (map (const emptyMeta) b) (exprToTypeTree t)
+    go (Let _ b t) = Let emptyMeta (map (const emptyMeta) b) (exprToTypeTree t)
     go (Guard _ t) = Guard emptyMeta (exprToTypeTree t)
 
 binary :: Op -> TypeTree -> TypeTree -> TypeTree
@@ -324,7 +324,7 @@ getMetaMIndex (Meta meta) = meta.mindex
 getMetaMType :: Meta -> MType
 getMetaMType (Meta meta) = meta.mtype
 
-type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) Meta
+type TypeTree = Tree Atom (Binding Meta) (Tuple Op MType) Meta
 
 type Index = Int
 type MIType = Tuple MType Index
@@ -358,18 +358,22 @@ makeIndexedDefinition (Def name bindings expr) beginWith =
       idxAndExpr = runState (toIndexedTree expr) (snd idxAndBindings)
   in Tuple (IndexedDef name (fst idxAndBindings) (fst idxAndExpr)) (snd idxAndExpr)
   where
-  toIndexedBindings = traverse $ traverseBinding makeIndexTuple
-  toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple' expr
+  toIndexedBindings = traverse $ traverseBinding makeIndexTuple'
+  toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple') makeIndexOpTuple makeIndexTuple' expr
 
 makeIndexedTree :: TypeTree -> IndexedTypeTree
 makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
   where
     -- Traverse the tree and assign indices in ascending order.
     makeIndexedTree' :: TypeTree -> State Index IndexedTypeTree
-    makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple' expr
+    makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple') makeIndexOpTuple makeIndexTuple' expr
 
 removeIndices :: IndexedTypeTree -> TypeTree
-removeIndices = treeMap id (map fst) (\(Tuple op mit) -> Tuple op (fst mit)) (\(Tuple mt _) -> Meta (emptyMeta' {mtype = mt}))
+removeIndices = treeMap
+  id
+  (map (\t -> Meta (emptyMeta' {mtype = fst t})))
+  (\(Tuple op mit) -> Tuple op (fst mit))
+  (\(Tuple mt _) -> Meta (emptyMeta' {mtype = mt}))
 
 insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Tuple t idx) expr
@@ -653,13 +657,13 @@ getBindingChildren (ListLit _ bs) = bs
 getBindingChildren (NTupleLit _ bs) = bs
 getBindingChildren _ = Nil
 
-type TypedBinding = Binding (Maybe Type)
+type TypedBinding = Binding Meta
 type IndexedTypedBinding = Binding MIType
 
 -- | Definitions
 -- |
 -- | Definitions for functions and constants
-data Definition = Def String (List (Binding MType)) TypeTree
+data Definition = Def String (List (Binding Meta)) TypeTree
 
 -- | A definition with indexed bindings and an indexed expression.
 data IndexedDefinition = IndexedDef String (List IndexedTypedBinding) IndexedTypeTree
