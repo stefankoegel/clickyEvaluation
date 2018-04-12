@@ -27,6 +27,9 @@ toList = Array.toUnfoldable
 tell' :: String -> Test Unit
 tell' = tell
 
+metaType :: Type -> Meta
+metaType t = Meta $ emptyMeta' {mtype = Just t}
+
 -- | Construct a list of type [typCon] given the name of the type constants.
 typConList :: String -> Type
 typConList name = TList (TypCon name)
@@ -275,54 +278,55 @@ testMapSchemeOnTVarMappings' name prelude scheme binding expected =
 
 -- | Typed type tree representing `[1]`.
 listOne :: TypeTree
-listOne = List (Just $ typConList "Int") (Atom (Just $ TypCon "Int") (AInt 1) : Nil)
+listOne = List (Meta (emptyMeta' {mtype = Just $ typConList "Int"}))
+  (Atom (Meta (emptyMeta' {mtype = Just $ TypCon "Int"})) (AInt 1) : Nil)
 
 -- | Untyped type tree representing `[1]`.
 untypedListOne :: TypeTree
-untypedListOne = List Nothing (Atom Nothing (AInt 1) : Nil)
+untypedListOne = List emptyMeta (Atom emptyMeta (AInt 1) : Nil)
 
 partiallyTypedExprTests :: Test Unit
 partiallyTypedExprTests = do
   -- Test that ((2 :: Int) + 4) is typed correctly.
   testInferTT "Partially typed"
     (Binary
-      Nothing
+      emptyMeta
       (Tuple Add Nothing)
-      (Atom (Just intType) (AInt 2))
-      (Atom Nothing (AInt 4))
+      (Atom (Meta $ emptyMeta' {mtype = Just intType}) (AInt 2))
+      (Atom emptyMeta (AInt 4))
     )
     (Binary
-      (Just (TypCon "Int"))
+      (Meta $ emptyMeta' {mtype = Just (TypCon "Int")})
       (Tuple Add (Just (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
-      (Atom (Just intType) (AInt 2))
-      (Atom (Just intType) (AInt 4))
+      (Atom (Meta $ emptyMeta' {mtype = Just intType}) (AInt 2))
+      (Atom (Meta $ emptyMeta' {mtype = Just intType}) (AInt 4))
     )
 
   -- Test that ((2 :: Char) + 4) results in a type error.
   testInferTTFail "Partially typed"
     (Binary
-      Nothing
+      emptyMeta
       (Tuple Add Nothing)
-      (Atom (Just charType) (AInt 2))
-      (Atom Nothing (AInt 4))
+      (Atom (Meta $ emptyMeta' {mtype = Just charType}) (AInt 2))
+      (Atom emptyMeta (AInt 4))
     )
     (UnificationFail intType charType)
 
   -- Test that `let (f :: Int -> Int) = \x -> x in f True` results in a type error.
   testInferTTFail "Partially typed let expression 1"
     (LetExpr
-      Nothing
+      emptyMeta
       (
-        Tuple (Lit (Just intToIntType) (Name "f"))
-          (Lambda Nothing
-            ((Lit Nothing (Name "x")) : Nil)
-            (Atom Nothing (Name "x"))) :
+        Tuple (Lit (Meta $ emptyMeta' {mtype = Just intToIntType}) (Name "f"))
+          (Lambda emptyMeta
+            ((Lit emptyMeta (Name "x")) : Nil)
+            (Atom emptyMeta (Name "x"))) :
         Nil
       )
       (App
-        Nothing
-        (Atom Nothing (Name "f"))
-        ((Atom Nothing (Bool true)) : Nil)
+        emptyMeta
+        (Atom emptyMeta (Name "f"))
+        ((Atom emptyMeta (Bool true)) : Nil)
       )
     )
     (UnificationFail intType boolType)
@@ -330,18 +334,18 @@ partiallyTypedExprTests = do
   -- Test that `let f = ((\x -> x) :: Int -> Int) in f True` results in a type error.
   testInferTTFail "Partially typed let expression 2"
     (LetExpr
-      Nothing
+      emptyMeta
       (
-        Tuple (Lit Nothing (Name "f"))
-          (Lambda (Just intToIntType)
-            ((Lit Nothing (Name "x")) : Nil)
-            (Atom Nothing (Name "x"))) :
+        Tuple (Lit emptyMeta (Name "f"))
+          (Lambda (Meta $ emptyMeta' {mtype = Just intToIntType})
+            ((Lit emptyMeta (Name "x")) : Nil)
+            (Atom emptyMeta (Name "x"))) :
         Nil
       )
       (App
-        Nothing
-        (Atom Nothing (Name "f"))
-        ((Atom Nothing (Bool true)) : Nil)
+        emptyMeta
+        (Atom emptyMeta (Name "f"))
+        ((Atom emptyMeta (Bool true)) : Nil)
       )
     )
     (UnificationFail intType boolType)
@@ -349,35 +353,35 @@ partiallyTypedExprTests = do
   -- Test that `(\(a :: Bool) b -> a)) 'x'` results in a type error.
   testInferTTFail "Partially typed lambda expression 1"
     (App
-      Nothing
+      emptyMeta
       (Lambda
-        Nothing
-        ((Lit (Just boolType) (Name "a")) : (Lit Nothing (Name "b")) : Nil)
-        (Atom Nothing (Name "a"))
+        emptyMeta
+        ((Lit (Meta $ emptyMeta' {mtype = Just boolType}) (Name "a")) : (Lit emptyMeta (Name "b")) : Nil)
+        (Atom emptyMeta (Name "a"))
       )
-      ((Atom Nothing (Char "x")) : Nil)
+      ((Atom emptyMeta (Char "x")) : Nil)
     )
     (UnificationFail boolType charType)
 
   -- Test that `(\(x:(y :: Char):ys) -> mod x y)` results in a type error.
   testInferTTFail "Partially typed lambda expression 1"
     (Lambda
-      Nothing
+      emptyMeta
         (
           (ConsLit
-            Nothing
-            (Lit Nothing (Name "x"))
+            emptyMeta
+            (Lit emptyMeta (Name "x"))
             (ConsLit
-              Nothing
-              (Lit (Just charType) (Name "y"))
-              (Lit Nothing (Name "ys"))
+              emptyMeta
+              (Lit (Meta $ emptyMeta' {mtype = Just charType}) (Name "y"))
+              (Lit emptyMeta (Name "ys"))
             ) : Nil
           )
         )
         (App
-          Nothing
-          (Atom Nothing (Name "mod"))
-          (Atom Nothing (Name "x") : Atom Nothing (Name "y") : Nil)
+          emptyMeta
+          (Atom emptyMeta (Name "mod"))
+          (Atom emptyMeta (Name "x") : Atom emptyMeta (Name "y") : Nil)
         )
     )
     (UnificationFail intType charType)
@@ -484,57 +488,57 @@ runTests = do
 
   -- Check that \f x -> f x and all the subexpressions are typed correctly.
   testInferTT "Apply function"
-    (Lambda Nothing
-      ((Lit Nothing (Name "f")) : (Lit Nothing (Name "x")) : Nil)
+    (Lambda emptyMeta
+      ((Lit emptyMeta (Name "f")) : (Lit emptyMeta (Name "x")) : Nil)
       (App
-        Nothing
-        (Atom Nothing (Name "f"))
-        ((Atom Nothing (Name "x")) : Nil)))
+        emptyMeta
+        (Atom emptyMeta (Name "f"))
+        ((Atom emptyMeta (Name "x")) : Nil)))
     (Lambda
-      (Just (typVarArrow "a" "b" `TypArr` typVarArrow "a" "b"))
+      (metaType (typVarArrow "a" "b" `TypArr` typVarArrow "a" "b"))
       (
-        (Lit (Just (typVarArrow "a" "b")) (Name "f")) :
-        (Lit (Just (TypVar  "a")) (Name "x")) :
+        (Lit (metaType (typVarArrow "a" "b")) (Name "f")) :
+        (Lit (metaType (TypVar  "a")) (Name "x")) :
         Nil
       )
       (App
-        (Just (TypVar  "b"))
-        (Atom (Just (typVarArrow "a" "b")) (Name "f"))
-        ((Atom (Just (TypVar  "a")) (Name "x")) : Nil)))
+        (metaType (TypVar  "b"))
+        (Atom (metaType (typVarArrow "a" "b")) (Name "f"))
+        ((Atom (metaType (TypVar  "a")) (Name "x")) : Nil)))
 
   -- Check that [1, 1 + 1, length [1]] and all the subexpressions are typed correctly.
   testInferTT "List"
     (List
-      Nothing
+      emptyMeta
       (
-        (Atom Nothing (AInt 1)) :
+        (Atom emptyMeta (AInt 1)) :
         (Binary
-          Nothing
+          emptyMeta
           (Tuple Add Nothing)
-          (Atom Nothing (AInt 1))
-          (Atom Nothing (AInt 1))) :
+          (Atom emptyMeta (AInt 1))
+          (Atom emptyMeta (AInt 1))) :
         (App
-          Nothing
+          emptyMeta
           (Atom
-            Nothing
+            emptyMeta
             (Name "length"))
           (untypedListOne : Nil)) :
         Nil
       )
     )
     (List
-      (Just (typConList "Int"))
+      (metaType (typConList "Int"))
       (
-        (Atom (Just (TypCon "Int")) (AInt 1)) :
+        (Atom (metaType (TypCon "Int")) (AInt 1)) :
         (Binary
-          (Just (TypCon "Int"))
+          (metaType (TypCon "Int"))
           (Tuple Add (Just (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
-          (Atom (Just (TypCon "Int")) (AInt 1))
-          (Atom (Just (TypCon "Int")) (AInt 1))) :
+          (Atom (metaType (TypCon "Int")) (AInt 1))
+          (Atom (metaType (TypCon "Int")) (AInt 1))) :
         (App
-          (Just (TypCon "Int"))
+          (metaType (TypCon "Int"))
           (Atom
-            (Just (typConList "Int" `TypArr` TypCon "Int"))
+            (metaType (typConList "Int" `TypArr` TypCon "Int"))
             (Name "length"))
           (listOne : Nil)) :
         Nil
@@ -544,38 +548,38 @@ runTests = do
   -- Check that (\(x:xs) -> x) [1] and all the subexpressions are typed correctly.
   testInferTT "ConsLit"
     (App
-      Nothing
+      emptyMeta
       (Lambda
-        Nothing
+        emptyMeta
         ((ConsLit
-          Nothing
-          (Lit Nothing (Name "x"))
-          (Lit Nothing (Name "xs"))) : Nil)
-        (Atom Nothing (Name "x")))
+          emptyMeta
+          (Lit emptyMeta (Name "x"))
+          (Lit emptyMeta (Name "xs"))) : Nil)
+        (Atom emptyMeta (Name "x")))
       (untypedListOne : Nil))
     (App
-      (Just $ TypCon "Int")
+      (metaType$ TypCon "Int")
       (Lambda
-        (Just $ typConList "Int" `TypArr` TypCon "Int")
+        (metaType $ typConList "Int" `TypArr` TypCon "Int")
         ((ConsLit
-          (Just $ typConList "Int")
-          (Lit (Just $ TypCon "Int") (Name "x"))
-          (Lit (Just $ typConList "Int") (Name "xs"))) : Nil)
-        (Atom (Just $ TypCon "Int") (Name "x")))
+          (metaType $ typConList "Int")
+          (Lit (metaType $ TypCon "Int") (Name "x"))
+          (Lit (metaType $ typConList "Int") (Name "xs"))) : Nil)
+        (Atom (metaType $ TypCon "Int") (Name "x")))
       (listOne : Nil))
 
   -- Check that let x = [1] in [x] :: [[Int]] and all the subexpressions are typed correctly.
   testInferTT "Let"
     (LetExpr
-      Nothing
-      (Tuple (Lit Nothing (Name "x")) untypedListOne : Nil)
-      (List Nothing (Atom Nothing (Name "x") : Nil)))
+      emptyMeta
+      (Tuple (Lit emptyMeta (Name "x")) untypedListOne : Nil)
+      (List emptyMeta (Atom emptyMeta (Name "x") : Nil)))
     (LetExpr
-      (Just $ TList $ typConList "Int")
-      (Tuple (Lit (Just $ typConList "Int") (Name "x")) listOne : Nil)
+      (metaType $ TList $ typConList "Int")
+      (Tuple (Lit (metaType $ typConList "Int") (Name "x")) listOne : Nil)
       (List
-        (Just $ TList $ typConList "Int")
-        (Atom (Just $ typConList "Int") (Name "x") : Nil)))
+        (metaType $ TList $ typConList "Int")
+        (Atom (metaType $ typConList "Int") (Name "x") : Nil)))
 
 -- lit "a"
 -- intLit "a"
@@ -584,41 +588,41 @@ runTests = do
   -- typed correctly.
   testInferTT "Tuple and NTupleLit"
     (App
-      Nothing
+      emptyMeta
       (Lambda
-        Nothing
-        ((NTupleLit Nothing (
-            Lit Nothing (Name "a") :
-            Lit Nothing (Name "b") :
+        emptyMeta
+        ((NTupleLit emptyMeta (
+            Lit emptyMeta (Name "a") :
+            Lit emptyMeta (Name "b") :
             Nil)) :
           Nil)
-        (NTuple Nothing (
-          Atom Nothing (Char "1") :
-          Atom Nothing (Name "b") :
-          Atom Nothing (Name "a") :
+        (NTuple emptyMeta (
+          Atom emptyMeta (Char "1") :
+          Atom emptyMeta (Name "b") :
+          Atom emptyMeta (Name "a") :
           Nil)))
-      (NTuple Nothing (
-          Atom Nothing (AInt 1) :
-          Atom Nothing (AInt 2) :
+      (NTuple emptyMeta (
+          Atom emptyMeta (AInt 1) :
+          Atom emptyMeta (AInt 2) :
           Nil) :
         Nil))
     (App
-      (Just $ charIntTupleType)
+      (metaType $ charIntTupleType)
       (Lambda
-        (Just $ intTupleType `TypArr` charIntTupleType)
-        ((NTupleLit (Just intTupleType) (
-            Lit (Just intType) (Name "a") :
-            Lit (Just intType) (Name "b") :
+        (metaType $ intTupleType `TypArr` charIntTupleType)
+        ((NTupleLit (metaType intTupleType) (
+            Lit (metaType intType) (Name "a") :
+            Lit (metaType intType) (Name "b") :
             Nil)) :
           Nil)
-        (NTuple (Just charIntTupleType) (
-          Atom (Just charType) (Char "1") :
-          Atom (Just intType) (Name "b") :
-          Atom (Just intType) (Name "a") :
+        (NTuple (metaType charIntTupleType) (
+          Atom (metaType charType) (Char "1") :
+          Atom (metaType intType) (Name "b") :
+          Atom (metaType intType) (Name "a") :
           Nil)))
-      (NTuple (Just intTupleType) (
-          Atom (Just intType) (AInt 1) :
-          Atom (Just intType) (AInt 2) :
+      (NTuple (metaType intTupleType) (
+          Atom (metaType intType) (AInt 1) :
+          Atom (metaType intType) (AInt 2) :
           Nil) :
         Nil))
 
@@ -628,53 +632,53 @@ runTests = do
 
   -- Check that x :: t_42 == x :: a.
   testNormalizeTT "Atom"
-    (Atom (Just $ TypVar "t_42") (Name "x"))
-    (Atom (Just $ TypVar "a") (Name "x"))
+    (Atom (metaType $ TypVar "t_42") (Name "x"))
+    (Atom (metaType $ TypVar "a") (Name "x"))
 
   -- Check that an untyped atom stays untyped.
   testNormalizeTT "Untyped atom"
-    (Atom Nothing (Name "x"))
-    (Atom Nothing (Name "x"))
+    (Atom emptyMeta (Name "x"))
+    (Atom emptyMeta (Name "x"))
 
   -- Check that (\x -> x) :: t_2 -> t_2 == (\x -> x) :: a -> a.
   testNormalizeTT "Identity function"
     (Lambda
-      (Just $ typVarArrow "t_2" "t_2")
-      ((Lit (Just $ TypVar "t_2") (Name "x")) : Nil)
-      (Atom (Just $ TypVar "t_2") (Name "x")))
+      (metaType $ typVarArrow "t_2" "t_2")
+      ((Lit (metaType $ TypVar "t_2") (Name "x")) : Nil)
+      (Atom (metaType $ TypVar "t_2") (Name "x")))
     (Lambda
-      (Just $ typVarArrow "a" "a")
-      ((Lit (Just $ TypVar "a") (Name "x")) : Nil)
-      (Atom (Just $ TypVar "a") (Name "x")))
+      (metaType $ typVarArrow "a" "a")
+      ((Lit (metaType $ TypVar "a") (Name "x")) : Nil)
+      (Atom (metaType $ TypVar "a") (Name "x")))
 
   -- Check that (\(x, y) -> x) :: (t_10, t_2) -> t_10
   --         == (\(x, y) -> x) :: (a, b) -> a
   testNormalizeTT "Normalization: Tuple binding in lambda"
     (Lambda
-      (Just (typVarTuple ("t_10" : "t_2" : Nil) `TypArr` TypVar "t_10"))
+      (metaType (typVarTuple ("t_10" : "t_2" : Nil) `TypArr` TypVar "t_10"))
       (
-        (NTupleLit (Just (typVarTuple ("t_10" : "t_2" : Nil)))
+        (NTupleLit (metaType (typVarTuple ("t_10" : "t_2" : Nil)))
           (
-            (Lit (Just (TypVar "t_10")) (Name "x")) :
-            (Lit (Just (TypVar "t_2")) (Name "y")) :
+            (Lit (metaType (TypVar "t_10")) (Name "x")) :
+            (Lit (metaType (TypVar "t_2")) (Name "y")) :
             Nil
           )
         ) : Nil
       )
-      (Atom (Just (TypVar "t_10")) (Name "x"))
+      (Atom (metaType (TypVar "t_10")) (Name "x"))
     )
     (Lambda
-      (Just (typVarTuple ("a" : "b" : Nil) `TypArr` TypVar "a"))
+      (metaType (typVarTuple ("a" : "b" : Nil) `TypArr` TypVar "a"))
       (
-        (NTupleLit (Just (typVarTuple ("a" : "b" : Nil)))
+        (NTupleLit (metaType (typVarTuple ("a" : "b" : Nil)))
           (
-            (Lit (Just (TypVar "a")) (Name "x")) :
-            (Lit (Just (TypVar "b")) (Name "y")) :
+            (Lit (metaType (TypVar "a")) (Name "x")) :
+            (Lit (metaType (TypVar "b")) (Name "y")) :
             Nil
           )
         ) : Nil
       )
-      (Atom (Just (TypVar "a")) (Name "x"))
+      (Atom (metaType (TypVar "a")) (Name "x"))
     )
 
   -- Check that (\(x:xs) [a,b] (u,v,w) -> x) :: [t_4] -> [t_2] -> (t_1, t_3, t_5) -> t_4
@@ -682,96 +686,96 @@ runTests = do
   testNormalizeTT "Normalization: Tuple binding in lambda"
     (Lambda
       -- :: [t_4] -> [t_2] -> (t_1, t_3, t_5) -> t_4
-      (Just
+      (metaType
         (typVarList "t_4" `TypArr`
           (typVarList "t_2" `TypArr`
             (typVarTuple ("t_1" : "t_3" : "t_5" : Nil)) `TypArr`
               TypVar "t_4")))
       (
         -- (x:xs) [a,b] (u,v,w)
-        (ConsLit (Just (typVarList "t_4"))
-          (Lit (Just (TypVar "t_4")) (Name "x"))
-          (Lit (Just (typVarList "t_4")) (Name "xs"))
+        (ConsLit (metaType (typVarList "t_4"))
+          (Lit (metaType (TypVar "t_4")) (Name "x"))
+          (Lit (metaType (typVarList "t_4")) (Name "xs"))
         ) :
-        (ListLit (Just (typVarList "t_2"))
+        (ListLit (metaType (typVarList "t_2"))
           (
-            (Lit (Just (TypVar "t_2")) (Name "a")) :
-            (Lit (Just (TypVar "t_2")) (Name "b")) :
+            (Lit (metaType (TypVar "t_2")) (Name "a")) :
+            (Lit (metaType (TypVar "t_2")) (Name "b")) :
             Nil
           )
         ) :
-        (NTupleLit (Just (typVarTuple ("t_1" : "t_3" : "t_5" : Nil)))
+        (NTupleLit (metaType (typVarTuple ("t_1" : "t_3" : "t_5" : Nil)))
           (
-            (Lit (Just (TypVar "t_1")) (Name "u")) :
-            (Lit (Just (TypVar "t_3")) (Name "v")) :
-            (Lit (Just (TypVar "t_5")) (Name "w")) :
+            (Lit (metaType (TypVar "t_1")) (Name "u")) :
+            (Lit (metaType (TypVar "t_3")) (Name "v")) :
+            (Lit (metaType (TypVar "t_5")) (Name "w")) :
             Nil
           )
         ) :
         Nil
       )
-      (Atom (Just (TypVar "t_4")) (Name "x"))
+      (Atom (metaType (TypVar "t_4")) (Name "x"))
     )
     (Lambda
       -- :: [a] -> [b] -> (c, d, e) -> a
-      (Just
+      (metaType
         (typVarList "a" `TypArr`
           (typVarList "b" `TypArr`
             (typVarTuple ("c" : "d" : "e" : Nil)) `TypArr`
               TypVar "a")))
       (
         -- (x:xs) [a,b] (u,v,w)
-        (ConsLit (Just (typVarList "a"))
-          (Lit (Just (TypVar "a")) (Name "x"))
-          (Lit (Just (typVarList "a")) (Name "xs"))
+        (ConsLit (metaType (typVarList "a"))
+          (Lit (metaType (TypVar "a")) (Name "x"))
+          (Lit (metaType (typVarList "a")) (Name "xs"))
         ) :
-        (ListLit (Just (typVarList "b"))
+        (ListLit (metaType (typVarList "b"))
           (
-            (Lit (Just (TypVar "b")) (Name "a")) :
-            (Lit (Just (TypVar "b")) (Name "b")) :
+            (Lit (metaType (TypVar "b")) (Name "a")) :
+            (Lit (metaType (TypVar "b")) (Name "b")) :
             Nil
           )
         ) :
-        (NTupleLit (Just (typVarTuple ("c" : "d" : "e" : Nil)))
+        (NTupleLit (metaType (typVarTuple ("c" : "d" : "e" : Nil)))
           (
-            (Lit (Just (TypVar "c")) (Name "u")) :
-            (Lit (Just (TypVar "d")) (Name "v")) :
-            (Lit (Just (TypVar "e")) (Name "w")) :
+            (Lit (metaType (TypVar "c")) (Name "u")) :
+            (Lit (metaType (TypVar "d")) (Name "v")) :
+            (Lit (metaType (TypVar "e")) (Name "w")) :
             Nil
           )
         ) :
         Nil
       )
-      (Atom (Just (TypVar "a")) (Name "x"))
+      (Atom (metaType (TypVar "a")) (Name "x"))
     )
 
   -- Check that (\f x -> f x) :: (t_4 -> t_45) -> t_4 -> t_45
   --         == (\f x -> f x) :: (a -> b) -> a -> b
   testNormalizeTT "Apply function"
     (Lambda
-      (Just (typVarArrow "t_4" "t_45" `TypArr` typVarArrow "t_4" "t_45"))
+      (metaType (typVarArrow "t_4" "t_45" `TypArr` typVarArrow "t_4" "t_45"))
       (
-        (Lit (Just (typVarArrow "t_4" "t_45")) (Name "f")) :
-        (Lit (Just (TypVar  "t_4")) (Name "x")) :
+        (Lit (metaType (typVarArrow "t_4" "t_45")) (Name "f")) :
+        (Lit (metaType (TypVar  "t_4")) (Name "x")) :
         Nil
       )
       (App
-        (Just (TypVar  "t_45"))
-        (Atom (Just (typVarArrow "t_4" "t_45")) (Name "f"))
-        ((Atom (Just (TypVar  "t_4")) (Name "x")) : Nil)
+        (metaType (TypVar  "t_45"))
+        (Atom (metaType (typVarArrow "t_4" "t_45")) (Name "f"))
+        ((Atom (metaType (TypVar  "t_4")) (Name "x")) : Nil)
       )
     )
     (Lambda
-      (Just (typVarArrow "a" "b" `TypArr` typVarArrow "a" "b"))
+      (metaType (typVarArrow "a" "b" `TypArr` typVarArrow "a" "b"))
       (
-        (Lit (Just (typVarArrow "a" "b")) (Name "f")) :
-        (Lit (Just (TypVar  "a")) (Name "x")) :
+        (Lit (metaType (typVarArrow "a" "b")) (Name "f")) :
+        (Lit (metaType (TypVar  "a")) (Name "x")) :
         Nil
       )
       (App
-        (Just (TypVar  "b"))
-        (Atom (Just (typVarArrow "a" "b")) (Name "f"))
-        ((Atom (Just (TypVar  "a")) (Name "x")) : Nil)
+        (metaType (TypVar  "b"))
+        (Atom (metaType (typVarArrow "a" "b")) (Name "f"))
+        ((Atom (metaType (TypVar  "a")) (Name "x")) : Nil)
       )
     )
 
@@ -866,10 +870,10 @@ adtTests = do
     adtPrelude
     "Id"
     (Atom
-      (Just
-        (TypArr
-          (TypVar "a")
-          (TTypeCons "Id" (TypVar "a":Nil))))
+      (Meta $ emptyMeta' {mtype = Just
+          (TypArr
+            (TypVar "a")
+            (TTypeCons "Id" (TypVar "a":Nil)))})
       (Constr "Id"))
 
   testInferExprWithCustomPrelude "adt-0-ary-1"

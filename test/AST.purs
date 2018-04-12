@@ -8,7 +8,7 @@ import Data.Tuple (Tuple(..))
 
 -- import Control.Monad.Writer (Writer, tell)
 
-import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, MType, toOpTuple)
+import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, toOpTuple, emptyMeta, Meta)
 
 import Test.Utils (tell, Test)
 
@@ -57,46 +57,46 @@ runTests = do
 
 
 atom :: TypeTree
-atom = Atom Nothing (Name "x")
+atom = Atom emptyMeta (Name "x")
 
 list :: TypeTree
-list = List Nothing $ toList [atom, atom]
+list = List emptyMeta $ toList [atom, atom]
 
 ntuple :: TypeTree
-ntuple = NTuple Nothing $ toList [atom, atom]
+ntuple = NTuple emptyMeta $ toList [atom, atom]
 
 binary :: TypeTree
-binary = Binary Nothing (toOpTuple Add) atom atom
+binary = Binary emptyMeta (toOpTuple Add) atom atom
 
 unary :: TypeTree
-unary = Unary Nothing (toOpTuple Sub) atom
+unary = Unary emptyMeta (toOpTuple Sub) atom
 
 sectl :: TypeTree
-sectl = SectL Nothing atom (toOpTuple Add)
+sectl = SectL emptyMeta atom (toOpTuple Add)
 
 sectr :: TypeTree
-sectr = SectR Nothing (toOpTuple Add) atom
+sectr = SectR emptyMeta (toOpTuple Add) atom
 
 prefixop :: TypeTree
-prefixop = PrefixOp Nothing (toOpTuple Add)
+prefixop = PrefixOp emptyMeta (toOpTuple Add)
 
 ifexpr :: TypeTree
-ifexpr = IfExpr Nothing atom atom atom
+ifexpr = IfExpr emptyMeta atom atom atom
 
 arithmseq :: TypeTree
-arithmseq = ArithmSeq Nothing atom (Just atom) (Just atom)
+arithmseq = ArithmSeq emptyMeta atom (Just atom) (Just atom)
 
-binding :: Binding MType
-binding = Lit Nothing (Name "x")
+binding :: Binding Meta
+binding = Lit emptyMeta (Name "x")
 
 letexpr :: TypeTree
-letexpr = LetExpr Nothing (toList [Tuple binding atom]) atom
+letexpr = LetExpr emptyMeta (toList [Tuple binding atom]) atom
 
 lambda :: TypeTree
-lambda = Lambda Nothing (toList [binding]) atom
+lambda = Lambda emptyMeta (toList [binding]) atom
 
 app :: TypeTree
-app = App Nothing atom (toList [atom, atom])
+app = App emptyMeta atom (toList [atom, atom])
 
 listcomp :: TypeTree
-listcomp = ListComp Nothing atom (toList [Gen Nothing binding atom, Let Nothing binding atom, Guard Nothing atom])
+listcomp = ListComp emptyMeta atom (toList [Gen emptyMeta binding atom, Let emptyMeta binding atom, Guard emptyMeta atom])
