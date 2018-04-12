@@ -10,7 +10,6 @@ import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
 
-import JSHelpers (unsafeUndef)
 
 -- | Operators
 -- |
