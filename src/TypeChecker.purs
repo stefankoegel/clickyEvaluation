@@ -157,7 +157,7 @@ instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => S
   ftv (Guard a c) = ftv c
 
 -- | Substitutable instance for the type tree.
-instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) (Maybe Type)) where
+instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) Meta) where
   apply s (Atom t a) = Atom (apply s t) a
   apply s (List t es) = List (apply s t) (apply s es)
   apply s (NTuple t es) = NTuple (apply s t) (apply s es)
@@ -187,6 +187,10 @@ instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (ConstrLit t c) = ConstrLit (apply s t) (map (apply s) c)
 
   ftv = extractFromBinding >>> ftv
+
+instance subMeta :: Substitutable Meta where
+  apply s (Meta meta) = Meta (meta {mtype = apply s meta.mtype})
+  ftv (Meta meta) = ftv meta.mtype
 
 -- +------------------------+
 -- | Type Variable Mappings |
@@ -1274,9 +1278,10 @@ solver stopOnError { subst: beginningSubst, constraints: constraints } =
 assignTypes :: Unifier -> IndexedTypeTree -> TypeTree
 assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f expr
   where
-  f (Tuple _ idx) = lookupTVar idx
+  f (Tuple _ idx) = Meta $ emptyMeta' { mtype = lookupTVar idx }
+  f' (Tuple _ idx) = lookupTVar idx
   fo (Tuple op (Tuple _ idx)) = Tuple op (lookupTVar idx)
-  fb = map f
+  fb = map f'
   lookupTVar idx = case Map.lookup idx constraints.mapped of
     Nothing -> Nothing
     Just (Constraint tv _) -> Just $ subst `apply` tv
@@ -1416,7 +1421,7 @@ inferExprDebug expr = do
 
 -- | Perform type inference on expression tree and extract top level type.
 inferExprToType :: TypeTree -> Infer Type
-inferExprToType expr = (extractFromTree >>> fromMaybe UnknownType) <$> inferExpr expr
+inferExprToType expr = (extractFromTree >>> \(Meta meta) -> fromMaybe UnknownType meta.mtype) <$> inferExpr expr
 
 -- | Given a list of definitions create a map of definition groups.
 buildDefinitionGroups :: List Definition -> Map.Map String (List Definition)
@@ -1482,7 +1487,12 @@ normalizeBinding' = AST.traverseBinding normalizeMType'
 
 -- | Normalize the given typed expression tree.
 normalizeTypeTree' :: TypeTree -> State NormalizationState TypeTree
-normalizeTypeTree' = AST.traverseTree normalizeBinding' normalizeOp' normalizeMType'
+normalizeTypeTree' = AST.traverseTree
+  normalizeBinding'
+  normalizeOp'
+  (\(Meta m) -> do
+    mt' <- normalizeMType' m.mtype
+    pure $ Meta (m {mtype = mt'}))
 
 -- | Normalize the given type. The only interesting part is the type variable case, where all the
 -- | work is done.
