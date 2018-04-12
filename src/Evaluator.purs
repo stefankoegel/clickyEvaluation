@@ -107,13 +107,13 @@ eval1 env expr = case expr of
   (IfExpr _ (Atom _ (Bool false)) _ ee)  -> pure ee
   (ArithmSeq _ start step end)         -> evalArithmSeq start step end
   -- (List _ (Cons e es))                      -> pure $ Binary Nothing Colon e (List Nothing es)
-  (App _ (Binary _ (Tuple Composition _) f g) (Cons e Nil)) -> pure $ App Nothing f (singleton $ App Nothing g (Cons e Nil))
+  (App _ (Binary _ (Tuple Composition _) f g) (Cons e Nil)) -> pure $ App AST.emptyMeta f (singleton $ App AST.emptyMeta g (Cons e Nil))
   (App _ (Lambda _ binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
-  (App _ (SectL _ e1 op) (Cons e2 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary Nothing op e1 e2)
-  (App _ (SectR _ op e2) (Cons e1 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary Nothing op e1 e2)
-  (App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))         -> {-binary env op e1 e2 <|>-} (pure $ Binary Nothing op e1 e2)
+  (App _ (SectL _ e1 op) (Cons e2 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary AST.emptyMeta op e1 e2)
+  (App _ (SectR _ op e2) (Cons e1 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary AST.emptyMeta op e1 e2)
+  (App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))         -> {-binary env op e1 e2 <|>-} (pure $ Binary AST.emptyMeta op e1 e2)
   (App _ (Atom _ (Name name)) args)      -> apply env name args
-  (App _ (App _ func es) es')            -> pure $ App Nothing func (es <> es')
+  (App _ (App _ func es) es')            -> pure $ App AST.emptyMeta func (es <> es')
 --  (App _ (Atom _ (Constr _)) _)      -> pure expr
   (ListComp _ e qs)                    -> evalListComp env e qs
   (LetExpr _ binds exp)                -> evalLetTypeTree binds exp
@@ -133,23 +133,23 @@ evalToBinding env expr bind = case bind of
     _          -> recurse env expr bind
 
   (ConsLit _ b bs)     -> case expr of
-    (Binary _ (Tuple Colon _) e es) -> Binary Nothing (Tuple Colon Nothing) (evalToBinding env e b) (evalToBinding env es bs)
-    (List _ (Cons e es))  -> evalToBinding env (Binary Nothing (Tuple Colon Nothing) e (List Nothing es)) bind
+    (Binary _ (Tuple Colon _) e es) -> Binary AST.emptyMeta (Tuple Colon Nothing) (evalToBinding env e b) (evalToBinding env es bs)
+    (List _ (Cons e es))  -> evalToBinding env (Binary AST.emptyMeta (Tuple Colon Nothing) e (List AST.emptyMeta es)) bind
     _                     -> recurse env expr bind
 
   (ListLit _ bs)       -> case expr of
-    (List _ es) -> if (length es == length bs) then List Nothing (zipWith (evalToBinding env) es bs) else expr
+    (List _ es) -> if (length es == length bs) then List AST.emptyMeta (zipWith (evalToBinding env) es bs) else expr
     _           -> recurse env expr bind
 
   (NTupleLit _ bs)     -> case expr of
-    (NTuple _ es)  -> NTuple Nothing (zipWith (evalToBinding env) es bs)
+    (NTuple _ es)  -> NTuple AST.emptyMeta (zipWith (evalToBinding env) es bs)
     _              -> recurse env expr bind
 -- TODO
   (ConstrLit _ (PrefixDataConstr n _ ps)) ->
     case expr of
       (App _ (Atom _ (Constr n')) ps') ->
         case n == n' && length ps == length ps' of
-          true -> App Nothing (Atom Nothing (Constr n')) (zipWith (evalToBinding env) ps' ps)
+          true -> App AST.emptyMeta (Atom AST.emptyMeta (Constr n')) (zipWith (evalToBinding env) ps' ps)
           false -> expr
       _ -> recurse env expr bind
   (ConstrLit _ (InfixDataConstr n _ _ l r)) ->
@@ -157,13 +157,13 @@ evalToBinding env expr bind = case bind of
       (App _ (PrefixOp _ (Tuple (InfixConstr n') Nothing)) (Cons l' (Cons r' Nil))) ->
         case n == n' of
              true -> App
-              Nothing
-              (PrefixOp Nothing (Tuple (InfixConstr n') Nothing))
+              AST.emptyMeta
+              (PrefixOp AST.emptyMeta (Tuple (InfixConstr n') Nothing))
               (Cons (evalToBinding env l' l) (Cons (evalToBinding env r' r) Nil))
              false -> expr
       (Binary _ (Tuple (InfixConstr n') _) l' r') ->
         case n == n' of
-             true -> Binary Nothing (Tuple (InfixConstr n') Nothing) (evalToBinding env l' l) (evalToBinding env r' r)
+             true -> Binary AST.emptyMeta (Tuple (InfixConstr n') Nothing) (evalToBinding env l' l) (evalToBinding env r' r)
              false -> expr
       _ -> recurse env expr bind
 
@@ -177,39 +177,39 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
     expr' :: TypeTree
     expr' = case expr of
       (Binary _ op e1 e2)  ->
-        Binary Nothing op (evalToBinding env e1 bind) (evalToBinding env e2 bind)
+        Binary AST.emptyMeta op (evalToBinding env e1 bind) (evalToBinding env e2 bind)
       (Unary _ op e)       ->
-        Unary Nothing op (evalToBinding env e bind)
+        Unary AST.emptyMeta op (evalToBinding env e bind)
       (List _ es)          ->
-        List Nothing ((\e -> evalToBinding env e bind) <$> es)
+        List AST.emptyMeta ((\e -> evalToBinding env e bind) <$> es)
       (NTuple _ es)        ->
-        NTuple Nothing ((\e -> evalToBinding env e bind) <$> es)
+        NTuple AST.emptyMeta ((\e -> evalToBinding env e bind) <$> es)
       (IfExpr _ c t e)     ->
-        IfExpr Nothing (evalToBinding env c bind) t e
+        IfExpr AST.emptyMeta (evalToBinding env c bind) t e
       (App _ c@(Atom _ (Constr _)) args) ->
-        App Nothing c ((\e -> evalToBinding env e bind) <$> args)
+        App AST.emptyMeta c ((\e -> evalToBinding env e bind) <$> args)
       (App _ f args)       -> do
-        App Nothing (evalToBinding env f bind) args
+        App AST.emptyMeta (evalToBinding env f bind) args
       (ArithmSeq _ c t e)     ->
-        ArithmSeq Nothing (evalToBinding env c bind) ((\x -> evalToBinding env x bind) <$> t) ((\x -> evalToBinding env x bind) <$> e)
+        ArithmSeq AST.emptyMeta (evalToBinding env c bind) ((\x -> evalToBinding env x bind) <$> t) ((\x -> evalToBinding env x bind) <$> e)
       (ListComp _ e qs)    -> do
-        ListComp Nothing (evalToBinding env e bind) ((\x -> evalToBindingQual env x bind) <$> qs)
+        ListComp AST.emptyMeta (evalToBinding env e bind) ((\x -> evalToBindingQual env x bind) <$> qs)
       _                  ->
         expr
 
     evalToBindingQual :: Env -> TypeQual -> Binding MType ->TypeQual
     evalToBindingQual environment qual binding = case qual of
-      Let _ b e -> Let Nothing b (evalToBinding environment e bind)
-      Gen _ b e -> Gen Nothing b (evalToBinding environment e bind)
-      Guard _ e -> Guard Nothing (evalToBinding environment e bind)
+      Let _ b e -> Let AST.emptyMeta b (evalToBinding environment e bind)
+      Gen _ b e -> Gen AST.emptyMeta b (evalToBinding environment e bind)
+      Guard _ e -> Guard AST.emptyMeta (evalToBinding environment e bind)
 
 
 wrapLambda :: (List (Binding MType)) -> (List TypeTree) -> TypeTree -> Evaluator TypeTree
 wrapLambda binds args body =
   case compare (length binds) (length args) of
     EQ -> pure body
-    GT -> pure $ Lambda Nothing (drop (length args) binds) body
-    LT -> pure $ App Nothing body (drop (length binds) args)
+    GT -> pure $ Lambda AST.emptyMeta (drop (length args) binds) body
+    LT -> pure $ App AST.emptyMeta body (drop (length binds) args)
 
 ------------------------------------------------------------------------------------------
 -- Arithmetic Sequences
@@ -261,9 +261,9 @@ clampStep istart istep = if istep >= istart
 
 exprFromStepTo :: TypeTree -> Maybe TypeTree -> Maybe TypeTree -> Quat (Maybe TypeTree)
 exprFromStepTo start step end = case start of
-  Atom _ (AInt i) -> (\x -> (Atom Nothing <<< AInt) <$> x) <$> intQuat
-  Atom _ (Bool b) -> (\x -> (Atom Nothing <<< Bool) <$> x) <$> (intToABool intQuat)
-  Atom _ (Char c) -> (\x -> (Atom Nothing <<< Char <<< String.singleton) <$> x) <$> (intToAChar intQuat)
+  Atom _ (AInt i) -> (\x -> (Atom AST.emptyMeta <<< AInt) <$> x) <$> intQuat
+  Atom _ (Bool b) -> (\x -> (Atom AST.emptyMeta <<< Bool) <$> x) <$> (intToABool intQuat)
+  Atom _ (Char c) -> (\x -> (Atom AST.emptyMeta <<< Char <<< String.singleton) <$> x) <$> (intToAChar intQuat)
   _             -> Quat Nothing Nothing Nothing Nothing
     where
       intQuat = intFromStepTo (unsafeTypeTreeToInt start) (unsafeTypeTreeToInt <$> step) (unsafeTypeTreeToInt <$> end)
@@ -301,7 +301,7 @@ unsafeTypeTreeToInt _ = top
 
 evalArithmSeq :: TypeTree -> Maybe TypeTree -> Maybe TypeTree -> Evaluator TypeTree
 evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, step, end]) of
-  false -> throwError $ CannotEvaluate $ ArithmSeq Nothing start step end
+  false -> throwError $ CannotEvaluate $ ArithmSeq AST.emptyMeta start step end
   true  -> evalArithmSeq'
   where
     isValid :: Maybe TypeTree -> Boolean
@@ -312,44 +312,44 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
 
     evalArithmSeq' :: Evaluator TypeTree
     evalArithmSeq' = case (exprFromStepTo start step end) of
-      Quat Nothing _ _ _          -> pure $ List Nothing Nil
-      Quat (Just a) Nothing _ _   -> pure $ AST.binary Colon a (List Nothing Nil)
-      Quat (Just a) (Just na) b c -> pure $ AST.binary Colon a (ArithmSeq Nothing na b c)
+      Quat Nothing _ _ _          -> pure $ List AST.emptyMeta Nil
+      Quat (Just a) Nothing _ _   -> pure $ AST.binary Colon a (List AST.emptyMeta Nil)
+      Quat (Just a) (Just na) b c -> pure $ AST.binary Colon a (ArithmSeq AST.emptyMeta na b c)
 
 ------------------------------------------------------------------------------------------
 -- List Comprehensions
 ------------------------------------------------------------------------------------------
 
 evalListComp :: Env -> TypeTree -> List TypeQual -> Evaluator TypeTree
-evalListComp _   expr Nil         = pure $ List Nothing $ singleton expr
+evalListComp _   expr Nil         = pure $ List AST.emptyMeta $ singleton expr
 evalListComp env expr (Cons q qs) = case q of
-  Guard _ (Atom _ (Bool false)) -> pure $ List Nothing Nil
-  Guard _ (Atom _ (Bool true))  -> if null qs then pure (List Nothing (singleton expr)) else pure (ListComp Nothing expr qs)
-  Gen _ _ (List _ Nil)          -> pure $ List Nothing Nil
-  -- Gen _ b (List (Cons e Nil)) -> evalListComp env expr (Cons (Let Nothing b e) qs)
+  Guard _ (Atom _ (Bool false)) -> pure $ List AST.emptyMeta Nil
+  Guard _ (Atom _ (Bool true))  -> if null qs then pure (List AST.emptyMeta (singleton expr)) else pure (ListComp AST.emptyMeta expr qs)
+  Gen _ _ (List _ Nil)          -> pure $ List AST.emptyMeta Nil
+  -- Gen _ b (List (Cons e Nil)) -> evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
   Gen _ b (List _ (Cons e es))  -> do
-    listcomp1 <- evalListComp env expr (Cons (Let Nothing b e) qs)
-    listcomp2 <- pure $ ListComp Nothing expr (Cons (Gen Nothing b (List Nothing es)) qs)
+    listcomp1 <- evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
+    listcomp2 <- pure $ ListComp AST.emptyMeta expr (Cons (Gen AST.emptyMeta b (List AST.emptyMeta es)) qs)
     case listcomp1 of
-      List _ (Cons x Nil) -> pure $ Binary Nothing (Tuple Colon Nothing) x listcomp2
+      List _ (Cons x Nil) -> pure $ Binary AST.emptyMeta (Tuple Colon Nothing) x listcomp2
       _ -> pure $ AST.binary Append listcomp1 listcomp2
-  -- Gen _ b (Binary Colon e (List Nil)) -> evalListComp env expr (Cons (Let Nothing b e) qs)
+  -- Gen _ b (Binary Colon e (List Nil)) -> evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
   Gen _ b (Binary _ (Tuple Colon _) e es)  -> do
-    listcomp1 <- evalListComp env expr (Cons (Let Nothing b e) qs)
-    listcomp2 <- pure $ ListComp Nothing expr (Cons (Gen Nothing b es) qs)
+    listcomp1 <- evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
+    listcomp2 <- pure $ ListComp AST.emptyMeta expr (Cons (Gen AST.emptyMeta b es) qs)
     case listcomp1 of
       List _ (Cons x Nil) -> pure $ AST.binary Colon x listcomp2
       _ -> pure $ AST.binary Append listcomp1 listcomp2
-  Gen _ b e -> pure $ ListComp Nothing expr (Cons (Gen Nothing b (evalToBinding env e (ConsLit Nothing b (Lit Nothing (Name "_"))))) qs)
+  Gen _ b e -> pure $ ListComp AST.emptyMeta expr (Cons (Gen AST.emptyMeta b (evalToBinding env e (ConsLit Nothing b (Lit Nothing (Name "_"))))) qs)
   Let _ b e -> case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
     Right r -> do
       Tuple qs' r' <- runStateT (replaceQualifiers qs) r
       expr'        <- replace' r' expr
       case qs' of 
-          Nil -> pure $ List Nothing $ singleton expr'
-          _   -> pure $ ListComp Nothing expr' qs'
+          Nil -> pure $ List AST.emptyMeta $ singleton expr'
+          _   -> pure $ ListComp AST.emptyMeta expr' qs'
     Left l  -> throwError $ BindingError $ MatchingError b e
-  _ -> throwError $ CannotEvaluate (ListComp Nothing expr (Cons q qs))
+  _ -> throwError $ CannotEvaluate (ListComp AST.emptyMeta expr (Cons q qs))
 
 -- replaces expressions in List-Comprehension-Qualifiers and considers overlapping bindings
 replaceQualifiers :: List TypeQual -> StateT (StrMap TypeTree) Evaluator (List TypeQual)
@@ -357,12 +357,12 @@ replaceQualifiers = traverse replaceQual
   where
     replaceQual :: TypeQual -> StateT (StrMap TypeTree) Evaluator TypeQual
     replaceQual qual = case qual of
-      Gen _ b e -> scope b e >>= \e' -> pure $ Gen Nothing b e'
-      Let _ b e -> scope b e >>= \e' -> pure $ Let Nothing b e'
+      Gen _ b e -> scope b e >>= \e' -> pure $ Gen AST.emptyMeta b e'
+      Let _ b e -> scope b e >>= \e' -> pure $ Let AST.emptyMeta b e'
       Guard _ e -> do
         sub <- get
         e'  <- lift $ replace' sub e
-        pure $ Guard Nothing e'
+        pure $ Guard AST.emptyMeta e'
 
 scope :: Binding MType -> TypeTree -> StateT (StrMap TypeTree) Evaluator TypeTree
 scope b e = do
@@ -387,7 +387,7 @@ evalLetTypeTree (Cons (Tuple b e) rest) expr = case runMatcherM $ matchls' Map.e
       _   -> do
         Tuple rest' r' <- runStateT (replaceBindings rest) r
         expr' <- replace' r' expr
-        pure $ LetExpr Nothing rest' expr'
+        pure $ LetExpr AST.emptyMeta rest' expr'
 
 replaceBindings :: Bindings -> StateT (StrMap TypeTree) Evaluator Bindings
 replaceBindings = traverse $ \(Tuple bin expr) -> scope bin expr >>= \expr' -> pure $ Tuple bin expr'
@@ -401,10 +401,10 @@ binary env (Tuple operator mtype) = case operator of
   Add    -> aint Add (+)
   Sub    -> aint Sub (-)
   Colon  -> \e es -> case es of
-    (List _ ls) -> pure $ List Nothing $ e:ls
+    (List _ ls) -> pure $ List AST.emptyMeta $ e:ls
     _         -> throwError $ BinaryOpError Colon e es
   Append -> \es1 es2 -> case (Tuple es1 es2) of
-    (Tuple (List _ ls1) (List _ ls2)) -> pure $ List Nothing $ ls1 <> ls2
+    (Tuple (List _ ls1) (List _ ls2)) -> pure $ List AST.emptyMeta $ ls1 <> ls2
     _                                 -> throwError $ BinaryOpError Append es1 es2
   Equ    -> ord Equ (==) (==) (==)
   Neq    -> ord Neq (/=) (/=) (/=)
@@ -413,33 +413,33 @@ binary env (Tuple operator mtype) = case operator of
   Geq    -> ord Geq (>=) (>=) (>=)
   Gt     -> ord Gt  (>)  (>)  (>)
   And    -> \e1 e2 -> case (Tuple e1 e2) of
-    (Tuple (Atom _ (Bool false)) _                  )   -> pure $ Atom Nothing $ Bool false
-    (Tuple _                     (Atom _ (Bool false))) -> pure $ Atom Nothing $ Bool false
-    (Tuple (Atom _ (Bool true))  (Atom _ (Bool true)))  -> pure $ Atom Nothing $ Bool true
+    (Tuple (Atom _ (Bool false)) _                  )   -> pure $ Atom AST.emptyMeta $ Bool false
+    (Tuple _                     (Atom _ (Bool false))) -> pure $ Atom AST.emptyMeta $ Bool false
+    (Tuple (Atom _ (Bool true))  (Atom _ (Bool true)))  -> pure $ Atom AST.emptyMeta $ Bool true
     (Tuple _                   _                     )  -> throwError $ BinaryOpError And e1 e2
   Or     -> \e1 e2 -> case (Tuple e1 e2) of
-    (Tuple (Atom _ (Bool true))  _                   )  -> pure $ Atom Nothing $ Bool true
-    (Tuple _                     (Atom _ (Bool true)))  -> pure $ Atom Nothing $ Bool true
-    (Tuple (Atom _ (Bool false)) (Atom _ (Bool false))) -> pure $ Atom Nothing $ Bool false
+    (Tuple (Atom _ (Bool true))  _                   )  -> pure $ Atom AST.emptyMeta $ Bool true
+    (Tuple _                     (Atom _ (Bool true)))  -> pure $ Atom AST.emptyMeta $ Bool true
+    (Tuple (Atom _ (Bool false)) (Atom _ (Bool false))) -> pure $ Atom AST.emptyMeta $ Bool false
     (Tuple _                     _                   )  -> throwError $ BinaryOpError And e1 e2
-  Dollar -> (\f e -> pure $ App Nothing f (singleton e))
+  Dollar -> (\f e -> pure $ App AST.emptyMeta f (singleton e))
   Composition -> \e1 e2 -> throwError $ BinaryOpError And e1 e2
   InfixFunc name -> \e1 e2 -> apply env name (e1 : e2 : Nil)
-  InfixConstr name -> \e1 e2 -> pure $ Binary Nothing (Tuple operator mtype) e1 e2
+  InfixConstr name -> \e1 e2 -> pure $ Binary AST.emptyMeta (Tuple operator mtype) e1 e2
   where
     aint :: Op -> (Int -> Int -> Int) -> TypeTree -> TypeTree -> Evaluator TypeTree
-    aint _   f (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom Nothing $ AInt $ f i j
+    aint _   f (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom AST.emptyMeta $ AInt $ f i j
     aint op  _ e1                e2                = throwError $ BinaryOpError op e1 e2
 
     ord :: Op -> (Int -> Int -> Boolean) -> (String -> String -> Boolean) -> (Boolean -> Boolean -> Boolean)-> TypeTree -> TypeTree -> Evaluator TypeTree
-    ord _  fi _  _  (Atom _ (AInt i))  (Atom _ (AInt j))  = pure $ Atom Nothing $ Bool $ fi i j
-    ord _  _  fs _  (Atom _ (Char s1)) (Atom _ (Char s2)) = pure $ Atom Nothing $ Bool $ fs s1 s2
-    ord _  _  _  fb (Atom _ (Bool b1)) (Atom _ (Bool b2)) = pure $ Atom Nothing $ Bool $ fb b1 b2
+    ord _  fi _  _  (Atom _ (AInt i))  (Atom _ (AInt j))  = pure $ Atom AST.emptyMeta $ Bool $ fi i j
+    ord _  _  fs _  (Atom _ (Char s1)) (Atom _ (Char s2)) = pure $ Atom AST.emptyMeta $ Bool $ fs s1 s2
+    ord _  _  _  fb (Atom _ (Bool b1)) (Atom _ (Bool b2)) = pure $ Atom AST.emptyMeta $ Bool $ fb b1 b2
     ord op _  _  _  e1               e2               = throwError $ BinaryOpError op e1 e2
 
 
 unary :: Env -> Tuple Op MType -> TypeTree -> Evaluator TypeTree
-unary env (Tuple Sub _) (Atom _ (AInt i)) = pure $ Atom Nothing $ AInt (-i)
+unary env (Tuple Sub _) (Atom _ (AInt i)) = pure $ Atom AST.emptyMeta $ AInt (-i)
 unary env (Tuple op _) e = throwError $ UnaryOpError op e
 
 apply :: Env -> String -> (List TypeTree) -> Evaluator TypeTree
@@ -452,13 +452,13 @@ apply env name args = case Map.lookup name env of
 -- built-in div
 division :: TypeTree -> TypeTree -> Evaluator TypeTree 
 division (Atom _ (AInt i)) (Atom _ (AInt 0)) = throwError DivByZero
-division (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom Nothing $ AInt $ div i j
+division (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom AST.emptyMeta $ AInt $ div i j
 division e1 e2 = throwError $ BinaryOpError (InfixFunc "div") e1 e2
 
 -- built-in mod
 modulo :: TypeTree -> TypeTree -> Evaluator TypeTree  
 modulo (Atom _ (AInt i)) (Atom _ (AInt 0)) = throwError DivByZero
-modulo (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom Nothing $ AInt $ mod i j
+modulo (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom AST.emptyMeta $ AInt $ mod i j
 modulo e1 e2 = throwError $ BinaryOpError (InfixFunc "mod") e1 e2
 
 
@@ -491,23 +491,23 @@ match' :: Binding MType -> TypeTree -> StateT (StrMap TypeTree) Matcher Unit
 match' (Lit _ (Name name)) e                   = modify (Map.insert name e)
 match' (Lit _ ba)          (Atom _ ea)         = case ba == ea of
                                                  true  -> pure unit
-                                                 false -> throwError $ MatchingError (Lit Nothing ba) (Atom Nothing ea)
+                                                 false -> throwError $ MatchingError (Lit Nothing ba) (Atom AST.emptyMeta ea)
 match' (Lit _ b)           e                   = throwError $ checkStrictness (Lit Nothing b) e
 
 match' (ConsLit _ b bs)    (Binary _ (Tuple Colon _) e es) = match' b e *> match' bs es
-match' (ConsLit _ b bs)    (List _ (Cons e es))  = match' (ConsLit Nothing b bs) (AST.binary Colon e (List Nothing es))
-match' (ConsLit _ b bs)    (List _ Nil)          = throwError $ MatchingError (ConsLit Nothing b bs) (List Nothing Nil)
+match' (ConsLit _ b bs)    (List _ (Cons e es))  = match' (ConsLit Nothing b bs) (AST.binary Colon e (List AST.emptyMeta es))
+match' (ConsLit _ b bs)    (List _ Nil)          = throwError $ MatchingError (ConsLit Nothing b bs) (List AST.emptyMeta Nil)
 match' (ConsLit _ b bs)    e                     = throwError $ checkStrictness (ConsLit Nothing b bs) e
 
 match' (ListLit _ (Cons b bs)) (Binary _ (Tuple Colon _) e es) = match' b e *> match' (ListLit Nothing bs) es
 match' (ListLit _ bs)      (List _ es)               = case length bs == length es of
                                                        true  -> void $ zipWithA match' bs es
-                                                       false -> throwError $ MatchingError (ListLit Nothing bs) (List Nothing es)
+                                                       false -> throwError $ MatchingError (ListLit Nothing bs) (List AST.emptyMeta es)
 match' (ListLit _ bs)      e                         = throwError $ checkStrictness (ListLit Nothing bs) e
 
 match' (NTupleLit _ bs)    (NTuple _ es) = case length bs == length es of
                                            true  -> void $ zipWithA match' bs es
-                                           false -> throwError $ MatchingError (NTupleLit Nothing bs) (NTuple Nothing es)
+                                           false -> throwError $ MatchingError (NTupleLit Nothing bs) (NTuple AST.emptyMeta es)
 match' (NTupleLit _ bs)    e             = throwError $ checkStrictness (NTupleLit Nothing bs) e
 -- TODO
 match' b@(ConstrLit _ (PrefixDataConstr n a ps)) e@(App _ (Atom _ (Constr n')) ps')
@@ -554,24 +554,24 @@ replace' subs = go
     a@(Atom _ (Name name)) -> case Map.lookup name subs of
       Just subTypeTree -> pure subTypeTree
       Nothing      -> pure a
-    (List _ exprs)         -> List Nothing <$> (traverse go exprs)
-    (NTuple _ exprs)       -> NTuple Nothing <$> (traverse go exprs)
-    (Binary _ op e1 e2)    -> Binary Nothing <$> pure op <*> go e1 <*> go e2
-    (Unary _ op e)         -> Unary Nothing <$> pure op <*> go e
-    (SectL _ e op)         -> SectL Nothing <$> go e <*> pure op
-    (SectR _ op e)         -> SectR Nothing <$> pure op <*> go e
-    (IfExpr _ ce te ee)    -> IfExpr Nothing <$> go ce <*> go te <*> go ee
-    (ArithmSeq _ ce te ee) -> ArithmSeq Nothing <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
-    (Lambda _ binds body)  -> (avoidCapture subs binds) *> (Lambda Nothing <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
-    (App _ func exprs)     -> App Nothing <$> go func <*> traverse go exprs
+    (List _ exprs)         -> List AST.emptyMeta <$> (traverse go exprs)
+    (NTuple _ exprs)       -> NTuple AST.emptyMeta <$> (traverse go exprs)
+    (Binary _ op e1 e2)    -> Binary AST.emptyMeta <$> pure op <*> go e1 <*> go e2
+    (Unary _ op e)         -> Unary AST.emptyMeta <$> pure op <*> go e
+    (SectL _ e op)         -> SectL AST.emptyMeta <$> go e <*> pure op
+    (SectR _ op e)         -> SectR AST.emptyMeta <$> pure op <*> go e
+    (IfExpr _ ce te ee)    -> IfExpr AST.emptyMeta <$> go ce <*> go te <*> go ee
+    (ArithmSeq _ ce te ee) -> ArithmSeq AST.emptyMeta <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
+    (Lambda _ binds body)  -> (avoidCapture subs binds) *> (Lambda AST.emptyMeta <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
+    (App _ func exprs)     -> App AST.emptyMeta <$> go func <*> traverse go exprs
     (ListComp _ expr quals) -> do
       Tuple quals' subs' <- runStateT (replaceQualifiers quals) subs
       expr'              <- replace' subs' expr
-      pure $ ListComp Nothing expr' quals'
+      pure $ ListComp AST.emptyMeta expr' quals'
     (LetExpr _ binds expr)  -> do
       Tuple binds' subs' <- runStateT (replaceBindings binds) subs
       expr'              <- replace' subs' expr
-      pure $ LetExpr Nothing binds' expr'
+      pure $ LetExpr AST.emptyMeta binds' expr'
     e                     -> pure e
 
 avoidCapture :: StrMap TypeTree -> (List (Binding MType)) -> Evaluator Unit
