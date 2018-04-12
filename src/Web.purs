@@ -18,7 +18,7 @@ import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
 import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding,
-            Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError, Meta (..), getMetaMType)
+            Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError, getMetaMType)
 
 import AST as AST
 
