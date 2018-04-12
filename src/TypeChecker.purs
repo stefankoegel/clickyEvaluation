@@ -157,7 +157,7 @@ instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => S
   ftv (Guard a c) = ftv c
 
 -- | Substitutable instance for the type tree.
-instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) Meta) where
+instance subTypeTree :: Substitutable (Tree Atom (Binding Meta) (Tuple Op (Maybe Type)) Meta) where
   apply s (Atom t a) = Atom (apply s t) a
   apply s (List t es) = List (apply s t) (apply s es)
   apply s (NTuple t es) = NTuple (apply s t) (apply s es)
@@ -1279,9 +1279,9 @@ assignTypes :: Unifier -> IndexedTypeTree -> TypeTree
 assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f expr
   where
   f (Tuple _ idx) = Meta $ emptyMeta' { mtype = lookupTVar idx }
-  f' (Tuple _ idx) = lookupTVar idx
+  -- f' (Tuple _ idx) = lookupTVar idx
   fo (Tuple op (Tuple _ idx)) = Tuple op (lookupTVar idx)
-  fb = map f'
+  fb = map f
   lookupTVar idx = case Map.lookup idx constraints.mapped of
     Nothing -> Nothing
     Just (Constraint tv _) -> Just $ subst `apply` tv
@@ -1483,7 +1483,10 @@ normalizeOp' (Tuple op opType) = do
 
 -- | Normalize the given typed binding.
 normalizeBinding' :: TypedBinding -> State NormalizationState TypedBinding
-normalizeBinding' = AST.traverseBinding normalizeMType'
+normalizeBinding' = AST.traverseBinding
+  (\(Meta meta) -> do
+    mt <- normalizeMType' meta.mtype
+    pure $ Meta meta {mtype = mt})
 
 -- | Normalize the given typed expression tree.
 normalizeTypeTree' :: TypeTree -> State NormalizationState TypeTree
