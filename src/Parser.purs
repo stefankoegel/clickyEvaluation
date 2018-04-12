@@ -40,7 +40,8 @@ import AST
   , compileADTDef
   , Associativity(..)
   , DataConstr(..)
-  , Type(..))
+  , Type(..)
+  , Meta(..))
 import AST as AST
 import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 
@@ -399,14 +400,14 @@ letExpr expr = do
   body  <- indent $ withPos expr
   pure $ LetExpr AST.emptyMeta binds body
   where
-    bindingItem :: IndentParser String TypeTree -> IndentParser String (Tuple (Binding MType) TypeTree)
+    bindingItem :: IndentParser String TypeTree -> IndentParser String (Tuple (Binding Meta) TypeTree)
     bindingItem expr = do
       b <- ilexe binding
       indent $ char '='
       e <- indent $ withPos expr
       pure $ Tuple b e
 
-    bindingBlock :: IndentParser String TypeTree -> IndentParser String (List (Tuple (Binding MType) TypeTree))
+    bindingBlock :: IndentParser String TypeTree -> IndentParser String (List (Tuple (Binding Meta) TypeTree))
     bindingBlock expr = curly <|> (PC.try layout) <|> (PC.try iblock)
       where 
         curly  = PC.between (ilexe $ char '{') (ilexe $ char '}') iblock 
@@ -454,7 +455,7 @@ parseExpr = runParserIndent expression
 -}
 
 
-binding :: IndentParser String (Binding MType)
+binding :: IndentParser String (Binding Meta)
 binding = do
   whiteSpace
   fix $ \bnd -> do
@@ -463,46 +464,46 @@ binding = do
          '(' -> do
             cs <- ilexe (char '(') *> indent (bndList bnd) <* indent (char ')')
             case cs of
-                 Nil        -> pure $ NTupleLit Nothing Nil
+                 Nil        -> pure $ NTupleLit AST.emptyMeta Nil
                  Cons c Nil -> pure c
-                 cs'        -> pure $ NTupleLit Nothing cs'
+                 cs'        -> pure $ NTupleLit AST.emptyMeta cs'
          '[' -> do
             cs <- ilexe (char '[') *> indent (bndList bnd) <* indent (char ']')
             case cs of
-                 Nil        -> pure $ ListLit Nothing Nil
-                 cs'        -> pure $ ListLit Nothing cs'
+                 Nil        -> pure $ ListLit AST.emptyMeta Nil
+                 cs'        -> pure $ ListLit AST.emptyMeta cs'
          _   -> PC.try $ ilexe bndSimple
 
 
-bndSimple :: IndentParser String (Binding MType)
+bndSimple :: IndentParser String (Binding Meta)
 bndSimple = PC.try bndLit
 
-bndLit :: forall m. (Monad m) => ParserT String m (Binding MType)
-bndLit = Lit Nothing <$> atom
+bndLit :: forall m. (Monad m) => ParserT String m (Binding Meta)
+bndLit = Lit AST.emptyMeta <$> atom
 
-bndList :: IndentParser String (Binding MType) -> IndentParser String (List (Binding MType))
+bndList :: IndentParser String (Binding Meta) -> IndentParser String (List (Binding Meta))
 bndList bnd = PC.sepBy
   (PC.try <<< indent <<< bndConses $ bnd)
   (PC.try <<< indent <<< char $ ',')
 
-bndConses :: FixedIndentParser String (Binding MType)
+bndConses :: FixedIndentParser String (Binding Meta)
 bndConses bnd = PC.chainr1
   (PC.try <<< ilexe <<< bndInfixes $ bnd)
   (do PC.try <<< indent <<< char $ ':'
-      pure $ ConsLit Nothing)
+      pure $ ConsLit AST.emptyMeta)
 
-bndInfixes :: FixedIndentParser String (Binding MType)
+bndInfixes :: FixedIndentParser String (Binding Meta)
 bndInfixes bnd = PC.chainl1
   (PC.try (ilexe ((bndComplex bnd))))
   (do o <- PC.try (indent infixConstructor)
-      pure (\l r -> ConstrLit Nothing (InfixDataConstr o LEFTASSOC 9 l r)))
+      pure (\l r -> ConstrLit AST.emptyMeta (InfixDataConstr o LEFTASSOC 9 l r)))
 
-bndComplex :: FixedIndentParser String (Binding MType)
+bndComplex :: FixedIndentParser String (Binding Meta)
 bndComplex bnd =
   PC.try
     (do n  <- ilexe upperCaseName
         as <- many1 bnd
-        pure $ ConstrLit Nothing (PrefixDataConstr n (length as) as))
+        pure $ ConstrLit AST.emptyMeta (PrefixDataConstr n (length as) as))
   <|> indent bnd
 
 ---------------------------------------------------------
