@@ -18,7 +18,7 @@ import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
 import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding,
-            Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError)
+            Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError, Meta (..))
 
 
 data RoseTree a = Node a (List (RoseTree a))
@@ -140,12 +140,12 @@ genQual t bind expr = typedNode "" ["gen"] [bind, arrow, expr] t
   where
     arrow = node "<-" ["separator"] []
 
-atom :: MType -> Atom -> Div
-atom t (AInt n) = typedNode (show n) ["atom", "num"] [] t
-atom t (Bool b) = typedNode (if b then "True" else "False") ["atom", "bool"] [] t
-atom t (Char c) = typedNode ("'" <> c <> "'") ["atom", "char"] [] t
-atom t (Name n) = typedNode n ["atom", "name"] [] t
-atom t (Constr n) = typedNode n ["atom", "name", "dataConstructor"] [] t
+atom :: Meta -> Atom -> Div
+atom (Meta meta) (AInt n) = typedNode (show n) ["atom", "num"] [] meta.mtype
+atom (Meta meta) (Bool b) = typedNode (if b then "True" else "False") ["atom", "bool"] [] meta.mtype
+atom (Meta meta) (Char c) = typedNode ("'" <> c <> "'") ["atom", "char"] [] meta.mtype
+atom (Meta meta) (Name n) = typedNode n ["atom", "name"] [] meta.mtype
+atom (Meta meta) (Constr n) = typedNode n ["atom", "name", "dataConstructor"] [] meta.mtype
 
 interleave :: forall a. a -> List a -> List a
 interleave _ Nil          = Nil
