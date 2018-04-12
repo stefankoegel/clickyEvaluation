@@ -301,7 +301,10 @@ type Expr = Tree Atom (Binding Unit) Op Unit
 type MType = Maybe Type
 type MIndex = Maybe (Tuple Int Int)
 
-type Meta = { mindex:: MIndex, mtype :: MType }
+newtype Meta = Meta { mindex :: MIndex, mtype :: MType }
+
+instance showMeta :: Show Meta where
+  show (Meta meta) = "Meta { mindex: " <> show meta.mindex <> ", mtype: " <> show meta.mtype <> "}"
 
 type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) Meta
 
