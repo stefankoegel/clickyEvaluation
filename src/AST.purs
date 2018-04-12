@@ -306,6 +306,12 @@ newtype Meta = Meta { mindex :: MIndex, mtype :: MType }
 instance showMeta :: Show Meta where
   show (Meta meta) = "Meta { mindex: " <> show meta.mindex <> ", mtype: " <> show meta.mtype <> "}"
 
+metaMIndex :: Meta -> MIndex
+metaMIndex (Meta meta) = meta.mindex
+
+metaMType :: Meta -> MType
+metaMType (Meta meta) = meta.mtype
+
 type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) Meta
 
 type Index = Int
