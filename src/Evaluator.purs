@@ -23,7 +23,7 @@ import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
 -- import JSHelpers (unsafeUndef)
 
-import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, MType, DataConstr (..))
+import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, MType, DataConstr (..), Meta (..))
 import AST as AST
 
 data EvalError =
@@ -61,9 +61,9 @@ instance showEvalError :: Show EvalError where
   show (MoreErrors e1 e2)         = "(MoreErrors " <> show e1 <> " " <> show e2 <> ")"
 
 data MatchingError =
-    MatchingError (Binding MType) TypeTree
-  | StrictnessError (Binding MType) TypeTree
-  | TooFewArguments (List (Binding MType)) (List TypeTree)
+    MatchingError (Binding Meta) TypeTree
+  | StrictnessError (Binding Meta) TypeTree
+  | TooFewArguments (List (Binding Meta)) (List TypeTree)
 
 instance showMatchingError :: Show MatchingError where
   show (MatchingError b e)     = "MatchingError " <> show b <> " " <> show e
@@ -80,7 +80,7 @@ type Matcher = ExceptT MatchingError Identity
 runMatcherM :: forall a. Matcher a -> Either MatchingError a
 runMatcherM = extract <<< runExceptT
 
-type Env = StrMap (List (Tuple (List (Binding MType)) TypeTree))
+type Env = StrMap (List (Tuple (List (Binding Meta)) TypeTree))
 
 defsToEnv :: (List Definition) -> Env
 defsToEnv = foldl insertDef Map.empty
@@ -121,10 +121,10 @@ eval1 env expr = case expr of
   _                                  -> throwError $ CannotEvaluate expr
 
 eval :: Env -> TypeTree -> TypeTree
-eval env expr = evalToBinding env expr (Lit Nothing (Name "_|_"))
+eval env expr = evalToBinding env expr (Lit AST.emptyMeta (Name "_|_"))
 
 -- | Evaluates an expression until it matches a given binding in a given environment.
-evalToBinding :: Env -> TypeTree -> Binding MType -> TypeTree
+evalToBinding :: Env -> TypeTree -> Binding Meta -> TypeTree
 evalToBinding env expr bind = case bind of
   (Lit _ (Name "_|_")) -> recurse env expr bind
   (Lit _ (Name _))     -> expr
@@ -169,7 +169,7 @@ evalToBinding env expr bind = case bind of
 
 
 
-recurse :: Env -> TypeTree -> Binding MType -> TypeTree
+recurse :: Env -> TypeTree -> Binding Meta -> TypeTree
 recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1d bind
   where
     eval1d :: TypeTree
@@ -197,14 +197,14 @@ recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1
       _                  ->
         expr
 
-    evalToBindingQual :: Env -> TypeQual -> Binding MType ->TypeQual
+    evalToBindingQual :: Env -> TypeQual -> Binding Meta ->TypeQual
     evalToBindingQual environment qual binding = case qual of
       Let _ b e -> Let AST.emptyMeta b (evalToBinding environment e bind)
       Gen _ b e -> Gen AST.emptyMeta b (evalToBinding environment e bind)
       Guard _ e -> Guard AST.emptyMeta (evalToBinding environment e bind)
 
 
-wrapLambda :: (List (Binding MType)) -> (List TypeTree) -> TypeTree -> Evaluator TypeTree
+wrapLambda :: (List (Binding Meta)) -> (List TypeTree) -> TypeTree -> Evaluator TypeTree
 wrapLambda binds args body =
   case compare (length binds) (length args) of
     EQ -> pure body
@@ -340,7 +340,8 @@ evalListComp env expr (Cons q qs) = case q of
     case listcomp1 of
       List _ (Cons x Nil) -> pure $ AST.binary Colon x listcomp2
       _ -> pure $ AST.binary Append listcomp1 listcomp2
-  Gen _ b e -> pure $ ListComp AST.emptyMeta expr (Cons (Gen AST.emptyMeta b (evalToBinding env e (ConsLit Nothing b (Lit Nothing (Name "_"))))) qs)
+  Gen _ b e -> pure $ ListComp AST.emptyMeta expr
+    (Cons (Gen AST.emptyMeta b (evalToBinding env e (ConsLit AST.emptyMeta b (Lit AST.emptyMeta (Name "_"))))) qs)
   Let _ b e -> case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
     Right r -> do
       Tuple qs' r' <- runStateT (replaceQualifiers qs) r
@@ -364,7 +365,7 @@ replaceQualifiers = traverse replaceQual
         e'  <- lift $ replace' sub e
         pure $ Guard AST.emptyMeta e'
 
-scope :: Binding MType -> TypeTree -> StateT (StrMap TypeTree) Evaluator TypeTree
+scope :: Binding Meta -> TypeTree -> StateT (StrMap TypeTree) Evaluator TypeTree
 scope b e = do
   sub <- get
   e'  <- lift $ replace' sub e
@@ -375,7 +376,7 @@ scope b e = do
 -- Let TypeTreeessions
 ------------------------------------------------------------------------------------------
 
-type Bindings = List (Tuple (Binding MType) TypeTree)
+type Bindings = List (Tuple (Binding Meta) TypeTree)
 
 evalLetTypeTree :: Bindings -> TypeTree -> Evaluator TypeTree
 evalLetTypeTree Nil e = pure e
@@ -390,7 +391,9 @@ evalLetTypeTree (Cons (Tuple b e) rest) expr = case runMatcherM $ matchls' Map.e
         pure $ LetExpr AST.emptyMeta rest' expr'
 
 replaceBindings :: Bindings -> StateT (StrMap TypeTree) Evaluator Bindings
-replaceBindings = traverse $ \(Tuple bin expr) -> scope bin expr >>= \expr' -> pure $ Tuple bin expr'
+replaceBindings = traverse $ \(Tuple bin expr) -> do
+  expr' <- scope bin expr
+  pure $ Tuple bin expr'
 
 ------------------------------------------------------------------------------------------
 
@@ -462,7 +465,7 @@ modulo (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom AST.emptyMeta $ AInt $ 
 modulo e1 e2 = throwError $ BinaryOpError (InfixFunc "mod") e1 e2
 
 
-tryAll :: Env -> (List (Tuple (List (Binding MType)) TypeTree)) -> (List TypeTree) -> String -> (List MatchingError) -> Evaluator TypeTree
+tryAll :: Env -> (List (Tuple (List (Binding Meta)) TypeTree)) -> (List TypeTree) -> String -> (List MatchingError) -> Evaluator TypeTree
 tryAll _   Nil                        _    name errs = throwError $ NoMatchingFunction name errs
 tryAll env (Cons (Tuple binds body) cases) args name errs | (length args) < (length binds) = tryAll env cases args name (errs <> (singleton $ TooFewArguments binds args))
 tryAll env (Cons (Tuple binds body) cases) args name errs = case runMatcherM $ matchls' env binds args of
@@ -479,36 +482,36 @@ whnf (Binary _ (Tuple (InfixConstr _) _) _ _) = true
 whnf (App _ (Atom _ (Constr _)) _) = true
 whnf _                 = false
 
-checkStrictness :: Binding MType -> TypeTree -> MatchingError
+checkStrictness :: Binding Meta -> TypeTree -> MatchingError
 checkStrictness bs es | whnf es   = MatchingError bs es
                       | otherwise = StrictnessError bs es
 
 
-matchls' :: Env -> (List (Binding MType)) -> (List TypeTree) -> Matcher (StrMap TypeTree)
+matchls' :: Env -> (List (Binding Meta)) -> (List TypeTree) -> Matcher (StrMap TypeTree)
 matchls' env bs es = execStateT (zipWithA (\b e -> match' b (evalToBinding env e b)) bs es) Map.empty
 
-match' :: Binding MType -> TypeTree -> StateT (StrMap TypeTree) Matcher Unit
+match' :: Binding Meta -> TypeTree -> StateT (StrMap TypeTree) Matcher Unit
 match' (Lit _ (Name name)) e                   = modify (Map.insert name e)
 match' (Lit _ ba)          (Atom _ ea)         = case ba == ea of
                                                  true  -> pure unit
-                                                 false -> throwError $ MatchingError (Lit Nothing ba) (Atom AST.emptyMeta ea)
-match' (Lit _ b)           e                   = throwError $ checkStrictness (Lit Nothing b) e
+                                                 false -> throwError $ MatchingError (Lit AST.emptyMeta ba) (Atom AST.emptyMeta ea)
+match' (Lit _ b)           e                   = throwError $ checkStrictness (Lit AST.emptyMeta b) e
 
 match' (ConsLit _ b bs)    (Binary _ (Tuple Colon _) e es) = match' b e *> match' bs es
-match' (ConsLit _ b bs)    (List _ (Cons e es))  = match' (ConsLit Nothing b bs) (AST.binary Colon e (List AST.emptyMeta es))
-match' (ConsLit _ b bs)    (List _ Nil)          = throwError $ MatchingError (ConsLit Nothing b bs) (List AST.emptyMeta Nil)
-match' (ConsLit _ b bs)    e                     = throwError $ checkStrictness (ConsLit Nothing b bs) e
+match' (ConsLit _ b bs)    (List _ (Cons e es))  = match' (ConsLit AST.emptyMeta b bs) (AST.binary Colon e (List AST.emptyMeta es))
+match' (ConsLit _ b bs)    (List _ Nil)          = throwError $ MatchingError (ConsLit AST.emptyMeta b bs) (List AST.emptyMeta Nil)
+match' (ConsLit _ b bs)    e                     = throwError $ checkStrictness (ConsLit AST.emptyMeta b bs) e
 
-match' (ListLit _ (Cons b bs)) (Binary _ (Tuple Colon _) e es) = match' b e *> match' (ListLit Nothing bs) es
+match' (ListLit _ (Cons b bs)) (Binary _ (Tuple Colon _) e es) = match' b e *> match' (ListLit AST.emptyMeta bs) es
 match' (ListLit _ bs)      (List _ es)               = case length bs == length es of
                                                        true  -> void $ zipWithA match' bs es
-                                                       false -> throwError $ MatchingError (ListLit Nothing bs) (List AST.emptyMeta es)
-match' (ListLit _ bs)      e                         = throwError $ checkStrictness (ListLit Nothing bs) e
+                                                       false -> throwError $ MatchingError (ListLit AST.emptyMeta bs) (List AST.emptyMeta es)
+match' (ListLit _ bs)      e                         = throwError $ checkStrictness (ListLit AST.emptyMeta bs) e
 
 match' (NTupleLit _ bs)    (NTuple _ es) = case length bs == length es of
                                            true  -> void $ zipWithA match' bs es
-                                           false -> throwError $ MatchingError (NTupleLit Nothing bs) (NTuple AST.emptyMeta es)
-match' (NTupleLit _ bs)    e             = throwError $ checkStrictness (NTupleLit Nothing bs) e
+                                           false -> throwError $ MatchingError (NTupleLit AST.emptyMeta bs) (NTuple AST.emptyMeta es)
+match' (NTupleLit _ bs)    e             = throwError $ checkStrictness (NTupleLit AST.emptyMeta bs) e
 -- TODO
 match' b@(ConstrLit _ (PrefixDataConstr n a ps)) e@(App _ (Atom _ (Constr n')) ps')
   = case  n == n' && length ps == length ps' of
@@ -540,7 +543,7 @@ mapM f (Cons x xs) = do
   pure $ Cons y ys
 
 -- removes every entry in StrMap that is inside the binding
-removeOverlapping :: Binding MType -> StrMap TypeTree -> StrMap TypeTree
+removeOverlapping :: Binding Meta -> StrMap TypeTree -> StrMap TypeTree
 removeOverlapping bind = removeOverlapping' (boundNames bind)
   where
     removeOverlapping' :: List String -> StrMap TypeTree -> StrMap TypeTree
@@ -562,7 +565,8 @@ replace' subs = go
     (SectR _ op e)         -> SectR AST.emptyMeta <$> pure op <*> go e
     (IfExpr _ ce te ee)    -> IfExpr AST.emptyMeta <$> go ce <*> go te <*> go ee
     (ArithmSeq _ ce te ee) -> ArithmSeq AST.emptyMeta <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
-    (Lambda _ binds body)  -> (avoidCapture subs binds) *> (Lambda AST.emptyMeta <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
+    (Lambda _ binds body)  -> (avoidCapture subs binds)
+      *> (Lambda AST.emptyMeta <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
     (App _ func exprs)     -> App AST.emptyMeta <$> go func <*> traverse go exprs
     (ListComp _ expr quals) -> do
       Tuple quals' subs' <- runStateT (replaceQualifiers quals) subs
@@ -574,7 +578,7 @@ replace' subs = go
       pure $ LetExpr AST.emptyMeta binds' expr'
     e                     -> pure e
 
-avoidCapture :: StrMap TypeTree -> (List (Binding MType)) -> Evaluator Unit
+avoidCapture :: StrMap TypeTree -> (List (Binding Meta)) -> Evaluator Unit
 avoidCapture subs binds = case intersect (concatMap freeVariables $ Map.values subs) (boundNames' binds) of
   Nil      -> pure unit
   captures -> throwError $ NameCaptureError captures
@@ -596,10 +600,10 @@ freeVariables _ = Nil
 --   (\bs f -> nub f \\ boundNames' bs)
 --   (\f fs -> f <> concat fs)
 
-boundNames' :: (List (Binding MType)) -> (List String)
+boundNames' :: (List (Binding Meta)) -> (List String)
 boundNames' = concatMap boundNames
 
-boundNames :: Binding MType -> (List String)
+boundNames :: Binding Meta -> (List String)
 boundNames = go
   where
   go (Lit _  (Name name)) = singleton name
