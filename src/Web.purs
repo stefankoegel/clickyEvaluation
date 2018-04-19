@@ -17,7 +17,7 @@ import Control.Monad.Eff.Console (CONSOLE)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
-import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding,
+import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding, Meta(..),
             Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError, getMetaMType)
 
 import AST as AST
@@ -29,7 +29,7 @@ type Div = RoseTree { content :: String, classes :: (List String), zipper :: May
 
 type DivHole = TypeTree -> (TypeTree -> TypeTree) -> Div
 
-type OpTuple = Tuple Op MType
+type OpTuple = Tuple Op Meta
 
 nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
 nodeHole content classes children expr hole =
@@ -172,7 +172,7 @@ unpackOp :: OpTuple -> Op
 unpackOp (Tuple op _) = op
 
 opToDiv :: OpTuple -> Div
-opToDiv (Tuple op t) = typedNode (pPrintOp op) ["op"] [] t
+opToDiv (Tuple op (Meta meta)) = typedNode (pPrintOp op) ["op"] [] meta.mtype
 
 binary :: MType -> OpTuple -> Div -> Div -> DivHole
 binary binType op d1 d2 = typedNodeHole "" ["binary"] [d1, opToDiv op, d2] binType
