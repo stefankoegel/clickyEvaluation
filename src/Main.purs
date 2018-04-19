@@ -125,7 +125,7 @@ doWithJust mMaybe f = do
     Just x  -> f x
 
 -- | Given an evaluation environment, try to infer the types inside of it.
-buildTypeEnvironment :: Eval.Env -> Maybe TypeChecker.TypeEnv
+buildTypeEnvironment :: Partial => Eval.Env -> Maybe TypeChecker.TypeEnv
 buildTypeEnvironment env =
   let defs = Eval.envToDefs env
   in case TypeChecker.tryInferEnvironment defs of
@@ -134,7 +134,7 @@ buildTypeEnvironment env =
 
 -- | Type check an expression using a given typed environment.
 -- | Construct a div tree from the given typed expression.
-typeCheckExpression :: forall eff. TypeChecker.TypeEnv -> AST.TypeTree
+typeCheckExpression :: forall eff. Partial => TypeChecker.TypeEnv -> AST.TypeTree
                  -> Eff (dom :: DOM, console :: CONSOLE | eff) (Maybe AST.TypeTree)
 typeCheckExpression typedEnv expr = do
   case TypeChecker.runInferWith typedEnv false (TypeChecker.inferExpr expr) of
@@ -181,7 +181,7 @@ stringToEnv str = case Parser.parseDefs str of
   Left _     -> empty
   Right defs -> Eval.defsToEnv defs
 
-preludeTyped :: TypeChecker.TypeEnv
+preludeTyped :: Partial => TypeChecker.TypeEnv
 preludeTyped = case buildTypeEnvironment preludeEnv of
   Just env -> env
   Nothing -> TypeChecker.emptyTypeEnv
