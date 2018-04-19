@@ -1281,7 +1281,7 @@ assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f
   where
   f (Meta meta) = Meta $ meta { mtype = lookupTVar (fromJust meta.mindex) }
   -- f' (Tuple _ idx) = lookupTVar idx
-  fo (Tuple op (Meta meta)) = Tuple op (Meta $ meta {mtype = lookupTVar (fromJust meta.mindex)})
+  fo (Tuple op (Meta meta)) = Tuple op (Meta $ emptyMeta' {mtype = lookupTVar (fromJust meta.mindex)})
   fb = map f
   lookupTVar idx = case Map.lookup idx constraints.mapped of
     Nothing -> Nothing
@@ -1374,7 +1374,7 @@ inferDefinition :: Partial => IndexedDefinition -> Infer (Triple Type TVarMappin
 inferDefinition def@(IndexedDef name bindings expr) = do
   tv <- fresh
   let m = Tuple name (Forall Nil tv) : Nil
-  Tuple t1 c1 <- withEnv m (infer (Lambda (Meta $ emptyMeta' {mtype = Nothing, mindex = Just (-1)}) bindings expr))
+  Tuple t1 c1 <- withEnv m (infer (Lambda (Meta $ emptyMeta' {mindex = Just (-1)}) bindings expr))
   let c2 = setConstraintFor expr tv t1
   pure $ Triple tv m (c1 <+> c2)
 

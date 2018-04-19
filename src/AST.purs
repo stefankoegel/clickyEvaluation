@@ -331,13 +331,6 @@ getMetaMType (Meta meta) = meta.mtype
 
 type TypeTree = Tree Atom (Binding Meta) (Tuple Op Meta) Meta
 
-makeIndexTuple' :: Meta -> State Index MIType
-makeIndexTuple' (Meta meta) = do
-  idx <- get
-  let new = Tuple meta.mtype idx
-  put (idx + 1)
-  pure new
-
 makeIndexTuple :: Meta -> State Index Meta
 makeIndexTuple (Meta meta) = do
   idx <- get
@@ -372,14 +365,12 @@ makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
 
 -- TODO: Is this at all necessary?
 removeIndices :: TypeTree -> TypeTree
-removeIndices = id
-{-
+-- removeIndices = id
 removeIndices = treeMap
   id
   (map (\(Meta meta) -> Meta (meta {mindex = Nothing})))
-  (\(Tuple op mit) -> Tuple op (fst mit))
+  (\(Tuple op (Meta meta)) -> Tuple op (Meta $ meta {mindex = Nothing}))
   (\(Meta meta) -> Meta (meta {mindex = Nothing}))
-  -}
 
 insertIntoIndexedTree :: MType -> TypeTree -> TypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Meta $ emptyMeta' {mtype = t, mindex = idx}) expr
@@ -392,10 +383,10 @@ opIndex :: Partial => (Tuple Op Meta) -> Index
 opIndex (Tuple op meta) = fromJust $ getMetaMIndex meta
 
 bindingIndex :: Partial => (Binding Meta) -> Index
-bindingIndex = extractFromBinding >>> (\(Meta meta) -> meta.mindex) >>> fromJust
+bindingIndex = extractFromBinding >>> getMetaMIndex >>> fromJust
 
 index :: Partial => TypeTree -> Index
-index = extractFromTree >>> (\(Meta meta) -> meta.mindex) >>> fromJust
+index = extractFromTree >>> getMetaMIndex >>> fromJust
 
 traverseBinding :: forall m m' f. Monad f =>
      (m -> f m')
