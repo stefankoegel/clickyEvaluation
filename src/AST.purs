@@ -104,8 +104,8 @@ data Tree a b o m =
   | App       m (Tree a b o m) (List (Tree a b o m))
   | ListComp  m (Tree a b o m) (List (QualTree b (Tree a b o m) m))
 
-toOpTuple :: Op -> Tuple Op MType
-toOpTuple op = Tuple op Nothing
+toOpTuple :: Op -> Tuple Op Meta
+toOpTuple op = Tuple op emptyMeta
 
 exprToTypeTree :: Expr -> TypeTree
 exprToTypeTree (Atom _ atom) = Atom emptyMeta atom
@@ -142,7 +142,7 @@ exprToTypeTree (ListComp _ t qualTrees) = ListComp emptyMeta
     go (Guard _ t) = Guard emptyMeta (exprToTypeTree t)
 
 binary :: Op -> TypeTree -> TypeTree -> TypeTree
-binary op left right = Binary emptyMeta (Tuple op Nothing) left right
+binary op left right = Binary emptyMeta (Tuple op emptyMeta) left right
 
 -- | Get the expression element from a given qual tree.
 getQualTreeExpression :: forall b t m. QualTree b t m -> t
@@ -329,19 +329,26 @@ getMetaMIndex (Meta meta) = meta.mindex
 getMetaMType :: Meta -> MType
 getMetaMType (Meta meta) = meta.mtype
 
-type TypeTree = Tree Atom (Binding Meta) (Tuple Op MType) Meta
+type TypeTree = Tree Atom (Binding Meta) (Tuple Op Meta) Meta
+
+makeIndexTuple' :: Meta -> State Index MIType
+makeIndexTuple' (Meta meta) = do
+  idx <- get
+  let new = Tuple meta.mtype idx
+  put (idx + 1)
+  pure new
 
 makeIndexTuple :: Meta -> State Index Meta
 makeIndexTuple (Meta meta) = do
   idx <- get
-  let new = Meta $ meta {mindex = idx}
+  let new = Meta $ meta {mindex = Just idx}
   put (idx + 1)
   pure new
 
-makeIndexOpTuple :: (Tuple Op MType) -> State Index (Tuple Op MIType)
-makeIndexOpTuple (Tuple op mt) = do
+makeIndexOpTuple :: (Tuple Op Meta) -> State Index (Tuple Op Meta)
+makeIndexOpTuple (Tuple op (Meta meta)) = do
   idx <- get
-  let new = Tuple op (Tuple mt idx)
+  let new = Tuple op (Meta $ meta {mindex = Just idx})
   put (idx + 1)
   pure new
 
@@ -365,18 +372,20 @@ makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
 
 -- TODO: Is this at all necessary?
 removeIndices :: TypeTree -> TypeTree
--- MAYBE: removeIndices = id
+removeIndices = id
+{-
 removeIndices = treeMap
   id
   (map (\(Meta meta) -> Meta (meta {mindex = Nothing})))
   (\(Tuple op mit) -> Tuple op (fst mit))
   (\(Meta meta) -> Meta (meta {mindex = Nothing}))
+  -}
 
 insertIntoIndexedTree :: MType -> TypeTree -> TypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Meta $ emptyMeta' {mtype = t, mindex = idx}) expr
-  where idx = (extractFromTree expr).mindex
+  where idx = getMetaMIndex (extractFromTree expr)
 
-definitionIndex :: IndexedDefinition -> Index
+definitionIndex :: Partial => IndexedDefinition -> Index
 definitionIndex (IndexedDef name bindings expr) = index expr
 
 opIndex :: (Tuple Op MIType) -> Index
@@ -385,7 +394,7 @@ opIndex (Tuple op (Tuple mt idx)) = idx
 bindingIndex :: (Binding MIType) -> Index
 bindingIndex = extractFromBinding >>> snd
 
-index :: TypeTree -> Index
+index :: Partial => TypeTree -> Index
 index = extractFromTree >>> (\(Meta meta) -> meta.mindex) >>> fromJust
 
 traverseBinding :: forall m m' f. Monad f =>
@@ -597,9 +606,10 @@ compileDataConstr :: Type -> DataConstr Type -> Definition
 compileDataConstr t (PrefixDataConstr name _ ps) =
   Def name Nil (Atom (Meta (emptyMeta' {mtype = Just (foldr TypArr t ps)})) (Constr name))
 compileDataConstr t (InfixDataConstr op assoc prec l r) =
-  Def op Nil (PrefixOp (Meta (emptyMeta' {mtype = Just typ})) (Tuple (InfixConstr op) (Just typ)))
+  Def op Nil (PrefixOp meta (Tuple (InfixConstr op) meta))
  where
   typ = TypArr l (TypArr r t)
+  meta = Meta $ emptyMeta' {mtype = Just typ}
 
 instance functorDataConstr :: Functor DataConstr where
   map f (PrefixDataConstr s i ps) = PrefixDataConstr s i (map f ps)
