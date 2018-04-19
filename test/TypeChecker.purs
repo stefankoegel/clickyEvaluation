@@ -30,6 +30,9 @@ tell' = tell
 metaType :: Type -> Meta
 metaType t = Meta $ emptyMeta' {mtype = Just t}
 
+metaIndex :: Int -> Meta
+metaIndex i = Meta $ emptyMeta' {mindex = Just i}
+
 -- | Construct a list of type [typCon] given the name of the type constants.
 typConList :: String -> Type
 typConList name = TList (TypCon name)
@@ -110,7 +113,7 @@ compareTypeError testName expected actual = if expected == actual
                "Actual type error: " <> prettyPrintTypeError actual <> "\n"
 
 -- | Try to infer the type of a given expression and compare the result with the expected type.
-testInferExpr :: String -> String -> Type -> Test Unit
+testInferExpr :: Partial => String -> String -> Type -> Test Unit
 testInferExpr name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
   Right expression -> case TC.runInfer true (TC.inferExprToType expression) of
@@ -118,7 +121,7 @@ testInferExpr name expressionString expected = case parseExpr expressionString o
     Right t -> compareTypes name expected t
 
 -- | Try to infer the type of a given expression and expect a type error to occur.
-testInferExprFail :: String -> String -> TypeError -> Test Unit
+testInferExprFail :: Partial => String -> String -> TypeError -> Test Unit
 testInferExprFail name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
   Right expression -> case TC.runInfer true (TC.inferExprToType expression) of
@@ -127,7 +130,7 @@ testInferExprFail name expressionString expected = case parseExpr expressionStri
                        "Found type: " <> prettyPrintType t <> "\n"
     Left typeError -> compareTypeError name expected typeError
 
-testInferDef :: String -> String -> Type -> Test Unit
+testInferDef :: Partial => String -> String -> Type -> Test Unit
 testInferDef name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
   Right (def:_) -> case TC.runInfer true (inferAndConvertToType def) of
@@ -138,7 +141,7 @@ testInferDef name definitionString expected = case parseDefs definitionString of
   where
   inferAndConvertToType def = TC.schemeOfDefinition def >>= TC.schemeToType
 
-testInferDefFail :: String -> String -> TypeError -> Test Unit
+testInferDefFail :: Partial => String -> String -> TypeError -> Test Unit
 testInferDefFail name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
   Right (def:_) -> case TC.runInfer true (inferAndConvertToType def) of
@@ -155,7 +158,7 @@ testInferDefFail name definitionString expected = case parseDefs definitionStrin
   where
   inferAndConvertToType def = TC.schemeOfDefinition def >>= TC.schemeToType
 
-testInferDefGroup :: String -> String -> Type -> Test Unit
+testInferDefGroup :: Partial => String -> String -> Type -> Test Unit
 testInferDefGroup name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
   Right definitions -> case TC.runInfer true (inferAndConvertToType definitions) of
@@ -165,7 +168,7 @@ testInferDefGroup name definitionString expected = case parseDefs definitionStri
   inferAndConvertToType defs = TC.schemeOfDefinitionGroup defs >>= TC.schemeToType
 
 -- | Infer the type of the given expression in the context of the prelude.
-testInferExprWithPrelude :: String -> String -> Type -> Test Unit
+testInferExprWithPrelude :: Partial => String -> String -> Type -> Test Unit
 testInferExprWithPrelude name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
   Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
@@ -174,7 +177,7 @@ testInferExprWithPrelude name expressionString expected = case parseExpr express
     
 
 -- | Infer the type of the given expression in the context of a custom prelude.
-testInferExprWithCustomPrelude :: String -> String -> String -> Type -> Test Unit
+testInferExprWithCustomPrelude :: Partial => String -> String -> String -> Type -> Test Unit
 testInferExprWithCustomPrelude name prelude expressionString expected =
   case parseDefs prelude of
     Left parseError -> reportParseError name parseError
@@ -191,12 +194,12 @@ testInferExprWithCustomPrelude name prelude expressionString expected =
 
 -- | Test type inference on expression trees, given an expression string as well as the expected
 -- | resulting typed tree.
-testInferTT' :: String -> String -> TypeTree -> Test Unit
+testInferTT' :: Partial => String -> String -> TypeTree -> Test Unit
 testInferTT' name unparsedTree expectedTypeTree = case parseExpr unparsedTree of
   Left parseError -> reportParseError name parseError
   Right expression -> testInferTT name expression expectedTypeTree
 
-testInferTTWithCustomPrelude' :: String -> String -> String -> TypeTree -> Test Unit
+testInferTTWithCustomPrelude' :: Partial => String -> String -> String -> TypeTree -> Test Unit
 testInferTTWithCustomPrelude' name prelude unparsedTree expectedTypeTree =
   case parseDefs prelude of
     Left parseError -> reportParseError name parseError
@@ -206,7 +209,7 @@ testInferTTWithCustomPrelude' name prelude unparsedTree expectedTypeTree =
 
 -- | Test type inference on expression trees. Here not only the expected type of the whole
 -- | expression is checked, but also the type of every subexpression.
-testInferTT :: String -> TypeTree -> TypeTree -> Test Unit
+testInferTT :: Partial => String -> TypeTree -> TypeTree -> Test Unit
 testInferTT name untypedTree expectedTypedTree =
   case TC.tryInferExprInContext parsedPrelude untypedTree of
     Left typeError -> reportTypeError name typeError
@@ -216,7 +219,7 @@ testInferTT name untypedTree expectedTypedTree =
                    "Expected type tree: " <> show expectedTypedTree <> "\n" <>
                    "Actual type tree: " <> show typedTree <> "\n"
 
-testInferTTWithCustomPrelude :: String -> List Definition -> TypeTree -> TypeTree -> Test Unit
+testInferTTWithCustomPrelude :: Partial => String -> List Definition -> TypeTree -> TypeTree -> Test Unit
 testInferTTWithCustomPrelude name parsedPrelude untypedTree expectedTypedTree =
   case TC.tryInferExprInContext parsedPrelude untypedTree of
     Left typeError -> reportTypeError name typeError
@@ -226,7 +229,7 @@ testInferTTWithCustomPrelude name parsedPrelude untypedTree expectedTypedTree =
                    "Expected type tree: " <> show expectedTypedTree <> "\n" <>
                    "Actual type tree: " <> show typedTree <> "\n"
 
-testInferTTFail :: String -> TypeTree -> TypeError -> Test Unit
+testInferTTFail :: Partial => String -> TypeTree -> TypeError -> Test Unit
 testInferTTFail name expr expectedError =
   case TC.tryInferExprInContext parsedPrelude expr of
     Left typeError -> compareTypeError name expectedError typeError
@@ -244,7 +247,7 @@ testNormalizeTT name tt normalizedTT = if (TC.normalizeTypeTree tt) == normalize
                "Actual type tree: " <> show tt <> "\n"
 
 -- | Test the function `mapSchemeOnTVarMappings`.
-testMapSchemeOnTVarMappings :: String -> Scheme -> IndexedTypedBinding
+testMapSchemeOnTVarMappings :: Partial => String -> Scheme -> TypedBinding
                             -> TVarMappings -> Test Unit
 testMapSchemeOnTVarMappings name scheme binding expected =
   case TC.runInfer true (fst <$> TC.mapSchemeOnTVarMappings binding scheme) of
@@ -257,7 +260,7 @@ testMapSchemeOnTVarMappings name scheme binding expected =
         "Actual type variable mapping: " <> TC.ppTVarMappings result <> "\n"
 
 -- | Test the function `mapSchemeOnTVarMappings`.
-testMapSchemeOnTVarMappings' :: String -> String -> Scheme -> IndexedTypedBinding
+testMapSchemeOnTVarMappings' :: Partial => String -> String -> Scheme -> TypedBinding
                             -> TVarMappings -> Test Unit
 testMapSchemeOnTVarMappings' name prelude scheme binding expected =
   case parseDefs prelude of
@@ -285,19 +288,19 @@ listOne = List (Meta (emptyMeta' {mtype = Just $ typConList "Int"}))
 untypedListOne :: TypeTree
 untypedListOne = List emptyMeta (Atom emptyMeta (AInt 1) : Nil)
 
-partiallyTypedExprTests :: Test Unit
+partiallyTypedExprTests :: Partial => Test Unit
 partiallyTypedExprTests = do
   -- Test that ((2 :: Int) + 4) is typed correctly.
   testInferTT "Partially typed"
     (Binary
       emptyMeta
-      (Tuple Add Nothing)
+      (Tuple Add emptyMeta)
       (Atom (Meta $ emptyMeta' {mtype = Just intType}) (AInt 2))
       (Atom emptyMeta (AInt 4))
     )
     (Binary
       (Meta $ emptyMeta' {mtype = Just (TypCon "Int")})
-      (Tuple Add (Just (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
+      (Tuple Add (metaType (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
       (Atom (Meta $ emptyMeta' {mtype = Just intType}) (AInt 2))
       (Atom (Meta $ emptyMeta' {mtype = Just intType}) (AInt 4))
     )
@@ -306,7 +309,7 @@ partiallyTypedExprTests = do
   testInferTTFail "Partially typed"
     (Binary
       emptyMeta
-      (Tuple Add Nothing)
+      (Tuple Add emptyMeta)
       (Atom (Meta $ emptyMeta' {mtype = Just charType}) (AInt 2))
       (Atom emptyMeta (AInt 4))
     )
@@ -386,7 +389,7 @@ partiallyTypedExprTests = do
     )
     (UnificationFail intType charType)
 
-runTests :: Test Unit
+runTests :: Partial => Test Unit
 runTests = do
   -- +--------------------------------------------------+
   -- | Test the inferred types of arbitrary expressions |
@@ -514,7 +517,7 @@ runTests = do
         (Atom emptyMeta (AInt 1)) :
         (Binary
           emptyMeta
-          (Tuple Add Nothing)
+          (Tuple Add emptyMeta)
           (Atom emptyMeta (AInt 1))
           (Atom emptyMeta (AInt 1))) :
         (App
@@ -532,7 +535,7 @@ runTests = do
         (Atom (metaType (TypCon "Int")) (AInt 1)) :
         (Binary
           (metaType (TypCon "Int"))
-          (Tuple Add (Just (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
+          (Tuple Add (metaType (TypCon "Int" `TypArr` (TypCon "Int" `TypArr` TypCon "Int"))))
           (Atom (metaType (TypCon "Int")) (AInt 1))
           (Atom (metaType (TypCon "Int")) (AInt 1))) :
         (App
@@ -783,7 +786,7 @@ runTests = do
   testMapSchemeOnTVarMappings
     "Map scheme on literal binding"
     (Forall Nil intType)
-    (Lit (Tuple Nothing 0) (Name "x"))
+    (Lit (metaIndex 0) (Name "x"))
     (Tuple "x" (Forall Nil intType) : Nil)
 
   -- Map scheme `forall t_4. (t_4 -> t_4, (Int, Bool)) on `(f, (n, b))`. We expect the mapping
@@ -796,13 +799,13 @@ runTests = do
         (TTuple (intType : boolType : Nil)) : Nil))
     )
     -- The binding: (f, (n, b))
-    (NTupleLit (Tuple Nothing 1)
+    (NTupleLit (metaIndex 1)
       (
-        (Lit (Tuple Nothing 2) (Name "f")) :
-        (NTupleLit (Tuple Nothing 3)
+        (Lit (metaIndex 2) (Name "f")) :
+        (NTupleLit (metaIndex 3)
           (
-            (Lit (Tuple Nothing 4) (Name "n")) :
-            (Lit (Tuple Nothing 5) (Name "b")) :
+            (Lit (metaIndex 4) (Name "n")) :
+            (Lit (metaIndex 5) (Name "b")) :
             Nil
           )
         ) :
@@ -849,10 +852,10 @@ data Complex a
   = a :+ a
 """
 
-myTuple idx l r = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Tuple" 2 (l:r:Nil))
+myTuple idx l r = ConstrLit (metaIndex idx) (PrefixDataConstr "Tuple" 2 (l:r:Nil))
 myTupleT l r = TTypeCons "Tuple" (l:r:Nil)
 
-myId idx c = ConstrLit (Tuple Nothing idx) (PrefixDataConstr "Id" 1 (c:Nil))
+myId idx c = ConstrLit (metaIndex idx) (PrefixDataConstr "Id" 1 (c:Nil))
 myIdT c = TTypeCons "Id" (c:Nil)
 
 myMaybeT c = TTypeCons "Maybe" (c:Nil)
@@ -861,10 +864,10 @@ myComplexT c = TTypeCons "Complex" (c:Nil)
 
 myComplex idx a b =
   ConstrLit
-    (Tuple Nothing idx)
+    (metaIndex idx)
     (InfixDataConstr ":+" LEFTASSOC 9 a b)
 
-adtTests :: Test Unit
+adtTests :: Partial => Test Unit
 adtTests = do
   testInferTTWithCustomPrelude' "adt-params-3-1"
     adtPrelude
@@ -1011,10 +1014,10 @@ adtTests = do
     (Forall ("t_1":Nil)
       (TTypeCons "Id" (TypVar "t_1":Nil)))
     (ConstrLit
-      (Tuple Nothing 0)
+      (metaIndex 0)
       (PrefixDataConstr "Id" 1
         (Lit
-          (Tuple Nothing 1)
+          (metaIndex 1)
           (Name "x")
         :Nil)))
     (Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
@@ -1025,10 +1028,10 @@ adtTests = do
     (Forall Nil
       (TTypeCons "Id" (TTypeCons "Unit" Nil:Nil)))
     (ConstrLit
-      (Tuple Nothing 0)
+      (metaIndex 0)
       (PrefixDataConstr "Id" 1
         (Lit
-          (Tuple Nothing 1)
+          (metaIndex 1)
           (Name "x")
         :Nil)))
     (Tuple "x" (Forall Nil (TTypeCons "Unit" Nil))
@@ -1039,10 +1042,10 @@ adtTests = do
     (Forall Nil
     (TTypeCons "Id" (intType:Nil)))
     (ConstrLit
-      (Tuple Nothing 0)
+      (metaIndex 0)
       (PrefixDataConstr "Id" 1
         (Lit
-          (Tuple Nothing 1)
+          (metaIndex 1)
           (Name "x")
         :Nil)))
     (Tuple "x" (Forall Nil intType)
@@ -1055,7 +1058,7 @@ adtTests = do
         (TypVar "id")
         (TTypeCons "Id" (TypVar "id":Nil))))
 
-    (Lit (Tuple Nothing 0) (Name "id"))
+    (Lit (metaIndex 0) (Name "id"))
 
     (Tuple "id"
       (Forall ("id":Nil)
@@ -1073,10 +1076,10 @@ adtTests = do
         (myTupleT intType boolType)))
     -- The binding: (f, (n, b))
     (myTuple 1
-        (Lit (Tuple Nothing 2) (Name "f"))
+        (Lit (metaIndex 2) (Name "f"))
         (myTuple 2
-          (Lit (Tuple Nothing 4) (Name "n"))
-          (Lit (Tuple Nothing 5) (Name "b"))))
+          (Lit (metaIndex 4) (Name "n"))
+          (Lit (metaIndex 5) (Name "b"))))
     -- The expected result: { f = forall t_4. t_4 -> t_4, n = Int, b = Bool }
     ( Tuple "f" (Forall ("t_4" : Nil) (typVarArrow "t_4" "t_4"))
     : Tuple "n" (Forall Nil intType)
@@ -1090,7 +1093,7 @@ adtTests = do
         (myIdT (TypVar "t_1"))))
     (myId 0
       (myId 1
-        (Lit (Tuple Nothing 3) (Name "x"))))
+        (Lit (metaIndex 3) (Name "x"))))
     ( Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
     : Nil )
 
@@ -1100,8 +1103,8 @@ adtTests = do
       (myComplexT
         (TypVar "t_1")))
     (myComplex 0
-      (Lit (Tuple Nothing 1) (Name "x"))
-      (Lit (Tuple Nothing 2) (Name "y")))
+      (Lit (metaIndex 1) (Name "x"))
+      (Lit (metaIndex 2) (Name "y")))
     (Tuple "x" (Forall ("t_1":Nil) (TypVar "t_1"))
     :Tuple "y" (Forall ("t_1":Nil) (TypVar "t_1"))
     :Nil)

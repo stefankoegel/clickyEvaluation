@@ -624,7 +624,7 @@ eapp :: TypeTree -> Array TypeTree -> TypeTree
 eapp f as = App emptyMeta f (toList as)
 
 ebin :: Op -> TypeTree -> TypeTree -> TypeTree
-ebin o l r = Binary emptyMeta (Tuple o Nothing) l r
+ebin o l r = Binary emptyMeta (Tuple o emptyMeta) l r
 
 def :: String -> Array (Binding Meta) -> TypeTree -> Definition
 def n bs e = Def n (toList bs) e

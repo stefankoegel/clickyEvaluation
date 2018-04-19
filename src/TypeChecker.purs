@@ -1052,7 +1052,6 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
       t <- schemeToType scheme
       Ex.throwError $ PatternMismatch binding t
 
-  getBindingType = extractFromBinding >>> fst >>> fromMaybe UnknownType
   expectListType (Forall tvs (TList t)) = Just $ TList t
   expectListType _ = Nothing
   expectTupleType (Forall tvs (TTuple ts)) = Just $ TTuple ts
