@@ -5,7 +5,7 @@ import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor (bimap, rmap)
 import Data.Foldable (intercalate, foldr)
 import Data.List (List(..), fold, (:))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
@@ -234,6 +234,7 @@ treeMap fa fb fo f (ListComp x e qualTrees) =
     (treeMap fa fb fo f e)
     (map (qualTreeMap fb (treeMap fa fb fo f) f) qualTrees)
 
+-- | Inserts Meta information into the given tree node
 insertIntoTree :: forall a b c d. d -> Tree a b c d -> Tree a b c d
 insertIntoTree x (Atom _ atom) = Atom x atom
 insertIntoTree x (List _ ts) = List x ts
@@ -250,6 +251,7 @@ insertIntoTree x (Lambda _ b t) = Lambda x b t
 insertIntoTree x (App _ t ts) = App x t ts
 insertIntoTree x (ListComp _ t ts) = ListComp x t ts
 
+-- | Extracts Meta information from the given node
 extractFromTree :: forall a b c d. Tree a b c d -> d
 extractFromTree (Atom c _) = c
 extractFromTree (List c _) = c
@@ -370,9 +372,9 @@ removeIndices = treeMap
   (\(Tuple op mit) -> Tuple op (fst mit))
   (\(Meta meta) -> Meta (meta {mindex = Nothing}))
 
-insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
-insertIntoIndexedTree t expr = insertIntoTree (Tuple t idx) expr
-  where idx = snd $ extractFromTree expr
+insertIntoIndexedTree :: MType -> TypeTree -> TypeTree
+insertIntoIndexedTree t expr = insertIntoTree (Meta $ emptyMeta' {mtype = t, mindex = idx}) expr
+  where idx = (extractFromTree expr).mindex
 
 definitionIndex :: IndexedDefinition -> Index
 definitionIndex (IndexedDef name bindings expr) = index expr
@@ -383,8 +385,8 @@ opIndex (Tuple op (Tuple mt idx)) = idx
 bindingIndex :: (Binding MIType) -> Index
 bindingIndex = extractFromBinding >>> snd
 
-index :: IndexedTypeTree -> Index
-index = extractFromTree >>> snd
+index :: TypeTree -> Index
+index = extractFromTree >>> (\(Meta meta) -> meta.mindex) >>> fromJust
 
 traverseBinding :: forall m m' f. Monad f =>
      (m -> f m')
@@ -516,7 +518,6 @@ traverseTree fb fo f expr@(ListComp t e quals) = do
 
 type ExprQualTree = QualTree (Binding Unit) Expr Unit
 type TypeQual = QualTree (Binding Meta) TypeTree Meta
-type IndexedQualTree = QualTree (Binding MIType) IndexedTypeTree MIType
 
 type TVar = String
 
@@ -623,7 +624,7 @@ data TypeError
   | UnknownDataConstructor String
   | UnknownError String
   | NoInstanceOfEnum Type
-  | PatternMismatch IndexedTypedBinding Type
+  | PatternMismatch TypedBinding Type
 
 derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c)
 
@@ -653,7 +654,6 @@ getBindingChildren (NTupleLit _ bs) = bs
 getBindingChildren _ = Nil
 
 type TypedBinding = Binding Meta
-type IndexedTypedBinding = Binding MIType
 
 -- | Definitions
 -- |
@@ -661,7 +661,7 @@ type IndexedTypedBinding = Binding MIType
 data Definition = Def String (List (Binding Meta)) TypeTree
 
 -- | A definition with indexed bindings and an indexed expression.
-data IndexedDefinition = IndexedDef String (List IndexedTypedBinding) IndexedTypeTree
+data IndexedDefinition = IndexedDef String (List TypedBinding) TypeTree
 
 derive instance eqDefintion :: Eq Definition
 derive instance eqIndexedDefintion :: Eq IndexedDefinition
