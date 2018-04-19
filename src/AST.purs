@@ -335,10 +335,10 @@ makeIndexTuple mt = do
   put (idx + 1)
   pure new
 
-makeIndexTuple' :: Meta -> State Index MIType
-makeIndexTuple' meta = do
+makeIndexTuple' :: Meta -> State Index Meta
+makeIndexTuple' (Meta meta) = do
   idx <- get
-  let new = Tuple (getMetaMType meta) idx
+  let new = Meta $ meta {mindex = idx}
   put (idx + 1)
   pure new
 
@@ -359,7 +359,7 @@ makeIndexedDefinition (Def name bindings expr) beginWith =
   toIndexedBindings = traverse $ traverseBinding makeIndexTuple'
   toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple') makeIndexOpTuple makeIndexTuple' expr
 
-makeIndexedTree :: TypeTree -> IndexedTypeTree
+makeIndexedTree :: TypeTree -> TypeTree
 makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
   where
     -- Traverse the tree and assign indices in ascending order.
