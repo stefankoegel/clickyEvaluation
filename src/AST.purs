@@ -357,15 +357,18 @@ makeIndexedTree :: TypeTree -> TypeTree
 makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
   where
     -- Traverse the tree and assign indices in ascending order.
-    makeIndexedTree' :: TypeTree -> State Index IndexedTypeTree
+    makeIndexedTree' :: TypeTree -> State Index TypeTree
     makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
 
-removeIndices :: IndexedTypeTree -> TypeTree
+
+-- TODO: Is this at all necessary?
+removeIndices :: TypeTree -> TypeTree
+-- MAYBE: removeIndices = id
 removeIndices = treeMap
   id
-  (map (\t -> Meta (emptyMeta' {mtype = fst t})))
+  (map (\(Meta meta) -> Meta (meta {mindex = Nothing})))
   (\(Tuple op mit) -> Tuple op (fst mit))
-  (\(Tuple mt _) -> Meta (emptyMeta' {mtype = mt}))
+  (\(Meta meta) -> Meta (meta {mindex = Nothing}))
 
 insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Tuple t idx) expr
