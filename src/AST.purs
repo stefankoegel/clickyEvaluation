@@ -302,6 +302,7 @@ type MType = Maybe Type
 
 type Index = Int
 type MIndex = Maybe Index
+type MIType = Tuple MType Index
 
 type Meta' = { mindex :: MIndex ,mtype :: MType }
 newtype Meta = Meta Meta'
