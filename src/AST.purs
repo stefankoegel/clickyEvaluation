@@ -328,8 +328,8 @@ getMetaMType (Meta meta) = meta.mtype
 
 type TypeTree = Tree Atom (Binding Meta) (Tuple Op MType) Meta
 
-makeIndexTuple' :: Meta -> State Index Meta
-makeIndexTuple' (Meta meta) = do
+makeIndexTuple :: Meta -> State Index Meta
+makeIndexTuple (Meta meta) = do
   idx <- get
   let new = Meta $ meta {mindex = idx}
   put (idx + 1)
@@ -349,15 +349,15 @@ makeIndexedDefinition (Def name bindings expr) beginWith =
       idxAndExpr = runState (toIndexedTree expr) (snd idxAndBindings)
   in Tuple (IndexedDef name (fst idxAndBindings) (fst idxAndExpr)) (snd idxAndExpr)
   where
-  toIndexedBindings = traverse $ traverseBinding makeIndexTuple'
-  toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple') makeIndexOpTuple makeIndexTuple' expr
+  toIndexedBindings = traverse $ traverseBinding makeIndexTuple
+  toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
 
 makeIndexedTree :: TypeTree -> TypeTree
 makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
   where
     -- Traverse the tree and assign indices in ascending order.
     makeIndexedTree' :: TypeTree -> State Index IndexedTypeTree
-    makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple') makeIndexOpTuple makeIndexTuple' expr
+    makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
 
 removeIndices :: IndexedTypeTree -> TypeTree
 removeIndices = treeMap
