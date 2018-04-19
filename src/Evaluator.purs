@@ -133,8 +133,8 @@ evalToBinding env expr bind = case bind of
     _          -> recurse env expr bind
 
   (ConsLit _ b bs)     -> case expr of
-    (Binary _ (Tuple Colon _) e es) -> Binary AST.emptyMeta (Tuple Colon Nothing) (evalToBinding env e b) (evalToBinding env es bs)
-    (List _ (Cons e es))  -> evalToBinding env (Binary AST.emptyMeta (Tuple Colon Nothing) e (List AST.emptyMeta es)) bind
+    (Binary _ (Tuple Colon _) e es) -> Binary AST.emptyMeta (Tuple Colon AST.emptyMeta) (evalToBinding env e b) (evalToBinding env es bs)
+    (List _ (Cons e es))  -> evalToBinding env (Binary AST.emptyMeta (Tuple Colon AST.emptyMeta) e (List AST.emptyMeta es)) bind
     _                     -> recurse env expr bind
 
   (ListLit _ bs)       -> case expr of
@@ -154,16 +154,16 @@ evalToBinding env expr bind = case bind of
       _ -> recurse env expr bind
   (ConstrLit _ (InfixDataConstr n _ _ l r)) ->
     case expr of
-      (App _ (PrefixOp _ (Tuple (InfixConstr n') Nothing)) (Cons l' (Cons r' Nil))) ->
-        case n == n' of
+      (App _ (PrefixOp _ (Tuple (InfixConstr n') meta)) (Cons l' (Cons r' Nil))) ->
+        case n == n' && meta == AST.emptyMeta of
              true -> App
               AST.emptyMeta
-              (PrefixOp AST.emptyMeta (Tuple (InfixConstr n') Nothing))
+              (PrefixOp AST.emptyMeta (Tuple (InfixConstr n') AST.emptyMeta))
               (Cons (evalToBinding env l' l) (Cons (evalToBinding env r' r) Nil))
              false -> expr
       (Binary _ (Tuple (InfixConstr n') _) l' r') ->
         case n == n' of
-             true -> Binary AST.emptyMeta (Tuple (InfixConstr n') Nothing) (evalToBinding env l' l) (evalToBinding env r' r)
+             true -> Binary AST.emptyMeta (Tuple (InfixConstr n') AST.emptyMeta) (evalToBinding env l' l) (evalToBinding env r' r)
              false -> expr
       _ -> recurse env expr bind
 
@@ -331,7 +331,7 @@ evalListComp env expr (Cons q qs) = case q of
     listcomp1 <- evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
     listcomp2 <- pure $ ListComp AST.emptyMeta expr (Cons (Gen AST.emptyMeta b (List AST.emptyMeta es)) qs)
     case listcomp1 of
-      List _ (Cons x Nil) -> pure $ Binary AST.emptyMeta (Tuple Colon Nothing) x listcomp2
+      List _ (Cons x Nil) -> pure $ Binary AST.emptyMeta (Tuple Colon AST.emptyMeta) x listcomp2
       _ -> pure $ AST.binary Append listcomp1 listcomp2
   -- Gen _ b (Binary Colon e (List Nil)) -> evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
   Gen _ b (Binary _ (Tuple Colon _) e es)  -> do
@@ -397,8 +397,8 @@ replaceBindings = traverse $ \(Tuple bin expr) -> do
 
 ------------------------------------------------------------------------------------------
 
-binary :: Env -> (Tuple Op MType) -> TypeTree -> TypeTree -> Evaluator TypeTree
-binary env (Tuple operator mtype) = case operator of
+binary :: Env -> (Tuple Op Meta) -> TypeTree -> TypeTree -> Evaluator TypeTree
+binary env (Tuple operator meta) = case operator of
   Power  -> aint Power (\i j -> product $ replicate j i)
   Mul    -> aint Mul (*)
   Add    -> aint Add (+)
@@ -428,7 +428,7 @@ binary env (Tuple operator mtype) = case operator of
   Dollar -> (\f e -> pure $ App AST.emptyMeta f (singleton e))
   Composition -> \e1 e2 -> throwError $ BinaryOpError And e1 e2
   InfixFunc name -> \e1 e2 -> apply env name (e1 : e2 : Nil)
-  InfixConstr name -> \e1 e2 -> pure $ Binary AST.emptyMeta (Tuple operator mtype) e1 e2
+  InfixConstr name -> \e1 e2 -> pure $ Binary AST.emptyMeta (Tuple operator meta) e1 e2
   where
     aint :: Op -> (Int -> Int -> Int) -> TypeTree -> TypeTree -> Evaluator TypeTree
     aint _   f (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom AST.emptyMeta $ AInt $ f i j
@@ -441,7 +441,7 @@ binary env (Tuple operator mtype) = case operator of
     ord op _  _  _  e1               e2               = throwError $ BinaryOpError op e1 e2
 
 
-unary :: Env -> Tuple Op MType -> TypeTree -> Evaluator TypeTree
+unary :: Env -> Tuple Op Meta -> TypeTree -> Evaluator TypeTree
 unary env (Tuple Sub _) (Atom _ (AInt i)) = pure $ Atom AST.emptyMeta $ AInt (-i)
 unary env (Tuple op _) e = throwError $ UnaryOpError op e
 
