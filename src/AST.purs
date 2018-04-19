@@ -328,13 +328,6 @@ getMetaMType (Meta meta) = meta.mtype
 
 type TypeTree = Tree Atom (Binding Meta) (Tuple Op MType) Meta
 
-makeIndexTuple :: MType -> State Index MIType
-makeIndexTuple mt = do
-  idx <- get
-  let new = Tuple mt idx
-  put (idx + 1)
-  pure new
-
 makeIndexTuple' :: Meta -> State Index Meta
 makeIndexTuple' (Meta meta) = do
   idx <- get
