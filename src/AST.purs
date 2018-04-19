@@ -299,7 +299,9 @@ getTreeChildren _ = Nil
 type Expr = Tree Atom (Binding Unit) Op Unit
 
 type MType = Maybe Type
-type MIndex = Maybe (Tuple Int Int)
+
+type Index = Int
+type MIndex = Maybe Index
 
 type Meta' = { mindex :: MIndex ,mtype :: MType }
 newtype Meta = Meta Meta'
@@ -325,10 +327,6 @@ getMetaMType :: Meta -> MType
 getMetaMType (Meta meta) = meta.mtype
 
 type TypeTree = Tree Atom (Binding Meta) (Tuple Op MType) Meta
-
-type Index = Int
-type MIType = Tuple MType Index
-type IndexedTypeTree = Tree Atom (Binding MIType) (Tuple Op MIType) MIType
 
 makeIndexTuple :: MType -> State Index MIType
 makeIndexTuple mt = do
