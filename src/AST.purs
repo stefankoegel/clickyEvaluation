@@ -388,11 +388,11 @@ insertIntoIndexedTree t expr = insertIntoTree (Meta $ emptyMeta' {mtype = t, min
 definitionIndex :: Partial => IndexedDefinition -> Index
 definitionIndex (IndexedDef name bindings expr) = index expr
 
-opIndex :: (Tuple Op MIType) -> Index
-opIndex (Tuple op (Tuple mt idx)) = idx
+opIndex :: Partial => (Tuple Op Meta) -> Index
+opIndex (Tuple op meta) = fromJust $ getMetaMIndex meta
 
-bindingIndex :: (Binding MIType) -> Index
-bindingIndex = extractFromBinding >>> snd
+bindingIndex :: Partial => (Binding Meta) -> Index
+bindingIndex = extractFromBinding >>> (\(Meta meta) -> meta.mindex) >>> fromJust
 
 index :: Partial => TypeTree -> Index
 index = extractFromTree >>> (\(Meta meta) -> meta.mindex) >>> fromJust
