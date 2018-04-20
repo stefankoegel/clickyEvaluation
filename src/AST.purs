@@ -363,9 +363,6 @@ makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
     makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
 
 
--- TODO: Is this at all necessary?
-removeIndices :: TypeTree -> TypeTree
-removeIndices = id
 
 insertIntoIndexedTree :: MType -> TypeTree -> TypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Meta $ meta {mtype = t}) expr
