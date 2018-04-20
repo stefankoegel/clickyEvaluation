@@ -213,21 +213,25 @@ testInferTT :: Partial => String -> TypeTree -> TypeTree -> Test Unit
 testInferTT name untypedTree expectedTypedTree =
   case TC.tryInferExprInContext parsedPrelude untypedTree of
     Left typeError -> reportTypeError name typeError
-    Right typedTree -> if expectedTypedTree == typedTree
+    Right typedTree -> if expectedTypedTree' == typedTree
       then pure unit
       else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
-                   "Expected type tree: " <> show expectedTypedTree <> "\n" <>
+                   "Expected type tree: " <> show expectedTypedTree' <> "\n" <>
                    "Actual type tree: " <> show typedTree <> "\n"
+ where
+   expectedTypedTree' = makeIndexedTree expectedTypedTree
 
 testInferTTWithCustomPrelude :: Partial => String -> List Definition -> TypeTree -> TypeTree -> Test Unit
 testInferTTWithCustomPrelude name parsedPrelude untypedTree expectedTypedTree =
   case TC.tryInferExprInContext parsedPrelude untypedTree of
     Left typeError -> reportTypeError name typeError
-    Right typedTree -> if expectedTypedTree == typedTree
+    Right typedTree -> if expectedTypedTree' == typedTree
       then pure unit
       else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
-                   "Expected type tree: " <> show expectedTypedTree <> "\n" <>
+                   "Expected type tree: " <> show expectedTypedTree' <> "\n" <>
                    "Actual type tree: " <> show typedTree <> "\n"
+ where
+  expectedTypedTree' = makeIndexedTree expectedTypedTree
 
 testInferTTFail :: Partial => String -> TypeTree -> TypeError -> Test Unit
 testInferTTFail name expr expectedError =
