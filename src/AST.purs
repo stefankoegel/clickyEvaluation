@@ -5,12 +5,11 @@ import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor (bimap, rmap)
 import Data.Foldable (intercalate, foldr)
 import Data.List (List(..), fold, (:))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
 
-import JSHelpers (unsafeUndef)
 
 -- | Operators
 -- |
@@ -105,45 +104,45 @@ data Tree a b o m =
   | App       m (Tree a b o m) (List (Tree a b o m))
   | ListComp  m (Tree a b o m) (List (QualTree b (Tree a b o m) m))
 
-toOpTuple :: Op -> Tuple Op MType
-toOpTuple op = Tuple op Nothing
+toOpTuple :: Op -> Tuple Op Meta
+toOpTuple op = Tuple op emptyMeta
 
 exprToTypeTree :: Expr -> TypeTree
-exprToTypeTree (Atom _ atom) = Atom Nothing atom
-exprToTypeTree (List _ exprs) = List Nothing (map exprToTypeTree exprs)
-exprToTypeTree (NTuple _ exprs) = NTuple Nothing (map exprToTypeTree exprs)
-exprToTypeTree (Binary _ op t1 t2) = Binary Nothing (toOpTuple op)
+exprToTypeTree (Atom _ atom) = Atom emptyMeta atom
+exprToTypeTree (List _ exprs) = List emptyMeta (map exprToTypeTree exprs)
+exprToTypeTree (NTuple _ exprs) = NTuple emptyMeta (map exprToTypeTree exprs)
+exprToTypeTree (Binary _ op t1 t2) = Binary emptyMeta (toOpTuple op)
   (exprToTypeTree t1)
   (exprToTypeTree t2)
-exprToTypeTree (Unary _ op t) = Unary Nothing (toOpTuple op) (exprToTypeTree t)
-exprToTypeTree (SectL _ t op) = SectL Nothing (exprToTypeTree t) (toOpTuple op)
-exprToTypeTree (SectR _ op t) = SectR Nothing (toOpTuple op) (exprToTypeTree t)
-exprToTypeTree (PrefixOp _ op) = PrefixOp Nothing (toOpTuple op)
-exprToTypeTree (IfExpr _ t1 t2 t3) = IfExpr Nothing
+exprToTypeTree (Unary _ op t) = Unary emptyMeta (toOpTuple op) (exprToTypeTree t)
+exprToTypeTree (SectL _ t op) = SectL emptyMeta (exprToTypeTree t) (toOpTuple op)
+exprToTypeTree (SectR _ op t) = SectR emptyMeta (toOpTuple op) (exprToTypeTree t)
+exprToTypeTree (PrefixOp _ op) = PrefixOp emptyMeta (toOpTuple op)
+exprToTypeTree (IfExpr _ t1 t2 t3) = IfExpr emptyMeta
   (exprToTypeTree t1)
   (exprToTypeTree t2)
   (exprToTypeTree t3)
-exprToTypeTree (ArithmSeq _ t1 mt2 mt3) = ArithmSeq Nothing
+exprToTypeTree (ArithmSeq _ t1 mt2 mt3) = ArithmSeq emptyMeta
   (exprToTypeTree t1)
   (map exprToTypeTree mt2)
   (map exprToTypeTree mt3)
-exprToTypeTree (LetExpr _ bs t) = LetExpr Nothing
-  (map (\(Tuple b bt) -> Tuple (map (const Nothing) b) (exprToTypeTree bt)) bs)
+exprToTypeTree (LetExpr _ bs t) = LetExpr emptyMeta
+  (map (\(Tuple b bt) -> Tuple (map (const emptyMeta) b) (exprToTypeTree bt)) bs)
   (exprToTypeTree t)
-exprToTypeTree (Lambda _ bindings t) = Lambda Nothing
-  (map (map (const Nothing)) bindings)
+exprToTypeTree (Lambda _ bindings t) = Lambda emptyMeta
+  (map (map (const emptyMeta)) bindings)
   (exprToTypeTree t)
-exprToTypeTree (App _ t ts) = App Nothing (exprToTypeTree t) (map exprToTypeTree ts)
-exprToTypeTree (ListComp _ t qualTrees) = ListComp Nothing
+exprToTypeTree (App _ t ts) = App emptyMeta (exprToTypeTree t) (map exprToTypeTree ts)
+exprToTypeTree (ListComp _ t qualTrees) = ListComp emptyMeta
   (exprToTypeTree t)
   (map go qualTrees)
     where
-    go (Gen _ b t) = Gen Nothing (map (const Nothing) b) (exprToTypeTree t)
-    go (Let _ b t) = Let Nothing (map (const Nothing) b) (exprToTypeTree t)
-    go (Guard _ t) = Guard Nothing (exprToTypeTree t)
+    go (Gen _ b t) = Gen emptyMeta (map (const emptyMeta) b) (exprToTypeTree t)
+    go (Let _ b t) = Let emptyMeta (map (const emptyMeta) b) (exprToTypeTree t)
+    go (Guard _ t) = Guard emptyMeta (exprToTypeTree t)
 
 binary :: Op -> TypeTree -> TypeTree -> TypeTree
-binary op left right = Binary Nothing (Tuple op Nothing) left right
+binary op left right = Binary emptyMeta (Tuple op emptyMeta) left right
 
 -- | Get the expression element from a given qual tree.
 getQualTreeExpression :: forall b t m. QualTree b t m -> t
@@ -235,6 +234,7 @@ treeMap fa fb fo f (ListComp x e qualTrees) =
     (treeMap fa fb fo f e)
     (map (qualTreeMap fb (treeMap fa fb fo f) f) qualTrees)
 
+-- | Inserts Meta information into the given tree node
 insertIntoTree :: forall a b c d. d -> Tree a b c d -> Tree a b c d
 insertIntoTree x (Atom _ atom) = Atom x atom
 insertIntoTree x (List _ ts) = List x ts
@@ -251,6 +251,7 @@ insertIntoTree x (Lambda _ b t) = Lambda x b t
 insertIntoTree x (App _ t ts) = App x t ts
 insertIntoTree x (ListComp _ t ts) = ListComp x t ts
 
+-- | Extracts Meta information from the given node
 extractFromTree :: forall a b c d. Tree a b c d -> d
 extractFromTree (Atom c _) = c
 extractFromTree (List c _) = c
@@ -301,23 +302,46 @@ type Expr = Tree Atom (Binding Unit) Op Unit
 
 type MType = Maybe Type
 
-type TypeTree = Tree Atom (Binding MType) (Tuple Op MType) MType
-
 type Index = Int
+type MIndex = Maybe Index
 type MIType = Tuple MType Index
-type IndexedTypeTree = Tree Atom (Binding MIType) (Tuple Op MIType) MIType
 
-makeIndexTuple :: MType -> State Index MIType
-makeIndexTuple mt = do
+type Meta' = { mindex :: MIndex ,mtype :: MType }
+newtype Meta = Meta Meta'
+
+
+emptyMeta' :: Meta'
+emptyMeta' = {mindex: Nothing, mtype: Nothing}
+
+emptyMeta :: Meta
+emptyMeta = Meta emptyMeta'
+
+instance showMeta :: Show Meta where
+  show (Meta meta) = "Meta { mindex: " <> show meta.mindex <> ", mtype: " <> show meta.mtype <> "}"
+
+instance eqMeta :: Eq Meta where
+  eq a b = getMetaMIndex a `eq` getMetaMIndex b && getMetaMType a `eq` getMetaMType b
+
+
+getMetaMIndex :: Meta -> MIndex
+getMetaMIndex (Meta meta) = meta.mindex
+
+getMetaMType :: Meta -> MType
+getMetaMType (Meta meta) = meta.mtype
+
+type TypeTree = Tree Atom (Binding Meta) (Tuple Op Meta) Meta
+
+makeIndexTuple :: Meta -> State Index Meta
+makeIndexTuple (Meta meta) = do
   idx <- get
-  let new = Tuple mt idx
+  let new = Meta $ meta {mindex = Just idx}
   put (idx + 1)
   pure new
 
-makeIndexOpTuple :: (Tuple Op MType) -> State Index (Tuple Op MIType)
-makeIndexOpTuple (Tuple op mt) = do
+makeIndexOpTuple :: (Tuple Op Meta) -> State Index (Tuple Op Meta)
+makeIndexOpTuple (Tuple op (Meta meta)) = do
   idx <- get
-  let new = Tuple op (Tuple mt idx)
+  let new = Tuple op (Meta $ meta {mindex = Just idx})
   put (idx + 1)
   pure new
 
@@ -331,31 +355,29 @@ makeIndexedDefinition (Def name bindings expr) beginWith =
   toIndexedBindings = traverse $ traverseBinding makeIndexTuple
   toIndexedTree expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
 
-makeIndexedTree :: TypeTree -> IndexedTypeTree
+makeIndexedTree :: TypeTree -> TypeTree
 makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
   where
     -- Traverse the tree and assign indices in ascending order.
-    makeIndexedTree' :: TypeTree -> State Index IndexedTypeTree
+    makeIndexedTree' :: TypeTree -> State Index TypeTree
     makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
 
-removeIndices :: IndexedTypeTree -> TypeTree
-removeIndices = treeMap id (map fst) (\(Tuple op mit) -> Tuple op (fst mit)) fst
+insertIntoIndexedTree :: MType -> TypeTree -> TypeTree
+insertIntoIndexedTree t expr = insertIntoTree (Meta $ meta {mtype = t}) expr
+  where
+    meta = extractFromTree >>> (\(Meta meta) -> meta) $ expr
 
-insertIntoIndexedTree :: MType -> IndexedTypeTree -> IndexedTypeTree
-insertIntoIndexedTree t expr = insertIntoTree (Tuple t idx) expr
-  where idx = snd $ extractFromTree expr
-
-definitionIndex :: IndexedDefinition -> Index
+definitionIndex :: Partial => IndexedDefinition -> Index
 definitionIndex (IndexedDef name bindings expr) = index expr
 
-opIndex :: (Tuple Op MIType) -> Index
-opIndex (Tuple op (Tuple mt idx)) = idx
+opIndex :: Partial => (Tuple Op Meta) -> Index
+opIndex = snd >>> getMetaMIndex >>> fromJust
 
-bindingIndex :: (Binding MIType) -> Index
-bindingIndex = extractFromBinding >>> snd
+bindingIndex :: Partial => (Binding Meta) -> Index
+bindingIndex = extractFromBinding >>> getMetaMIndex >>> fromJust
 
-index :: IndexedTypeTree -> Index
-index = extractFromTree >>> snd
+index :: Partial => TypeTree -> Index
+index = extractFromTree >>> getMetaMIndex >>> fromJust
 
 traverseBinding :: forall m m' f. Monad f =>
      (m -> f m')
@@ -486,8 +508,7 @@ traverseTree fb fo f expr@(ListComp t e quals) = do
   pure $ ListComp t' e' quals'
 
 type ExprQualTree = QualTree (Binding Unit) Expr Unit
-type TypeQual = QualTree (Binding MType) TypeTree MType
-type IndexedQualTree = QualTree (Binding MIType) IndexedTypeTree MIType
+type TypeQual = QualTree (Binding Meta) TypeTree Meta
 
 type TVar = String
 
@@ -565,11 +586,12 @@ data DataConstr param
 -- This will be called by compileADTDef and does the actual work.
 compileDataConstr :: Type -> DataConstr Type -> Definition
 compileDataConstr t (PrefixDataConstr name _ ps) =
-  Def name Nil (Atom (Just $ foldr TypArr t ps) (Constr name))
+  Def name Nil (Atom (Meta (emptyMeta' {mtype = Just (foldr TypArr t ps)})) (Constr name))
 compileDataConstr t (InfixDataConstr op assoc prec l r) =
-  Def op Nil (PrefixOp (Just typ) (Tuple (InfixConstr op) (Just typ)))
+  Def op Nil (PrefixOp meta (Tuple (InfixConstr op) meta))
  where
   typ = TypArr l (TypArr r t)
+  meta = Meta $ emptyMeta' {mtype = Just typ}
 
 instance functorDataConstr :: Functor DataConstr where
   map f (PrefixDataConstr s i ps) = PrefixDataConstr s i (map f ps)
@@ -594,7 +616,7 @@ data TypeError
   | UnknownDataConstructor String
   | UnknownError String
   | NoInstanceOfEnum Type
-  | PatternMismatch IndexedTypedBinding Type
+  | PatternMismatch TypedBinding Type
 
 derive instance eqQualTree :: (Eq a, Eq b, Eq c) => Eq (QualTree a b c)
 
@@ -623,16 +645,15 @@ getBindingChildren (ListLit _ bs) = bs
 getBindingChildren (NTupleLit _ bs) = bs
 getBindingChildren _ = Nil
 
-type TypedBinding = Binding (Maybe Type)
-type IndexedTypedBinding = Binding MIType
+type TypedBinding = Binding Meta
 
 -- | Definitions
 -- |
 -- | Definitions for functions and constants
-data Definition = Def String (List (Binding MType)) TypeTree
+data Definition = Def String (List (Binding Meta)) TypeTree
 
 -- | A definition with indexed bindings and an indexed expression.
-data IndexedDefinition = IndexedDef String (List IndexedTypedBinding) IndexedTypeTree
+data IndexedDefinition = IndexedDef String (List TypedBinding) TypeTree
 
 derive instance eqDefintion :: Eq Definition
 derive instance eqIndexedDefintion :: Eq IndexedDefinition

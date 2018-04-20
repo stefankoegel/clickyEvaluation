@@ -16,6 +16,8 @@ import Node.Process (PROCESS, exit)
 
 import Test.Utils (withWriterLog, WRITERLOG, padLeft)
 
+import Partial.Unsafe (unsafePartial)
+
 report :: forall eff. String -> Eff (console :: CONSOLE | eff) Unit
 report = padLeft >>> (\x -> x <> "\n") >>> log
 
@@ -27,22 +29,22 @@ main :: forall eff.
           Unit
 main = do
   log $ "Running parser tests..."
-  parserLog <- withWriterLog Parser.runTests
+  parserLog <- withWriterLog (unsafePartial Parser.runTests)
   log $ " ...found " <> show (length parserLog) <> " errors"
   for parserLog report
 
   log $ "Running AST tests..."
-  astLog <- withWriterLog AST.runTests
+  astLog <- withWriterLog (unsafePartial AST.runTests)
   log $ " ...found " <> show (length astLog) <> " errors"
   for astLog report
 
   log $ "Running evaluator tests..."
-  evaluatorLog <- withWriterLog Evaluator.runTests
+  evaluatorLog <- withWriterLog (unsafePartial Evaluator.runTests)
   log $ " ...found " <> show (length evaluatorLog) <> " errors"
   for evaluatorLog report
 
   log $ "Running type checker tests..."
-  typeCheckerLog <- withWriterLog TypeChecker.runTests
+  typeCheckerLog <- withWriterLog (unsafePartial TypeChecker.runTests)
   log $ " ...found " <> show (length typeCheckerLog) <> " errors"
   for typeCheckerLog report
 
