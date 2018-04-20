@@ -362,8 +362,6 @@ makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
     makeIndexedTree' :: TypeTree -> State Index TypeTree
     makeIndexedTree' expr = traverseTree (traverseBinding makeIndexTuple) makeIndexOpTuple makeIndexTuple expr
 
-
-
 insertIntoIndexedTree :: MType -> TypeTree -> TypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Meta $ meta {mtype = t}) expr
   where
