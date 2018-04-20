@@ -571,7 +571,7 @@ inferOp opTuple@(Tuple op _) = do
 
 -- | Return true, if the top-level node of the given expression has a type.
 isTypedExpr :: TypeTree -> Boolean
-isTypedExpr = extractFromTree >>> (\(Meta meta) -> meta.mindex) >>> isJust
+isTypedExpr = extractFromTree >>> getMetaMType >>> isJust
 
 -- | Traverse the given (partially typed) expression and collect type constraints. For expression
 -- | nodes which are already typed, corresponding constraints are emitted.
