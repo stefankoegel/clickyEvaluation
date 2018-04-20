@@ -373,14 +373,15 @@ removeIndices = treeMap
   (\(Meta meta) -> Meta (meta {mindex = Nothing}))
 
 insertIntoIndexedTree :: MType -> TypeTree -> TypeTree
-insertIntoIndexedTree t expr = insertIntoTree (Meta $ emptyMeta' {mtype = t, mindex = idx}) expr
-  where idx = getMetaMIndex (extractFromTree expr)
+insertIntoIndexedTree t expr = insertIntoTree (Meta $ meta {mtype = t}) expr
+  where
+    meta = extractFromTree >>> (\(Meta meta) -> meta) $ expr
 
 definitionIndex :: Partial => IndexedDefinition -> Index
 definitionIndex (IndexedDef name bindings expr) = index expr
 
 opIndex :: Partial => (Tuple Op Meta) -> Index
-opIndex (Tuple op meta) = fromJust $ getMetaMIndex meta
+opIndex = snd >>> getMetaMIndex >>> fromJust
 
 bindingIndex :: Partial => (Binding Meta) -> Index
 bindingIndex = extractFromBinding >>> getMetaMIndex >>> fromJust
