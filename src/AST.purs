@@ -365,12 +365,7 @@ makeIndexedTree expr = evalState (makeIndexedTree' expr) 0
 
 -- TODO: Is this at all necessary?
 removeIndices :: TypeTree -> TypeTree
--- removeIndices = id
-removeIndices = treeMap
-  id
-  (map (\(Meta meta) -> Meta (meta {mindex = Nothing})))
-  (\(Tuple op (Meta meta)) -> Tuple op (Meta $ meta {mindex = Nothing}))
-  (\(Meta meta) -> Meta (meta {mindex = Nothing}))
+removeIndices = id
 
 insertIntoIndexedTree :: MType -> TypeTree -> TypeTree
 insertIntoIndexedTree t expr = insertIntoTree (Meta $ meta {mtype = t}) expr
