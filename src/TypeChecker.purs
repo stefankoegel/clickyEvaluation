@@ -562,7 +562,7 @@ getOpType op = case op of
 -- | corresponding expression node.
 inferOp :: Partial => Tuple Op Meta -> Infer (Tuple Type Constraints)
 inferOp (Tuple (InfixFunc name) (Meta meta)) = do
-  Tuple t c <- infer (Atom (Meta $ emptyMeta' {mindex = meta.mindex}) (Name name))
+  Tuple t c <- infer (Atom (Meta $ meta {mindex = meta.mindex}) (Name name))
   pure $ Tuple t c
 inferOp opTuple@(Tuple op _) = do
   t <- getOpType op
@@ -1281,7 +1281,7 @@ assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f
   where
   f (Meta meta) = Meta $ meta { mtype = lookupTVar (fromJust meta.mindex) }
   -- f' (Tuple _ idx) = lookupTVar idx
-  fo (Tuple op (Meta meta)) = Tuple op (Meta $ emptyMeta' {mtype = lookupTVar (fromJust meta.mindex)})
+  fo (Tuple op (Meta meta)) = Tuple op (Meta $ meta {mtype = lookupTVar (fromJust meta.mindex)})
   fb = map f
   lookupTVar idx = case Map.lookup idx constraints.mapped of
     Nothing -> Nothing
