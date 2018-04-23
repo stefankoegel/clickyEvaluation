@@ -53,6 +53,8 @@ type FixedIndentParser s a = IndentParser s a -> IndentParser s a
 
 type IndexingT m a = StateT Int m a
 
+type IndexingParserT s m a = IndexintT (ParserT s m) a
+
 runIndexingT :: forall m a. (Monad m) => IndexingT m a -> m (Tuple a Int)
 runIndexingT action = runStateT action 0
 
