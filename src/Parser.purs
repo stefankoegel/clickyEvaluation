@@ -74,7 +74,7 @@ freshMeta = AST.idxMeta <$> fresh
 ---------------------------------------------------------
 
 -- | @ many1 @ should prabably be inside Text.Parsing.Parser.Combinators
-many1 :: forall s m a. (Monad m) => ParserT s m a -> ParserT s m (List a)
+many1 :: forall s m a. (Monad m) => IndexingParserT s m a -> IndexingParserT s m (List a)
 many1 p = lift2 Cons p (many p)
 
 --skips whitespaces
@@ -86,7 +86,7 @@ skipWhite :: forall m. (Monad m) => ParserT String m Unit
 skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
 
 --lexeme parser (skips trailing whitespaces and linebreaks)
-ilexe :: forall a m. (Monad m) => ParserT String m a -> ParserT String m a
+ilexe :: forall a m. (Monad m) => IndexingParserT String m a -> IndexingParserT String m a
 ilexe p = p <* skipWhite
 
 -- parses <p> if it is on the same line or indented, does NOT change indentation state
