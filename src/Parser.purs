@@ -15,7 +15,7 @@ import Control.Alt ((<|>))
 import Control.Apply (lift2)
 -- import Control.Applicative ((<*), (*>))
 import Control.Lazy (fix)
-import Control.Monad.State (runState, runStateT, StateT, get, put, modify)
+import Control.Monad.State (runState, runStateT, StateT, get, put, modify, lift)
 
 import Text.Parsing.Parser (ParseError, ParserT, runParserT, fail)
 import Text.Parsing.Parser.Combinators as PC
@@ -247,7 +247,9 @@ operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
       (\x ->
         (uncurry3
           (\p op assoc ->
-            Infix (Binary AST.emptyMeta <<< toOpTuple <<< op <$> spaced p) assoc))
+            Infix (do
+                  meta <- freshMeta
+                  Binary freshMeta <<< toOpTuple <<< op <$> spaced p) assoc))
         <$> x)
       <$> infixOperators
 
@@ -256,9 +258,10 @@ operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
       where 
         minusParse = do
           string "-"
+          meta <- freshMeta
           pure $ \e -> case e of
-            Atom _ (AInt ai) -> Atom AST.emptyMeta (AInt (-ai))
-            _                -> Unary AST.emptyMeta (toOpTuple Sub) e
+            Atom _ (AInt ai) -> Atom meta (AInt (-ai))
+            _                -> Unary meta (toOpTuple Sub) e
 
     -- | Parse an expression between spaces (backtracks)
     spaced :: forall a. ParserT String m a -> ParserT String m a
@@ -277,7 +280,9 @@ base expr =
   <|> PC.try (arithmeticSequence expr)
   <|> list expr
   <|> charList
-  <|> (Atom AST.emptyMeta <$> atom)
+  <|> (do
+      meta <- freshMeta
+      Atom meta <$> atom)
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
 syntax :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -293,7 +298,9 @@ applicationOrSingleExpression expr = do
   mArgs <- PC.optionMaybe (PC.try $ ((PC.try (indent (base expr))) `PC.sepEndBy1` skipWhite))
   case mArgs of
     Nothing   -> pure e
-    Just args -> pure $ App AST.emptyMeta e args
+    Just args -> do
+      meta <- freshMeta
+      pure $ App meta e args
 
 -- | Parse an if_then_else construct - layout sensitive
 ifThenElse :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -304,7 +311,8 @@ ifThenElse expr = do
   thenExpr <- indent expr
   indent $ string "else"
   elseExpr <- indent expr
-  pure $ IfExpr AST.emptyMeta testExpr thenExpr elseExpr
+  meta <- freshMeta
+  pure $ IfExpr meta testExpr thenExpr elseExpr
 
 -- | Parser for tuples or bracketed expressions - layout sensitive
 tuplesOrBrackets :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -317,7 +325,9 @@ tuplesOrBrackets expr = do
   indent $ char ')'
   case mes of
     Nothing -> pure e
-    Just es -> pure $ NTuple AST.emptyMeta (Cons e es)
+    Just es -> do
+      meta <- freshMeta
+      pure $ NTuple meta (Cons e es)
 
 -- | Parser for operator sections - layout sensitive
 section :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -329,13 +339,16 @@ section expr = do
   me2 <- PC.optionMaybe (indent $ syntax expr)
   indent $ char ')'
   case me1 of
-    Nothing ->
+    Nothing -> do
+      meta <- freshMeta
       case me2 of
-        Nothing -> pure $ PrefixOp AST.emptyMeta op
-        Just e2 -> pure $ SectR AST.emptyMeta op e2
+        Nothing -> pure $ PrefixOp meta op
+        Just e2 -> pure $ SectR meta op e2
     Just e1 ->
       case me2 of
-        Nothing -> pure $ SectL AST.emptyMeta e1 op
+        Nothing -> do
+          meta <- freshMeta
+          pure $ SectL meta e1 op
         Just _ -> fail "Cannot have a section with two expressions!"
 
 -- | Parser for lists - layout sensitive
@@ -344,7 +357,8 @@ list expr = do
   ilexe $ char '['
   exprs <- (indent expr) `PC.sepBy` (PC.try $ indent $ char ',')
   indent $ char ']'
-  pure $ List AST.emptyMeta exprs
+  meta <- freshMeta
+  pure $ List meta exprs
 
 -- | Parser for Arithmetic Sequences - layout sensitive
 arithmeticSequence :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -355,7 +369,8 @@ arithmeticSequence expr = do
   indent $ string ".."
   end   <- PC.optionMaybe $ indent expr
   indent $ char ']'
-  pure $ ArithmSeq AST.emptyMeta start step end
+  meta <- freshMeta
+  pure $ ArithmSeq meta start step end
 
 -- | Parser for list comprehensions - layout sensitive
 listComp :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -366,7 +381,8 @@ listComp expr = do
   skipWhite
   quals <- (indent $ qual expr) `PC.sepBy1` (PC.try $ indent $ char ',')
   indent $ char ']'
-  pure $ ListComp AST.emptyMeta start quals
+  meta <- freshMeta
+  pure $ ListComp meta start quals
   where
     -- | Parser for list comprehension qualifiers
     qual :: IndentParser String TypeTree -> IndentParser String TypeQual
@@ -377,13 +393,18 @@ listComp expr = do
           b <- indent binding
           indent $ char '='
           e <- indent expr
-          pure $ Let AST.emptyMeta b e
+          meta <- freshMeta
+          pure $ Let meta b e
         parseGen = do
           b <- ilexe binding
           indent $ string "<-"
           e <- indent expr
-          pure $ Gen AST.emptyMeta b e
-        parseGuard = ilexe expr >>= (pure <<< Guard AST.emptyMeta)
+          meta <- freshMeta
+          pure $ Gen meta b e
+        parseGuard = do
+          meta <- freshMeta
+          expr' <- ilexe expr
+          pure $ Guard meta expr'
 
 -- | Parser for strings ("example")
 charList :: forall m. (Monad m) => ParserT String m TypeTree
@@ -391,7 +412,9 @@ charList = do
   char '"'
   strs <- many character'
   char '"'
-  pure (List AST.emptyMeta ((Atom AST.emptyMeta <<< Char <<< String.singleton) <$> strs))
+  meta1 <- freshMeta
+  meta2 <- freshMeta
+  pure (List meta1 ((Atom meta2 <<< Char <<< String.singleton) <$> strs))
 
 -- | Parse a lambda expression - layout sensitive
 lambda :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -400,7 +423,8 @@ lambda expr = do
   binds <- many1 $ indent binding
   indent $ string "->"
   body <- indent expr
-  pure $ Lambda AST.emptyMeta binds body
+  meta <- freshMeta
+  pure $ Lambda meta binds body
 
 -- Parser for let expressions - layout sensitive
 letExpr :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -409,7 +433,8 @@ letExpr expr = do
   binds <- indent $ bindingBlock expr
   indent $ string "in"
   body  <- indent $ withPos expr
-  pure $ LetExpr AST.emptyMeta binds body
+  meta <- freshMeta
+  pure $ LetExpr meta binds body
   where
     bindingItem :: IndentParser String TypeTree -> IndentParser String (Tuple (Binding Meta) TypeTree)
     bindingItem expr = do
@@ -475,14 +500,14 @@ binding = do
          '(' -> do
             cs <- ilexe (char '(') *> indent (bndList bnd) <* indent (char ')')
             case cs of
-                 Nil        -> pure $ NTupleLit AST.emptyMeta Nil
+                 Nil        -> NTupleLit <$> freshMeta <*> pure Nil
                  Cons c Nil -> pure c
-                 cs'        -> pure $ NTupleLit AST.emptyMeta cs'
+                 cs'        -> NTupleLit <$> freshMeta <*> pure cs'
          '[' -> do
             cs <- ilexe (char '[') *> indent (bndList bnd) <* indent (char ']')
             case cs of
-                 Nil        -> pure $ ListLit AST.emptyMeta Nil
-                 cs'        -> pure $ ListLit AST.emptyMeta cs'
+                 Nil        -> ListLit <$> freshMeta <*> pure Nil
+                 cs'        -> ListLit <$> freshMeta <*> pure cs'
          _   -> PC.try $ ilexe bndSimple
 
 
@@ -490,7 +515,7 @@ bndSimple :: IndentParser String (Binding Meta)
 bndSimple = PC.try bndLit
 
 bndLit :: forall m. (Monad m) => ParserT String m (Binding Meta)
-bndLit = Lit AST.emptyMeta <$> atom
+bndLit = Lit <$> freshMeta <*> atom
 
 bndList :: IndentParser String (Binding Meta) -> IndentParser String (List (Binding Meta))
 bndList bnd = PC.sepBy
@@ -501,20 +526,22 @@ bndConses :: FixedIndentParser String (Binding Meta)
 bndConses bnd = PC.chainr1
   (PC.try <<< ilexe <<< bndInfixes $ bnd)
   (do PC.try <<< indent <<< char $ ':'
-      pure $ ConsLit AST.emptyMeta)
+      ConsLit <$> freshMeta)
 
 bndInfixes :: FixedIndentParser String (Binding Meta)
 bndInfixes bnd = PC.chainl1
   (PC.try (ilexe ((bndComplex bnd))))
   (do o <- PC.try (indent infixConstructor)
-      pure (\l r -> ConstrLit AST.emptyMeta (InfixDataConstr o LEFTASSOC 9 l r)))
+      meta <- freshMeta
+      pure (\l r -> ConstrLit meta (InfixDataConstr o LEFTASSOC 9 l r)))
 
 bndComplex :: FixedIndentParser String (Binding Meta)
 bndComplex bnd =
   PC.try
     (do n  <- ilexe upperCaseName
         as <- many1 bnd
-        pure $ ConstrLit AST.emptyMeta (PrefixDataConstr n (length as) as))
+        meta <- freshMeta
+        pure $ ConstrLit meta (PrefixDataConstr n (length as) as))
   <|> indent bnd
 
 ---------------------------------------------------------
