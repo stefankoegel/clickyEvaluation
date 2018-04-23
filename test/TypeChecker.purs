@@ -116,7 +116,7 @@ compareTypeError testName expected actual = if expected == actual
 testInferExpr :: Partial => String -> String -> Type -> Test Unit
 testInferExpr name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
-  Right expression -> case TC.runInfer true (TC.inferExprToType expression) of
+  Right (Tuple expression _) -> case TC.runInfer true (TC.inferExprToType expression) of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
 
@@ -124,7 +124,7 @@ testInferExpr name expressionString expected = case parseExpr expressionString o
 testInferExprFail :: Partial => String -> String -> TypeError -> Test Unit
 testInferExprFail name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
-  Right expression -> case TC.runInfer true (TC.inferExprToType expression) of
+  Right (Tuple expression _) -> case TC.runInfer true (TC.inferExprToType expression) of
     Right t -> tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
                        "Expected type error: " <> prettyPrintTypeError expected <> "\n" <>
                        "Found type: " <> prettyPrintType t <> "\n"
@@ -133,7 +133,7 @@ testInferExprFail name expressionString expected = case parseExpr expressionStri
 testInferDef :: Partial => String -> String -> Type -> Test Unit
 testInferDef name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
-  Right (def:_) -> case TC.runInfer true (inferAndConvertToType def) of
+  Right (Tuple (def:_) _) -> case TC.runInfer true (inferAndConvertToType def) of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
   _ -> tell' $ "Expected to parse definition in test case `" <> name <> "`\n" <>
@@ -144,7 +144,7 @@ testInferDef name definitionString expected = case parseDefs definitionString of
 testInferDefFail :: Partial => String -> String -> TypeError -> Test Unit
 testInferDefFail name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
-  Right (def:_) -> case TC.runInfer true (inferAndConvertToType def) of
+  Right (Tuple (def:_) _) -> case TC.runInfer true (inferAndConvertToType def) of
     Left typeError -> if typeError == expected
       then pure unit
       else tell' $ "Type inference failed in test case `" <> name <> "`:\n" <>
@@ -161,7 +161,7 @@ testInferDefFail name definitionString expected = case parseDefs definitionStrin
 testInferDefGroup :: Partial => String -> String -> Type -> Test Unit
 testInferDefGroup name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
-  Right definitions -> case TC.runInfer true (inferAndConvertToType definitions) of
+  Right (Tuple definitions _) -> case TC.runInfer true (inferAndConvertToType definitions) of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
   where
@@ -171,7 +171,7 @@ testInferDefGroup name definitionString expected = case parseDefs definitionStri
 testInferExprWithPrelude :: Partial => String -> String -> Type -> Test Unit
 testInferExprWithPrelude name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
-  Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
+  Right (Tuple expression _) -> case TC.tryInferTypeInContext parsedPrelude expression of
     Left typeError -> reportTypeError name typeError
     Right t -> compareTypes name expected t
     
@@ -181,10 +181,10 @@ testInferExprWithCustomPrelude :: Partial => String -> String -> String -> Type 
 testInferExprWithCustomPrelude name prelude expressionString expected =
   case parseDefs prelude of
     Left parseError -> reportParseError name parseError
-    Right parsedPrelude ->
+    Right (Tuple parsedPrelude _) ->
       case parseExpr expressionString of
-        Left parseError -> reportParseError name parseError
-        Right expression -> case TC.tryInferTypeInContext parsedPrelude expression of
+        Left parseError            -> reportParseError name parseError
+        Right (Tuple expression _) -> case TC.tryInferTypeInContext parsedPrelude expression of
           Left typeError -> do
             reportTypeError name typeError
           Right t -> compareTypesWithNote name expected t
@@ -197,15 +197,15 @@ testInferExprWithCustomPrelude name prelude expressionString expected =
 testInferTT' :: Partial => String -> String -> TypeTree -> Test Unit
 testInferTT' name unparsedTree expectedTypeTree = case parseExpr unparsedTree of
   Left parseError -> reportParseError name parseError
-  Right expression -> testInferTT name expression expectedTypeTree
+  Right (Tuple expression _) -> testInferTT name expression expectedTypeTree
 
 testInferTTWithCustomPrelude' :: Partial => String -> String -> String -> TypeTree -> Test Unit
 testInferTTWithCustomPrelude' name prelude unparsedTree expectedTypeTree =
   case parseDefs prelude of
-    Left parseError -> reportParseError name parseError
-    Right parsedPrelude -> case parseExpr unparsedTree of
-      Left parseError -> reportParseError name parseError
-      Right expression -> testInferTTWithCustomPrelude name parsedPrelude expression expectedTypeTree
+    Left parseError               -> reportParseError name parseError
+    Right (Tuple parsedPrelude _) -> case parseExpr unparsedTree of
+      Left parseError            -> reportParseError name parseError
+      Right (Tuple expression _) -> testInferTTWithCustomPrelude name parsedPrelude expression expectedTypeTree
 
 -- | Test type inference on expression trees. Here not only the expected type of the whole
 -- | expression is checked, but also the type of every subexpression.
@@ -268,12 +268,12 @@ testMapSchemeOnTVarMappings' :: Partial => String -> String -> Scheme -> TypedBi
                             -> TVarMappings -> Test Unit
 testMapSchemeOnTVarMappings' name prelude scheme binding expected =
   case parseDefs prelude of
-    Left parseError -> reportParseError name parseError
-    Right parsedPrelude -> case TC.tryInferEnvironment parsedPrelude of
+    Left parseError               -> reportParseError name parseError
+    Right (Tuple parsedPrelude _) -> case TC.tryInferEnvironment parsedPrelude of
       Left typeError -> reportTypeError name typeError
-      Right env -> case TC.runInferWith env true (fst <$> TC.mapSchemeOnTVarMappings binding scheme) of
+      Right env      -> case TC.runInferWith env true (fst <$> TC.mapSchemeOnTVarMappings binding scheme) of
         Left typeError -> reportTypeError name typeError
-        Right result -> if result == expected
+        Right result   -> if result == expected
           then pure unit
           else tell' $
             "The function `mapSchemeOnTVarMappings` failed in test case `" <> name <> "`:\n" <>

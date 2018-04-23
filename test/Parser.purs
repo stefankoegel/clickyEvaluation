@@ -49,8 +49,8 @@ import Parser
   , infixDataConstrtructorDefinition
   , symbol
   , infixConstructor
-  , types)
-import IndentParser (IndentParser)
+  , types
+  , IndentParser)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
@@ -69,7 +69,7 @@ test name p input expected = case runParserIndent p input of
     <> padLeft (parseErrorMessage parseError) <> "\n"
     <> "Input:\n"
     <> padLeft input
-  Right result           ->
+  Right (Tuple result _) ->
     if result == expected
       then pure unit --tell $ "Parse success (" <> name <> ")"
       else tell' $
@@ -414,7 +414,7 @@ runTests = do
 parsedPrelude' :: List Definition
 parsedPrelude' = case runParserIndent definitions prelude of
                       Left m -> unsafeUndef $ "Failed to parse prelude: " <> show m
-                      Right r -> r
+                      Right (Tuple r _) -> r
 
 prelude :: String
 prelude =

@@ -19,12 +19,12 @@ tell' = tell
 
 preludeEnv :: Env
 preludeEnv = case runParserIndent definitions prelude of
-  Right env -> defsToEnv env
+  Right (Tuple env _) -> defsToEnv env
   Left _    -> defsToEnv Nil
 
 eval1test :: String -> String -> String -> Test Unit
 eval1test name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
-  (Tuple (Right inExp) (Right expExp)) ->
+  (Tuple (Right (Tuple inExp _)) (Right (Tuple expExp _))) ->
     case runEvalM (eval1 M.empty inExp) of
       (Right eval1Exp) -> 
         if eval1Exp == expExp
@@ -44,7 +44,7 @@ eval1test name input expected = case (Tuple (runParserIndent expression input) (
 
 eval1EnvTest :: String -> String -> String -> String -> Test Unit
 eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
-  (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
+  (Tuple (Tuple (Right (Tuple inExp _)) (Right (Tuple expExp _))) (Right (Tuple defs _))) ->
     case runEvalM (eval1 (defsToEnv defs) inExp) of
       (Right eval1Exp) -> 
         if eval1Exp == expExp
@@ -64,7 +64,7 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expre
 
 evalEnvTest :: String -> String -> String -> String -> Test Unit
 evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
-  (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
+  (Tuple (Tuple (Right (Tuple inExp _)) (Right (Tuple expExp _))) (Right (Tuple defs _))) ->
     let evalExp = eval (defsToEnv defs) inExp in
       if evalExp == expExp
         then pure unit -- log $ "Eval success (" ++ name ++ ")"
@@ -99,7 +99,7 @@ evalTest n = evalEnvTest n ""
 
 evalPreludeTest :: String -> String -> String -> Test Unit
 evalPreludeTest name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
-  (Tuple (Right inExp) (Right expExp)) ->
+  (Tuple (Right (Tuple inExp _)) (Right (Tuple expExp _))) ->
     let evalExp = eval preludeEnv inExp in
       if evalExp == expExp
         then pure unit -- log $ "Eval success (" ++ name ++ ")"
