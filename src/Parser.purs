@@ -53,7 +53,7 @@ type FixedIndentParser s a = IndentParser s a -> IndentParser s a
 
 type IndexingT m a = StateT Int m a
 
-type IndexingParserT s m a = IndexintT (ParserT s m) a
+type IndexingParserT s m a = IndexingT (ParserT s m) a
 
 runIndexingT :: forall m a. (Monad m) => IndexingT m a -> m (Tuple a Int)
 runIndexingT action = runStateT action 0
@@ -66,7 +66,7 @@ fresh = do
   modify (\i -> i + 1)
   pure i
 
-freshMeta :: forall m. (Monad m) => IndexingT m Meta
+freshMeta :: forall m. (Monad m) => ParserT s () Meta
 freshMeta = AST.idxMeta <$> fresh
 
 ---------------------------------------------------------
@@ -74,7 +74,10 @@ freshMeta = AST.idxMeta <$> fresh
 ---------------------------------------------------------
 
 -- | @ many1 @ should prabably be inside Text.Parsing.Parser.Combinators
-many1 :: forall s m a. (Monad m) => IndexingParserT s m a -> IndexingParserT s m (List a)
+many1' :: forall s m a. (Monad m) => IndexingParserT s m a -> IndexingParserT s m (List a)
+many1' p = lift2 Cons p (many p)
+
+many1 :: forall s m a. (Monad m) => ParserT s m a -> ParserT s m (List a)
 many1 p = lift2 Cons p (many p)
 
 --skips whitespaces
@@ -86,12 +89,15 @@ skipWhite :: forall m. (Monad m) => ParserT String m Unit
 skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
 
 --lexeme parser (skips trailing whitespaces and linebreaks)
-ilexe :: forall a m. (Monad m) => IndexingParserT String m a -> IndexingParserT String m a
+ilexe :: forall a m. (Monad m) => ParserT String m a -> ParserT String m a
 ilexe p = p <* skipWhite
+
+ilexe' :: forall a m. (Monad m) => IndexingParserT String m a -> IndexingParserT String m a
+ilexe' p = p <* lift skipWhite
 
 -- parses <p> if it is on the same line or indented, does NOT change indentation state
 indent :: forall a. IndentParser String a -> IndentParser String a
-indent p = ((sameLine <|> indented') PC.<?> "Missing indentation! Did you type a tab-character?") *> ilexe p
+indent p = lift ((sameLine <|> indented') PC.<?> "Missing indentation! Did you type a tab-character?") *> ilexe' p
 
 -- returns the next non whitespace character
 lookAhead :: forall m. (Monad m) => ParserT String m Char
@@ -635,8 +641,8 @@ typeCons t = do
 
 typeExpr :: IndentParser String Type -> IndentParser String Type
 typeExpr t = PC.between
-  (PC.try <<< indent <<< char $ '(')
-  (PC.try <<< indent <<< char $ ')')
+  (indent <<< lift <<< PC.try <<< char $ '(')
+  (indent <<< lift <<< PC.try <<< char $ ')')
   (indent t)
 
 types :: IndentParser String Type
