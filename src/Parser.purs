@@ -15,7 +15,7 @@ import Control.Alt ((<|>))
 import Control.Apply (lift2)
 -- import Control.Applicative ((<*), (*>))
 import Control.Lazy (fix)
-import Control.Monad.State (runState, runStateT, StateT, get, put)
+import Control.Monad.State (runState, runStateT, StateT, get, put, modify)
 
 import Text.Parsing.Parser (ParseError, ParserT, runParserT, fail)
 import Text.Parsing.Parser.Combinators as PC
@@ -52,6 +52,15 @@ import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 type FixedIndentParser s a = IndentParser s a -> IndentParser s a
 
 type IndexingT m a = StateT Int m a
+
+fresh :: forall m. (Monad m) => IndexingT m Int
+fresh = do
+  i <- get
+  modify (\i -> i + 1)
+  pure i
+
+freshMeta :: forall m. (Monad m) => IndexingT m Meta
+freshMeta = AST.idxMeta <$> fresh
 
 ---------------------------------------------------------
 -- Helpful combinators
