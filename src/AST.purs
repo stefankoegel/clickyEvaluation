@@ -316,6 +316,9 @@ emptyMeta' = {mindex: Nothing, mtype: Nothing}
 emptyMeta :: Meta
 emptyMeta = Meta emptyMeta'
 
+idxMeta :: Int -> Meta
+idxMeta i = Meta {mindex: Just i, mtype: Nothing}
+
 instance showMeta :: Show Meta where
   show (Meta meta) = "Meta { mindex: " <> show meta.mindex <> ", mtype: " <> show meta.mtype <> "}"
 
