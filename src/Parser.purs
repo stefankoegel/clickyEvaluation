@@ -5,17 +5,20 @@ import Data.String as String
 import Data.Foldable (foldl)
 import Data.List (List(..), many, concat, elemIndex, length)
 import Data.Maybe (Maybe(..), maybe)
-import Data.Tuple (Tuple(..), fst)
+import Data.Tuple (Tuple(..), fst, snd)
 import Data.Tuple.Nested (Tuple3, uncurry3, tuple3)
 import Data.Array (modifyAt, snoc)
 import Data.Array (fromFoldable, toUnfoldable) as Array
-import Data.Either (Either)
+import Data.Either (Either(..))
+import Data.Identity (Identity (..))
+import Data.Newtype (unwrap)
 
 import Control.Alt ((<|>))
 import Control.Apply (lift2)
 -- import Control.Applicative ((<*), (*>))
 import Control.Lazy (fix)
-import Control.Monad.State (State, StateT, runState, runStateT, get, put, modify, lift)
+import Control.Monad.State (State, StateT, runState, runStateT, evalStateT, get, put, modify, lift)
+import Control.Monad.Trans.Class (class MonadTrans)
 
 import Text.Parsing.Parser (ParseError, ParserT, runParserT, fail)
 import Text.Parsing.Parser.Combinators as PC
@@ -35,7 +38,6 @@ import AST
   , QualTree(..)
   , TypeQual
   , TypeTree
-  , toOpTuple
   , ADTDef(..)
   , compileADTDef
   , Associativity(..)
@@ -43,7 +45,7 @@ import AST
   , Type(..)
   , Meta(..))
 import AST as AST
-import IndentParser (block, withPos, block1, indented', sameLine)
+import IndentParser (IndentParserT, block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
 -- Utils
@@ -51,14 +53,18 @@ import IndentParser (block, withPos, block1, indented', sameLine)
 
 type FixedIndentParser s a = IndentParser s a -> IndentParser s a
 
-type IndexingT m a = StateT Int m a
+type IndexingT m = StateT Int m
+type Indexing = IndexingT Identity
 
-type IndexingParserT s m a = IndexingT (ParserT s m) a
+type IndexingParserT s mt m = ParserT s (mt (IndexingT m))
 
 runIndexingT :: forall m a. (Monad m) => IndexingT m a -> m (Tuple a Int)
 runIndexingT action = runStateT action 0
 
-type IndentParser s a = IndexingT (ParserT s (State Position)) a
+runIndexing :: forall a. Indexing a -> Tuple a Int
+runIndexing = runIndexingT >>> unwrap
+
+type IndentParser s a = IndentParserT s Indexing a
 
 fresh :: forall m. (Monad m) => IndexingT m Int
 fresh = do
@@ -66,17 +72,14 @@ fresh = do
   modify (\i -> i + 1)
   pure i
 
-freshMeta :: forall m. (Monad m) => ParserT s () Meta
-freshMeta = AST.idxMeta <$> fresh
+freshMeta :: forall m mt s. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => IndexingParserT s mt m Meta
+freshMeta = AST.idxMeta <$> lift (lift fresh)
 
 ---------------------------------------------------------
 -- Helpful combinators
 ---------------------------------------------------------
 
 -- | @ many1 @ should prabably be inside Text.Parsing.Parser.Combinators
-many1' :: forall s m a. (Monad m) => IndexingParserT s m a -> IndexingParserT s m (List a)
-many1' p = lift2 Cons p (many p)
-
 many1 :: forall s m a. (Monad m) => ParserT s m a -> ParserT s m (List a)
 many1 p = lift2 Cons p (many p)
 
@@ -92,12 +95,9 @@ skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
 ilexe :: forall a m. (Monad m) => ParserT String m a -> ParserT String m a
 ilexe p = p <* skipWhite
 
-ilexe' :: forall a m. (Monad m) => IndexingParserT String m a -> IndexingParserT String m a
-ilexe' p = p <* lift skipWhite
-
 -- parses <p> if it is on the same line or indented, does NOT change indentation state
 indent :: forall a. IndentParser String a -> IndentParser String a
-indent p = lift ((sameLine <|> indented') PC.<?> "Missing indentation! Did you type a tab-character?") *> ilexe' p
+indent p = ((sameLine <|> indented') PC.<?> "Missing indentation! Did you type a tab-character?") *> ilexe p
 
 -- returns the next non whitespace character
 lookAhead :: forall m. (Monad m) => ParserT String m Char
@@ -223,7 +223,7 @@ atom = int <|> variable <|> bool <|> constructor <|> character
 ---------------------------------------------------------
 
 -- | Table for operator parsers and their AST representation. Sorted by precedence.
-infixOperators :: forall m. (Monad m) => Array (Array (Tuple3 (ParserT String m String) (String -> Op) Assoc))
+infixOperators :: forall m mt. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => Array (Array (Tuple3 (ParserT String (mt (IndexingT m)) String) (String -> Op) Assoc))
 infixOperators =
   [ [ (tuple3 (PC.try infixConstructor) InfixConstr AssocLeft)
     , (tuple3 (PC.try infixFunc) InfixFunc AssocLeft)
@@ -252,35 +252,37 @@ infixFunc :: forall m. (Monad m) => ParserT String m String
 infixFunc = char '`' *> name <* char '`'
 
 -- | Table of operators (math, boolean, ...)
-operatorTable :: forall m. (Monad m) => OperatorTable m String TypeTree
+operatorTable :: forall m mt. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => OperatorTable (mt (IndexingT m)) String TypeTree
 operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
   where
-    infixTable :: OperatorTable m String TypeTree
+    infixTable :: OperatorTable (mt (IndexingT m)) String TypeTree
     infixTable =
       (\x ->
         (uncurry3
           (\p op assoc ->
             Infix (do
                   meta <- freshMeta
-                  Binary freshMeta <<< toOpTuple <<< op <$> spaced p) assoc))
+                  meta' <- freshMeta
+                  Binary meta <<< flip Tuple meta' <<< op <$> spaced p) assoc))
         <$> x)
       <$> infixOperators
 
-    unaryMinus :: Operator m String TypeTree
+    unaryMinus :: Operator (mt (IndexingT m)) String TypeTree
     unaryMinus = Prefix $ spaced minusParse
       where 
         minusParse = do
           string "-"
           meta <- freshMeta
+          meta' <- freshMeta -- TODO one id wasted, if the first case matches
           pure $ \e -> case e of
             Atom _ (AInt ai) -> Atom meta (AInt (-ai))
-            _                -> Unary meta (toOpTuple Sub) e
+            _                -> Unary meta (Tuple Sub meta') e
 
-    -- | Parse an expression between spaces (backtracks)
-    spaced :: forall a. ParserT String m a -> ParserT String m a
-    spaced p = PC.try $ PC.between skipSpaces skipSpaces p
+-- | Parse an expression between spaces (backtracks)
+spaced :: forall m a. (Monad m) => ParserT String m a -> ParserT String m a
+spaced p = PC.try $ PC.between skipSpaces skipSpaces p
 
-opParser :: forall m. (Monad m) => ParserT String m Op
+opParser :: forall m mt. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => ParserT String (mt (IndexingT m)) Op
 opParser = PC.choice $ (\x -> (uncurry3 (\p op _ -> op <$> p)) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators
 
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
@@ -347,7 +349,7 @@ section :: IndentParser String TypeTree -> IndentParser String TypeTree
 section expr = do
   ilexe $ char '('
   me1 <- PC.optionMaybe (indent $ syntax expr)
-  op <- toOpTuple <$> opParser
+  op <- Tuple <$> opParser <*> freshMeta
   skipWhite
   me2 <- PC.optionMaybe (indent $ syntax expr)
   indent $ char ')'
@@ -420,7 +422,7 @@ listComp expr = do
           pure $ Guard meta expr'
 
 -- | Parser for strings ("example")
-charList :: forall m. (Monad m) => ParserT String m TypeTree
+charList :: forall m mt. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => IndexingParserT String mt m TypeTree
 charList = do
   char '"'
   strs <- many character'
@@ -470,9 +472,14 @@ expression = do
   fix $ \expr -> buildExprParser operatorTable (syntax expr)
 
 runParserIndent :: forall a. IndentParser String a -> String -> Either ParseError (Tuple a Int)
-runParserIndent p src = fst $ flip runState initialPos $ runParserT src $ runIndexingT p
+runParserIndent p src = do -- runIndexing $ flip evalStateT initialPos $ runParserT src p
+  case fst result of
+       Left err -> Left err
+       Right r  -> Right $ Tuple r (snd result)
+ where
+   result = runIndexing $ flip evalStateT initialPos $ runParserT src p
 
-parseExpr :: String -> Either ParseError TypeTree
+parseExpr :: String -> Either ParseError (Tuple TypeTree Int)
 parseExpr = runParserIndent expression
 
 ---------------------------------------------------------
@@ -527,7 +534,7 @@ binding = do
 bndSimple :: IndentParser String (Binding Meta)
 bndSimple = PC.try bndLit
 
-bndLit :: forall m. (Monad m) => ParserT String m (Binding Meta)
+bndLit :: IndentParser String (Binding Meta)
 bndLit = Lit <$> freshMeta <*> atom
 
 bndList :: IndentParser String (Binding Meta) -> IndentParser String (List (Binding Meta))
@@ -552,8 +559,8 @@ bndComplex :: FixedIndentParser String (Binding Meta)
 bndComplex bnd =
   PC.try
     (do n  <- ilexe upperCaseName
-        as <- many1 bnd
         meta <- freshMeta
+        as <- many1 bnd
         pure $ ConstrLit meta (PrefixDataConstr n (length as) as))
   <|> indent bnd
 
@@ -582,7 +589,7 @@ definitions = do
 
   
 
-parseDefs :: String -> Either ParseError (List Definition)
+parseDefs :: String -> Either ParseError (Tuple (List Definition) Int)
 parseDefs = runParserIndent $ definitions
 
 ---------------------------------------------------------
@@ -641,8 +648,8 @@ typeCons t = do
 
 typeExpr :: IndentParser String Type -> IndentParser String Type
 typeExpr t = PC.between
-  (indent <<< lift <<< PC.try <<< char $ '(')
-  (indent <<< lift <<< PC.try <<< char $ ')')
+  (indent <<< PC.try <<< char $ '(')
+  (indent <<< PC.try <<< char $ ')')
   (indent t)
 
 types :: IndentParser String Type

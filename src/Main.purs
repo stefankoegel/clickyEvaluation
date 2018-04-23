@@ -14,6 +14,7 @@ import Data.Maybe (Maybe(..))
 import Data.StrMap (empty)
 import Data.Array (cons)
 import Data.Traversable (for)
+import Data.Tuple (Tuple (..))
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
@@ -63,7 +64,7 @@ parseExpr input = case Parser.parseExpr input of
   Left error -> do
     showError "Parser" (show error)
     pure Nothing
-  Right expr -> pure $ Just expr
+  Right (Tuple expr _)-> pure $ Just expr
 
 eval1 :: Eval.Env -> AST.TypeTree -> Either String AST.TypeTree
 eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
@@ -179,7 +180,7 @@ showExprIn expr env history container histContainer = do
 stringToEnv :: String -> Eval.Env
 stringToEnv str = case Parser.parseDefs str of
   Left _     -> empty
-  Right defs -> Eval.defsToEnv defs
+  Right (Tuple defs _) -> Eval.defsToEnv defs
 
 preludeTyped :: Partial => TypeChecker.TypeEnv
 preludeTyped = case buildTypeEnvironment preludeEnv of
