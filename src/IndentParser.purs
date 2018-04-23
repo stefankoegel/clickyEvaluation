@@ -1,7 +1,7 @@
 module IndentParser (
     -- $doc
     -- * Types
-    IndentParser, runIndent,
+    IndentParser, IndentParserT, runIndent,
     -- * Blocks
     withBlock, withBlock', block, block1,
     -- * Indentation Checking
@@ -16,12 +16,13 @@ module IndentParser (
 import Prelude (class Monad, Unit, id, ap, const, ($), flip, unit, (==), bind, (<=), (>>=))
 import Data.List (List(..), many)
 import Data.Maybe (Maybe(..))
+import Data.Identity (Identity(..))
 
 import Control.Alt ((<|>))
 import Control.Apply ((*>), lift2)
 import Control.Applicative (pure)
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.State (State, evalState)
+import Control.Monad.State (StateT, State, evalState)
 import Control.Monad.State.Trans (get, put)
 
 import Text.Parsing.Parser (ParserT, ParseState(ParseState), fail)
@@ -59,7 +60,8 @@ import Text.Parsing.Parser.String (string, oneOf)
 
 -- | Indentation sensitive parser type. Usually @ m @ will
 --   be @ Identity @ as with any @ ParserT @
-type IndentParser s a = ParserT s (State Position) a
+type IndentParserT s m a = ParserT s (StateT Position m) a
+type IndentParser s a = IndentParserT s Identity a
 
 -- | @ getPosition @ returns current position
 --   should probably be added to Text.Parsing.Parser.Pos
