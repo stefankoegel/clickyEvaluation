@@ -15,7 +15,7 @@ import Control.Alt ((<|>))
 import Control.Apply (lift2)
 -- import Control.Applicative ((<*), (*>))
 import Control.Lazy (fix)
-import Control.Monad.State (runState, runStateT, StateT, get, put, modify, lift)
+import Control.Monad.State (State, StateT, runState, runStateT, get, put, modify, lift)
 
 import Text.Parsing.Parser (ParseError, ParserT, runParserT, fail)
 import Text.Parsing.Parser.Combinators as PC
@@ -23,7 +23,7 @@ import Text.Parsing.Parser.Expr (OperatorTable, Assoc(AssocRight, AssocNone, Ass
 import Text.Parsing.Parser.String (whiteSpace, char, string, oneOf, noneOf, anyChar)
 import Text.Parsing.Parser.Token (unGenLanguageDef, upper, digit)
 import Text.Parsing.Parser.Language (haskellDef)
-import Text.Parsing.Parser.Pos (initialPos)
+import Text.Parsing.Parser.Pos (initialPos, Position)
 
 import AST
   ( MType
@@ -43,7 +43,7 @@ import AST
   , Type(..)
   , Meta(..))
 import AST as AST
-import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
+import IndentParser (block, withPos, block1, indented', sameLine)
 
 ---------------------------------------------------------
 -- Utils
@@ -52,6 +52,11 @@ import IndentParser (IndentParser, block, withPos, block1, indented', sameLine)
 type FixedIndentParser s a = IndentParser s a -> IndentParser s a
 
 type IndexingT m a = StateT Int m a
+
+runIndexingT :: forall m a. (Monad m) => IndexingT m a -> m (Tuple a Int)
+runIndexingT action = runStateT action 0
+
+type IndentParser s a = IndexingT (ParserT s (State Position)) a
 
 fresh :: forall m. (Monad m) => IndexingT m Int
 fresh = do
@@ -456,8 +461,8 @@ expression = do
   whiteSpace
   fix $ \expr -> buildExprParser operatorTable (syntax expr)
 
-runParserIndent :: forall a. IndentParser String a -> String -> Either ParseError a
-runParserIndent p src = fst $ flip runState initialPos $ runParserT src p
+runParserIndent :: forall a. IndentParser String a -> String -> Either ParseError (Tuple a Int)
+runParserIndent p src = fst $ flip runState initialPos $ runParserT src $ runIndexingT p
 
 parseExpr :: String -> Either ParseError TypeTree
 parseExpr = runParserIndent expression
