@@ -3,8 +3,8 @@ module AST where
 import Prelude
 import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor (bimap, rmap)
-import Data.Foldable (intercalate, foldr)
-import Data.List (List(..), fold, (:))
+import Data.Foldable (intercalate, foldr, and)
+import Data.List (List(..), fold, (:), zipWith)
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
@@ -110,24 +110,24 @@ data Tree a b o m =
 eq' :: TypeTree -> TypeTree -> Boolean
 eq' (Atom _ a) (Atom _ b) = a == b
 eq' (List _ as) (List _ bs) = and $ zipWith eq' as bs
-eq' (NTuple _ as) (NTuple _bs) = and $ zipWith eq' as bs
-eq' (Binary _ o l r) (Binary o' l' r') = eqOp' o o' && eq' l l' && eq' r r'
-eq' (Unary _ o e) (Unary _ o' e') = eqOp' o o' && eq' e e'
-eq' (SectL _ e o) (SectL _ e' o') = eqOp' o o' && eq' e e'
-eq' (SectR _ o e) (SectR _ o' e') = eqOp' o o' && eq' e e'
-eq' (PrefixOp _ o) (PrefixOp _ o') = eqOp' o o'
+eq' (NTuple _ as) (NTuple _ bs) = and $ zipWith eq' as bs
+eq' (Binary _ o l r) (Binary _ o' l' r') = eq'Op o o' && eq' l l' && eq' r r'
+eq' (Unary _ o e) (Unary _ o' e') = eq'Op o o' && eq' e e'
+eq' (SectL _ e o) (SectL _ e' o') = eq'Op o o' && eq' e e'
+eq' (SectR _ o e) (SectR _ o' e') = eq'Op o o' && eq' e e'
+eq' (PrefixOp _ o) (PrefixOp _ o') = eq'Op o o'
 eq' (IfExpr _ i t e) (IfExpr _ i' t' e') = eq' i i' && eq' t t' && eq' e e'
-eq' (ArithSeq _ a mb mc) (ArithSeq _ a' mb' mc') = eq' a a' && eq'' mb mb' && eq'' mc mc'
+eq' (ArithmSeq _ a mb mc) (ArithmSeq _ a' mb' mc') = eq' a a' && eq'' mb mb' && eq'' mc mc'
  where
   eq'' Nothing Nothing = true
   eq'' (Just a) (Just b) = eq' a b
   eq'' _ _ = false
-eq' (LetExpr _ d e) (LetExpr _ d' e') = and (zipWith eq'' d d') && eq' d d'
+eq' (LetExpr _ d e) (LetExpr _ d' e') = and (zipWith eq'' d d') && eq' e e'
  where
   eq'' (Tuple b e) (Tuple b' e') = eq'Binding b b' && eq' e e'
-eq' (Lambda _ bs e) (Lambda bs' e') = and (zipWith eq'Binding bs bs') && eq' e e'
+eq' (Lambda _ bs e) (Lambda _ bs' e') = and (zipWith eq'Binding bs bs') && eq' e e'
 eq' (App _ f as) (App _ f' as') = eq' f f' && and (zipWith eq' as as')
-eq' (ListComp _ e qs) (ListComp e' qs') = eq' e e' && and (zipWith eq'QualTree qs qs')
+eq' (ListComp _ e qs) (ListComp _ e' qs') = eq' e e' && and (zipWith eq'QualTree qs qs')
 eq' _ _ = false
 
 eq'Op :: Tuple Op Meta -> Tuple Op Meta -> Boolean
@@ -137,7 +137,7 @@ eq'Binding :: TypedBinding -> TypedBinding -> Boolean
 eq'Binding (Lit _ a) (Lit _ a') = a == a'
 eq'Binding (ConsLit _ a as) (ConsLit _ a' as') = eq'Binding a a' && eq'Binding as as'
 eq'Binding (ListLit _ bs) (ListLit _ bs') = and (zipWith eq'Binding bs bs')
-eq'Binding (NTupleLit _ bs) (NTupleLit _bs') = and (zipWith eq'Binding bs bs')
+eq'Binding (NTupleLit _ bs) (NTupleLit _ bs') = and (zipWith eq'Binding bs bs')
 eq'Binding (ConstrLit _ dc) (ConstrLit _ dc') = eq'DataConstr dc dc'
 eq'Binding _ _ = false
 
