@@ -10,7 +10,7 @@ import Data.List (List(Nil))
 
 import Parser (definitions, expression, runParserIndent)
 import Evaluator (eval, eval1, runEvalM, defsToEnv,Env)
-import Test.Parser (prelude, parsedPrelude)
+import Test.Parser (prelude, parsedPrelude, class Testable, equals)
 
 import Test.Utils (Test, tell, padLeft)
 
@@ -27,7 +27,7 @@ eval1test name input expected = case (Tuple (runParserIndent expression input) (
   (Tuple (Right (Tuple inExp _)) (Right (Tuple expExp _))) ->
     case runEvalM (eval1 M.empty inExp) of
       (Right eval1Exp) -> 
-        if eval1Exp == expExp
+        if eval1Exp `equals` expExp
           then pure unit -- log $ "Eval success (" ++ name ++ ")"
           else tell'
              $ "Eval fail (" <> name <> "):\n"
@@ -47,7 +47,7 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expre
   (Tuple (Tuple (Right (Tuple inExp _)) (Right (Tuple expExp _))) (Right (Tuple defs _))) ->
     case runEvalM (eval1 (defsToEnv defs) inExp) of
       (Right eval1Exp) -> 
-        if eval1Exp == expExp
+        if eval1Exp `equals` expExp
           then pure unit -- log $ "Eval success (" <> name <> ")"
           else tell'
              $ "Eval fail (" <> name <> "):\n"
@@ -66,7 +66,7 @@ evalEnvTest :: String -> String -> String -> String -> Test Unit
 evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right (Tuple inExp _)) (Right (Tuple expExp _))) (Right (Tuple defs _))) ->
     let evalExp = eval (defsToEnv defs) inExp in
-      if evalExp == expExp
+      if evalExp `equals` expExp
         then pure unit -- log $ "Eval success (" ++ name ++ ")"
         else tell'
              $ "Eval fail (" <> name <> "):\n"
@@ -101,7 +101,7 @@ evalPreludeTest :: String -> String -> String -> Test Unit
 evalPreludeTest name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
   (Tuple (Right (Tuple inExp _)) (Right (Tuple expExp _))) ->
     let evalExp = eval preludeEnv inExp in
-      if evalExp == expExp
+      if evalExp `equals` expExp
         then pure unit -- log $ "Eval success (" ++ name ++ ")"
         else tell'
              $ "Eval fail (" <> name <> "):\n"
