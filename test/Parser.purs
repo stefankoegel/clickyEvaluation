@@ -63,8 +63,27 @@ tell' = tell
 padLeft' :: forall a. (Show a) => a -> String
 padLeft' = show >>> padLeft
 
-testEq :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Test Unit
-testEq name p input expected = case runParserIndent p input of
+		
+class (Show a) <= Testable a where
+  equals :: a -> a -> Boolean
+  
+instance testableTypeTree :: Testable TypeTree where
+  equals = eq'
+  
+instance testableDefinition :: Testable Definition where
+  equals = eq'Def
+  
+instance testableBinding :: Testable Binding where
+  equals = eq'Binding
+  
+instance testableAtom :: Testable Atom where
+  equals = eq
+  
+instance testableType :: Testable Type where
+  equals = eq
+
+test :: forall a. (Testable a) => String -> IndentParser String a -> String -> a -> Test Unit
+test name p input expected = case runParserIndent p input of
   Left parseError -> tell' $
     "Parse fail (" <> name <> "): "
     <> padLeft' (parseErrorPosition parseError) <> "\n"
@@ -72,7 +91,7 @@ testEq name p input expected = case runParserIndent p input of
     <> "Input:\n"
     <> padLeft input
   Right (Tuple result _) ->
-    if result == expected
+    if result `equals` expected
       then pure unit --tell $ "Parse success (" <> name <> ")"
       else tell' $
         "Parse fail (" <> name <> "):\n"
@@ -83,45 +102,6 @@ testEq name p input expected = case runParserIndent p input of
         <> "Input:\n"
         <> padLeft input
 		
-test :: String -> IndentParser String TypeTree -> String -> TypeTree -> Test Unit
-test name p input expected = case runParserIndent p input of
-  Left parseError -> tell' $
-    "Parse fail (" <> name <> "): "
-    <> padLeft' (parseErrorPosition parseError) <> "\n"
-    <> padLeft (parseErrorMessage parseError) <> "\n"
-    <> "Input:\n"
-    <> padLeft input
-  Right (Tuple result _) ->
-    if eq' result expected
-      then pure unit --tell $ "Parse success (" <> name <> ")"
-      else tell' $
-        "Parse fail (" <> name <> "):\n"
-        <> "Output:\n"
-        <> padLeft' result <> "\n"
-        <> "Expected:\n"
-        <> padLeft' expected <> "\n"
-        <> "Input:\n"
-        <> padLeft input
-
-testDef :: String -> IndentParser String Definition -> String -> Definition -> Test Unit
-testDef name p input expected = case runParserIndent p input of
-  Left parseError -> tell' $
-    "Parse fail (" <> name <> "): "
-    <> padLeft' (parseErrorPosition parseError) <> "\n"
-    <> padLeft (parseErrorMessage parseError) <> "\n"
-    <> "Input:\n"
-    <> padLeft input
-  Right (Tuple result _) ->
-    if eq'Def result expected
-      then pure unit --tell $ "Parse success (" <> name <> ")"
-      else tell' $
-        "Parse fail (" <> name <> "):\n"
-        <> "Output:\n"
-        <> padLeft' result <> "\n"
-        <> "Expected:\n"
-        <> padLeft' expected <> "\n"
-        <> "Input:\n"
-        <> padLeft input
 
 rejectTest :: forall a . (Show a)
                       => String
@@ -163,20 +143,20 @@ aname s = Atom emptyMeta $ Name s
 
 runTests :: Test Unit
 runTests = do
-  testEq "0" int "0" (AInt 0)
-  testEq "1" int "1" (AInt 1)
-  testEq "all" int "0123456789" (AInt 123456789)
-  testEq "high" int "2147483647" (AInt 2147483647)
-  testEq "overflow" int "2147483648" (AInt (negate 2147483648))
+  test "0" int "0" (AInt 0)
+  test "1" int "1" (AInt 1)
+  test "all" int "0123456789" (AInt 123456789)
+  test "high" int "2147483647" (AInt 2147483647)
+  test "overflow" int "2147483648" (AInt (negate 2147483648))
 
-  testEq "bool1" bool "True" (Bool true)
-  testEq "bool2" bool "False" (Bool false)
+  test "bool1" bool "True" (Bool true)
+  test "bool2" bool "False" (Bool false)
 
-  testEq "a" variable "a" (Name "a")
-  testEq "lower" variable "a_bcdefghijklmnopqrstuvwxyz_" (Name "a_bcdefghijklmnopqrstuvwxyz_")
-  testEq "upper" variable "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'" (Name "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'")
-  testEq "special" variable "_____''''" (Name "_____''''")
-  testEq "with_numbers1" variable "a1" (Name "a1")
+  test "a" variable "a" (Name "a")
+  test "lower" variable "a_bcdefghijklmnopqrstuvwxyz_" (Name "a_bcdefghijklmnopqrstuvwxyz_")
+  test "upper" variable "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'" (Name "a'BCDEFGHIJKLMNOPQRSTUVWXYZ'")
+  test "special" variable "_____''''" (Name "_____''''")
+  test "with_numbers1" variable "a1" (Name "a1")
 
   test "composition" expression "f . g" (Binary emptyMeta (toOpTuple Composition) (aname "f") (aname "g"))
   test "power" expression "2 ^ 10" (Binary emptyMeta (toOpTuple Power) (aint 2) (aint 10))
@@ -426,9 +406,9 @@ runTests = do
               (Nil))))
         (Nil)))
 
-  testEq "char_atom1" atom "'a'" (Char "a")
-  testEq "char_atom2" atom "'\\\\'" (Char "\\")
-  testEq "char_atom3" atom "'\\n'" (Char "\n")
+  test "char_atom1" atom "'a'" (Char "a")
+  test "char_atom2" atom "'\\\\'" (Char "\\")
+  test "char_atom3" atom "'\\n'" (Char "\n")
   test "char_expr1" expression "'\\r'" (Atom emptyMeta (Char "\r"))
   test "char_expr2" expression "['\\\\', '\\'', '\\\"']" (List emptyMeta $ toList [Atom emptyMeta (Char "\\"), Atom emptyMeta (Char "'"), Atom emptyMeta (Char "\"")])
 
