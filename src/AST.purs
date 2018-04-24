@@ -151,6 +151,9 @@ eq'QualTree (Gen _ b e) (Gen _ b' e') = eq'Binding b b' && eq' e e'
 eq'QualTree (Let _ b e) (Let _ b' e') = eq'Binding b b' && eq' e e'
 eq'QualTree (Guard _ e) (Guard _ e')  = eq' e e'
 eq'QualTree _ _ = false
+
+eq'Def :: Definition -> Definition -> Boolean
+eq'Def (Def s bs e) (Def s' bs' e') = s == s' && and (zipWith eq'Binding bs bs') && eq' e e'
   
 toOpTuple :: Op -> Tuple Op Meta
 toOpTuple op = Tuple op emptyMeta
