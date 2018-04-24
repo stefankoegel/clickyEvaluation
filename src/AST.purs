@@ -104,6 +104,53 @@ data Tree a b o m =
   | App       m (Tree a b o m) (List (Tree a b o m))
   | ListComp  m (Tree a b o m) (List (QualTree b (Tree a b o m) m))
 
+  
+-- | ONLY FOR TEST PURPOSES
+-- | compare two TypeTree values on equality ignoring the meta information
+eq' :: TypeTree -> TypeTree -> Boolean
+eq' (Atom _ a) (Atom _ b) = a == b
+eq' (List _ as) (List _ bs) = and $ zipWith eq' as bs
+eq' (NTuple _ as) (NTuple _bs) = and $ zipWith eq' as bs
+eq' (Binary _ o l r) (Binary o' l' r') = eqOp' o o' && eq' l l' && eq' r r'
+eq' (Unary _ o e) (Unary _ o' e') = eqOp' o o' && eq' e e'
+eq' (SectL _ e o) (SectL _ e' o') = eqOp' o o' && eq' e e'
+eq' (SectR _ o e) (SectR _ o' e') = eqOp' o o' && eq' e e'
+eq' (PrefixOp _ o) (PrefixOp _ o') = eqOp' o o'
+eq' (IfExpr _ i t e) (IfExpr _ i' t' e') = eq' i i' && eq' t t' && eq' e e'
+eq' (ArithSeq _ a mb mc) (ArithSeq _ a' mb' mc') = eq' a a' && eq'' mb mb' && eq'' mc mc'
+ where
+  eq'' Nothing Nothing = true
+  eq'' (Just a) (Just b) = eq' a b
+  eq'' _ _ = false
+eq' (LetExpr _ d e) (LetExpr _ d' e') = and (zipWith eq'' d d') && eq' d d'
+ where
+  eq'' (Tuple b e) (Tuple b' e') = eq'Binding b b' && eq' e e'
+eq' (Lambda _ bs e) (Lambda bs' e') = and (zipWith eq'Binding bs bs') && eq' e e'
+eq' (App _ f as) (App _ f' as') = eq' f f' && and (zipWith eq' as as')
+eq' (ListComp _ e qs) (ListComp e' qs') = eq' e e' && and (zipWith eq'QualTree qs qs')
+eq' _ _ = false
+
+eq'Op :: Tuple Op Meta -> Tuple Op Meta -> Boolean
+eq'Op (Tuple o _) (Tuple o' _) = o == o'
+
+eq'Binding :: TypedBinding -> TypedBinding -> Boolean
+eq'Binding (Lit _ a) (Lit _ a') = a == a'
+eq'Binding (ConsLit _ a as) (ConsLit _ a' as') = eq'Binding a a' && eq'Binding as as'
+eq'Binding (ListLit _ bs) (ListLit _ bs') = and (zipWith eq'Binding bs bs')
+eq'Binding (NTupleLit _ bs) (NTupleLit _bs') = and (zipWith eq'Binding bs bs')
+eq'Binding (ConstrLit _ dc) (ConstrLit _ dc') = eq'DataConstr dc dc'
+eq'Binding _ _ = false
+
+eq'DataConstr :: DataConstr TypedBinding -> DataConstr TypedBinding -> Boolean
+eq'DataConstr (PrefixDataConstr n a ps) (PrefixDataConstr n' a' ps') = n == n' && a == a' && and (zipWith eq'Binding ps ps')
+eq'DataConstr (InfixDataConstr n a p l r) (InfixDataConstr n' a' p' l' r') = n == n' && a == a' && p == p' && eq'Binding l l' && eq'Binding r r'
+eq'DataConstr _ _ = false
+
+eq'QualTree :: TypeQual -> TypeQual -> Boolean
+eq'QualTree (Gen _ b e) (Gen _ b' e') = eq'Binding b b' && eq' e e'
+eq'QualTree (Let _ b e) (Let _ b' e') = eq'Binding b b' && eq' e e'
+eq'QualTree (Guard _ e) (Guard _ e')  = eq' e e'
+  
 toOpTuple :: Op -> Tuple Op Meta
 toOpTuple op = Tuple op emptyMeta
 
