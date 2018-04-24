@@ -70,10 +70,10 @@ instance showMatchingError :: Show MatchingError where
   show (StrictnessError b e)   = "StrictnessError " <> show b <> " " <> show e
   show (TooFewArguments bs es) = "TooFewArguments " <> show bs <> " " <> show es
 
-type Evaluator = ExceptT EvalError Identity
+type Evaluator = StateT Int (ExceptT EvalError Identity)
 
-runEvalM :: forall a. Evaluator a -> Either EvalError a
-runEvalM = extract <<< runExceptT
+runEvalM :: forall a. Int -> Evaluator a -> Either EvalError (Tuple a Int)
+runEvalM idx = extract <<< runExceptT <<< flip runStateT idx
 
 type Matcher = ExceptT MatchingError Identity
 
@@ -133,37 +133,37 @@ evalToBinding env expr bind = case bind of
     _          -> recurse env expr bind
 
   (ConsLit _ b bs)     -> case expr of
-    (Binary _ (Tuple Colon _) e es) -> Binary AST.emptyMeta (Tuple Colon AST.emptyMeta) (evalToBinding env e b) (evalToBinding env es bs)
+    (Binary meta (Tuple Colon meta') e es) -> Binary meta (Tuple Colon meta') (evalToBinding env e b) (evalToBinding env es bs)
     (List _ (Cons e es))  -> evalToBinding env (Binary AST.emptyMeta (Tuple Colon AST.emptyMeta) e (List AST.emptyMeta es)) bind
     _                     -> recurse env expr bind
 
   (ListLit _ bs)       -> case expr of
-    (List _ es) -> if (length es == length bs) then List AST.emptyMeta (zipWith (evalToBinding env) es bs) else expr
+    (List meta es) -> if (length es == length bs) then List meta (zipWith (evalToBinding env) es bs) else expr
     _           -> recurse env expr bind
 
   (NTupleLit _ bs)     -> case expr of
-    (NTuple _ es)  -> NTuple AST.emptyMeta (zipWith (evalToBinding env) es bs)
+    (NTuple meta es)  -> NTuple meta (zipWith (evalToBinding env) es bs)
     _              -> recurse env expr bind
 -- TODO
   (ConstrLit _ (PrefixDataConstr n _ ps)) ->
     case expr of
-      (App _ (Atom _ (Constr n')) ps') ->
+      (App meta (Atom meta' (Constr n')) ps') ->
         case n == n' && length ps == length ps' of
-          true -> App AST.emptyMeta (Atom AST.emptyMeta (Constr n')) (zipWith (evalToBinding env) ps' ps)
+          true -> App meta (Atom meta' (Constr n')) (zipWith (evalToBinding env) ps' ps)
           false -> expr
       _ -> recurse env expr bind
   (ConstrLit _ (InfixDataConstr n _ _ l r)) ->
     case expr of
-      (App _ (PrefixOp _ (Tuple (InfixConstr n') meta)) (Cons l' (Cons r' Nil))) ->
-        case n == n' && meta == AST.emptyMeta of
+      (App meta (PrefixOp meta' (Tuple (InfixConstr n') meta'')) (Cons l' (Cons r' Nil))) ->
+        case n == n' && meta'' == AST.emptyMeta of
              true -> App
-              AST.emptyMeta
-              (PrefixOp AST.emptyMeta (Tuple (InfixConstr n') AST.emptyMeta))
+              meta
+              (PrefixOp meta' (Tuple (InfixConstr n') meta''))
               (Cons (evalToBinding env l' l) (Cons (evalToBinding env r' r) Nil))
              false -> expr
-      (Binary _ (Tuple (InfixConstr n') _) l' r') ->
+      (Binary meta (Tuple (InfixConstr n') meta') l' r') ->
         case n == n' of
-             true -> Binary AST.emptyMeta (Tuple (InfixConstr n') AST.emptyMeta) (evalToBinding env l' l) (evalToBinding env r' r)
+             true -> Binary meta (Tuple (InfixConstr n') meta') (evalToBinding env l' l) (evalToBinding env r' r)
              false -> expr
       _ -> recurse env expr bind
 
