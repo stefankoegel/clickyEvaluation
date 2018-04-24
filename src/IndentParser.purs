@@ -60,8 +60,8 @@ import Text.Parsing.Parser.String (string, oneOf)
 
 -- | Indentation sensitive parser type. Usually @ m @ will
 --   be @ Identity @ as with any @ ParserT @
-type IndentParserT s m a = ParserT s (StateT Position m) a
-type IndentParser s a = IndentParserT s Identity a
+type IndentParserT s m = ParserT s (StateT Position m)
+type IndentParser s = IndentParserT s Identity
 
 -- | @ getPosition @ returns current position
 --   should probably be added to Text.Parsing.Parser.Pos
