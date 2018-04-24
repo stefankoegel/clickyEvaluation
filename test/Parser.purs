@@ -2,13 +2,13 @@ module Test.Parser where
 
 import Prelude
 import Data.Either (Either(..))
-import Data.List (List(..), singleton, (:), many)
+import Data.List (List(..), singleton, (:), many, zipWith)
 import Data.Array ((..))
 import Data.Array (length, zip, toUnfoldable, replicate) as Array
 import Data.Tuple (Tuple(..))
 import Data.String (toCharArray, null) as String
 import Data.Maybe (Maybe(..))
-import Data.Foldable (intercalate, for_)
+import Data.Foldable (intercalate, for_, and)
 
 import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessage, fail)
 
@@ -35,7 +35,8 @@ import AST
   , emptyMeta
   , emptyMeta'
   , eq'
-  , eq'Def)
+  , eq'Def
+  , eq'Binding)
 import Parser
   ( expression
   , atom
@@ -67,13 +68,13 @@ padLeft' = show >>> padLeft
 class (Show a) <= Testable a where
   equals :: a -> a -> Boolean
   
-instance testableTypeTree :: Testable TypeTree where
+instance testableTypeTree :: Testable (Tree Atom (Binding Meta) (Tuple Op Meta) Meta) where
   equals = eq'
   
 instance testableDefinition :: Testable Definition where
   equals = eq'Def
   
-instance testableBinding :: Testable Binding where
+instance testableBinding :: Testable (Binding Meta) where
   equals = eq'Binding
   
 instance testableAtom :: Testable Atom where
@@ -81,6 +82,21 @@ instance testableAtom :: Testable Atom where
   
 instance testableType :: Testable Type where
   equals = eq
+
+instance testableDataConstrType :: Testable (DataConstr Type) where
+  equals = eq
+
+instance testableString :: Testable String where
+  equals = eq
+
+instance testableChar :: Testable Char where
+  equals = eq
+
+instance testableADTDef :: Testable ADTDef where
+  equals = eq
+
+instance testableList :: (Testable a) => Testable (List a) where
+  equals as bs = and $ zipWith equals as bs
 
 test :: forall a. (Testable a) => String -> IndentParser String a -> String -> a -> Test Unit
 test name p input expected = case runParserIndent p input of
