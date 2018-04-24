@@ -150,6 +150,7 @@ eq'QualTree :: TypeQual -> TypeQual -> Boolean
 eq'QualTree (Gen _ b e) (Gen _ b' e') = eq'Binding b b' && eq' e e'
 eq'QualTree (Let _ b e) (Let _ b' e') = eq'Binding b b' && eq' e e'
 eq'QualTree (Guard _ e) (Guard _ e')  = eq' e e'
+eq'QualTree _ _ = false
   
 toOpTuple :: Op -> Tuple Op Meta
 toOpTuple op = Tuple op emptyMeta
