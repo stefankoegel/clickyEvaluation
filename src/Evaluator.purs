@@ -196,7 +196,7 @@ evalToBinding env expr bind = case bind of
 
 
 recurse :: Env -> TypeTree -> Binding Meta -> State Int TypeTree
-recurse env expr bind = do
+recurse env expr bnd = do
   e' <- expr'
   idx <- get
   eval1d <- case runEvalM (eval1 env e') idx of
@@ -206,38 +206,38 @@ recurse env expr bind = do
          pure e''
   if expr == eval1d
      then pure expr
-     else evalToBinding env eval1d bind
+     else evalToBinding env eval1d bnd
  where
     expr' :: State Int TypeTree
     expr' = case expr of
       (Binary meta op e1 e2)  ->
-        Binary meta <$> pure op <*> evalToBinding env e1 bind <*> evalToBinding env e2 bind
+        Binary meta <$> pure op <*> evalToBinding env e1 bnd <*> evalToBinding env e2 bnd
       (Unary meta op e)       ->
-        Unary meta <$> pure op <*> evalToBinding env e bind
+        Unary meta <$> pure op <*> evalToBinding env e bnd
       (List meta es)          ->
-        List meta <$> mapM (\e -> evalToBinding env e bind) es
+        List meta <$> mapM (\e -> evalToBinding env e bnd) es
       (NTuple meta es)        ->
-        NTuple meta <$> mapM (\e -> evalToBinding env e bind) es
+        NTuple meta <$> mapM (\e -> evalToBinding env e bnd) es
       (IfExpr meta c t e)     ->
-        IfExpr meta <$> evalToBinding env c bind <*> pure t <*> pure e
+        IfExpr meta <$> evalToBinding env c bnd <*> pure t <*> pure e
       (App meta c@(Atom _ (Constr _)) args) ->
-        App meta <$> pure c <*> mapM (\e -> evalToBinding env e bind) args
+        App meta <$> pure c <*> mapM (\e -> evalToBinding env e bnd) args
       (App meta f args)       ->
-        App meta <$> evalToBinding env f bind <*> pure args
+        App meta <$> evalToBinding env f bnd <*> pure args
       (ArithmSeq meta c t e)     ->
         ArithmSeq meta
-        <$> evalToBinding env c bind
-        <*> mapM' (\x -> evalToBinding env x bind) t
-        <*> mapM' (\x -> evalToBinding env x bind) e
+        <$> evalToBinding env c bnd
+        <*> mapM' (\x -> evalToBinding env x bnd) t
+        <*> mapM' (\x -> evalToBinding env x bnd) e
       (ListComp meta e qs)    ->
-        ListComp meta <$> evalToBinding env e bind <*> mapM (\x -> evalToBindingQual env x bind) qs
+        ListComp meta <$> evalToBinding env e bnd <*> mapM (\x -> evalToBindingQual env x bnd) qs
       _                  -> pure expr
 
     evalToBindingQual :: Env -> TypeQual -> Binding Meta -> State Int TypeQual
-    evalToBindingQual environment qual binding = case qual of
-      Let meta b e -> Let meta b <$> evalToBinding environment e bind
-      Gen meta b e -> Gen meta b <$> evalToBinding environment e bind
-      Guard meta e -> Guard meta <$> evalToBinding environment e bind
+    evalToBindingQual environment qual bnding = case qual of
+      Let meta b e -> Let meta b <$> evalToBinding environment e bnd
+      Gen meta b e -> Gen meta b <$> evalToBinding environment e bnd
+      Guard meta e -> Guard meta <$> evalToBinding environment e bnd
 
 
 
