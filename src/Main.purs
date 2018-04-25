@@ -27,7 +27,7 @@ makeCE :: forall eff. String -> String -> Eff (dom :: DOM , console :: CONSOLE| 
 makeCE input selector = do
   clearInfo
   container <- J.select selector
-  doWithJust (parseExpr input) \expr -> do
+  doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = preludeEnv
     showExprIn expr env [] container Nothing
     pure unit
@@ -36,7 +36,7 @@ makeCEwithDefs :: forall eff. String -> String -> String -> Eff (dom :: DOM , co
 makeCEwithDefs input defs selector = do
   clearInfo
   container <- J.select selector
-  doWithJust (parseExpr input) \expr -> do
+  doWithJust (parseExpr input) \(Tuple expr nextIdx)-> do
     let env = stringToEnv defs
     showExprIn expr env [] container Nothing
 
@@ -45,7 +45,7 @@ makeCEwithHistory input selector histSelector = do
   clearInfo
   container <- J.select selector
   histContainer <- J.select histSelector
-  doWithJust (parseExpr input) \expr -> do
+  doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = preludeEnv
     showExprIn expr env [] container (Just histContainer)
 
@@ -54,17 +54,17 @@ makeCEwithDefsAndHistory  input defs selector histSelector = do
   clearInfo
   container <- J.select selector
   histContainer <- J.select histSelector
-  doWithJust (parseExpr input) \expr -> do
+  doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = stringToEnv defs
     showExprIn expr env [] container (Just histContainer)
 
 -- | Try to parse the given expression and report parser errors.
-parseExpr :: forall eff. String -> Eff (dom :: DOM, console :: CONSOLE | eff) (Maybe AST.TypeTree)
+parseExpr :: forall eff. String -> Eff (dom :: DOM, console :: CONSOLE | eff) (Maybe (Tuple AST.TypeTree Int))
 parseExpr input = case Parser.parseExpr input of
   Left error -> do
     showError "Parser" (show error)
     pure Nothing
-  Right (Tuple expr _)-> pure $ Just expr
+  Right (Tuple expr nextIdx)-> pure $ Just (Tuple expr idx)
 
 eval1 :: Eval.Env -> AST.TypeTree -> Either String AST.TypeTree
 eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
