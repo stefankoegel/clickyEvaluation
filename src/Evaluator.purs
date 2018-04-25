@@ -199,7 +199,7 @@ recurse :: Env -> TypeTree -> Binding Meta -> State Int TypeTree
 recurse env expr bnd = do
   e' <- expr'
   idx <- get
-  eval1d <- case runEvalM (eval1 env e') idx of
+  eval1d <- case runEvalM idx (eval1 env e') of
        Left _                 -> pure e'
        Right (Tuple e'' idx') -> do
          put idx'
