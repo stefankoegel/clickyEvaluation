@@ -18,13 +18,28 @@ import Data.Char (fromCharCode)
 import Data.Enum (fromEnum)
 import Control.Comonad (extract)
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.State.Trans (StateT, get, modify, runStateT, execStateT)
+import Control.Monad.State (State, runState)
+import Control.Monad.State.Trans (StateT, get, modify, put, runStateT, execStateT)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
 -- import JSHelpers (unsafeUndef)
 
 import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, MType, DataConstr (..), Meta (..))
 import AST as AST
+
+--------------------------------------------------------------------------------
+-- Utils -----------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+zipWithM :: forall m a b c. (Monad m) => (a -> b -> m c) -> List a -> List b -> m (List c)
+zipWithM _ Nil _                   = pure Nil
+zipWithM _ _   Nil                 = pure Nil
+zipWithM f (Cons a as) (Cons b bs) = Cons <$> f a b <*> zipWithM f as bs
+
+mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
+mapM' f Nothing  = pure Nothing
+mapM' f (Just x) = Just <$> (f x)
+--------------------------------------------------------------------------------
 
 data EvalError =
     IndexError Int Int
@@ -184,15 +199,15 @@ recurse :: Env -> TypeTree -> Binding Meta -> State Int TypeTree
 recurse env expr bind = do
   e' <- expr'
   idx <- get
-  eval1d <- case runEvalM (eval1 env e') i of
-       Left _                -> pure e'
-       Right (Tuple e' idx') -> do
+  eval1d <- case runEvalM (eval1 env e') idx of
+       Left _                 -> pure e'
+       Right (Tuple e'' idx') -> do
          put idx'
-         pure e'
+         pure e''
   if expr == eval1d
      then pure expr
      else evalToBinding env eval1d bind
-  where
+ where
     expr' :: State Int TypeTree
     expr' = case expr of
       (Binary meta op e1 e2)  ->
@@ -207,11 +222,14 @@ recurse env expr bind = do
         IfExpr meta <$> evalToBinding env c bind <*> pure t <*> pure e
       (App meta c@(Atom _ (Constr _)) args) ->
         App meta <$> pure c <*> mapM (\e -> evalToBinding env e bind) args
-      (App meta f args)       -> do
+      (App meta f args)       ->
         App meta <$> evalToBinding env f bind <*> pure args
       (ArithmSeq meta c t e)     ->
-        ArithmSeq meta <$> evalToBinding env c bind <*> mapM (\x -> evalToBinding env x bind) t <*> mapM (\x -> evalToBinding env x bind) e
-      (ListComp meta e qs)    -> do
+        ArithmSeq meta
+        <$> evalToBinding env c bind
+        <*> mapM' (\x -> evalToBinding env x bind) t
+        <*> mapM' (\x -> evalToBinding env x bind) e
+      (ListComp meta e qs)    ->
         ListComp meta <$> evalToBinding env e bind <*> mapM (\x -> evalToBindingQual env x bind) qs
       _                  -> pure expr
 
@@ -220,6 +238,7 @@ recurse env expr bind = do
       Let meta b e -> Let meta b <$> evalToBinding environment e bind
       Gen meta b e -> Gen meta b <$> evalToBinding environment e bind
       Guard meta e -> Guard meta <$> evalToBinding environment e bind
+
 
 
 wrapLambda :: (List (Binding Meta)) -> (List TypeTree) -> TypeTree -> Evaluator TypeTree
@@ -549,9 +568,6 @@ match' b@(ConstrLit _ _) e = throwError $ checkStrictness b e
 
 
 --TODO: replace with purescript mapM
-mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
-mapM' f Nothing  = pure Nothing
-mapM' f (Just x) = Just <$> (f x)
 
 mapM :: forall a b m. (Monad m) => (a -> m b) -> List a -> m (List b)
 mapM f Nil = pure Nil
