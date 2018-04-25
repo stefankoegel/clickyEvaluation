@@ -120,88 +120,106 @@ eval1 env expr = case expr of
 --  (Atom _ (Constr x))                -> pure expr
   _                                  -> throwError $ CannotEvaluate expr
 
-eval :: Env -> TypeTree -> TypeTree
-eval env expr = evalToBinding env expr (Lit AST.emptyMeta (Name "_|_"))
+eval :: Int -> Env -> TypeTree -> Tuple TypeTree Int
+eval nextIdx env expr = runState (evalToBinding env expr (Lit AST.emptyMeta (Name "_|_"))) nextIdx
+
+freshMeta :: State Int Meta
+freshMeta = do
+  i <- get
+  modify (\i -> i + 1)
+  pure $ AST.idxMeta i
 
 -- | Evaluates an expression until it matches a given binding in a given environment.
-evalToBinding :: Env -> TypeTree -> Binding Meta -> TypeTree
+evalToBinding :: Env -> TypeTree -> Binding Meta -> State Int TypeTree
 evalToBinding env expr bind = case bind of
   (Lit _ (Name "_|_")) -> recurse env expr bind
-  (Lit _ (Name _))     -> expr
+  (Lit _ (Name _))     -> pure expr
   (Lit _ _)            -> case expr of
-    (Atom _ _) -> expr
+    (Atom _ _) -> pure expr
     _          -> recurse env expr bind
 
   (ConsLit _ b bs)     -> case expr of
-    (Binary meta (Tuple Colon meta') e es) -> Binary meta (Tuple Colon meta') (evalToBinding env e b) (evalToBinding env es bs)
-    (List _ (Cons e es))  -> evalToBinding env (Binary AST.emptyMeta (Tuple Colon AST.emptyMeta) e (List AST.emptyMeta es)) bind
+    (Binary meta (Tuple Colon meta') e es) -> Binary meta (Tuple Colon meta') <$> evalToBinding env e b <*> evalToBinding env es bs
+    (List _ (Cons e es))  -> do
+      meta   <- freshMeta
+      meta'  <- freshMeta
+      meta'' <- freshMeta
+      evalToBinding env (Binary meta (Tuple Colon meta') e (List meta'' es)) bind
     _                     -> recurse env expr bind
 
-  (ListLit _ bs)       -> case expr of
-    (List meta es) -> if (length es == length bs) then List meta (zipWith (evalToBinding env) es bs) else expr
+  (ListLit _ bs) -> case expr of
+    (List meta es)
+      | (length es == length bs) -> List meta <$> zipWithM (evalToBinding env) es bs -- TODO Define zipWithM
+      | otherwise                -> pure expr
     _           -> recurse env expr bind
 
-  (NTupleLit _ bs)     -> case expr of
-    (NTuple meta es)  -> NTuple meta (zipWith (evalToBinding env) es bs)
-    _              -> recurse env expr bind
--- TODO
+  (NTupleLit _ bs) -> case expr of
+    (NTuple meta es) -> NTuple meta <$> zipWithM (evalToBinding env) es bs
+    _                -> recurse env expr bind
   (ConstrLit _ (PrefixDataConstr n _ ps)) ->
     case expr of
       (App meta (Atom meta' (Constr n')) ps') ->
         case n == n' && length ps == length ps' of
-          true -> App meta (Atom meta' (Constr n')) (zipWith (evalToBinding env) ps' ps)
-          false -> expr
+          true -> App meta (Atom meta' (Constr n')) <$> zipWithM (evalToBinding env) ps' ps
+          false -> pure expr
       _ -> recurse env expr bind
   (ConstrLit _ (InfixDataConstr n _ _ l r)) ->
     case expr of
       (App meta (PrefixOp meta' (Tuple (InfixConstr n') meta'')) (Cons l' (Cons r' Nil))) ->
         case n == n' && meta'' == AST.emptyMeta of
-             true -> App
-              meta
-              (PrefixOp meta' (Tuple (InfixConstr n') meta''))
-              (Cons (evalToBinding env l' l) (Cons (evalToBinding env r' r) Nil))
-             false -> expr
+             true -> do
+               el <- evalToBinding env l' l
+               er <- evalToBinding env r' r
+               pure $ App meta (PrefixOp meta' (Tuple (InfixConstr n') meta'')) (Cons el (Cons er Nil))
+             false -> pure expr
       (Binary meta (Tuple (InfixConstr n') meta') l' r') ->
         case n == n' of
-             true -> Binary meta (Tuple (InfixConstr n') meta') (evalToBinding env l' l) (evalToBinding env r' r)
-             false -> expr
+             true -> Binary meta (Tuple (InfixConstr n') meta') <$> evalToBinding env l' l <*> evalToBinding env r' r
+             false -> pure expr
       _ -> recurse env expr bind
 
 
 
-recurse :: Env -> TypeTree -> Binding Meta -> TypeTree
-recurse env expr bind = if expr == eval1d then expr else evalToBinding env eval1d bind
+recurse :: Env -> TypeTree -> Binding Meta -> State Int TypeTree
+recurse env expr bind = do
+  e' <- expr'
+  idx <- get
+  eval1d <- case runEvalM (eval1 env e') i of
+       Left _                -> pure e'
+       Right (Tuple e' idx') -> do
+         put idx'
+         pure e'
+  if expr == eval1d
+     then pure expr
+     else evalToBinding env eval1d bind
   where
-    eval1d :: TypeTree
-    eval1d = either (const expr') id $ runEvalM $ eval1 env expr'
-    expr' :: TypeTree
+    expr' :: State Int TypeTree
     expr' = case expr of
-      (Binary _ op e1 e2)  ->
-        Binary AST.emptyMeta op (evalToBinding env e1 bind) (evalToBinding env e2 bind)
-      (Unary _ op e)       ->
-        Unary AST.emptyMeta op (evalToBinding env e bind)
-      (List _ es)          ->
-        List AST.emptyMeta ((\e -> evalToBinding env e bind) <$> es)
-      (NTuple _ es)        ->
-        NTuple AST.emptyMeta ((\e -> evalToBinding env e bind) <$> es)
-      (IfExpr _ c t e)     ->
-        IfExpr AST.emptyMeta (evalToBinding env c bind) t e
-      (App _ c@(Atom _ (Constr _)) args) ->
-        App AST.emptyMeta c ((\e -> evalToBinding env e bind) <$> args)
-      (App _ f args)       -> do
-        App AST.emptyMeta (evalToBinding env f bind) args
-      (ArithmSeq _ c t e)     ->
-        ArithmSeq AST.emptyMeta (evalToBinding env c bind) ((\x -> evalToBinding env x bind) <$> t) ((\x -> evalToBinding env x bind) <$> e)
-      (ListComp _ e qs)    -> do
-        ListComp AST.emptyMeta (evalToBinding env e bind) ((\x -> evalToBindingQual env x bind) <$> qs)
-      _                  ->
-        expr
+      (Binary meta op e1 e2)  ->
+        Binary meta <$> pure op <*> evalToBinding env e1 bind <*> evalToBinding env e2 bind
+      (Unary meta op e)       ->
+        Unary meta <$> pure op <*> evalToBinding env e bind
+      (List meta es)          ->
+        List meta <$> mapM (\e -> evalToBinding env e bind) es
+      (NTuple meta es)        ->
+        NTuple meta <$> mapM (\e -> evalToBinding env e bind) es
+      (IfExpr meta c t e)     ->
+        IfExpr meta <$> evalToBinding env c bind <*> pure t <*> pure e
+      (App meta c@(Atom _ (Constr _)) args) ->
+        App meta <$> pure c <*> mapM (\e -> evalToBinding env e bind) args
+      (App meta f args)       -> do
+        App meta <$> evalToBinding env f bind <*> pure args
+      (ArithmSeq meta c t e)     ->
+        ArithmSeq meta <$> evalToBinding env c bind <*> mapM (\x -> evalToBinding env x bind) t <*> mapM (\x -> evalToBinding env x bind) e
+      (ListComp meta e qs)    -> do
+        ListComp meta <$> evalToBinding env e bind <*> mapM (\x -> evalToBindingQual env x bind) qs
+      _                  -> pure expr
 
-    evalToBindingQual :: Env -> TypeQual -> Binding Meta ->TypeQual
+    evalToBindingQual :: Env -> TypeQual -> Binding Meta -> State Int TypeQual
     evalToBindingQual environment qual binding = case qual of
-      Let _ b e -> Let AST.emptyMeta b (evalToBinding environment e bind)
-      Gen _ b e -> Gen AST.emptyMeta b (evalToBinding environment e bind)
-      Guard _ e -> Guard AST.emptyMeta (evalToBinding environment e bind)
+      Let meta b e -> Let meta b <$> evalToBinding environment e bind
+      Gen meta b e -> Gen meta b <$> evalToBinding environment e bind
+      Guard meta e -> Guard meta <$> evalToBinding environment e bind
 
 
 wrapLambda :: (List (Binding Meta)) -> (List TypeTree) -> TypeTree -> Evaluator TypeTree
