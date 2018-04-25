@@ -182,7 +182,7 @@ evalToBinding env expr bnd = case bnd of
   (ConstrLit _ (InfixDataConstr n _ _ l r)) ->
     case expr of
       (App meta (PrefixOp meta' (Tuple (InfixConstr n') meta'')) (Cons l' (Cons r' Nil))) ->
-        case n == n' {- && meta'' == AST.emptyMeta -} of
+        case n == n' of
              true -> do
                el <- evalToBinding env l' l
                er <- evalToBinding env r' r
