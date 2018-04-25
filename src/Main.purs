@@ -29,7 +29,7 @@ makeCE input selector = do
   container <- J.select selector
   doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = preludeEnv
-    showExprIn expr env [] container Nothing
+    showExprIn expr nextIdx env [] container Nothing
     pure unit
 
 makeCEwithDefs :: forall eff. String -> String -> String -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
@@ -38,7 +38,7 @@ makeCEwithDefs input defs selector = do
   container <- J.select selector
   doWithJust (parseExpr input) \(Tuple expr nextIdx)-> do
     let env = stringToEnv defs
-    showExprIn expr env [] container Nothing
+    showExprIn expr nextIdx env [] container Nothing
 
 makeCEwithHistory :: forall eff. String -> String -> String -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
 makeCEwithHistory input selector histSelector = do
@@ -47,7 +47,7 @@ makeCEwithHistory input selector histSelector = do
   histContainer <- J.select histSelector
   doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = preludeEnv
-    showExprIn expr env [] container (Just histContainer)
+    showExprIn expr nextIdx env [] container (Just histContainer)
 
 makeCEwithDefsAndHistory :: forall eff. String -> String -> String -> String -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
 makeCEwithDefsAndHistory  input defs selector histSelector = do
@@ -56,7 +56,7 @@ makeCEwithDefsAndHistory  input defs selector histSelector = do
   histContainer <- J.select histSelector
   doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = stringToEnv defs
-    showExprIn expr env [] container (Just histContainer)
+    showExprIn expr nextIdx env [] container (Just histContainer)
 
 -- | Try to parse the given expression and report parser errors.
 parseExpr :: forall eff. String -> Eff (dom :: DOM, console :: CONSOLE | eff) (Maybe (Tuple AST.TypeTree Int))
@@ -66,28 +66,34 @@ parseExpr input = case Parser.parseExpr input of
     pure Nothing
   Right (Tuple expr nextIdx)-> pure $ Just (Tuple expr idx)
 
-eval1 :: Eval.Env -> AST.TypeTree -> Either String AST.TypeTree
-eval1 env expr = case Eval.runEvalM (Eval.eval1 env expr) of
-  Left err    -> Left $ show err
-  Right expr' -> Right expr'
+eval1 :: Int -> Eval.Env -> AST.TypeTree -> Either String (Tuple AST.TypeTree Int)
+eval1 nextIdx env expr = case Eval.runEvalM (Eval.eval1 env expr) nextIdx of
+  Left err             -> Left $ show err
+  Right exprAndNextIdx -> Right exprAndNextIdx
 
-eval1' :: Eval.Env -> AST.TypeTree -> AST.TypeTree
-eval1' env expr = case eval1 env expr of
-  Left _      -> expr
-  Right expr' -> expr'
+eval1' :: Int -> Eval.Env -> AST.TypeTree -> Tuple AST.TypeTree Int
+eval1' nextIdx env expr = case eval1 env expr of
+  Left _      -> Tuple expr nextIdx
+  Right expr' -> exprAndNextIdx
 
-makeCallback :: Eval.Env -> Array AST.TypeTree -> J.JQuery -> Maybe J.JQuery-> Web.Callback
-makeCallback env history container histContainer expr hole event jq = do
+makeCallback :: Int
+             -> Eval.Env
+             -> Array AST.TypeTree
+             -> J.JQuery
+             -> Maybe J.JQuery
+             -> Web.Callback
+makeCallback nextIdx env history container histContainer expr hole event jq = do
   J.stopImmediatePropagation event
-  let evalFunc = if ctrlKeyPressed event then Eval.eval else eval1'
+  let evalFunc = if ctrlKeyPressed event then Eval.eval nextIdx else eval1' nextIdx
+      evaluated = evalFunc env expr -- :: Tuple TypeTree Index
   case getType event of
-    "click"     -> if evalFunc env expr /= expr
-                   then showExprIn (hole (evalFunc env expr)) env (cons (hole expr) history) container histContainer
+    "click"     -> if fst evaluated /= expr
+                   then showExprIn (hole (evalFunc env expr)) (snd evaluated) env (cons (hole expr) history) container histContainer
                    else pure unit
     "mouseover" -> do
                      log $ show expr
-                     case eval1 env expr of
-                       Right expr' -> do
+                     case eval1 nextIdx env expr of
+                       Right (Tuple expr' _) -> do -- index can be ignored here (I guess...)
                          log $ show expr'
                          J.addClass "highlight" jq
                        Left err   -> log err
@@ -146,10 +152,15 @@ typeCheckExpression typedEnv expr = do
       pure $ Just typedExpr
 
 -- | Construct a div tree from the given typed expression.
-buildDivTreeFromExpression :: forall eff. AST.TypeTree -> Eval.Env -> Array AST.TypeTree
-                           -> J.JQuery -> Maybe J.JQuery -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
-buildDivTreeFromExpression typedExpr env history container histContainer = do
-    content <- exprToJQuery (makeCallback env history container histContainer) typedExpr
+buildDivTreeFromExpression :: forall eff. AST.TypeTree
+                           -> Int
+                           -> Eval.Env
+                           -> Array AST.TypeTree
+                           -> J.JQuery
+                           -> Maybe J.JQuery
+                           -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
+buildDivTreeFromExpression typedExpr nextIdx env history container histContainer = do
+    content <- exprToJQuery (makeCallback nextIdx env history container histContainer) typedExpr
     J.clear container
     J.append content container
     case histContainer of
@@ -167,15 +178,20 @@ buildDivTreeFromExpression typedExpr env history container histContainer = do
 
 -- | Show the given expression inside a given environment after the types of the environment as
 -- | well as the expression have been inferred.
-showExprIn :: forall eff. AST.TypeTree -> Eval.Env -> Array AST.TypeTree -> J.JQuery
-           -> Maybe J.JQuery -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
-showExprIn expr env history container histContainer = do
+showExprIn :: forall eff. AST.TypeTree
+           -> Int
+           -> Eval.Env
+           -> Array AST.TypeTree
+           -> J.JQuery
+           -> Maybe J.JQuery
+           -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
+showExprIn expr nextIdx env history container histContainer = do
   -- Try to infer the types of the environment.
   -- doWithJust (buildTypeEnvironment expr env) \typedEnv -> do
     -- Try to infer the type of the given expression.
     -- doWithJust (typeCheckExpression preludeTyped expr) \typedExpr ->
       -- buildDivTreeFromExpression typedExpr env history container histContainer
-    buildDivTreeFromExpression expr env history container histContainer
+    buildDivTreeFromExpression expr nextIdx env history container histContainer
 
 stringToEnv :: String -> Eval.Env
 stringToEnv str = case Parser.parseDefs str of
