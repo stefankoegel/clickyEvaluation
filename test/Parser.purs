@@ -14,6 +14,7 @@ import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessag
 
 -- import Control.Monad.Writer (Writer, tell)
 import Control.Monad.State (get)
+import Control.Monad.Eff.Console (log)
 
 import Test.Utils (Test, tell, padLeft)
 import JSHelpers (unsafeUndef)
@@ -108,7 +109,7 @@ test name p input expected = case runParserIndent p input of
     <> padLeft input
   Right (Tuple result _) ->
     if result `equals` expected
-      then pure unit --tell $ "Parse success (" <> name <> ")"
+      then log $ "Parse success (" <> name <> ")"
       else tell' $
         "Parse fail (" <> name <> "):\n"
         <> "Output:\n"
@@ -125,7 +126,7 @@ rejectTest :: forall a . (Show a)
                       -> String
                       -> Test Unit
 rejectTest name parser input = case runParserIndent (parser <* inputIsEmpty) input of
-  Left parserError -> pure unit
+  Left parserError -> log $ "rejectTest passed (" <> name <> ")"
   Right result ->
     tell' $
       "Parser accepted " <> name <> "\n"

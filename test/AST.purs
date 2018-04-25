@@ -7,6 +7,7 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 
 -- import Control.Monad.Writer (Writer, tell)
+import Control.Monad.Eff.Console (log)
 
 import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, toOpTuple, emptyMeta, Meta)
 
@@ -21,7 +22,7 @@ tell' = tell
 test :: forall a. (Show a, Eq a) => String -> a -> a -> Test Unit
 test name input expected = case input == expected of
   false -> tell' $ "AST fail (" <> name <> "): " <> show input <> " should be " <> show expected
-  true  -> pure unit
+  true  -> log $ "Test success (" <> name <> ")"
 
 runTests :: Test Unit
 runTests = do
