@@ -5,7 +5,7 @@ import Data.List (List(Nil, Cons), null, singleton, concatMap, intersect, zipWit
 import Data.List.Lazy (replicate)
 import Data.StrMap (StrMap, delete)
 import Data.StrMap as Map
-import Data.Tuple (Tuple(Tuple))
+import Data.Tuple (Tuple(Tuple), fst, snd)
 import Data.Maybe (Maybe(Nothing, Just), fromMaybe)
 import Data.Foldable (foldl, foldr, foldMap, product)
 import Data.Traversable (traverse)
@@ -20,6 +20,7 @@ import Control.Comonad (extract)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.State (State, runState)
 import Control.Monad.State.Trans (StateT, get, modify, put, runStateT, execStateT)
+import Control.Monad.State.Class (class MonadState)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
 -- import JSHelpers (unsafeUndef)
@@ -90,10 +91,10 @@ type Evaluator = StateT Int (ExceptT EvalError Identity)
 runEvalM :: forall a. Int -> Evaluator a -> Either EvalError (Tuple a Int)
 runEvalM idx = extract <<< runExceptT <<< flip runStateT idx
 
-type Matcher = ExceptT MatchingError Identity
+type Matcher = StateT Int (ExceptT MatchingError Identity)
 
-runMatcherM :: forall a. Matcher a -> Either MatchingError a
-runMatcherM = extract <<< runExceptT
+runMatcherM :: forall a. Int -> Matcher a -> Either MatchingError (Tuple a Int)
+runMatcherM idx = extract <<< runExceptT <<< flip runStateT idx
 
 type Env = StrMap (List (Tuple (List (Binding Meta)) TypeTree))
 
@@ -138,7 +139,7 @@ eval1 env expr = case expr of
 eval :: Int -> Env -> TypeTree -> Tuple TypeTree Int
 eval nextIdx env expr = runState (evalToBinding env expr (Lit AST.emptyMeta (Name "_|_"))) nextIdx
 
-freshMeta :: State Int Meta
+freshMeta :: forall m. (MonadState Int m) => m Meta
 freshMeta = do
   i <- get
   modify (\i -> i + 1)
@@ -525,31 +526,42 @@ checkStrictness bs es | whnf es   = MatchingError bs es
 
 
 matchls' :: Env -> (List (Binding Meta)) -> (List TypeTree) -> Matcher (StrMap TypeTree)
-matchls' env bs es = execStateT (zipWithA (\b e -> match' b (evalToBinding env e b)) bs es) Map.empty
+matchls' env bs es = execStateT (zipWithA m bs es) Map.empty
+ where
+   m :: Binding Meta -> TypeTree -> StateT (StrMap TypeTree) Matcher Unit
+   m b t = do
+     i <- get
+     let bndAndIdx = runState (evalToBinding env t b) i
+         i' = snd bndAndIdx
+         t' = fst bndAndIdx
+     put i'
+     match' b t'
+
 
 match' :: Binding Meta -> TypeTree -> StateT (StrMap TypeTree) Matcher Unit
 match' (Lit _ (Name name)) e                   = modify (Map.insert name e)
-match' (Lit _ ba)          (Atom _ ea)         = case ba == ea of
+match' (Lit meta ba)       (Atom meta' ea)     = case ba == ea of
                                                  true  -> pure unit
-                                                 false -> throwError $ MatchingError (Lit AST.emptyMeta ba) (Atom AST.emptyMeta ea)
-match' (Lit _ b)           e                   = throwError $ checkStrictness (Lit AST.emptyMeta b) e
+                                                 false -> throwError $ MatchingError (Lit meta ba) (Atom meta' ea)
+match' (Lit meta b)        e                   = throwError $ checkStrictness (Lit meta b) e
 
 match' (ConsLit _ b bs)    (Binary _ (Tuple Colon _) e es) = match' b e *> match' bs es
-match' (ConsLit _ b bs)    (List _ (Cons e es))  = match' (ConsLit AST.emptyMeta b bs) (AST.binary Colon e (List AST.emptyMeta es))
-match' (ConsLit _ b bs)    (List _ Nil)          = throwError $ MatchingError (ConsLit AST.emptyMeta b bs) (List AST.emptyMeta Nil)
-match' (ConsLit _ b bs)    e                     = throwError $ checkStrictness (ConsLit AST.emptyMeta b bs) e
+match' (ConsLit meta b bs) (List _ (Cons e es))  = do
+  meta' <- lift freshMeta
+  match' (ConsLit meta b bs) (AST.binary Colon e (List meta' es))
+match' (ConsLit meta b bs)   (List meta' Nil)    = throwError $ MatchingError (ConsLit meta b bs) (List meta' Nil)
+match' (ConsLit meta b bs)   e                   = throwError $ checkStrictness (ConsLit meta b bs) e
 
-match' (ListLit _ (Cons b bs)) (Binary _ (Tuple Colon _) e es) = match' b e *> match' (ListLit AST.emptyMeta bs) es
-match' (ListLit _ bs)      (List _ es)               = case length bs == length es of
+match' (ListLit meta (Cons b bs)) (Binary _ (Tuple Colon _) e es) = match' b e *> match' (ListLit meta bs) es
+match' (ListLit meta bs)      (List meta' es)               = case length bs == length es of
                                                        true  -> void $ zipWithA match' bs es
-                                                       false -> throwError $ MatchingError (ListLit AST.emptyMeta bs) (List AST.emptyMeta es)
-match' (ListLit _ bs)      e                         = throwError $ checkStrictness (ListLit AST.emptyMeta bs) e
+                                                       false -> throwError $ MatchingError (ListLit meta bs) (List meta' es)
+match' (ListLit meta bs)      e                         = throwError $ checkStrictness (ListLit meta bs) e
 
-match' (NTupleLit _ bs)    (NTuple _ es) = case length bs == length es of
+match' (NTupleLit meta bs)    (NTuple meta' es) = case length bs == length es of
                                            true  -> void $ zipWithA match' bs es
-                                           false -> throwError $ MatchingError (NTupleLit AST.emptyMeta bs) (NTuple AST.emptyMeta es)
-match' (NTupleLit _ bs)    e             = throwError $ checkStrictness (NTupleLit AST.emptyMeta bs) e
--- TODO
+                                           false -> throwError $ MatchingError (NTupleLit meta bs) (NTuple meta' es)
+match' (NTupleLit meta bs)    e             = throwError $ checkStrictness (NTupleLit meta bs) e
 match' b@(ConstrLit _ (PrefixDataConstr n a ps)) e@(App _ (Atom _ (Constr n')) ps')
   = case  n == n' && length ps == length ps' of
          true -> void $ zipWithA match' ps ps'
@@ -568,7 +580,6 @@ match' b@(ConstrLit _ _) e = throwError $ checkStrictness b e
 
 
 --TODO: replace with purescript mapM
-
 mapM :: forall a b m. (Monad m) => (a -> m b) -> List a -> m (List b)
 mapM f Nil = pure Nil
 mapM f (Cons x xs) = do
