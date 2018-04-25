@@ -182,7 +182,7 @@ evalToBinding env expr bnd = case bnd of
   (ConstrLit _ (InfixDataConstr n _ _ l r)) ->
     case expr of
       (App meta (PrefixOp meta' (Tuple (InfixConstr n') meta'')) (Cons l' (Cons r' Nil))) ->
-        case n == n' && meta'' == AST.emptyMeta of
+        case n == n' {- && meta'' == AST.emptyMeta -} of
              true -> do
                el <- evalToBinding env l' l
                er <- evalToBinding env r' r
@@ -246,8 +246,8 @@ wrapLambda :: (List (Binding Meta)) -> (List TypeTree) -> TypeTree -> Evaluator 
 wrapLambda binds args body =
   case compare (length binds) (length args) of
     EQ -> pure body
-    GT -> pure $ Lambda AST.emptyMeta (drop (length args) binds) body
-    LT -> pure $ App AST.emptyMeta body (drop (length binds) args)
+    GT -> Lambda <$> freshMeta <*> pure (drop (length args) binds) <*> pure body
+    LT -> App <$> freshMeta <*> pure body <*> pure (drop (length binds) args)
 
 ------------------------------------------------------------------------------------------
 -- Arithmetic Sequences
@@ -262,6 +262,9 @@ data Quat a = Quat a a a a
 
 instance functorQuat :: Functor Quat where
   map f (Quat a b c d) = Quat (f a) (f b) (f c) (f d)
+
+mapMQuat :: forall m a b. (Monad m) => (a -> m b) -> Quat a -> m (Quat b)
+mapMQuat f (Quat a b c d) = Quat <$> f a <*> f b <*> f c <*> f d
 
 intFromStepTo :: Int -> Maybe Int -> Maybe Int -> Quat (Maybe Int)
 intFromStepTo start Nothing Nothing     = Quat (Just start) (clampSucc start) Nothing Nothing
@@ -297,12 +300,12 @@ clampStep istart istep = if istep >= istart
   then if (top - istep)    >= (istep - istart) then Just (istep + (istep - istart)) else Nothing
   else if (bottom - istep) <= (istep - istart) then Just (istep + (istep - istart)) else Nothing
 
-exprFromStepTo :: TypeTree -> Maybe TypeTree -> Maybe TypeTree -> Quat (Maybe TypeTree)
+exprFromStepTo :: TypeTree -> Maybe TypeTree -> Maybe TypeTree -> Evaluator (Quat (Maybe TypeTree))
 exprFromStepTo start step end = case start of
-  Atom _ (AInt i) -> (\x -> (Atom AST.emptyMeta <<< AInt) <$> x) <$> intQuat
-  Atom _ (Bool b) -> (\x -> (Atom AST.emptyMeta <<< Bool) <$> x) <$> (intToABool intQuat)
-  Atom _ (Char c) -> (\x -> (Atom AST.emptyMeta <<< Char <<< String.singleton) <$> x) <$> (intToAChar intQuat)
-  _             -> Quat Nothing Nothing Nothing Nothing
+  Atom _ (AInt _) -> (mapM' (\a -> Atom <$> freshMeta <*> pure (AInt a))) `mapMQuat` intQuat
+  Atom _ (Bool _) -> (mapM' (\a -> Atom <$> freshMeta <*> pure (Bool a))) `mapMQuat` (intToABool intQuat)
+  Atom _ (Char _) -> (mapM' (\a -> Atom <$> freshMeta <*> pure (Char (String.singleton a)))) `mapMQuat` (intToAChar intQuat)
+  _               -> pure $ Quat Nothing Nothing Nothing Nothing
     where
       intQuat = intFromStepTo (unsafeTypeTreeToInt start) (unsafeTypeTreeToInt <$> step) (unsafeTypeTreeToInt <$> end)
 
@@ -349,36 +352,50 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
     isValid _ = false
 
     evalArithmSeq' :: Evaluator TypeTree
-    evalArithmSeq' = case (exprFromStepTo start step end) of
-      Quat Nothing _ _ _          -> List <$> freshMeta <*> pure Nil
-      Quat (Just a) Nothing _ _   -> do
-        m <- freshMeta
-        pure $ AST.binary Colon a (List m Nil)
-      Quat (Just a) (Just na) b c -> do
-        m <- freshMeta
-        pure $ AST.binary Colon a (ArithmSeq m na b c)
+    evalArithmSeq' = do
+      quat <- exprFromStepTo start step end
+      case quat of
+        Quat Nothing _ _ _          -> List <$> freshMeta <*> pure Nil
+        Quat (Just a) Nothing _ _   -> do
+          m <- freshMeta
+          pure $ AST.binary Colon a (List m Nil)
+        Quat (Just a) (Just na) b c -> do
+          m <- freshMeta
+          pure $ AST.binary Colon a (ArithmSeq m na b c)
 
 ------------------------------------------------------------------------------------------
 -- List Comprehensions
 ------------------------------------------------------------------------------------------
 
 evalListComp :: Env -> TypeTree -> List TypeQual -> Evaluator TypeTree
-evalListComp _   expr Nil         = pure $ List AST.emptyMeta $ singleton expr
+evalListComp _   expr Nil         = List <$> freshMeta <*> pure (singleton expr)
 evalListComp env expr (Cons q qs) = case q of
-  Guard _ (Atom _ (Bool false)) -> pure $ List AST.emptyMeta Nil
-  Guard _ (Atom _ (Bool true))  -> if null qs then pure (List AST.emptyMeta (singleton expr)) else pure (ListComp AST.emptyMeta expr qs)
-  Gen _ _ (List _ Nil)          -> pure $ List AST.emptyMeta Nil
+  Guard _ (Atom _ (Bool false)) -> List <$> freshMeta <*> pure Nil
+  Guard _ (Atom _ (Bool true))
+    | null qs   -> List <$> freshMeta <*> pure (singleton expr)
+    | otherwise -> ListComp <$> freshMeta <*> pure expr <*> pure qs
+  Gen _ _ (List _ Nil)          -> List <$> freshMeta <*> pure Nil
   -- Gen _ b (List (Cons e Nil)) -> evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
   Gen _ b (List _ (Cons e es))  -> do
-    listcomp1 <- evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
-    listcomp2 <- pure $ ListComp AST.emptyMeta expr (Cons (Gen AST.emptyMeta b (List AST.emptyMeta es)) qs)
+    m <- freshMeta
+    listcomp1 <- evalListComp env expr (Cons (Let m b e) qs)
+    m1 <- freshMeta
+    m2 <- freshMeta
+    m3 <- freshMeta
+    listcomp2 <- pure $ ListComp m1 expr (Cons (Gen m2 b (List m3 es)) qs)
     case listcomp1 of
-      List _ (Cons x Nil) -> pure $ Binary AST.emptyMeta (Tuple Colon AST.emptyMeta) x listcomp2
+      List _ (Cons x Nil) -> do
+        m1 <- freshMeta
+        m2 <- freshMeta
+        pure $ Binary m1 (Tuple Colon m2) x listcomp2
       _ -> pure $ AST.binary Append listcomp1 listcomp2
   -- Gen _ b (Binary Colon e (List Nil)) -> evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
   Gen _ b (Binary _ (Tuple Colon _) e es)  -> do
-    listcomp1 <- evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
-    listcomp2 <- pure $ ListComp AST.emptyMeta expr (Cons (Gen AST.emptyMeta b es) qs)
+    m1 <- freshMeta
+    listcomp1 <- evalListComp env expr (Cons (Let m1 b e) qs)
+    m2 <- freshMeta
+    m3 <- freshMeta
+    listcomp2 <- pure $ ListComp m2 expr (Cons (Gen m3 b es) qs)
     case listcomp1 of
       List _ (Cons x Nil) -> pure $ AST.binary Colon x listcomp2
       _ -> pure $ AST.binary Append listcomp1 listcomp2
@@ -399,8 +416,8 @@ evalListComp env expr (Cons q qs) = case q of
         Tuple qs' r' <- runStateT (replaceQualifiers qs) r
         expr'        <- replace' r' expr
         case qs' of 
-            Nil -> pure $ List AST.emptyMeta $ singleton expr'
-            _   -> pure $ ListComp AST.emptyMeta expr' qs'
+            Nil -> List <$> freshMeta <*> pure (singleton expr')
+            _   -> ListComp <$> freshMeta <*> pure expr' <*> pure qs'
       Left l  -> throwError $ BindingError $ MatchingError b e
   _ -> throwError $ CannotEvaluate (ListComp AST.emptyMeta expr (Cons q qs))
 
@@ -410,12 +427,12 @@ replaceQualifiers = traverse replaceQual
   where
     replaceQual :: TypeQual -> StateT (StrMap TypeTree) Evaluator TypeQual
     replaceQual qual = case qual of
-      Gen _ b e -> scope b e >>= \e' -> pure $ Gen AST.emptyMeta b e'
-      Let _ b e -> scope b e >>= \e' -> pure $ Let AST.emptyMeta b e'
+      Gen _ b e -> scope b e >>= \e' -> Gen <$> lift freshMeta <*> pure b <*> pure e'
+      Let _ b e -> scope b e >>= \e' -> Let <$> lift freshMeta <*> pure b <*> pure e'
       Guard _ e -> do
         sub <- get
         e'  <- lift $ replace' sub e
-        pure $ Guard AST.emptyMeta e'
+        Guard <$> lift freshMeta <*> pure e'
 
 scope :: Binding Meta -> TypeTree -> StateT (StrMap TypeTree) Evaluator TypeTree
 scope b e = do
@@ -443,7 +460,7 @@ evalLetTypeTree (Cons (Tuple b e) rest) expr = do
         _   -> do
           Tuple rest' r' <- runStateT (replaceBindings rest) r
           expr' <- replace' r' expr
-          pure $ LetExpr AST.emptyMeta rest' expr'
+          LetExpr <$> freshMeta <*> pure rest' <*> pure expr'
 
 replaceBindings :: Bindings -> StateT (StrMap TypeTree) Evaluator Bindings
 replaceBindings = traverse $ \(Tuple bin expr) -> do
@@ -639,10 +656,10 @@ replace' subs = go
       Tuple quals' subs' <- runStateT (replaceQualifiers quals) subs
       expr'              <- replace' subs' expr
       pure $ ListComp m expr' quals'
-    (LetExpr _ binds expr)  -> do
+    (LetExpr m binds expr)  -> do
       Tuple binds' subs' <- runStateT (replaceBindings binds) subs
       expr'              <- replace' subs' expr
-      pure $ LetExpr AST.emptyMeta binds' expr'
+      pure $ LetExpr m binds' expr'
     e                     -> pure e
 
 avoidCapture :: StrMap TypeTree -> (List (Binding Meta)) -> Evaluator Unit
