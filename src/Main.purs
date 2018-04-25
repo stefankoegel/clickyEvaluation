@@ -14,7 +14,7 @@ import Data.Maybe (Maybe(..))
 import Data.StrMap (empty)
 import Data.Array (cons)
 import Data.Traversable (for)
-import Data.Tuple (Tuple (..))
+import Data.Tuple (Tuple (..), fst, snd)
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
@@ -64,17 +64,17 @@ parseExpr input = case Parser.parseExpr input of
   Left error -> do
     showError "Parser" (show error)
     pure Nothing
-  Right (Tuple expr nextIdx)-> pure $ Just (Tuple expr idx)
+  Right (Tuple expr nextIdx) -> pure $ Just (Tuple expr nextIdx)
 
 eval1 :: Int -> Eval.Env -> AST.TypeTree -> Either String (Tuple AST.TypeTree Int)
-eval1 nextIdx env expr = case Eval.runEvalM (Eval.eval1 env expr) nextIdx of
+eval1 nextIdx env expr = case Eval.runEvalM nextIdx (Eval.eval1 env expr) of
   Left err             -> Left $ show err
   Right exprAndNextIdx -> Right exprAndNextIdx
 
 eval1' :: Int -> Eval.Env -> AST.TypeTree -> Tuple AST.TypeTree Int
-eval1' nextIdx env expr = case eval1 env expr of
-  Left _      -> Tuple expr nextIdx
-  Right expr' -> exprAndNextIdx
+eval1' nextIdx env expr = case eval1 nextIdx env expr of
+  Left _               -> Tuple expr nextIdx
+  Right exprAndNextIdx -> exprAndNextIdx
 
 makeCallback :: Int
              -> Eval.Env
@@ -88,7 +88,7 @@ makeCallback nextIdx env history container histContainer expr hole event jq = do
       evaluated = evalFunc env expr -- :: Tuple TypeTree Index
   case getType event of
     "click"     -> if fst evaluated /= expr
-                   then showExprIn (hole (evalFunc env expr)) (snd evaluated) env (cons (hole expr) history) container histContainer
+                   then showExprIn (hole (fst evaluated)) (snd evaluated) env (cons (hole expr) history) container histContainer
                    else pure unit
     "mouseover" -> do
                      log $ show expr
