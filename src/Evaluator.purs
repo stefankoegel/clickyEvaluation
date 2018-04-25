@@ -25,7 +25,7 @@ import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
 -- import JSHelpers (unsafeUndef)
 
-import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, MType, DataConstr (..), Meta (..))
+import AST (TypeTree, Tree(..), Atom(..), Binding(..), Definition(Def), Op(..), QualTree(..), TypeQual, MType, DataConstr (..), Meta (..), eq')
 import AST as AST
 
 --------------------------------------------------------------------------------
@@ -205,7 +205,7 @@ recurse env expr bnd = do
        Right (Tuple e'' idx') -> do
          put idx'
          pure e''
-  if expr == eval1d
+  if expr `eq'` eval1d
      then pure expr
      else evalToBinding env eval1d bnd
  where
@@ -350,9 +350,13 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
 
     evalArithmSeq' :: Evaluator TypeTree
     evalArithmSeq' = case (exprFromStepTo start step end) of
-      Quat Nothing _ _ _          -> pure $ List AST.emptyMeta Nil
-      Quat (Just a) Nothing _ _   -> pure $ AST.binary Colon a (List AST.emptyMeta Nil)
-      Quat (Just a) (Just na) b c -> pure $ AST.binary Colon a (ArithmSeq AST.emptyMeta na b c)
+      Quat Nothing _ _ _          -> List <$> freshMeta <*> pure Nil
+      Quat (Just a) Nothing _ _   -> do
+        m <- freshMeta
+        pure $ AST.binary Colon a (List m Nil)
+      Quat (Just a) (Just na) b c -> do
+        m <- freshMeta
+        pure $ AST.binary Colon a (ArithmSeq m na b c)
 
 ------------------------------------------------------------------------------------------
 -- List Comprehensions
