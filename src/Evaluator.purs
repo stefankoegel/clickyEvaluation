@@ -123,13 +123,13 @@ eval1 env expr = case expr of
   (IfExpr _ (Atom _ (Bool false)) _ ee)  -> pure ee
   (ArithmSeq _ start step end)         -> evalArithmSeq start step end
   -- (List _ (Cons e es))                      -> pure $ Binary Nothing Colon e (List Nothing es)
-  (App _ (Binary _ (Tuple Composition _) f g) (Cons e Nil)) -> pure $ App AST.emptyMeta f (singleton $ App AST.emptyMeta g (Cons e Nil))
+  (App _ (Binary _ (Tuple Composition _) f g) (Cons e Nil)) -> App <$> freshMeta <*> pure f <*> (singleton <$> (App <$> freshMeta <*> pure g <*> pure (Cons e Nil)))
   (App _ (Lambda _ binds body) args)     -> tryAll env (singleton $ Tuple binds body) args "lambda" Nil
-  (App _ (SectL _ e1 op) (Cons e2 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary AST.emptyMeta op e1 e2)
-  (App _ (SectR _ op e2) (Cons e1 Nil))           -> {-binary env op e1 e2 <|>-} (pure $ Binary AST.emptyMeta op e1 e2)
-  (App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))         -> {-binary env op e1 e2 <|>-} (pure $ Binary AST.emptyMeta op e1 e2)
+  (App _ (SectL _ e1 op) (Cons e2 Nil))           -> Binary <$> freshMeta <*> pure op <*> pure e1 <*> pure e2
+  (App _ (SectR _ op e2) (Cons e1 Nil))           -> Binary <$> freshMeta <*> pure op <*> pure e1 <*> pure e2
+  (App _ (PrefixOp _ op) (Cons e1 (Cons e2 Nil)))         -> Binary <$> freshMeta <*> pure op <*> pure e1 <*> pure e2
   (App _ (Atom _ (Name name)) args)      -> apply env name args
-  (App _ (App _ func es) es')            -> pure $ App AST.emptyMeta func (es <> es')
+  (App _ (App _ func es) es')            -> App <$> freshMeta <*> pure func <*> pure (es <> es')
 --  (App _ (Atom _ (Constr _)) _)      -> pure expr
   (ListComp _ e qs)                    -> evalListComp env e qs
   (LetExpr _ binds exp)                -> evalLetTypeTree binds exp
@@ -147,12 +147,12 @@ freshMeta = do
 
 -- | Evaluates an expression until it matches a given binding in a given environment.
 evalToBinding :: Env -> TypeTree -> Binding Meta -> State Int TypeTree
-evalToBinding env expr bind = case bind of
-  (Lit _ (Name "_|_")) -> recurse env expr bind
+evalToBinding env expr bnd = case bnd of
+  (Lit _ (Name "_|_")) -> recurse env expr bnd
   (Lit _ (Name _))     -> pure expr
   (Lit _ _)            -> case expr of
     (Atom _ _) -> pure expr
-    _          -> recurse env expr bind
+    _          -> recurse env expr bnd
 
   (ConsLit _ b bs)     -> case expr of
     (Binary meta (Tuple Colon meta') e es) -> Binary meta (Tuple Colon meta') <$> evalToBinding env e b <*> evalToBinding env es bs
@@ -160,25 +160,25 @@ evalToBinding env expr bind = case bind of
       meta   <- freshMeta
       meta'  <- freshMeta
       meta'' <- freshMeta
-      evalToBinding env (Binary meta (Tuple Colon meta') e (List meta'' es)) bind
-    _                     -> recurse env expr bind
+      evalToBinding env (Binary meta (Tuple Colon meta') e (List meta'' es)) bnd
+    _                     -> recurse env expr bnd
 
   (ListLit _ bs) -> case expr of
     (List meta es)
       | (length es == length bs) -> List meta <$> zipWithM (evalToBinding env) es bs -- TODO Define zipWithM
       | otherwise                -> pure expr
-    _           -> recurse env expr bind
+    _           -> recurse env expr bnd
 
   (NTupleLit _ bs) -> case expr of
     (NTuple meta es) -> NTuple meta <$> zipWithM (evalToBinding env) es bs
-    _                -> recurse env expr bind
+    _                -> recurse env expr bnd
   (ConstrLit _ (PrefixDataConstr n _ ps)) ->
     case expr of
       (App meta (Atom meta' (Constr n')) ps') ->
         case n == n' && length ps == length ps' of
           true -> App meta (Atom meta' (Constr n')) <$> zipWithM (evalToBinding env) ps' ps
           false -> pure expr
-      _ -> recurse env expr bind
+      _ -> recurse env expr bnd
   (ConstrLit _ (InfixDataConstr n _ _ l r)) ->
     case expr of
       (App meta (PrefixOp meta' (Tuple (InfixConstr n') meta'')) (Cons l' (Cons r' Nil))) ->
@@ -192,7 +192,7 @@ evalToBinding env expr bind = case bind of
         case n == n' of
              true -> Binary meta (Tuple (InfixConstr n') meta') <$> evalToBinding env l' l <*> evalToBinding env r' r
              false -> pure expr
-      _ -> recurse env expr bind
+      _ -> recurse env expr bnd
 
 
 
@@ -378,16 +378,26 @@ evalListComp env expr (Cons q qs) = case q of
     case listcomp1 of
       List _ (Cons x Nil) -> pure $ AST.binary Colon x listcomp2
       _ -> pure $ AST.binary Append listcomp1 listcomp2
-  Gen _ b e -> pure $ ListComp AST.emptyMeta expr
-    (Cons (Gen AST.emptyMeta b (evalToBinding env e (ConsLit AST.emptyMeta b (Lit AST.emptyMeta (Name "_"))))) qs)
-  Let _ b e -> case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
-    Right r -> do
-      Tuple qs' r' <- runStateT (replaceQualifiers qs) r
-      expr'        <- replace' r' expr
-      case qs' of 
-          Nil -> pure $ List AST.emptyMeta $ singleton expr'
-          _   -> pure $ ListComp AST.emptyMeta expr' qs'
-    Left l  -> throwError $ BindingError $ MatchingError b e
+  Gen _ b e -> do
+    m1 <- freshMeta
+    m2 <- freshMeta
+    m3 <- freshMeta
+    m4 <- freshMeta
+    i <- get
+    let e' = runState (evalToBinding env e (ConsLit m3 b (Lit m4 (Name "_")))) i
+    put (snd e')
+    pure $ ListComp m1 expr (Cons (Gen m2 b (fst e')) qs)
+  Let _ b e -> do
+    i <- get
+    case runMatcherM i $ matchls' Map.empty (singleton b) (singleton e) of
+      Right (Tuple r i') -> do
+        put i'
+        Tuple qs' r' <- runStateT (replaceQualifiers qs) r
+        expr'        <- replace' r' expr
+        case qs' of 
+            Nil -> pure $ List AST.emptyMeta $ singleton expr'
+            _   -> pure $ ListComp AST.emptyMeta expr' qs'
+      Left l  -> throwError $ BindingError $ MatchingError b e
   _ -> throwError $ CannotEvaluate (ListComp AST.emptyMeta expr (Cons q qs))
 
 -- replaces expressions in List-Comprehension-Qualifiers and considers overlapping bindings
@@ -418,15 +428,18 @@ type Bindings = List (Tuple (Binding Meta) TypeTree)
 
 evalLetTypeTree :: Bindings -> TypeTree -> Evaluator TypeTree
 evalLetTypeTree Nil e = pure e
-evalLetTypeTree (Cons (Tuple b e) rest) expr = case runMatcherM $ matchls' Map.empty (singleton b) (singleton e) of
-  Left l  -> throwError $ BindingError $ MatchingError b e
-  Right r -> do
-    case rest of
-      Nil -> replace' r expr
-      _   -> do
-        Tuple rest' r' <- runStateT (replaceBindings rest) r
-        expr' <- replace' r' expr
-        pure $ LetExpr AST.emptyMeta rest' expr'
+evalLetTypeTree (Cons (Tuple b e) rest) expr = do
+  i <- get
+  case runMatcherM i $ matchls' Map.empty (singleton b) (singleton e) of
+    Left l             -> throwError $ BindingError $ MatchingError b e
+    Right (Tuple r i') -> do
+      put i'
+      case rest of
+        Nil -> replace' r expr
+        _   -> do
+          Tuple rest' r' <- runStateT (replaceBindings rest) r
+          expr' <- replace' r' expr
+          pure $ LetExpr AST.emptyMeta rest' expr'
 
 replaceBindings :: Bindings -> StateT (StrMap TypeTree) Evaluator Bindings
 replaceBindings = traverse $ \(Tuple bin expr) -> do
@@ -442,10 +455,10 @@ binary env (Tuple operator meta) = case operator of
   Add    -> aint Add (+)
   Sub    -> aint Sub (-)
   Colon  -> \e es -> case es of
-    (List _ ls) -> pure $ List AST.emptyMeta $ e:ls
-    _         -> throwError $ BinaryOpError Colon e es
+    (List _ ls) -> List <$> freshMeta <*> pure (e:ls)
+    _           -> throwError $ BinaryOpError Colon e es
   Append -> \es1 es2 -> case (Tuple es1 es2) of
-    (Tuple (List _ ls1) (List _ ls2)) -> pure $ List AST.emptyMeta $ ls1 <> ls2
+    (Tuple (List _ ls1) (List _ ls2)) -> List <$> freshMeta <*> pure (ls1 <> ls2)
     _                                 -> throwError $ BinaryOpError Append es1 es2
   Equ    -> ord Equ (==) (==) (==)
   Neq    -> ord Neq (/=) (/=) (/=)
@@ -454,33 +467,33 @@ binary env (Tuple operator meta) = case operator of
   Geq    -> ord Geq (>=) (>=) (>=)
   Gt     -> ord Gt  (>)  (>)  (>)
   And    -> \e1 e2 -> case (Tuple e1 e2) of
-    (Tuple (Atom _ (Bool false)) _                  )   -> pure $ Atom AST.emptyMeta $ Bool false
-    (Tuple _                     (Atom _ (Bool false))) -> pure $ Atom AST.emptyMeta $ Bool false
-    (Tuple (Atom _ (Bool true))  (Atom _ (Bool true)))  -> pure $ Atom AST.emptyMeta $ Bool true
+    (Tuple (Atom m (Bool false)) _                  )   -> Atom <$> freshMeta <*> pure (Bool false)
+    (Tuple _                     (Atom m (Bool false))) -> Atom <$> freshMeta <*> pure (Bool false)
+    (Tuple (Atom _ (Bool true))  (Atom _ (Bool true)))  -> Atom <$> freshMeta <*> pure (Bool true)
     (Tuple _                   _                     )  -> throwError $ BinaryOpError And e1 e2
   Or     -> \e1 e2 -> case (Tuple e1 e2) of
-    (Tuple (Atom _ (Bool true))  _                   )  -> pure $ Atom AST.emptyMeta $ Bool true
-    (Tuple _                     (Atom _ (Bool true)))  -> pure $ Atom AST.emptyMeta $ Bool true
-    (Tuple (Atom _ (Bool false)) (Atom _ (Bool false))) -> pure $ Atom AST.emptyMeta $ Bool false
+    (Tuple (Atom _ (Bool true))  _                   )  -> Atom <$> freshMeta <*> pure (Bool true)
+    (Tuple _                     (Atom _ (Bool true)))  -> Atom <$> freshMeta <*> pure (Bool true)
+    (Tuple (Atom _ (Bool false)) (Atom _ (Bool false))) -> Atom <$> freshMeta <*> pure (Bool false)
     (Tuple _                     _                   )  -> throwError $ BinaryOpError And e1 e2
-  Dollar -> (\f e -> pure $ App AST.emptyMeta f (singleton e))
+  Dollar -> (\f e -> App <$> freshMeta <*> pure f <*> pure (singleton e))
   Composition -> \e1 e2 -> throwError $ BinaryOpError And e1 e2
   InfixFunc name -> \e1 e2 -> apply env name (e1 : e2 : Nil)
-  InfixConstr name -> \e1 e2 -> pure $ Binary AST.emptyMeta (Tuple operator meta) e1 e2
+  InfixConstr name -> \e1 e2 -> Binary <$> freshMeta <*> pure (Tuple operator meta) <*> pure e1 <*> pure e2
   where
     aint :: Op -> (Int -> Int -> Int) -> TypeTree -> TypeTree -> Evaluator TypeTree
-    aint _   f (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom AST.emptyMeta $ AInt $ f i j
+    aint _   f (Atom _ (AInt i)) (Atom _ (AInt j)) = Atom <$> freshMeta <*> pure (AInt $ f i j)
     aint op  _ e1                e2                = throwError $ BinaryOpError op e1 e2
 
     ord :: Op -> (Int -> Int -> Boolean) -> (String -> String -> Boolean) -> (Boolean -> Boolean -> Boolean)-> TypeTree -> TypeTree -> Evaluator TypeTree
-    ord _  fi _  _  (Atom _ (AInt i))  (Atom _ (AInt j))  = pure $ Atom AST.emptyMeta $ Bool $ fi i j
-    ord _  _  fs _  (Atom _ (Char s1)) (Atom _ (Char s2)) = pure $ Atom AST.emptyMeta $ Bool $ fs s1 s2
-    ord _  _  _  fb (Atom _ (Bool b1)) (Atom _ (Bool b2)) = pure $ Atom AST.emptyMeta $ Bool $ fb b1 b2
+    ord _  fi _  _  (Atom _ (AInt i))  (Atom _ (AInt j))  = Atom <$> freshMeta <*> pure (Bool $ fi i j)
+    ord _  _  fs _  (Atom _ (Char s1)) (Atom _ (Char s2)) = Atom <$> freshMeta <*> pure (Bool $ fs s1 s2)
+    ord _  _  _  fb (Atom _ (Bool b1)) (Atom _ (Bool b2)) = Atom <$> freshMeta <*> pure (Bool $ fb b1 b2)
     ord op _  _  _  e1               e2               = throwError $ BinaryOpError op e1 e2
 
 
 unary :: Env -> Tuple Op Meta -> TypeTree -> Evaluator TypeTree
-unary env (Tuple Sub _) (Atom _ (AInt i)) = pure $ Atom AST.emptyMeta $ AInt (-i)
+unary env (Tuple Sub _) (Atom _ (AInt i)) = Atom <$> freshMeta <*> pure (AInt (-i))
 unary env (Tuple op _) e = throwError $ UnaryOpError op e
 
 apply :: Env -> String -> (List TypeTree) -> Evaluator TypeTree
@@ -493,23 +506,28 @@ apply env name args = case Map.lookup name env of
 -- built-in div
 division :: TypeTree -> TypeTree -> Evaluator TypeTree 
 division (Atom _ (AInt i)) (Atom _ (AInt 0)) = throwError DivByZero
-division (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom AST.emptyMeta $ AInt $ div i j
+division (Atom _ (AInt i)) (Atom _ (AInt j)) = Atom <$> freshMeta <*> pure (AInt $ div i j)
 division e1 e2 = throwError $ BinaryOpError (InfixFunc "div") e1 e2
 
 -- built-in mod
 modulo :: TypeTree -> TypeTree -> Evaluator TypeTree  
 modulo (Atom _ (AInt i)) (Atom _ (AInt 0)) = throwError DivByZero
-modulo (Atom _ (AInt i)) (Atom _ (AInt j)) = pure $ Atom AST.emptyMeta $ AInt $ mod i j
+modulo (Atom _ (AInt i)) (Atom _ (AInt j)) = Atom <$> freshMeta <*> pure (AInt $ mod i j)
 modulo e1 e2 = throwError $ BinaryOpError (InfixFunc "mod") e1 e2
 
 
 tryAll :: Env -> (List (Tuple (List (Binding Meta)) TypeTree)) -> (List TypeTree) -> String -> (List MatchingError) -> Evaluator TypeTree
 tryAll _   Nil                        _    name errs = throwError $ NoMatchingFunction name errs
 tryAll env (Cons (Tuple binds body) cases) args name errs | (length args) < (length binds) = tryAll env cases args name (errs <> (singleton $ TooFewArguments binds args))
-tryAll env (Cons (Tuple binds body) cases) args name errs = case runMatcherM $ matchls' env binds args of
-  Right replMap                 -> replace' replMap body >>= wrapLambda binds args
-  Left se@(StrictnessError _ _) -> throwError $ NoMatchingFunction name (errs <> singleton se)
-  Left err                      -> tryAll env cases args name (errs <> singleton err)
+tryAll env (Cons (Tuple binds body) cases) args name errs = do
+  idx <- get
+  case runMatcherM idx $ matchls' env binds args of
+    Right (Tuple replMap idx')    -> do
+      put idx'
+      body' <- replace' replMap body
+      wrapLambda binds args body'
+    Left se@(StrictnessError _ _) -> throwError $ NoMatchingFunction name (errs <> singleton se)
+    Left err                      -> tryAll env cases args name (errs <> singleton err)
 
 whnf :: TypeTree -> Boolean
 whnf (Atom _ (Name _)) = false
@@ -530,11 +548,11 @@ matchls' env bs es = execStateT (zipWithA m bs es) Map.empty
  where
    m :: Binding Meta -> TypeTree -> StateT (StrMap TypeTree) Matcher Unit
    m b t = do
-     i <- get
+     i <- lift get
      let bndAndIdx = runState (evalToBinding env t b) i
          i' = snd bndAndIdx
          t' = fst bndAndIdx
-     put i'
+     lift $ put i'
      match' b t'
 
 
@@ -601,22 +619,22 @@ replace' subs = go
   go tt = case tt of
     a@(Atom _ (Name name)) -> case Map.lookup name subs of
       Just subTypeTree -> pure subTypeTree
-      Nothing      -> pure a
-    (List _ exprs)         -> List AST.emptyMeta <$> (traverse go exprs)
-    (NTuple _ exprs)       -> NTuple AST.emptyMeta <$> (traverse go exprs)
-    (Binary _ op e1 e2)    -> Binary AST.emptyMeta <$> pure op <*> go e1 <*> go e2
-    (Unary _ op e)         -> Unary AST.emptyMeta <$> pure op <*> go e
-    (SectL _ e op)         -> SectL AST.emptyMeta <$> go e <*> pure op
-    (SectR _ op e)         -> SectR AST.emptyMeta <$> pure op <*> go e
-    (IfExpr _ ce te ee)    -> IfExpr AST.emptyMeta <$> go ce <*> go te <*> go ee
-    (ArithmSeq _ ce te ee) -> ArithmSeq AST.emptyMeta <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
-    (Lambda _ binds body)  -> (avoidCapture subs binds)
-      *> (Lambda AST.emptyMeta <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
-    (App _ func exprs)     -> App AST.emptyMeta <$> go func <*> traverse go exprs
-    (ListComp _ expr quals) -> do
+      Nothing          -> pure a
+    (List m exprs)         -> List m <$> (traverse go exprs)
+    (NTuple m exprs)       -> NTuple m <$> (traverse go exprs)
+    (Binary m op e1 e2)    -> Binary m <$> pure op <*> go e1 <*> go e2
+    (Unary m op e)         -> Unary m <$> pure op <*> go e
+    (SectL m e op)         -> SectL m <$> go e <*> pure op
+    (SectR m op e)         -> SectR m <$> pure op <*> go e
+    (IfExpr m ce te ee)    -> IfExpr m <$> go ce <*> go te <*> go ee
+    (ArithmSeq m ce te ee) -> ArithmSeq m <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
+    (Lambda m binds body)  -> (avoidCapture subs binds)
+      *> (Lambda m <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
+    (App m func exprs)     -> App m <$> go func <*> traverse go exprs
+    (ListComp m expr quals) -> do
       Tuple quals' subs' <- runStateT (replaceQualifiers quals) subs
       expr'              <- replace' subs' expr
-      pure $ ListComp AST.emptyMeta expr' quals'
+      pure $ ListComp m expr' quals'
     (LetExpr _ binds expr)  -> do
       Tuple binds' subs' <- runStateT (replaceBindings binds) subs
       expr'              <- replace' subs' expr
