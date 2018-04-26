@@ -205,7 +205,7 @@ recurse env expr bnd = do
        Right (Tuple e'' idx') -> do
          put idx'
          pure e''
-  if expr `eq'` eval1d
+  if expr `eq'` eval1d  -- TODO this should work with (==) FIX NEEDED
      then pure expr
      else evalToBinding env eval1d bnd
  where
