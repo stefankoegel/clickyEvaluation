@@ -358,10 +358,20 @@ evalArithmSeq start step end = case foldr (&&) true (isValid <$> [Just start, st
         Quat Nothing _ _ _          -> List <$> freshMeta <*> pure Nil
         Quat (Just a) Nothing _ _   -> do
           m <- freshMeta
-          pure $ AST.binary Colon a (List m Nil)
+          AST.binary
+            <$> freshMeta
+            <*> freshMeta
+            <*> pure Colon
+            <*> pure a
+            <*> pure (List m Nil)
         Quat (Just a) (Just na) b c -> do
           m <- freshMeta
-          pure $ AST.binary Colon a (ArithmSeq m na b c)
+          AST.binary
+            <$> freshMeta
+            <*> freshMeta
+            <*> pure Colon
+            <*> pure a
+            <*> pure (ArithmSeq m na b c)
 
 ------------------------------------------------------------------------------------------
 -- List Comprehensions
@@ -388,7 +398,12 @@ evalListComp env expr (Cons q qs) = case q of
         m1 <- freshMeta
         m2 <- freshMeta
         pure $ Binary m1 (Tuple Colon m2) x listcomp2
-      _ -> pure $ AST.binary Append listcomp1 listcomp2
+      _ -> AST.binary
+        <$> freshMeta
+        <*> freshMeta
+        <*> pure Append
+        <*> pure listcomp1
+        <*> pure listcomp2
   -- Gen _ b (Binary Colon e (List Nil)) -> evalListComp env expr (Cons (Let AST.emptyMeta b e) qs)
   Gen _ b (Binary _ (Tuple Colon _) e es)  -> do
     m1 <- freshMeta
@@ -397,8 +412,18 @@ evalListComp env expr (Cons q qs) = case q of
     m3 <- freshMeta
     listcomp2 <- pure $ ListComp m2 expr (Cons (Gen m3 b es) qs)
     case listcomp1 of
-      List _ (Cons x Nil) -> pure $ AST.binary Colon x listcomp2
-      _ -> pure $ AST.binary Append listcomp1 listcomp2
+      List _ (Cons x Nil) -> AST.binary
+        <$> freshMeta
+        <*> freshMeta
+        <*> pure Colon
+        <*> pure x
+        <*> pure listcomp2
+      _ -> AST.binary
+        <$> freshMeta
+        <*> freshMeta
+        <*> pure Append
+        <*> pure listcomp1
+        <*> pure listcomp2
   Gen _ b e -> do
     m1 <- freshMeta
     m2 <- freshMeta
@@ -587,7 +612,9 @@ match' (Lit meta b)        e                   = throwError $ checkStrictness (L
 match' (ConsLit _ b bs)    (Binary _ (Tuple Colon _) e es) = match' b e *> match' bs es
 match' (ConsLit meta b bs) (List _ (Cons e es))  = do
   meta' <- lift freshMeta
-  match' (ConsLit meta b bs) (AST.binary Colon e (List meta' es))
+  meta'' <- lift freshMeta
+  meta''' <- lift freshMeta
+  match' (ConsLit meta b bs) (AST.binary meta'' meta''' Colon e (List meta' es))
 match' (ConsLit meta b bs)   (List meta' Nil)    = throwError $ MatchingError (ConsLit meta b bs) (List meta' Nil)
 match' (ConsLit meta b bs)   e                   = throwError $ checkStrictness (ConsLit meta b bs) e
 

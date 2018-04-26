@@ -75,6 +75,12 @@ fresh = do
 freshMeta :: forall m mt s. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => IndexingParserT s mt m Meta
 freshMeta = AST.idxMeta <$> lift (lift fresh)
 
+curr :: forall m mt s. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => IndexingParserT s mt m Int
+curr = lift (lift get)
+
+putNew :: forall m mt s. (Monad m, MonadTrans mt, Monad (mt (IndexingT m)))
+       => Int -> IndexingParserT s mt m Unit
+putNew i = lift (lift (put i))
 ---------------------------------------------------------
 -- Helpful combinators
 ---------------------------------------------------------
@@ -577,7 +583,12 @@ definition = do
   pure $ Def defName binds body
 
 typeDefinition' :: IndentParser String (List Definition)
-typeDefinition' = compileADTDef <$> typeDefinition
+typeDefinition' = do
+  idx <- curr
+  td <- typeDefinition
+  let defsAndIdx = runState (compileADTDef td) idx
+  putNew (snd defsAndIdx)
+  pure (fst defsAndIdx)
 
 -- TODO: Infix function definition
 

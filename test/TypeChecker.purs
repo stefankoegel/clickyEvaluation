@@ -33,7 +33,7 @@ metaType :: Type -> Meta
 metaType t = Meta $ emptyMeta' {mtype = Just t}
 
 metaIndex :: Int -> Meta
-metaIndex i = Meta $ emptyMeta' {mindex = Just i}
+metaIndex i = Meta $ emptyMeta' {index = i}
 
 -- | Construct a list of type [typCon] given the name of the type constants.
 typConList :: String -> Type

@@ -1,7 +1,7 @@
 module AST where
 
 import Prelude
-import Control.Monad.State (State, evalState, runState, get, put)
+import Control.Monad.State (State, evalState, runState, get, modify, put)
 import Data.Bifunctor (bimap, rmap)
 import Data.Foldable (intercalate, foldr, and)
 import Data.List (List(..), fold, (:), zipWith)
@@ -9,6 +9,21 @@ import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
+
+--------------------------------------------------------------------------------
+-- Utilities -------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+mapM :: forall a b m. (Monad m) => (a -> m b) -> List a -> m (List b)
+mapM f Nil = pure Nil
+mapM f (Cons x xs) = do
+  y  <- f x
+  ys <- mapM f xs
+  pure $ Cons y ys
+  
+--------------------------------------------------------------------------------
+
+
 
 
 -- | Operators
@@ -158,6 +173,8 @@ eq'Def (Def s bs e) (Def s' bs' e') = s == s' && and (zipWith eq'Binding bs bs')
 toOpTuple :: Op -> Tuple Op Meta
 toOpTuple op = Tuple op emptyMeta
 
+
+{- 
 exprToTypeTree :: Expr -> TypeTree
 exprToTypeTree (Atom _ atom) = Atom emptyMeta atom
 exprToTypeTree (List _ exprs) = List emptyMeta (map exprToTypeTree exprs)
@@ -191,9 +208,10 @@ exprToTypeTree (ListComp _ t qualTrees) = ListComp emptyMeta
     go (Gen _ b t) = Gen emptyMeta (map (const emptyMeta) b) (exprToTypeTree t)
     go (Let _ b t) = Let emptyMeta (map (const emptyMeta) b) (exprToTypeTree t)
     go (Guard _ t) = Guard emptyMeta (exprToTypeTree t)
+    -}
 
-binary :: Op -> TypeTree -> TypeTree -> TypeTree
-binary op left right = Binary emptyMeta (Tuple op emptyMeta) left right
+binary :: Meta -> Meta -> Op -> TypeTree -> TypeTree -> TypeTree
+binary meta metaOp op left right = Binary meta (Tuple op metaOp) left right
 
 -- | Get the expression element from a given qual tree.
 getQualTreeExpression :: forall b t m. QualTree b t m -> t
@@ -357,28 +375,37 @@ type Index = Int
 type MIndex = Maybe Index
 type MIType = Tuple MType Index
 
-type Meta' = { mindex :: MIndex ,mtype :: MType }
+type Meta' = { index :: Index ,mtype :: MType }
 newtype Meta = Meta Meta'
 
 
 emptyMeta' :: Meta'
-emptyMeta' = {mindex: Nothing, mtype: Nothing}
+emptyMeta' = {index: (-1), mtype: Nothing}
 
 emptyMeta :: Meta
 emptyMeta = Meta emptyMeta'
 
 idxMeta :: Int -> Meta
-idxMeta i = Meta {mindex: Just i, mtype: Nothing}
+idxMeta i = Meta {index: i, mtype: Nothing}
+
+freshIdx :: State Index Index
+freshIdx = do
+  i <- get
+  modify (\i -> i + 1)
+  pure i
+
+freshMeta :: State Index Meta
+freshMeta = idxMeta <$> freshIdx
 
 instance showMeta :: Show Meta where
-  show (Meta meta) = "Meta { mindex: " <> show meta.mindex <> ", mtype: " <> show meta.mtype <> "}"
+  show (Meta meta) = "Meta { index: " <> show meta.index <> ", mtype: " <> show meta.mtype <> "}"
 
 instance eqMeta :: Eq Meta where
-  eq a b = getMetaMIndex a `eq` getMetaMIndex b && getMetaMType a `eq` getMetaMType b
+  eq a b = getMetaIndex a `eq` getMetaIndex b && getMetaMType a `eq` getMetaMType b
 
 
-getMetaMIndex :: Meta -> MIndex
-getMetaMIndex (Meta meta) = meta.mindex
+getMetaIndex :: Meta -> Index
+getMetaIndex (Meta meta) = meta.index
 
 getMetaMType :: Meta -> MType
 getMetaMType (Meta meta) = meta.mtype
@@ -388,14 +415,14 @@ type TypeTree = Tree Atom (Binding Meta) (Tuple Op Meta) Meta
 makeIndexTuple :: Meta -> State Index Meta
 makeIndexTuple (Meta meta) = do
   idx <- get
-  let new = Meta $ meta {mindex = Just idx}
+  let new = Meta $ meta {index = idx}
   put (idx + 1)
   pure new
 
 makeIndexOpTuple :: (Tuple Op Meta) -> State Index (Tuple Op Meta)
 makeIndexOpTuple (Tuple op (Meta meta)) = do
   idx <- get
-  let new = Tuple op (Meta $ meta {mindex = Just idx})
+  let new = Tuple op (Meta $ meta {index = idx})
   put (idx + 1)
   pure new
 
@@ -425,13 +452,13 @@ definitionIndex :: Partial => IndexedDefinition -> Index
 definitionIndex (IndexedDef name bindings expr) = index expr
 
 opIndex :: Partial => (Tuple Op Meta) -> Index
-opIndex = snd >>> getMetaMIndex >>> fromJust
+opIndex = snd >>> getMetaIndex
 
 bindingIndex :: Partial => (Binding Meta) -> Index
-bindingIndex = extractFromBinding >>> getMetaMIndex >>> fromJust
+bindingIndex = extractFromBinding >>> getMetaIndex
 
 index :: Partial => TypeTree -> Index
-index = extractFromTree >>> getMetaMIndex >>> fromJust
+index = extractFromTree >>> getMetaIndex
 
 traverseBinding :: forall m m' f. Monad f =>
      (m -> f m')
@@ -604,12 +631,9 @@ data ADTDef
 --
 -- where the left hand side is just the name,
 -- and the right hand side is an actual expression.
-compileADTDef :: ADTDef -> List Definition
+compileADTDef :: ADTDef -> State Index (List Definition)
 compileADTDef (ADTDef tname tvars constrs) =
-  map (compileDataConstr (TTypeCons tname (map TypVar tvars))) constrs
-
--- compileADTDef :: ADTDef -> Def
--- compileADTDef (ADTDef tname tvars 
+  mapM (compileDataConstr (TTypeCons tname (map TypVar tvars))) constrs
 
 derive instance eqADTDef :: Eq ADTDef
 
@@ -638,14 +662,16 @@ data DataConstr param
   | InfixDataConstr String Associativity Int param param
 
 -- This will be called by compileADTDef and does the actual work.
-compileDataConstr :: Type -> DataConstr Type -> Definition
-compileDataConstr t (PrefixDataConstr name _ ps) =
-  Def name Nil (Atom (Meta (emptyMeta' {mtype = Just (foldr TypArr t ps)})) (Constr name))
-compileDataConstr t (InfixDataConstr op assoc prec l r) =
-  Def op Nil (PrefixOp meta (Tuple (InfixConstr op) meta))
+compileDataConstr :: Type -> DataConstr Type -> State Index Definition
+compileDataConstr t (PrefixDataConstr name _ ps) = do
+  i <- freshIdx
+  pure $ Def name Nil (Atom (Meta ({index: i, mtype: Just (foldr TypArr t ps)})) (Constr name))
+compileDataConstr t (InfixDataConstr op assoc prec l r) = do
+  meta <- freshMeta
+  meta' <- freshMeta
+  pure $ Def op Nil (PrefixOp meta (Tuple (InfixConstr op) meta'))
  where
   typ = TypArr l (TypArr r t)
-  meta = Meta $ emptyMeta' {mtype = Just typ}
 
 instance functorDataConstr :: Functor DataConstr where
   map f (PrefixDataConstr s i ps) = PrefixDataConstr s i (map f ps)
