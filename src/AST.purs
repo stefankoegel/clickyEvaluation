@@ -667,9 +667,9 @@ compileDataConstr t (PrefixDataConstr name _ ps) = do
   i <- freshIdx
   pure $ Def name Nil (Atom (Meta ({index: i, mtype: Just (foldr TypArr t ps)})) (Constr name))
 compileDataConstr t (InfixDataConstr op assoc prec l r) = do
-  meta <- freshMeta
-  meta' <- freshMeta
-  pure $ Def op Nil (PrefixOp meta (Tuple (InfixConstr op) meta'))
+  i <- freshIdx
+  i' <- freshIdx
+  pure $ Def op Nil (PrefixOp (Meta emptyMeta' {index = i, mtype = Just typ}) (Tuple (InfixConstr op) (Meta emptyMeta' {index = i', mtype = Just typ})))
  where
   typ = TypArr l (TypArr r t)
 
