@@ -6,4 +6,4 @@ install:
   - npm install
 script:
   - travis_wait 200 npm run build
-  - travis_wait 400 npm run test
+  - npm run test

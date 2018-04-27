@@ -2,18 +2,19 @@ module Test.Parser where
 
 import Prelude
 import Data.Either (Either(..))
-import Data.List (List(..), singleton, (:), many)
+import Data.List (List(..), singleton, (:), many, zipWith)
 import Data.Array ((..))
 import Data.Array (length, zip, toUnfoldable, replicate) as Array
 import Data.Tuple (Tuple(..))
 import Data.String (toCharArray, null) as String
 import Data.Maybe (Maybe(..))
-import Data.Foldable (intercalate, for_)
+import Data.Foldable (intercalate, for_, and)
 
 import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessage, fail)
 
 -- import Control.Monad.Writer (Writer, tell)
 import Control.Monad.State (get)
+import Control.Monad.Eff.Console (log)
 
 import Test.Utils (Test, tell, padLeft)
 import JSHelpers (unsafeUndef)
@@ -33,7 +34,10 @@ import AST
   , Type(..)
   , Meta (..)
   , emptyMeta
-  , emptyMeta')
+  , emptyMeta'
+  , eq'
+  , eq'Def
+  , eq'Binding)
 import Parser
   ( expression
   , atom
@@ -49,8 +53,8 @@ import Parser
   , infixDataConstrtructorDefinition
   , symbol
   , infixConstructor
-  , types)
-import IndentParser (IndentParser)
+  , types
+  , IndentParser)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
@@ -61,7 +65,41 @@ tell' = tell
 padLeft' :: forall a. (Show a) => a -> String
 padLeft' = show >>> padLeft
 
-test :: forall a. (Show a, Eq a) => String -> IndentParser String a -> String -> a -> Test Unit
+		
+class (Show a) <= Testable a where
+  equals :: a -> a -> Boolean
+  
+instance testableTypeTree :: Testable (Tree Atom (Binding Meta) (Tuple Op Meta) Meta) where
+  equals = eq'
+  
+instance testableDefinition :: Testable Definition where
+  equals = eq'Def
+  
+instance testableBinding :: Testable (Binding Meta) where
+  equals = eq'Binding
+  
+instance testableAtom :: Testable Atom where
+  equals = eq
+  
+instance testableType :: Testable Type where
+  equals = eq
+
+instance testableDataConstrType :: Testable (DataConstr Type) where
+  equals = eq
+
+instance testableString :: Testable String where
+  equals = eq
+
+instance testableChar :: Testable Char where
+  equals = eq
+
+instance testableADTDef :: Testable ADTDef where
+  equals = eq
+
+instance testableList :: (Testable a) => Testable (List a) where
+  equals as bs = and $ zipWith equals as bs
+
+test :: forall a. (Testable a) => String -> IndentParser String a -> String -> a -> Test Unit
 test name p input expected = case runParserIndent p input of
   Left parseError -> tell' $
     "Parse fail (" <> name <> "): "
@@ -69,9 +107,9 @@ test name p input expected = case runParserIndent p input of
     <> padLeft (parseErrorMessage parseError) <> "\n"
     <> "Input:\n"
     <> padLeft input
-  Right result           ->
-    if result == expected
-      then pure unit --tell $ "Parse success (" <> name <> ")"
+  Right (Tuple result _) ->
+    if result `equals` expected
+      then log $ "Parse success (" <> name <> ")"
       else tell' $
         "Parse fail (" <> name <> "):\n"
         <> "Output:\n"
@@ -80,7 +118,7 @@ test name p input expected = case runParserIndent p input of
         <> padLeft' expected <> "\n"
         <> "Input:\n"
         <> padLeft input
-
+		
 
 rejectTest :: forall a . (Show a)
                       => String
@@ -88,7 +126,7 @@ rejectTest :: forall a . (Show a)
                       -> String
                       -> Test Unit
 rejectTest name parser input = case runParserIndent (parser <* inputIsEmpty) input of
-  Left parserError -> pure unit
+  Left parserError -> log $ "rejectTest passed (" <> name <> ")"
   Right result ->
     tell' $
       "Parser accepted " <> name <> "\n"
@@ -414,7 +452,7 @@ runTests = do
 parsedPrelude' :: List Definition
 parsedPrelude' = case runParserIndent definitions prelude of
                       Left m -> unsafeUndef $ "Failed to parse prelude: " <> show m
-                      Right r -> r
+                      Right (Tuple r _) -> r
 
 prelude :: String
 prelude =

@@ -1,14 +1,29 @@
 module AST where
 
 import Prelude
-import Control.Monad.State (State, evalState, runState, get, put)
+import Control.Monad.State (State, evalState, runState, get, modify, put)
 import Data.Bifunctor (bimap, rmap)
-import Data.Foldable (intercalate, foldr)
-import Data.List (List(..), fold, (:))
+import Data.Foldable (intercalate, foldr, and)
+import Data.List (List(..), fold, (:), zipWith)
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
+
+--------------------------------------------------------------------------------
+-- Utilities -------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+mapM :: forall a b m. (Monad m) => (a -> m b) -> List a -> m (List b)
+mapM f Nil = pure Nil
+mapM f (Cons x xs) = do
+  y  <- f x
+  ys <- mapM f xs
+  pure $ Cons y ys
+  
+--------------------------------------------------------------------------------
+
+
 
 
 -- | Operators
@@ -104,9 +119,62 @@ data Tree a b o m =
   | App       m (Tree a b o m) (List (Tree a b o m))
   | ListComp  m (Tree a b o m) (List (QualTree b (Tree a b o m) m))
 
+  
+-- | ONLY FOR TEST PURPOSES
+-- | compare two TypeTree values on equality ignoring the meta information
+eq' :: TypeTree -> TypeTree -> Boolean
+eq' (Atom _ a) (Atom _ b) = a == b
+eq' (List _ as) (List _ bs) = and $ zipWith eq' as bs
+eq' (NTuple _ as) (NTuple _ bs) = and $ zipWith eq' as bs
+eq' (Binary _ o l r) (Binary _ o' l' r') = eq'Op o o' && eq' l l' && eq' r r'
+eq' (Unary _ o e) (Unary _ o' e') = eq'Op o o' && eq' e e'
+eq' (SectL _ e o) (SectL _ e' o') = eq'Op o o' && eq' e e'
+eq' (SectR _ o e) (SectR _ o' e') = eq'Op o o' && eq' e e'
+eq' (PrefixOp _ o) (PrefixOp _ o') = eq'Op o o'
+eq' (IfExpr _ i t e) (IfExpr _ i' t' e') = eq' i i' && eq' t t' && eq' e e'
+eq' (ArithmSeq _ a mb mc) (ArithmSeq _ a' mb' mc') = eq' a a' && eq'' mb mb' && eq'' mc mc'
+ where
+  eq'' Nothing Nothing = true
+  eq'' (Just a) (Just b) = eq' a b
+  eq'' _ _ = false
+eq' (LetExpr _ d e) (LetExpr _ d' e') = and (zipWith eq'' d d') && eq' e e'
+ where
+  eq'' (Tuple b e) (Tuple b' e') = eq'Binding b b' && eq' e e'
+eq' (Lambda _ bs e) (Lambda _ bs' e') = and (zipWith eq'Binding bs bs') && eq' e e'
+eq' (App _ f as) (App _ f' as') = eq' f f' && and (zipWith eq' as as')
+eq' (ListComp _ e qs) (ListComp _ e' qs') = eq' e e' && and (zipWith eq'QualTree qs qs')
+eq' _ _ = false
+
+eq'Op :: Tuple Op Meta -> Tuple Op Meta -> Boolean
+eq'Op (Tuple o _) (Tuple o' _) = o == o'
+
+eq'Binding :: TypedBinding -> TypedBinding -> Boolean
+eq'Binding (Lit _ a) (Lit _ a') = a == a'
+eq'Binding (ConsLit _ a as) (ConsLit _ a' as') = eq'Binding a a' && eq'Binding as as'
+eq'Binding (ListLit _ bs) (ListLit _ bs') = and (zipWith eq'Binding bs bs')
+eq'Binding (NTupleLit _ bs) (NTupleLit _ bs') = and (zipWith eq'Binding bs bs')
+eq'Binding (ConstrLit _ dc) (ConstrLit _ dc') = eq'DataConstr dc dc'
+eq'Binding _ _ = false
+
+eq'DataConstr :: DataConstr TypedBinding -> DataConstr TypedBinding -> Boolean
+eq'DataConstr (PrefixDataConstr n a ps) (PrefixDataConstr n' a' ps') = n == n' && a == a' && and (zipWith eq'Binding ps ps')
+eq'DataConstr (InfixDataConstr n a p l r) (InfixDataConstr n' a' p' l' r') = n == n' && a == a' && p == p' && eq'Binding l l' && eq'Binding r r'
+eq'DataConstr _ _ = false
+
+eq'QualTree :: TypeQual -> TypeQual -> Boolean
+eq'QualTree (Gen _ b e) (Gen _ b' e') = eq'Binding b b' && eq' e e'
+eq'QualTree (Let _ b e) (Let _ b' e') = eq'Binding b b' && eq' e e'
+eq'QualTree (Guard _ e) (Guard _ e')  = eq' e e'
+eq'QualTree _ _ = false
+
+eq'Def :: Definition -> Definition -> Boolean
+eq'Def (Def s bs e) (Def s' bs' e') = s == s' && and (zipWith eq'Binding bs bs') && eq' e e'
+  
 toOpTuple :: Op -> Tuple Op Meta
 toOpTuple op = Tuple op emptyMeta
 
+
+{- 
 exprToTypeTree :: Expr -> TypeTree
 exprToTypeTree (Atom _ atom) = Atom emptyMeta atom
 exprToTypeTree (List _ exprs) = List emptyMeta (map exprToTypeTree exprs)
@@ -140,9 +208,10 @@ exprToTypeTree (ListComp _ t qualTrees) = ListComp emptyMeta
     go (Gen _ b t) = Gen emptyMeta (map (const emptyMeta) b) (exprToTypeTree t)
     go (Let _ b t) = Let emptyMeta (map (const emptyMeta) b) (exprToTypeTree t)
     go (Guard _ t) = Guard emptyMeta (exprToTypeTree t)
+    -}
 
-binary :: Op -> TypeTree -> TypeTree -> TypeTree
-binary op left right = Binary emptyMeta (Tuple op emptyMeta) left right
+binary :: Meta -> Meta -> Op -> TypeTree -> TypeTree -> TypeTree
+binary meta metaOp op left right = Binary meta (Tuple op metaOp) left right
 
 -- | Get the expression element from a given qual tree.
 getQualTreeExpression :: forall b t m. QualTree b t m -> t
@@ -306,25 +375,37 @@ type Index = Int
 type MIndex = Maybe Index
 type MIType = Tuple MType Index
 
-type Meta' = { mindex :: MIndex ,mtype :: MType }
+type Meta' = { index :: Index ,mtype :: MType }
 newtype Meta = Meta Meta'
 
 
 emptyMeta' :: Meta'
-emptyMeta' = {mindex: Nothing, mtype: Nothing}
+emptyMeta' = {index: (-1), mtype: Nothing}
 
 emptyMeta :: Meta
 emptyMeta = Meta emptyMeta'
 
+idxMeta :: Int -> Meta
+idxMeta i = Meta {index: i, mtype: Nothing}
+
+freshIdx :: State Index Index
+freshIdx = do
+  i <- get
+  modify (\i -> i + 1)
+  pure i
+
+freshMeta :: State Index Meta
+freshMeta = idxMeta <$> freshIdx
+
 instance showMeta :: Show Meta where
-  show (Meta meta) = "Meta { mindex: " <> show meta.mindex <> ", mtype: " <> show meta.mtype <> "}"
+  show (Meta meta) = "Meta { index: " <> show meta.index <> ", mtype: " <> show meta.mtype <> "}"
 
 instance eqMeta :: Eq Meta where
-  eq a b = getMetaMIndex a `eq` getMetaMIndex b && getMetaMType a `eq` getMetaMType b
+  eq a b = getMetaIndex a `eq` getMetaIndex b && getMetaMType a `eq` getMetaMType b
 
 
-getMetaMIndex :: Meta -> MIndex
-getMetaMIndex (Meta meta) = meta.mindex
+getMetaIndex :: Meta -> Index
+getMetaIndex (Meta meta) = meta.index
 
 getMetaMType :: Meta -> MType
 getMetaMType (Meta meta) = meta.mtype
@@ -334,14 +415,14 @@ type TypeTree = Tree Atom (Binding Meta) (Tuple Op Meta) Meta
 makeIndexTuple :: Meta -> State Index Meta
 makeIndexTuple (Meta meta) = do
   idx <- get
-  let new = Meta $ meta {mindex = Just idx}
+  let new = Meta $ meta {index = idx}
   put (idx + 1)
   pure new
 
 makeIndexOpTuple :: (Tuple Op Meta) -> State Index (Tuple Op Meta)
 makeIndexOpTuple (Tuple op (Meta meta)) = do
   idx <- get
-  let new = Tuple op (Meta $ meta {mindex = Just idx})
+  let new = Tuple op (Meta $ meta {index = idx})
   put (idx + 1)
   pure new
 
@@ -367,17 +448,17 @@ insertIntoIndexedTree t expr = insertIntoTree (Meta $ meta {mtype = t}) expr
   where
     meta = extractFromTree >>> (\(Meta meta) -> meta) $ expr
 
-definitionIndex :: Partial => IndexedDefinition -> Index
+definitionIndex :: IndexedDefinition -> Index
 definitionIndex (IndexedDef name bindings expr) = index expr
 
-opIndex :: Partial => (Tuple Op Meta) -> Index
-opIndex = snd >>> getMetaMIndex >>> fromJust
+opIndex :: (Tuple Op Meta) -> Index
+opIndex = snd >>> getMetaIndex
 
-bindingIndex :: Partial => (Binding Meta) -> Index
-bindingIndex = extractFromBinding >>> getMetaMIndex >>> fromJust
+bindingIndex :: (Binding Meta) -> Index
+bindingIndex = extractFromBinding >>> getMetaIndex
 
-index :: Partial => TypeTree -> Index
-index = extractFromTree >>> getMetaMIndex >>> fromJust
+index :: TypeTree -> Index
+index = extractFromTree >>> getMetaIndex
 
 traverseBinding :: forall m m' f. Monad f =>
      (m -> f m')
@@ -550,12 +631,9 @@ data ADTDef
 --
 -- where the left hand side is just the name,
 -- and the right hand side is an actual expression.
-compileADTDef :: ADTDef -> List Definition
+compileADTDef :: ADTDef -> State Index (List Definition)
 compileADTDef (ADTDef tname tvars constrs) =
-  map (compileDataConstr (TTypeCons tname (map TypVar tvars))) constrs
-
--- compileADTDef :: ADTDef -> Def
--- compileADTDef (ADTDef tname tvars 
+  mapM (compileDataConstr (TTypeCons tname (map TypVar tvars))) constrs
 
 derive instance eqADTDef :: Eq ADTDef
 
@@ -584,14 +662,16 @@ data DataConstr param
   | InfixDataConstr String Associativity Int param param
 
 -- This will be called by compileADTDef and does the actual work.
-compileDataConstr :: Type -> DataConstr Type -> Definition
-compileDataConstr t (PrefixDataConstr name _ ps) =
-  Def name Nil (Atom (Meta (emptyMeta' {mtype = Just (foldr TypArr t ps)})) (Constr name))
-compileDataConstr t (InfixDataConstr op assoc prec l r) =
-  Def op Nil (PrefixOp meta (Tuple (InfixConstr op) meta))
+compileDataConstr :: Type -> DataConstr Type -> State Index Definition
+compileDataConstr t (PrefixDataConstr name _ ps) = do
+  i <- freshIdx
+  pure $ Def name Nil (Atom (Meta ({index: i, mtype: Just (foldr TypArr t ps)})) (Constr name))
+compileDataConstr t (InfixDataConstr op assoc prec l r) = do
+  i <- freshIdx
+  i' <- freshIdx
+  pure $ Def op Nil (PrefixOp (Meta emptyMeta' {index = i, mtype = Just typ}) (Tuple (InfixConstr op) (Meta emptyMeta' {index = i', mtype = Just typ})))
  where
   typ = TypArr l (TypArr r t)
-  meta = Meta $ emptyMeta' {mtype = Just typ}
 
 instance functorDataConstr :: Functor DataConstr where
   map f (PrefixDataConstr s i ps) = PrefixDataConstr s i (map f ps)

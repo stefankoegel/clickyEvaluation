@@ -7,8 +7,9 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 
 -- import Control.Monad.Writer (Writer, tell)
+import Control.Monad.Eff.Console (log)
 
-import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, toOpTuple, emptyMeta, Meta)
+import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, emptyMeta, Meta)
 
 import Test.Utils (tell, Test)
 
@@ -21,7 +22,7 @@ tell' = tell
 test :: forall a. (Show a, Eq a) => String -> a -> a -> Test Unit
 test name input expected = case input == expected of
   false -> tell' $ "AST fail (" <> name <> "): " <> show input <> " should be " <> show expected
-  true  -> pure unit
+  true  -> log $ "Test success (" <> name <> ")"
 
 runTests :: Test Unit
 runTests = do
@@ -66,19 +67,19 @@ ntuple :: TypeTree
 ntuple = NTuple emptyMeta $ toList [atom, atom]
 
 binary :: TypeTree
-binary = Binary emptyMeta (toOpTuple Add) atom atom
+binary = Binary emptyMeta (Tuple Add emptyMeta) atom atom
 
 unary :: TypeTree
-unary = Unary emptyMeta (toOpTuple Sub) atom
+unary = Unary emptyMeta (Tuple Sub emptyMeta) atom
 
 sectl :: TypeTree
-sectl = SectL emptyMeta atom (toOpTuple Add)
+sectl = SectL emptyMeta atom (Tuple Add emptyMeta)
 
 sectr :: TypeTree
-sectr = SectR emptyMeta (toOpTuple Add) atom
+sectr = SectR emptyMeta (Tuple Add emptyMeta) atom
 
 prefixop :: TypeTree
-prefixop = PrefixOp emptyMeta (toOpTuple Add)
+prefixop = PrefixOp emptyMeta (Tuple Add emptyMeta)
 
 ifexpr :: TypeTree
 ifexpr = IfExpr emptyMeta atom atom atom
