@@ -448,16 +448,16 @@ insertIntoIndexedTree t expr = insertIntoTree (Meta $ meta {mtype = t}) expr
   where
     meta = extractFromTree >>> (\(Meta meta) -> meta) $ expr
 
-definitionIndex :: Partial => IndexedDefinition -> Index
+definitionIndex :: IndexedDefinition -> Index
 definitionIndex (IndexedDef name bindings expr) = index expr
 
-opIndex :: Partial => (Tuple Op Meta) -> Index
+opIndex :: (Tuple Op Meta) -> Index
 opIndex = snd >>> getMetaIndex
 
-bindingIndex :: Partial => (Binding Meta) -> Index
+bindingIndex :: (Binding Meta) -> Index
 bindingIndex = extractFromBinding >>> getMetaIndex
 
-index :: Partial => TypeTree -> Index
+index :: TypeTree -> Index
 index = extractFromTree >>> getMetaIndex
 
 traverseBinding :: forall m m' f. Monad f =>
