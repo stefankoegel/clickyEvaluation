@@ -10,22 +10,6 @@ import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
 import Data.Tuple (Tuple(..), fst, snd)
 
---------------------------------------------------------------------------------
--- Utilities -------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-mapM :: forall a b m. (Monad m) => (a -> m b) -> List a -> m (List b)
-mapM f Nil = pure Nil
-mapM f (Cons x xs) = do
-  y  <- f x
-  ys <- mapM f xs
-  pure $ Cons y ys
-  
---------------------------------------------------------------------------------
-
-
-
-
 -- | Operators
 -- |
 -- | Primitive infix operators that are evaluated directly by the `Evaluator`.
@@ -633,7 +617,7 @@ data ADTDef
 -- and the right hand side is an actual expression.
 compileADTDef :: ADTDef -> State Index (List Definition)
 compileADTDef (ADTDef tname tvars constrs) =
-  mapM (compileDataConstr (TTypeCons tname (map TypVar tvars))) constrs
+  traverse (compileDataConstr (TTypeCons tname (map TypVar tvars))) constrs
 
 derive instance eqADTDef :: Eq ADTDef
 
