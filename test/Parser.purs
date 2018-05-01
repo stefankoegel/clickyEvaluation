@@ -60,11 +60,11 @@ import Parser
   , IndentParser)
 
 
-validlyIndexed :: TypeTree -> Boolean
-validlyIndexed tree = all (\x -> x >= 0) indices && length indices == length (nub indices)
+isValidlyIndexed :: TypeTree -> Boolean
+isValidlyIndexed tree = all (\x -> x >= 0) indices && length indices == length (nub indices)
   where
     indices :: List Int
-    indices = W.execWriter (validlyIndexed' tree)
+    indices = W.execWriter (isValidlyIndexed' tree)
 
     tell' :: forall a. a -> W.Writer (List a) Unit
     tell' = singleton >>> W.tell
@@ -72,8 +72,8 @@ validlyIndexed tree = all (\x -> x >= 0) indices && length indices == length (nu
     void :: forall m a. (Monad m) => m a -> m Unit
     void _ = pure unit
 
-    validlyIndexed' :: TypeTree -> W.Writer (List Int) Unit
-    validlyIndexed' = void <<< traverseTree
+    isValidlyIndexed' :: TypeTree -> W.Writer (List Int) Unit
+    isValidlyIndexed' = void <<< traverseTree
       (traverseBinding (getMetaIndex >>> tell'))
       (snd >>> getMetaIndex >>> tell')
       (getMetaIndex >>> tell')
