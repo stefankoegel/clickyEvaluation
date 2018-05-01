@@ -42,6 +42,7 @@ highlight { clicked: mi, evaluated: mj } (Meta m) = case Tuple (cmp mi) (cmp mj)
   Tuple _           (Just true) -> singleton "evaluated"
   _                             -> Nil
  where
+   cmp :: Maybe Int -> Maybe Boolean
    cmp = map (\i -> m.index == i)
 
 nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
