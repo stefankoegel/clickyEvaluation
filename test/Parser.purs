@@ -61,7 +61,7 @@ import Parser
 
 
 isValidlyIndexed :: TypeTree -> Boolean
-isValidlyIndexed tree = all (\x -> x >= 0) indices && length indices == length (nub indices)
+isValidlyIndexed tree = length indices > 0 && (all (\x -> x >= 0) indices) && (length indices == length (nub indices))
   where
     indices :: List Int
     indices = W.execWriter (isValidlyIndexed' tree)
@@ -72,9 +72,9 @@ isValidlyIndexed tree = all (\x -> x >= 0) indices && length indices == length (
     void :: forall m a. (Monad m) => m a -> m Unit
     void _ = pure unit
 
-    isValidlyIndexed' :: TypeTree -> W.Writer (List Int) Unit
-    isValidlyIndexed' = void <<< traverseTree
-      (traverseBinding (getMetaIndex >>> tell'))
+    isValidlyIndexed' :: TypeTree -> W.Writer (List Int) (Tree Atom Unit Unit Unit)
+    isValidlyIndexed' = traverseTree
+      (traverseBinding (getMetaIndex >>> tell') >>> void)
       (snd >>> getMetaIndex >>> tell')
       (getMetaIndex >>> tell')
 
