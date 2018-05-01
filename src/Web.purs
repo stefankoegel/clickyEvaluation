@@ -34,6 +34,7 @@ type OpTuple = Tuple Op Meta
 -- Tells, which nodes are to be marked as clicked or evaluated, if any.
 type Highlight = { clicked :: Maybe Index, evaluated :: Maybe Index }
 
+-- Given a Highlight value and the Meta information of a node, generated additional classes to highlight the node
 highlight :: Highlight -> Meta -> List String
 highlight { clicked: mi, evaluated: mj } (Meta m) = case Tuple (cmp mi) (cmp mj) of
   Tuple (Just true) (Just true) -> "clicked" : "evaluated" : Nil
