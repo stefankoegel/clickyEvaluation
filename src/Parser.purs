@@ -3,6 +3,7 @@ module Parser where
 import Prelude
 import Data.String as String
 import Data.Foldable (foldl)
+import Data.Traversable (for)
 import Data.List (List(..), many, concat, elemIndex, length)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..), fst, snd)
@@ -301,9 +302,7 @@ base expr =
   <|> PC.try (arithmeticSequence expr)
   <|> list expr
   <|> charList
-  <|> (do
-      meta <- freshMeta
-      Atom meta <$> atom)
+  <|> (Atom <$> freshMeta <*> atom)
 
 -- | Parse syntax constructs like if_then_else, lambdas or function application
 syntax :: IndentParser String TypeTree -> IndentParser String TypeTree
@@ -431,11 +430,11 @@ listComp expr = do
 charList :: forall m mt. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => IndexingParserT String mt m TypeTree
 charList = do
   char '"'
-  strs <- many character'
+  chrs <- many character'
   char '"'
-  meta1 <- freshMeta
-  meta2 <- freshMeta
-  pure (List meta1 ((Atom meta2 <<< Char <<< String.singleton) <$> strs))
+  List
+    <$> freshMeta
+    <*> for chrs (\chr -> Atom <$> freshMeta <*> pure (String.singleton >>> Char $ chr))
 
 -- | Parse a lambda expression - layout sensitive
 lambda :: IndentParser String TypeTree -> IndentParser String TypeTree
