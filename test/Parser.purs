@@ -2,17 +2,17 @@ module Test.Parser where
 
 import Prelude
 import Data.Either (Either(..))
-import Data.List (List(..), singleton, (:), many, zipWith)
+import Data.List (List(..), singleton, (:), many, zipWith, nub, length)
 import Data.Array ((..))
 import Data.Array (length, zip, toUnfoldable, replicate) as Array
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), snd)
 import Data.String (toCharArray, null) as String
 import Data.Maybe (Maybe(..))
-import Data.Foldable (intercalate, for_, and)
+import Data.Foldable (intercalate, for_, and, all)
 
 import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessage, fail)
 
--- import Control.Monad.Writer (Writer, tell)
+import Control.Monad.Writer (Writer, tell, execWriter) as W
 import Control.Monad.State (get)
 import Control.Monad.Eff.Console (log)
 
@@ -35,9 +35,12 @@ import AST
   , Meta (..)
   , emptyMeta
   , emptyMeta'
+  , getMetaIndex
   , eq'
   , eq'Def
-  , eq'Binding)
+  , eq'Binding
+  , traverseTree
+  , traverseBinding)
 import Parser
   ( expression
   , atom
@@ -55,6 +58,26 @@ import Parser
   , infixConstructor
   , types
   , IndentParser)
+
+
+validlyIndexed :: TypeTree -> Boolean
+validlyIndexed tree = all (\x -> x >= 0) indices && length indices == length (nub indices)
+  where
+    indices :: List Int
+    indices = W.execWriter (validlyIndexed' tree)
+
+    tell' :: forall a. a -> W.Writer (List a) Unit
+    tell' = singleton >>> W.tell
+
+    void :: forall m a. (Monad m) => m a -> m Unit
+    void _ = pure unit
+
+    validlyIndexed' :: TypeTree -> W.Writer (List Int) Unit
+    validlyIndexed' = void <<< traverseTree
+      (traverseBinding (getMetaIndex >>> tell'))
+      (snd >>> getMetaIndex >>> tell')
+      (getMetaIndex >>> tell')
+
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
