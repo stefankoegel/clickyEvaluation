@@ -3,7 +3,7 @@ module Web where
 import Prelude
 import Data.Foldable (class Foldable, intercalate)
 import Data.Unfoldable (fromMaybe)
-import Data.List (List(Nil, Cons), snoc, fromFoldable, (:))
+import Data.List (List(Nil, Cons), snoc, fromFoldable, (:), singleton)
 import Data.Set (intersection, size)
 import Data.Set as Set
 import Data.Maybe (Maybe(..), maybe, isJust)
@@ -32,7 +32,16 @@ type DivHole = TypeTree -> (TypeTree -> TypeTree) -> Div
 type OpTuple = Tuple Op Meta
 
 -- Tells, which nodes are to be marked as clicked or evaluated, if any.
-type Highlight = { clicked: Maybe Index, evaluated: Maybe Index }
+type Highlight = { clicked :: Maybe Index, evaluated :: Maybe Index }
+
+highlight :: Highlight -> Meta -> List String
+highlight { clicked: mi, evaluated: mj } (Meta m) = case Tuple (cmp mi) (cmp mj) of
+  Tuple (Just true) (Just true) -> "clicked" : "evaluated" : Nil
+  Tuple (Just true) _           -> singleton "clicked"
+  Tuple _           (Just true) -> singleton "evaluated"
+  _                             -> Nil
+ where
+   cmp = map (\i -> m.index == i)
 
 nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
 nodeHole content classes children expr hole =
