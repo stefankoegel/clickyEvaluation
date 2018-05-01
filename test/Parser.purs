@@ -214,48 +214,48 @@ runTests = do
   test "special" variable "_____''''" (Name "_____''''")
   test "with_numbers1" variable "a1" (Name "a1")
 
-  test "composition" expression "f . g" (Binary emptyMeta (toOpTuple Composition) (aname "f") (aname "g"))
-  test "power" expression "2 ^ 10" (Binary emptyMeta (toOpTuple Power) (aint 2) (aint 10))
-  test "mul" expression "2 * 2" (Binary emptyMeta (toOpTuple Mul) (aint 2) (aint 2))
-  test "div" expression "13 `div` 3" (Binary emptyMeta (toOpTuple (InfixFunc "div")) (aint 13) (aint 3))
-  test "mod" expression "13 `mod` 3" (Binary emptyMeta (toOpTuple (InfixFunc "mod")) (aint 13) (aint 3))
-  test "add1" expression "1 + 1"  (Binary emptyMeta (toOpTuple Add) (aint 1) (aint 1))
-  test "add2" expression "2+2" (Binary emptyMeta (toOpTuple Add) (aint 2) (aint 2))
-  test "sub" expression "5 - 3" (Binary emptyMeta (toOpTuple Sub) (aint 5) (aint 3))
-  test "colon" expression "x:xs" (Binary emptyMeta (toOpTuple Colon) (aname "x") (aname "xs"))
-  test "append1" expression "xs ++ ys" (Binary emptyMeta (toOpTuple Append) (aname "xs") (aname "ys"))
-  test "append2" expression "xs++ys"  (Binary emptyMeta (toOpTuple Append) (aname "xs") (aname "ys"))
-  test "equ" expression "5 == 5" (Binary emptyMeta (toOpTuple Equ) (aint 5) (aint 5))
-  test "neq" expression "1 /= 2" (Binary emptyMeta (toOpTuple Neq) (aint 1) (aint 2))
-  test "lt1" expression "1 < 234" (Binary emptyMeta (toOpTuple Lt) (aint 1) (aint 234))
-  test "lt2" expression "x<y" (Binary emptyMeta (toOpTuple Lt) (aname "x") (aname "y"))
-  test "leq" expression "1 <= 234" (Binary emptyMeta (toOpTuple Leq) (aint 1) (aint 234))
-  test "gt1" expression "567 > 1" (Binary emptyMeta (toOpTuple Gt) (aint 567) (aint 1))
-  test "gt2" expression "x>y" (Binary emptyMeta (toOpTuple Gt) (aname "x") (aname "y"))
-  test "geq" expression "567 >= 1" (Binary emptyMeta (toOpTuple Geq) (aint 567) (aint 1))
-  test "and" expression "hot && cold" (Binary emptyMeta (toOpTuple And) (aname "hot") (aname "cold"))
-  test "or" expression "be || notBe" (Binary emptyMeta (toOpTuple Or) (aname "be") (aname "notBe"))
-  test "dollar" expression "f $ 1 + 2"  (Binary emptyMeta (toOpTuple Dollar) (aname "f") (Binary emptyMeta (toOpTuple Add) (aint 1) (aint 2)))
+  testTypeTree "composition" expression "f . g" (Binary emptyMeta (toOpTuple Composition) (aname "f") (aname "g"))
+  testTypeTree "power" expression "2 ^ 10" (Binary emptyMeta (toOpTuple Power) (aint 2) (aint 10))
+  testTypeTree "mul" expression "2 * 2" (Binary emptyMeta (toOpTuple Mul) (aint 2) (aint 2))
+  testTypeTree "div" expression "13 `div` 3" (Binary emptyMeta (toOpTuple (InfixFunc "div")) (aint 13) (aint 3))
+  testTypeTree "mod" expression "13 `mod` 3" (Binary emptyMeta (toOpTuple (InfixFunc "mod")) (aint 13) (aint 3))
+  testTypeTree "add1" expression "1 + 1"  (Binary emptyMeta (toOpTuple Add) (aint 1) (aint 1))
+  testTypeTree "add2" expression "2+2" (Binary emptyMeta (toOpTuple Add) (aint 2) (aint 2))
+  testTypeTree "sub" expression "5 - 3" (Binary emptyMeta (toOpTuple Sub) (aint 5) (aint 3))
+  testTypeTree "colon" expression "x:xs" (Binary emptyMeta (toOpTuple Colon) (aname "x") (aname "xs"))
+  testTypeTree "append1" expression "xs ++ ys" (Binary emptyMeta (toOpTuple Append) (aname "xs") (aname "ys"))
+  testTypeTree "append2" expression "xs++ys"  (Binary emptyMeta (toOpTuple Append) (aname "xs") (aname "ys"))
+  testTypeTree "equ" expression "5 == 5" (Binary emptyMeta (toOpTuple Equ) (aint 5) (aint 5))
+  testTypeTree "neq" expression "1 /= 2" (Binary emptyMeta (toOpTuple Neq) (aint 1) (aint 2))
+  testTypeTree "lt1" expression "1 < 234" (Binary emptyMeta (toOpTuple Lt) (aint 1) (aint 234))
+  testTypeTree "lt2" expression "x<y" (Binary emptyMeta (toOpTuple Lt) (aname "x") (aname "y"))
+  testTypeTree "leq" expression "1 <= 234" (Binary emptyMeta (toOpTuple Leq) (aint 1) (aint 234))
+  testTypeTree "gt1" expression "567 > 1" (Binary emptyMeta (toOpTuple Gt) (aint 567) (aint 1))
+  testTypeTree "gt2" expression "x>y" (Binary emptyMeta (toOpTuple Gt) (aname "x") (aname "y"))
+  testTypeTree "geq" expression "567 >= 1" (Binary emptyMeta (toOpTuple Geq) (aint 567) (aint 1))
+  testTypeTree "and" expression "hot && cold" (Binary emptyMeta (toOpTuple And) (aname "hot") (aname "cold"))
+  testTypeTree "or" expression "be || notBe" (Binary emptyMeta (toOpTuple Or) (aname "be") (aname "notBe"))
+  testTypeTree "dollar" expression "f $ 1 + 2"  (Binary emptyMeta (toOpTuple Dollar) (aname "f") (Binary emptyMeta (toOpTuple Add) (aint 1) (aint 2)))
 
-  test "unary_minus1" expression "- 10"  (aint (-10))
-  test "unary_minus2" expression "- x"  (Unary emptyMeta (toOpTuple Sub) (aname "x"))
-  test "unary_minus3" expression "-10"  (aint (-10))
-  test "unary_minus4" expression "-x"  (Unary emptyMeta (toOpTuple Sub) (aname "x"))
+  testTypeTree "unary_minus1" expression "- 10"  (aint (-10))
+  testTypeTree "unary_minus2" expression "- x"  (Unary emptyMeta (toOpTuple Sub) (aname "x"))
+  testTypeTree "unary_minus3" expression "-10"  (aint (-10))
+  testTypeTree "unary_minus4" expression "-x"  (Unary emptyMeta (toOpTuple Sub) (aname "x"))
 
-  test "infix_operator1" expression "1 `max` 3" (Binary emptyMeta (toOpTuple (InfixFunc "max")) (aint 1) (aint 3))
-  test "infix_operator2" expression "5 `max` 2 `min` 1" (Binary emptyMeta (toOpTuple (InfixFunc "min")) (Binary emptyMeta (toOpTuple (InfixFunc "max")) (aint 5) (aint 2)) (aint 1))
-  test "infix_operator3" expression "True`tight`False" (Binary emptyMeta (toOpTuple (InfixFunc "tight")) (abool true) (abool false))
+  testTypeTree "infix_operator1" expression "1 `max` 3" (Binary emptyMeta (toOpTuple (InfixFunc "max")) (aint 1) (aint 3))
+  testTypeTree "infix_operator2" expression "5 `max` 2 `min` 1" (Binary emptyMeta (toOpTuple (InfixFunc "min")) (Binary emptyMeta (toOpTuple (InfixFunc "max")) (aint 5) (aint 2)) (aint 1))
+  testTypeTree "infix_operator3" expression "True`tight`False" (Binary emptyMeta (toOpTuple (InfixFunc "tight")) (abool true) (abool false))
 
-  test "1" expression "1" (aint 1)
-  test "add" expression "1 + 2" (Binary emptyMeta (toOpTuple Add) (aint 1) (aint 2))
-  test "precedence" expression "1 * 2 + 3 * 4" (Binary emptyMeta (toOpTuple Add)
+  testTypeTree "1" expression "1" (aint 1)
+  testTypeTree "add" expression "1 + 2" (Binary emptyMeta (toOpTuple Add) (aint 1) (aint 2))
+  testTypeTree "precedence" expression "1 * 2 + 3 * 4" (Binary emptyMeta (toOpTuple Add)
                                     (Binary emptyMeta (toOpTuple Mul) (aint 1) (aint 2))
                                     (Binary emptyMeta (toOpTuple Mul) (aint 3) (aint 4)))
-  test "whitespaces" expression
+  testTypeTree "whitespaces" expression
     "1   \t   -    \t   ( f   )    \t\t\t\t                                                                \t\t\t\t             `div`     _ignore"
     (Binary emptyMeta (toOpTuple Sub) (aint 1) (Binary emptyMeta (toOpTuple (InfixFunc "div")) (aname "f") (aname "_ignore")))
-  test "brackets" expression "(  1  +  2  )  *  3" (Binary emptyMeta (toOpTuple Mul) (Binary emptyMeta (toOpTuple Add) (aint 1) (aint 2)) (aint 3))
-  test "brackets2" expression "( (  1  +  2  - 3  )  *  4 * 5 * 6)"
+  testTypeTree "brackets" expression "(  1  +  2  )  *  3" (Binary emptyMeta (toOpTuple Mul) (Binary emptyMeta (toOpTuple Add) (aint 1) (aint 2)) (aint 3))
+  testTypeTree "brackets2" expression "( (  1  +  2  - 3  )  *  4 * 5 * 6)"
     (Binary emptyMeta (toOpTuple Mul)
       (Binary emptyMeta (toOpTuple Mul)
         (Binary emptyMeta (toOpTuple Mul)
@@ -265,50 +265,50 @@ runTests = do
           (aint 4))
         (aint 5))
       (aint 6))
-  test "brackets3" expression "( ( ( 1 ) ) )" (aint 1)
-  test "many brackets" expression "(   (( ((  f )) *  ( (17   )) ) ))" (Binary emptyMeta (toOpTuple Mul) (aname "f") (aint 17))
+  testTypeTree "brackets3" expression "( ( ( 1 ) ) )" (aint 1)
+  testTypeTree "many brackets" expression "(   (( ((  f )) *  ( (17   )) ) ))" (Binary emptyMeta (toOpTuple Mul) (aname "f") (aint 17))
 
-  test "if_then_else" expression "if x then y else z" (IfExpr emptyMeta (aname "x") (aname "y") (aname "z"))
-  test "nested if" expression "if(if 1 then 2 else 3)then y else z" (IfExpr emptyMeta (IfExpr emptyMeta (aint 1) (aint 2) (aint 3)) (aname "y") (aname "z"))
-  test "iffy1" expression "iffy" (aname "iffy")
-  test "iffy2" expression "if 10 + 20 then iffy * iffy else ((7))"
+  testTypeTree "if_then_else" expression "if x then y else z" (IfExpr emptyMeta (aname "x") (aname "y") (aname "z"))
+  testTypeTree "nested if" expression "if(if 1 then 2 else 3)then y else z" (IfExpr emptyMeta (IfExpr emptyMeta (aint 1) (aint 2) (aint 3)) (aname "y") (aname "z"))
+  testTypeTree "iffy1" expression "iffy" (aname "iffy")
+  testTypeTree "iffy2" expression "if 10 + 20 then iffy * iffy else ((7))"
     (IfExpr emptyMeta
       (Binary emptyMeta (toOpTuple Add) (aint 10) (aint 20))
       (Binary emptyMeta (toOpTuple Mul) (aname "iffy") (aname "iffy"))
       (aint 7))
-  test "iffy3" expression "iffy + if iffy then iffy else iffy"
+  testTypeTree "iffy3" expression "iffy + if iffy then iffy else iffy"
     (Binary emptyMeta (toOpTuple Add) (aname "iffy") (IfExpr emptyMeta (aname "iffy") (aname "iffy") (aname "iffy")))
-  test "nested if 2" expression "if if x then y else z then if a then b else c else if i then j else k"
+  testTypeTree "nested if 2" expression "if if x then y else z then if a then b else c else if i then j else k"
     (IfExpr emptyMeta
       (IfExpr emptyMeta (aname "x") (aname "y") (aname "z"))
       (IfExpr emptyMeta (aname "a") (aname "b") (aname "c"))
       (IfExpr emptyMeta (aname "i") (aname "j") (aname "k")))
-  test "if2" expression "if bool then False else True" (IfExpr emptyMeta (aname "bool") (Atom emptyMeta (Bool false)) (Atom emptyMeta (Bool true)))
+  testTypeTree "if2" expression "if bool then False else True" (IfExpr emptyMeta (aname "bool") (Atom emptyMeta (Bool false)) (Atom emptyMeta (Bool true)))
 
-  test "apply1" expression "f 1" (App emptyMeta (aname "f") (singleton (aint 1)))
-  test "apply2" expression "f x y z 12 (3 + 7)"
+  testTypeTree "apply1" expression "f 1" (App emptyMeta (aname "f") (singleton (aint 1)))
+  testTypeTree "apply2" expression "f x y z 12 (3 + 7)"
     (App emptyMeta (aname "f") (toList [aname "x", aname "y", aname "z", aint 12, Binary emptyMeta (toOpTuple Add) (aint 3) (aint 7)]))
-  test "fibonacci" expression "fib (n - 1) + fib (n - 2)"
+  testTypeTree "fibonacci" expression "fib (n - 1) + fib (n - 2)"
     (Binary emptyMeta (toOpTuple Add)
       (App emptyMeta (aname "fib") (toList [Binary emptyMeta (toOpTuple Sub) (aname "n") (aint 1)]))
       (App emptyMeta (aname "fib") (toList [Binary emptyMeta (toOpTuple Sub) (aname "n") (aint 2)])))
-  test "predicate" expression "if p 10 then 10 else 20"
+  testTypeTree "predicate" expression "if p 10 then 10 else 20"
     (IfExpr emptyMeta
       (App emptyMeta (aname "p") (singleton (aint 10)))
       (aint 10)
       (aint 20))
-  test "stuff" expression "f a (1 * 2) * 3"
+  testTypeTree "stuff" expression "f a (1 * 2) * 3"
     (Binary emptyMeta (toOpTuple Mul)
       (App emptyMeta (aname "f") (toList [aname "a", Binary emptyMeta (toOpTuple Mul) (aint 1) (aint 2)]))
       (aint 3))
 
-  test "tuple" expression "(1, 2)" (NTuple emptyMeta (toList [aint 1, aint 2]))
-  test "3tuple" expression "(1, 2, 3)" (NTuple emptyMeta (toList [aint 1, aint 2, aint 3]))
-  test "4tuple" expression "(1, 2, 3, 4)" (NTuple emptyMeta (toList [aint 1, aint 2, aint 3, aint 4]))
-  test "tuple_spaces" expression "(   1   , 2   )" (NTuple emptyMeta (toList [aint 1, aint 2]))
-  test "3tuple_spaces" expression "(  1   , 2    , 3     )" (NTuple emptyMeta (toList [aint 1, aint 2, aint 3]))
-  test "tuple_arith" expression "((1 + 2, (3)))" (NTuple emptyMeta (toList [Binary emptyMeta (toOpTuple Add) (aint 1) (aint 2), aint 3]))
-  test "tuple_apply" expression "fmap f (snd (1,2), fst ( 1 , 2 ))"
+  testTypeTree "tuple" expression "(1, 2)" (NTuple emptyMeta (toList [aint 1, aint 2]))
+  testTypeTree "3tuple" expression "(1, 2, 3)" (NTuple emptyMeta (toList [aint 1, aint 2, aint 3]))
+  testTypeTree "4tuple" expression "(1, 2, 3, 4)" (NTuple emptyMeta (toList [aint 1, aint 2, aint 3, aint 4]))
+  testTypeTree "tuple_spaces" expression "(   1   , 2   )" (NTuple emptyMeta (toList [aint 1, aint 2]))
+  testTypeTree "3tuple_spaces" expression "(  1   , 2    , 3     )" (NTuple emptyMeta (toList [aint 1, aint 2, aint 3]))
+  testTypeTree "tuple_arith" expression "((1 + 2, (3)))" (NTuple emptyMeta (toList [Binary emptyMeta (toOpTuple Add) (aint 1) (aint 2), aint 3]))
+  testTypeTree "tuple_apply" expression "fmap f (snd (1,2), fst ( 1 , 2 ))"
     (App emptyMeta (aname "fmap") (toList
       [ (aname "f")
       , NTuple emptyMeta (toList
@@ -317,7 +317,7 @@ runTests = do
         ])
       ]
     ))
-  test "tuple_deep" expression "((((( ((((((1)),((2))),(3,((((4)))))),((5,6),(7,8))),(((9,(10)),(((11,12)))),((((13,14),(14,15)))))) )))))"
+  testTypeTree "tuple_deep" expression "((((( ((((((1)),((2))),(3,((((4)))))),((5,6),(7,8))),(((9,(10)),(((11,12)))),((((13,14),(14,15)))))) )))))"
     (NTuple emptyMeta (Cons
       (NTuple emptyMeta (Cons
         (NTuple emptyMeta (Cons
@@ -331,34 +331,34 @@ runTests = do
       (Cons (NTuple emptyMeta (Cons (NTuple emptyMeta (Cons (Atom emptyMeta (AInt 13)) (Cons (Atom emptyMeta (AInt 14)) (Nil))))
         (Cons (NTuple emptyMeta (Cons (Atom emptyMeta (AInt 14)) (Cons (Atom emptyMeta (AInt 15)) (Nil)))) (Nil)))) (Nil)))) (Nil))))
 
-  test "list_empty" expression "[]" (List emptyMeta Nil)
-  test "list1" expression "[1]" (List emptyMeta (toList [aint 1]))
-  test "list2" expression "[  1  ]" (List emptyMeta (toList [aint 1]))
-  test "list3" expression "[  1  ,2,3,     4    ,  5  ]" (List emptyMeta (toList [aint 1, aint 2, aint 3, aint 4, aint 5]))
-  test "list_nested" expression "[ [1,2] , [ 3 , 4 ] ]" (List emptyMeta $ toList [(List emptyMeta $ toList [aint 1, aint 2]), (List emptyMeta $ toList [aint 3, aint 4])])
-  test "list_complex" expression "[ 1 + 2 , 3 + 4 ] ++ []"
+  testTypeTree "list_empty" expression "[]" (List emptyMeta Nil)
+  testTypeTree "list1" expression "[1]" (List emptyMeta (toList [aint 1]))
+  testTypeTree "list2" expression "[  1  ]" (List emptyMeta (toList [aint 1]))
+  testTypeTree "list3" expression "[  1  ,2,3,     4    ,  5  ]" (List emptyMeta (toList [aint 1, aint 2, aint 3, aint 4, aint 5]))
+  testTypeTree "list_nested" expression "[ [1,2] , [ 3 , 4 ] ]" (List emptyMeta $ toList [(List emptyMeta $ toList [aint 1, aint 2]), (List emptyMeta $ toList [aint 3, aint 4])])
+  testTypeTree "list_complex" expression "[ 1 + 2 , 3 + 4 ] ++ []"
     (Binary emptyMeta (toOpTuple Append)
       (List emptyMeta $ toList [Binary emptyMeta (toOpTuple Add) (aint 1) (aint 2), Binary emptyMeta (toOpTuple Add) (aint 3) (aint 4)])
       (List emptyMeta Nil))
 
   test "binding_lit1" binding "x" (Lit emptyMeta (Name "x"))
   test "binding_lit2" binding "10" (Lit emptyMeta (AInt 10))
-  test "lambda1" expression "(\\x -> x)" (Lambda emptyMeta (toList [Lit emptyMeta (Name "x")]) (aname "x"))
-  test "lambda2" expression "( \\ x y z -> ( x , y , z ) )"
+  testTypeTree "lambda1" expression "(\\x -> x)" (Lambda emptyMeta (toList [Lit emptyMeta (Name "x")]) (aname "x"))
+  testTypeTree "lambda2" expression "( \\ x y z -> ( x , y , z ) )"
     (Lambda emptyMeta (toList [Lit emptyMeta (Name "x"), Lit emptyMeta (Name "y"), Lit emptyMeta (Name "z")])
       (NTuple emptyMeta (toList [aname "x", aname "y", aname "z"])))
-  test "lambda3" expression "(  \\  x ->   (   \\    y ->    (   \\    z ->     f   x   y   z )  )  )"
+  testTypeTree "lambda3" expression "(  \\  x ->   (   \\    y ->    (   \\    z ->     f   x   y   z )  )  )"
     (Lambda emptyMeta (singleton $ Lit emptyMeta $ Name "x")
       (Lambda emptyMeta (singleton $ Lit emptyMeta $ Name "y")
         (Lambda emptyMeta (singleton $ Lit emptyMeta $ Name "z")
           (App emptyMeta (aname "f") (toList [aname "x", aname "y", aname "z"])))))
-  test "lambda4" expression "(\\a b -> a + b) 1 2"
+  testTypeTree "lambda4" expression "(\\a b -> a + b) 1 2"
     (App emptyMeta
       (Lambda emptyMeta (toList [Lit emptyMeta (Name "a"), Lit emptyMeta (Name "b")])
         (Binary emptyMeta (toOpTuple Add) (aname "a") (aname "b")))
       (toList [aint 1, aint 2]))
 
-  test "lambda5" expression "(\\a -> (\\b -> (\\c -> (\\d -> (\\e -> (\\f -> (\\g -> a + b + c + d + e + f + g))))))) 1 2 3 4 5 6 7"
+  testTypeTree "lambda5" expression "(\\a -> (\\b -> (\\c -> (\\d -> (\\e -> (\\f -> (\\g -> a + b + c + d + e + f + g))))))) 1 2 3 4 5 6 7"
     (App emptyMeta
       (Lambda emptyMeta (Cons (Lit emptyMeta (Name "a")) (Nil))
         (Lambda emptyMeta (Cons (Lit emptyMeta (Name "b")) (Nil))
@@ -380,7 +380,7 @@ runTests = do
                       (Atom emptyMeta (Name "g"))))))))))
       (Cons (Atom emptyMeta (AInt 1)) (Cons (Atom emptyMeta (AInt 2)) (Cons (Atom emptyMeta (AInt 3)) (Cons (Atom emptyMeta (AInt 4)) (Cons (Atom emptyMeta (AInt 5)) (Cons (Atom emptyMeta (AInt 6)) (Cons (Atom emptyMeta (AInt 7)) (Nil)))))))))
 
-  test "lambda6" expression "\\x -> x + 2"
+  testTypeTree "lambda6" expression "\\x -> x + 2"
       (Lambda emptyMeta
         (toList [Lit emptyMeta (Name "x")])
         (Binary emptyMeta (toOpTuple Add) (aname "x") (aint 2)))
@@ -392,28 +392,28 @@ runTests = do
         (toList [Lit emptyMeta (Name "b")])
         (Binary emptyMeta (toOpTuple Add) (aname "a") (aname "b"))))
 
-  test "sectR1" expression "(+1)" (SectR emptyMeta (toOpTuple Add) (aint 1))
-  test "sectR2" expression "( ^ 2 )" (SectR emptyMeta (toOpTuple Power) (aint 2))
-  test "sectR3" expression "(++ [1])" (SectR emptyMeta (toOpTuple Append) (List emptyMeta (toList [aint 1])))
-  test "sectR4" expression "(<= (2 + 2))" (SectR emptyMeta (toOpTuple Leq) (Binary emptyMeta (toOpTuple Add) (aint 2) (aint 2)))
-  test "sectR5" expression "(   >=  (  2 + 2  )  )" (SectR emptyMeta (toOpTuple Geq) (Binary emptyMeta (toOpTuple Add) (aint 2) (aint 2)))
+  testTypeTree "sectR1" expression "(+1)" (SectR emptyMeta (toOpTuple Add) (aint 1))
+  testTypeTree "sectR2" expression "( ^ 2 )" (SectR emptyMeta (toOpTuple Power) (aint 2))
+  testTypeTree "sectR3" expression "(++ [1])" (SectR emptyMeta (toOpTuple Append) (List emptyMeta (toList [aint 1])))
+  testTypeTree "sectR4" expression "(<= (2 + 2))" (SectR emptyMeta (toOpTuple Leq) (Binary emptyMeta (toOpTuple Add) (aint 2) (aint 2)))
+  testTypeTree "sectR5" expression "(   >=  (  2 + 2  )  )" (SectR emptyMeta (toOpTuple Geq) (Binary emptyMeta (toOpTuple Add) (aint 2) (aint 2)))
 
-  test "prefixOp1" expression "(+)" (PrefixOp emptyMeta (toOpTuple Add))
-  test "prefixOp2" expression "( ++ )" (PrefixOp emptyMeta (toOpTuple Append))
-  test "prefixOp3" expression "((^) 2 10)" (App emptyMeta (PrefixOp emptyMeta (toOpTuple Power)) (toList [aint 2, aint 10]))
+  testTypeTree "prefixOp1" expression "(+)" (PrefixOp emptyMeta (toOpTuple Add))
+  testTypeTree "prefixOp2" expression "( ++ )" (PrefixOp emptyMeta (toOpTuple Append))
+  testTypeTree "prefixOp3" expression "((^) 2 10)" (App emptyMeta (PrefixOp emptyMeta (toOpTuple Power)) (toList [aint 2, aint 10]))
 
-  test "sectL1" expression "(1+)" (SectL emptyMeta (aint 1) (toOpTuple Add))
-  test "sectL2" expression "( n `mod` )" (SectL emptyMeta (aname "n") (toOpTuple (InfixFunc "mod")))
-  test "sectL3" expression "([1] ++)" (SectL emptyMeta (List emptyMeta $ toList [aint 1]) (toOpTuple Append))
-  test "sectL4" expression "(   ( 2 +  2 )  <= )" (SectL emptyMeta (Binary emptyMeta (toOpTuple Add) (aint 2) (aint 2)) (toOpTuple Leq))
+  testTypeTree "sectL1" expression "(1+)" (SectL emptyMeta (aint 1) (toOpTuple Add))
+  testTypeTree "sectL2" expression "( n `mod` )" (SectL emptyMeta (aname "n") (toOpTuple (InfixFunc "mod")))
+  testTypeTree "sectL3" expression "([1] ++)" (SectL emptyMeta (List emptyMeta $ toList [aint 1]) (toOpTuple Append))
+  testTypeTree "sectL4" expression "(   ( 2 +  2 )  <= )" (SectL emptyMeta (Binary emptyMeta (toOpTuple Add) (aint 2) (aint 2)) (toOpTuple Leq))
 
-  test "let1" expression "let x = 1 in x + x" (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (aint 1)) Nil) (Binary emptyMeta (toOpTuple Add) (aname "x") (aname "x")))
-  test "let2" expression "letty + let x = 1 in x" (Binary emptyMeta (toOpTuple Add) (aname "letty") (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (aint 1)) Nil) (aname "x")))
-  test "let3" expression "let x = let y = 1 in y in let z = 2 in x + z" (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 1))) (Nil)) (Atom emptyMeta (Name "y")))) (Nil)) (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 2))) (Nil)) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "z")))))
-  test "let4" expression "let { x = 1; y = 2; z = 3} in x + y + z"              (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (Atom emptyMeta (AInt 1))) (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 2))) (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 3))) (Nil)))) (Binary emptyMeta (toOpTuple Add) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "y"))) (Atom emptyMeta (Name "z"))))
-  test "let5" expression "let x = 1; y = 2; z = 3 in x + y + z"                 (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (Atom emptyMeta (AInt 1))) (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 2))) (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 3))) (Nil)))) (Binary emptyMeta (toOpTuple Add) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "y"))) (Atom emptyMeta (Name "z"))))
-  test "let6" expression "let x = 1\n    y = 2\n    z = 3 in x + y + z"         (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (Atom emptyMeta (AInt 1))) (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 2))) (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 3))) (Nil)))) (Binary emptyMeta (toOpTuple Add) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "y"))) (Atom emptyMeta (Name "z"))))
-  test "let7" expression "let {\n  x = 1 ;\n  y = 2 ;\n  z = 3\n} in x + y + z" (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (Atom emptyMeta (AInt 1))) (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 2))) (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 3))) (Nil)))) (Binary emptyMeta (toOpTuple Add) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "y"))) (Atom emptyMeta (Name "z"))))
+  testTypeTree "let1" expression "let x = 1 in x + x" (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (aint 1)) Nil) (Binary emptyMeta (toOpTuple Add) (aname "x") (aname "x")))
+  testTypeTree "let2" expression "letty + let x = 1 in x" (Binary emptyMeta (toOpTuple Add) (aname "letty") (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (aint 1)) Nil) (aname "x")))
+  testTypeTree "let3" expression "let x = let y = 1 in y in let z = 2 in x + z" (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 1))) (Nil)) (Atom emptyMeta (Name "y")))) (Nil)) (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 2))) (Nil)) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "z")))))
+  testTypeTree "let4" expression "let { x = 1; y = 2; z = 3} in x + y + z"              (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (Atom emptyMeta (AInt 1))) (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 2))) (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 3))) (Nil)))) (Binary emptyMeta (toOpTuple Add) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "y"))) (Atom emptyMeta (Name "z"))))
+  testTypeTree "let5" expression "let x = 1; y = 2; z = 3 in x + y + z"                 (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (Atom emptyMeta (AInt 1))) (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 2))) (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 3))) (Nil)))) (Binary emptyMeta (toOpTuple Add) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "y"))) (Atom emptyMeta (Name "z"))))
+  testTypeTree "let6" expression "let x = 1\n    y = 2\n    z = 3 in x + y + z"         (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (Atom emptyMeta (AInt 1))) (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 2))) (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 3))) (Nil)))) (Binary emptyMeta (toOpTuple Add) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "y"))) (Atom emptyMeta (Name "z"))))
+  testTypeTree "let7" expression "let {\n  x = 1 ;\n  y = 2 ;\n  z = 3\n} in x + y + z" (LetExpr emptyMeta (Cons (Tuple (Lit emptyMeta (Name "x")) (Atom emptyMeta (AInt 1))) (Cons (Tuple (Lit emptyMeta (Name "y")) (Atom emptyMeta (AInt 2))) (Cons (Tuple (Lit emptyMeta (Name "z")) (Atom emptyMeta (AInt 3))) (Nil)))) (Binary emptyMeta (toOpTuple Add) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "x")) (Atom emptyMeta (Name "y"))) (Atom emptyMeta (Name "z"))))
 
   test "consLit1" binding "(x:xs)" (ConsLit emptyMeta (Lit emptyMeta (Name "x")) (Lit emptyMeta (Name "xs")))
   test "consLit2" binding "(x:(y:zs))" (ConsLit emptyMeta (Lit emptyMeta (Name "x")) (ConsLit emptyMeta (Lit emptyMeta (Name "y")) (Lit emptyMeta (Name "zs"))))
@@ -451,7 +451,7 @@ runTests = do
     (toList [Def "a" Nil (aint 10), Def "b" Nil (aint 20)])
 
   test "prelude" definitions prelude parsedPrelude
-  test "expression" expression "sum (map (^2) [1, 2, 3, 4])"
+  testTypeTree "expression" expression "sum (map (^2) [1, 2, 3, 4])"
     (App emptyMeta
       (Atom emptyMeta (Name "sum"))
       (Cons
@@ -465,18 +465,18 @@ runTests = do
   test "char_atom1" atom "'a'" (Char "a")
   test "char_atom2" atom "'\\\\'" (Char "\\")
   test "char_atom3" atom "'\\n'" (Char "\n")
-  test "char_expr1" expression "'\\r'" (Atom emptyMeta (Char "\r"))
-  test "char_expr2" expression "['\\\\', '\\'', '\\\"']" (List emptyMeta $ toList [Atom emptyMeta (Char "\\"), Atom emptyMeta (Char "'"), Atom emptyMeta (Char "\"")])
+  testTypeTree "char_expr1" expression "'\\r'" (Atom emptyMeta (Char "\r"))
+  testTypeTree "char_expr2" expression "['\\\\', '\\'', '\\\"']" (List emptyMeta $ toList [Atom emptyMeta (Char "\\"), Atom emptyMeta (Char "'"), Atom emptyMeta (Char "\"")])
 
-  test "string1" expression "\"asdf\"" (List emptyMeta $ toList [Atom emptyMeta (Char "a"), Atom emptyMeta (Char "s"), Atom emptyMeta (Char "d"), Atom emptyMeta (Char "f")])
-  test "string2" expression "\"\\\\\\n\\\"\\\'\"" (List emptyMeta $ toList [Atom emptyMeta (Char "\\"), Atom emptyMeta (Char "\n"), Atom emptyMeta (Char "\""), Atom emptyMeta (Char "'")])
+  testTypeTree "string1" expression "\"asdf\"" (List emptyMeta $ toList [Atom emptyMeta (Char "a"), Atom emptyMeta (Char "s"), Atom emptyMeta (Char "d"), Atom emptyMeta (Char "f")])
+  testTypeTree "string2" expression "\"\\\\\\n\\\"\\\'\"" (List emptyMeta $ toList [Atom emptyMeta (Char "\\"), Atom emptyMeta (Char "\n"), Atom emptyMeta (Char "\""), Atom emptyMeta (Char "'")])
 
-  test "listComp1" expression "[ x | x <- [1,2,3] ]" $ ListComp emptyMeta (Atom emptyMeta (Name "x")) (toList [Gen emptyMeta (Lit emptyMeta (Name "x")) (List emptyMeta (toList [Atom emptyMeta (AInt 1), Atom emptyMeta (AInt 2), Atom emptyMeta (AInt 3)]))])
-  test "listComp2" expression "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp emptyMeta (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "b")) (Atom emptyMeta (Name ("c")))) $ toList [Let emptyMeta (Lit emptyMeta (Name "b")) (Atom emptyMeta (AInt 3)),
+  testTypeTree "listComp1" expression "[ x | x <- [1,2,3] ]" $ ListComp emptyMeta (Atom emptyMeta (Name "x")) (toList [Gen emptyMeta (Lit emptyMeta (Name "x")) (List emptyMeta (toList [Atom emptyMeta (AInt 1), Atom emptyMeta (AInt 2), Atom emptyMeta (AInt 3)]))])
+  testTypeTree "listComp2" expression "[ b + c | let b = 3, c <- [1 .. ]]" $ ListComp emptyMeta (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "b")) (Atom emptyMeta (Name ("c")))) $ toList [Let emptyMeta (Lit emptyMeta (Name "b")) (Atom emptyMeta (AInt 3)),
     Gen emptyMeta (Lit emptyMeta (Name "c")) (ArithmSeq emptyMeta (Atom emptyMeta (AInt 1)) Nothing Nothing)]
-  test "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp emptyMeta (Binary emptyMeta (toOpTuple Mul) (Atom emptyMeta (Name "a")) (Atom emptyMeta (Name "b"))) $ toList [Let emptyMeta (Lit emptyMeta (Name "a")) (Atom emptyMeta (AInt 5)),
+  testTypeTree "listComp3" expression "[a*b|let a=5,let b=a+1]" $ ListComp emptyMeta (Binary emptyMeta (toOpTuple Mul) (Atom emptyMeta (Name "a")) (Atom emptyMeta (Name "b"))) $ toList [Let emptyMeta (Lit emptyMeta (Name "a")) (Atom emptyMeta (AInt 5)),
     Let emptyMeta (Lit emptyMeta (Name "b")) (Binary emptyMeta (toOpTuple Add) (Atom emptyMeta (Name "a")) (Atom emptyMeta (AInt 1)))]
-  test "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp emptyMeta (aname "x") $ toList [ Gen emptyMeta (Lit emptyMeta (Name "x")) (ArithmSeq emptyMeta (aint 1) Nothing (Just (aint 10))), Guard emptyMeta (App emptyMeta (aname "even") $ toList [aname "x"])]
+  testTypeTree "listComp4" expression "[ x | x <- [1..10], even x ]" $ ListComp emptyMeta (aname "x") $ toList [ Gen emptyMeta (Lit emptyMeta (Name "x")) (ArithmSeq emptyMeta (aint 1) Nothing (Just (aint 10))), Guard emptyMeta (App emptyMeta (aname "even") $ toList [aname "x"])]
 
   testConstructorsExpression
   testConstructorsDefinition
@@ -708,17 +708,17 @@ def n bs e = Def n (toList bs) e
 
 testConstructorsExpression :: Test Unit
 testConstructorsExpression = do
-  test "simple-expr-1" expression
+  testTypeTree "simple-expr-1" expression
     "Foo"
     (econstr "Foo")
 
-  test "simple-expr-2" expression
+  testTypeTree "simple-expr-2" expression
     "Foo 1"
     (eapp
       (econstr "Foo")
       [eint 1])
 
-  test "simple-expr-3" expression
+  testTypeTree "simple-expr-3" expression
     "Foo 1 (1 + 2)"
     (eapp
       (econstr "Foo")
@@ -727,44 +727,44 @@ testConstructorsExpression = do
         (eint 1)
         (eint 2)])
 
-  test "nested-expr-1" expression
+  testTypeTree "nested-expr-1" expression
     "Foo Bar"
     (eapp
       (econstr "Foo")
       [ econstr "Bar" ])
 
-  test "nested-expr-2" expression
+  testTypeTree "nested-expr-2" expression
     "Foo bar"
     (eapp
       (econstr "Foo")
       [ ename "bar"])
 
-  test "nested-expr-3" expression
+  testTypeTree "nested-expr-3" expression
     "foo Bar"
     (eapp
       (ename "foo")
       [econstr "Bar"])
 
-  test "nested-deep-expr-1" expression
+  testTypeTree "nested-deep-expr-1" expression
     "Foo1 (Foo2 (Foo3 bar))"
     (eapp (econstr "Foo1")
       [ eapp (econstr "Foo2")
         [ eapp (econstr "Foo3")
           [ ename "bar" ]]])
 
-  test "nested-expr-4" expression
+  testTypeTree "nested-expr-4" expression
     "Bar || Foo"
     (ebin Or
       (econstr "Bar")
       (econstr "Foo"))
 
-  test "nested-expr-5" expression
+  testTypeTree "nested-expr-5" expression
     "Bar 1 :- Foo 2 3"
     (ebin (InfixConstr ":-")
       (eapp (econstr "Bar") [eint 1])
       (eapp (econstr "Foo") [eint 2, eint 3]))
 
-  test "nested-expr-6" expression
+  testTypeTree "nested-expr-6" expression
     "Bar 1 (Foo ::: Foo 2)"
     (eapp (econstr "Bar")
       [ eint 1
