@@ -346,9 +346,9 @@ div.evalError {
 }
 
 .clicked div {
-  background: #a33;
+  background: green;
 }
 
-.evaluated div{
-  box-shadow: 0 0.1em 0.3em 0 #33a;
+.evaluated div {
+  box-shadow: 0 0.1em 0.3em 0 red;
 }
