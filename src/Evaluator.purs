@@ -36,10 +36,6 @@ zipWithM :: forall m a b c. (Monad m) => (a -> b -> m c) -> List a -> List b -> 
 zipWithM _ Nil _                   = pure Nil
 zipWithM _ _   Nil                 = pure Nil
 zipWithM f (Cons a as) (Cons b bs) = Cons <$> f a b <*> zipWithM f as bs
-
-mapM' :: forall a b m. (Monad m) => (a -> m b) -> Maybe a -> m (Maybe b)
-mapM' f Nothing  = pure Nothing
-mapM' f (Just x) = Just <$> (f x)
 --------------------------------------------------------------------------------
 
 data EvalError =
@@ -216,22 +212,22 @@ recurse env expr bnd = do
       (Unary meta op e)       ->
         Unary meta <$> pure op <*> evalToBinding env e bnd
       (List meta es)          ->
-        List meta <$> mapM (\e -> evalToBinding env e bnd) es
+        List meta <$> traverse (\e -> evalToBinding env e bnd) es
       (NTuple meta es)        ->
-        NTuple meta <$> mapM (\e -> evalToBinding env e bnd) es
+        NTuple meta <$> traverse (\e -> evalToBinding env e bnd) es
       (IfExpr meta c t e)     ->
         IfExpr meta <$> evalToBinding env c bnd <*> pure t <*> pure e
       (App meta c@(Atom _ (Constr _)) args) ->
-        App meta <$> pure c <*> mapM (\e -> evalToBinding env e bnd) args
+        App meta <$> pure c <*> traverse (\e -> evalToBinding env e bnd) args
       (App meta f args)       ->
         App meta <$> evalToBinding env f bnd <*> pure args
       (ArithmSeq meta c t e)     ->
         ArithmSeq meta
         <$> evalToBinding env c bnd
-        <*> mapM' (\x -> evalToBinding env x bnd) t
-        <*> mapM' (\x -> evalToBinding env x bnd) e
+        <*> traverse (\x -> evalToBinding env x bnd) t
+        <*> traverse (\x -> evalToBinding env x bnd) e
       (ListComp meta e qs)    ->
-        ListComp meta <$> evalToBinding env e bnd <*> mapM (\x -> evalToBindingQual env x bnd) qs
+        ListComp meta <$> evalToBinding env e bnd <*> traverse (\x -> evalToBindingQual env x bnd) qs
       _                  -> pure expr
 
     evalToBindingQual :: Env -> TypeQual -> Binding Meta -> State Int TypeQual
@@ -302,9 +298,9 @@ clampStep istart istep = if istep >= istart
 
 exprFromStepTo :: TypeTree -> Maybe TypeTree -> Maybe TypeTree -> Evaluator (Quat (Maybe TypeTree))
 exprFromStepTo start step end = case start of
-  Atom _ (AInt _) -> (mapM' (\a -> Atom <$> freshMeta <*> pure (AInt a))) `mapMQuat` intQuat
-  Atom _ (Bool _) -> (mapM' (\a -> Atom <$> freshMeta <*> pure (Bool a))) `mapMQuat` (intToABool intQuat)
-  Atom _ (Char _) -> (mapM' (\a -> Atom <$> freshMeta <*> pure (Char (String.singleton a)))) `mapMQuat` (intToAChar intQuat)
+  Atom _ (AInt _) -> (traverse (\a -> Atom <$> freshMeta <*> pure (AInt a))) `mapMQuat` intQuat
+  Atom _ (Bool _) -> (traverse (\a -> Atom <$> freshMeta <*> pure (Bool a))) `mapMQuat` (intToABool intQuat)
+  Atom _ (Char _) -> (traverse (\a -> Atom <$> freshMeta <*> pure (Char (String.singleton a)))) `mapMQuat` (intToAChar intQuat)
   _               -> pure $ Quat Nothing Nothing Nothing Nothing
     where
       intQuat = intFromStepTo (unsafeTypeTreeToInt start) (unsafeTypeTreeToInt <$> step) (unsafeTypeTreeToInt <$> end)
@@ -645,14 +641,6 @@ match' b@(ConstrLit _ (InfixDataConstr n _ _ l r)) e@(App _ (PrefixOp _ (Tuple (
 match' b@(ConstrLit _ _) e = throwError $ checkStrictness b e
 
 
---TODO: replace with purescript mapM
-mapM :: forall a b m. (Monad m) => (a -> m b) -> List a -> m (List b)
-mapM f Nil = pure Nil
-mapM f (Cons x xs) = do
-  y  <- f x
-  ys <- mapM f xs
-  pure $ Cons y ys
-
 -- removes every entry in StrMap that is inside the binding
 removeOverlapping :: Binding Meta -> StrMap TypeTree -> StrMap TypeTree
 removeOverlapping bind = removeOverlapping' (boundNames bind)
@@ -675,7 +663,7 @@ replace' subs = go
     (SectL m e op)         -> SectL m <$> go e <*> pure op
     (SectR m op e)         -> SectR m <$> pure op <*> go e
     (IfExpr m ce te ee)    -> IfExpr m <$> go ce <*> go te <*> go ee
-    (ArithmSeq m ce te ee) -> ArithmSeq m <$> go ce <*> (mapM' go te) <*> (mapM' go ee)
+    (ArithmSeq m ce te ee) -> ArithmSeq m <$> go ce <*> (traverse go te) <*> (traverse go ee)
     (Lambda m binds body)  -> (avoidCapture subs binds)
       *> (Lambda m <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
     (App m func exprs)     -> App m <$> go func <*> traverse go exprs
