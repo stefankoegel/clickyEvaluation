@@ -17,7 +17,7 @@ import Control.Monad.Eff.Console (CONSOLE)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
-import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding, Meta(..),
+import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding, Meta(..), Index,
             Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError, getMetaMType)
 
 import AST as AST
@@ -30,6 +30,9 @@ type Div = RoseTree { content :: String, classes :: (List String), zipper :: May
 type DivHole = TypeTree -> (TypeTree -> TypeTree) -> Div
 
 type OpTuple = Tuple Op Meta
+
+-- Tells, which nodes are to be marked as clicked or evaluated, if any.
+type Highlight = { clicked: Maybe Index, evaluated: Maybe Index }
 
 nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
 nodeHole content classes children expr hole =
