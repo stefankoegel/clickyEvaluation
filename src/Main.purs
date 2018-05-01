@@ -29,7 +29,7 @@ makeCE input selector = do
   container <- J.select selector
   doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = preludeEnv
-    showExprIn expr nextIdx env [] container Nothing
+    showExprIn (Tuple Web.emptyHighlight expr) nextIdx env [] container Nothing
     pure unit
 
 makeCEwithDefs :: forall eff. String -> String -> String -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
@@ -38,7 +38,7 @@ makeCEwithDefs input defs selector = do
   container <- J.select selector
   doWithJust (parseExpr input) \(Tuple expr nextIdx)-> do
     let env = stringToEnv defs
-    showExprIn expr nextIdx env [] container Nothing
+    showExprIn (Tuple Web.emptyHighlight expr) nextIdx env [] container Nothing
 
 makeCEwithHistory :: forall eff. String -> String -> String -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
 makeCEwithHistory input selector histSelector = do
@@ -47,7 +47,7 @@ makeCEwithHistory input selector histSelector = do
   histContainer <- J.select histSelector
   doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = preludeEnv
-    showExprIn expr nextIdx env [] container (Just histContainer)
+    showExprIn (Tuple Web.emptyHighlight expr) nextIdx env [] container (Just histContainer)
 
 makeCEwithDefsAndHistory :: forall eff. String -> String -> String -> String -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
 makeCEwithDefsAndHistory  input defs selector histSelector = do
@@ -56,7 +56,7 @@ makeCEwithDefsAndHistory  input defs selector histSelector = do
   histContainer <- J.select histSelector
   doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = stringToEnv defs
-    showExprIn expr nextIdx env [] container (Just histContainer)
+    showExprIn (Tuple Web.emptyHighlight expr) nextIdx env [] container (Just histContainer)
 
 -- | Try to parse the given expression and report parser errors.
 parseExpr :: forall eff. String -> Eff (dom :: DOM, console :: CONSOLE | eff) (Maybe (Tuple AST.TypeTree Int))
@@ -78,11 +78,12 @@ eval1' nextIdx env expr = case eval1 nextIdx env expr of
 
 makeCallback :: Int
              -> Eval.Env
-             -> Array AST.TypeTree
+             -> Array (Tuple Web.Highlight AST.TypeTree)
              -> J.JQuery
              -> Maybe J.JQuery
+             -> Web.Highlight
              -> Web.Callback
-makeCallback nextIdx env history container histContainer expr hole event jq = do
+makeCallback nextIdx env history container histContainer currHighlight expr hole event jq = do
   J.stopImmediatePropagation event
   let evalFunc  = if ctrlKeyPressed event then Eval.eval nextIdx else eval1' nextIdx
       evaluated = evalFunc env expr -- :: Tuple TypeTree Index
@@ -90,10 +91,19 @@ makeCallback nextIdx env history container histContainer expr hole event jq = do
       nextIdx'  = snd evaluated
   case getType event of
     "click"     -> if fst evaluated /= expr
-                   then showExprIn (hole evalExpr) nextIdx' env (cons (hole expr) history) container histContainer
+                   then showExprIn
+                     (Tuple (Web.evalHighlight (AST.index evalExpr)) (hole evalExpr))
+                     nextIdx'
+                     env
+                     (cons (Tuple (currHighlight {clicked = Just (AST.index expr)}) (hole expr)) history)
+                     container
+                     histContainer
                    else pure unit
     "mouseover" -> do
                      log $ show expr
+                     log
+                      $ "clicked = " <> show currHighlight.clicked
+                      <> ", eval'ed = " <> show currHighlight.evaluated
                      case eval1 nextIdx env expr of
                        Right (Tuple expr' _) -> do -- index can be ignored here (I guess...)
                          log $ show expr'
@@ -154,7 +164,7 @@ typeCheckExpression typedEnv expr = do
       pure $ Just typedExpr
 
 -- | Construct a div tree from the given typed expression.
-buildDivTreeFromExpression :: forall eff. AST.TypeTree
+buildDivTreeFromExpression :: forall eff. (Tuple Web.Highlight AST.TypeTree)
                            -> Int
                            -> Eval.Env
                            -> Array (Tuple Web.Highlight AST.TypeTree)
@@ -162,7 +172,9 @@ buildDivTreeFromExpression :: forall eff. AST.TypeTree
                            -> Maybe J.JQuery
                            -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
 buildDivTreeFromExpression typedExpr nextIdx env history container histContainer = do
-    content <- exprToJQuery (makeCallback nextIdx env history container histContainer) typedExpr
+    content <- exprToJQuery
+      (makeCallback nextIdx env history container histContainer (fst typedExpr))
+      typedExpr
     J.clear container
     J.append content container
     case histContainer of
@@ -180,10 +192,10 @@ buildDivTreeFromExpression typedExpr nextIdx env history container histContainer
 
 -- | Show the given expression inside a given environment after the types of the environment as
 -- | well as the expression have been inferred.
-showExprIn :: forall eff. AST.TypeTree
+showExprIn :: forall eff. (Tuple Web.Highlight AST.TypeTree)
            -> Int
            -> Eval.Env
-           -> Array AST.TypeTree
+           -> Array (Tuple Web.Highlight AST.TypeTree)
            -> J.JQuery
            -> Maybe J.JQuery
            -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit

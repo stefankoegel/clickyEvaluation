@@ -51,7 +51,7 @@ highlight' { clicked: mi, evaluated: mj } (Meta m) = case Tuple (cmp mi) (cmp mj
    cmp = map (\i -> m.index == i)
 
 highlight :: Highlight -> Meta -> Div -> Div
-highlight hl meta (Node a chs) = Node (a { classes = highlight' hl meta <> a.classes }) chs
+highlight hl meta (Node a chs) = Node (a { classes = a.classes <> highlight' hl meta }) chs
 
 
 nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
