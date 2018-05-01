@@ -14,7 +14,7 @@ import Data.Maybe (Maybe(..))
 import Data.StrMap (empty)
 import Data.Array (cons)
 import Data.Traversable (for)
-import Data.Tuple (Tuple (..), fst, snd)
+import Data.Tuple (Tuple (..), fst, snd, uncurry)
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
@@ -103,8 +103,8 @@ makeCallback nextIdx env history container histContainer expr hole event jq = do
     _           -> pure unit
   pure unit
 
-exprToJQuery :: forall eff. Web.Callback -> AST.TypeTree -> Eff (dom :: DOM , console :: CONSOLE| eff) J.JQuery
-exprToJQuery callback = Web.exprToDiv >>> Web.divToJQuery true callback
+exprToJQuery :: forall eff. Web.Callback -> Tuple Web.Highlight AST.TypeTree -> Eff (dom :: DOM , console :: CONSOLE| eff) J.JQuery
+exprToJQuery callback = uncurry Web.exprToDiv >>> Web.divToJQuery true callback
 
 -- | Clear the contents of info div.
 clearInfo :: forall eff. Eff (dom :: DOM, console :: CONSOLE | eff) Unit
@@ -157,7 +157,7 @@ typeCheckExpression typedEnv expr = do
 buildDivTreeFromExpression :: forall eff. AST.TypeTree
                            -> Int
                            -> Eval.Env
-                           -> Array AST.TypeTree
+                           -> Array (Tuple Web.Highlight AST.TypeTree)
                            -> J.JQuery
                            -> Maybe J.JQuery
                            -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
