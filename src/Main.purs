@@ -84,11 +84,13 @@ makeCallback :: Int
              -> Web.Callback
 makeCallback nextIdx env history container histContainer expr hole event jq = do
   J.stopImmediatePropagation event
-  let evalFunc = if ctrlKeyPressed event then Eval.eval nextIdx else eval1' nextIdx
+  let evalFunc  = if ctrlKeyPressed event then Eval.eval nextIdx else eval1' nextIdx
       evaluated = evalFunc env expr -- :: Tuple TypeTree Index
+      evalExpr  = fst evaluated
+      nextIdx'  = snd evaluated
   case getType event of
     "click"     -> if fst evaluated /= expr
-                   then showExprIn (hole (fst evaluated)) (snd evaluated) env (cons (hole expr) history) container histContainer
+                   then showExprIn (hole evalExpr) nextIdx' env (cons (hole expr) history) container histContainer
                    else pure unit
     "mouseover" -> do
                      log $ show expr
