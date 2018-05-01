@@ -391,9 +391,9 @@ evalListComp env expr (Cons q qs) = case q of
     listcomp2 <- pure $ ListComp m1 expr (Cons (Gen m2 b (List m3 es)) qs)
     case listcomp1 of
       List _ (Cons x Nil) -> do
-        m1 <- freshMeta
-        m2 <- freshMeta
-        pure $ Binary m1 (Tuple Colon m2) x listcomp2
+        m4 <- freshMeta
+        m5 <- freshMeta
+        pure $ Binary m4 (Tuple Colon m5) x listcomp2
       _ -> AST.binary
         <$> freshMeta
         <*> freshMeta
@@ -649,33 +649,43 @@ removeOverlapping bind = removeOverlapping' (boundNames bind)
     removeOverlapping' Nil         = id
     removeOverlapping' (Cons s ss) = removeOverlapping' ss <<< delete s
 
+freshIndices :: TypeTree -> Evaluator TypeTree
+freshIndices = AST.traverseTree
+  (AST.traverseBinding (\_ -> freshMeta))
+  (\(Tuple o _) -> Tuple o <$> freshMeta)
+  (\_ -> freshMeta)
+
 replace' :: StrMap TypeTree -> TypeTree -> Evaluator TypeTree
 replace' subs = go
   where
   go tt = case tt of
     a@(Atom _ (Name name)) -> case Map.lookup name subs of
-      Just subTypeTree -> pure subTypeTree
+      Just subTypeTree -> AST.traverseTree
+        (AST.traverseBinding (\_ -> freshMeta))
+        (\(Tuple o _) -> Tuple o <$> freshMeta)
+        (\_ -> freshMeta)
+        subTypeTree
       Nothing          -> pure a
-    (List m exprs)         -> List m <$> (traverse go exprs)
-    (NTuple m exprs)       -> NTuple m <$> (traverse go exprs)
-    (Binary m op e1 e2)    -> Binary m <$> pure op <*> go e1 <*> go e2
-    (Unary m op e)         -> Unary m <$> pure op <*> go e
-    (SectL m e op)         -> SectL m <$> go e <*> pure op
-    (SectR m op e)         -> SectR m <$> pure op <*> go e
-    (IfExpr m ce te ee)    -> IfExpr m <$> go ce <*> go te <*> go ee
-    (ArithmSeq m ce te ee) -> ArithmSeq m <$> go ce <*> (traverse go te) <*> (traverse go ee)
-    (Lambda m binds body)  -> (avoidCapture subs binds)
-      *> (Lambda m <$> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
-    (App m func exprs)     -> App m <$> go func <*> traverse go exprs
-    (ListComp m expr quals) -> do
+    (List _ exprs)         -> List <$> freshMeta <*> (traverse go exprs)
+    (NTuple _ exprs)       -> NTuple <$> freshMeta <*> (traverse go exprs)
+    (Binary _ op e1 e2)    -> Binary <$> freshMeta <*> pure op <*> go e1 <*> go e2
+    (Unary _ op e)         -> Unary <$> freshMeta <*> pure op <*> go e
+    (SectL _ e op)         -> SectL <$> freshMeta <*> go e <*> pure op
+    (SectR _ op e)         -> SectR <$> freshMeta <*> pure op <*> go e
+    (IfExpr _ ce te ee)    -> IfExpr <$> freshMeta <*> go ce <*> go te <*> go ee
+    (ArithmSeq _ ce te ee) -> ArithmSeq <$> freshMeta <*> go ce <*> (traverse go te) <*> (traverse go ee)
+    (Lambda _ binds body)  -> (avoidCapture subs binds)
+      *> (Lambda <$> freshMeta <*> pure binds <*> replace' (foldr Map.delete subs (boundNames' binds)) body)
+    (App _ func exprs)     -> App <$> freshMeta <*> go func <*> traverse go exprs
+    (ListComp _ expr quals) -> do
       Tuple quals' subs' <- runStateT (replaceQualifiers quals) subs
       expr'              <- replace' subs' expr
-      pure $ ListComp m expr' quals'
-    (LetExpr m binds expr)  -> do
+      ListComp <$> freshMeta <*> pure expr' <*> pure quals'
+    (LetExpr _ binds expr)  -> do
       Tuple binds' subs' <- runStateT (replaceBindings binds) subs
       expr'              <- replace' subs' expr
-      pure $ LetExpr m binds' expr'
-    e                     -> pure e
+      LetExpr <$> freshMeta <*> pure binds' <*> pure expr'
+    e                     -> freshIndices e
 
 avoidCapture :: StrMap TypeTree -> (List (Binding Meta)) -> Evaluator Unit
 avoidCapture subs binds = case intersect (concatMap freeVariables $ Map.values subs) (boundNames' binds) of
