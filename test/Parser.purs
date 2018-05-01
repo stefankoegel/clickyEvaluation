@@ -122,18 +122,22 @@ instance testableADTDef :: Testable ADTDef where
 instance testableList :: (Testable a) => Testable (List a) where
   equals as bs = and $ zipWith equals as bs
 
-test :: forall a. (Testable a) => String -> IndentParser String a -> String -> a -> Test Unit
-test name p input expected = case runParserIndent p input of
+test' :: forall a. (Testable a)
+      => (a -> Boolean)
+      -> String
+      -> IndentParser String a
+      -> String
+      -> a
+      -> Test Unit
+test' predicate name p input expected = case runParserIndent p input of
   Left parseError -> tell' $
     "Parse fail (" <> name <> "): "
     <> padLeft' (parseErrorPosition parseError) <> "\n"
     <> padLeft (parseErrorMessage parseError) <> "\n"
     <> "Input:\n"
     <> padLeft input
-  Right (Tuple result _) ->
-    if result `equals` expected
-      then log $ "Parse success (" <> name <> ")"
-      else tell' $
+  Right (Tuple result _)
+    | not (result `equals` expected) -> tell' $
         "Parse fail (" <> name <> "):\n"
         <> "Output:\n"
         <> padLeft' result <> "\n"
@@ -141,7 +145,17 @@ test name p input expected = case runParserIndent p input of
         <> padLeft' expected <> "\n"
         <> "Input:\n"
         <> padLeft input
-		
+    | not (predicate result) -> tell' $
+        "Predicate fail (" <> name <> "):\n"
+        <> "Output:\n"
+        <> padLeft' result <> "\n"
+        <> "Expected:\n"
+        <> padLeft' expected <> "\n"
+        <> "Input:\n"
+        <> padLeft input
+    | otherwise -> log $ "Parse success (" <> name <> ")"
+
+test = test' (const true)
 
 rejectTest :: forall a . (Show a)
                       => String
