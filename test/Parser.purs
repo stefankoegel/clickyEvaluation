@@ -157,6 +157,8 @@ test' predicate name p input expected = case runParserIndent p input of
 
 test = test' (const true)
 
+testTypeTree = test' isValidlyIndexed
+
 rejectTest :: forall a . (Show a)
                       => String
                       -> IndentParser String a
