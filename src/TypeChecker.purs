@@ -11,7 +11,7 @@ import Data.Foldable (intercalate, fold, foldl, foldr)
 import Data.List (List(..), (:), concat, unzip, zip, last)
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, fromJust, isJust, maybe)
 import Data.Set as Set
 import Data.String as String
 import Data.Traversable (traverse)
@@ -19,7 +19,7 @@ import Data.Tuple (Tuple(Tuple), snd, fst)
 import Partial.Unsafe (unsafeCrashWith)
 import Prelude (
   class Eq, class Show, Unit,
-  ($), (+), (-), (<$>), (<<<), (<>), (==), (>), (>>=), (>>>),
+  ($), (+), (-), (<$>), (<<<), (<>), (==), (>), (>>=), (>>>), (&&),
   bind, const, div, flip, id, map, mod, negate, not, otherwise, pure, show, unit)
 
 import AST
@@ -157,7 +157,7 @@ instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => S
   ftv (Guard a c) = ftv c
 
 -- | Substitutable instance for the type tree.
-instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple Op (Maybe Type)) (Maybe Type)) where
+instance subTypeTree :: Substitutable (Tree Atom (Binding Meta) (Tuple Op Meta) Meta) where
   apply s (Atom t a) = Atom (apply s t) a
   apply s (List t es) = List (apply s t) (apply s es)
   apply s (NTuple t es) = NTuple (apply s t) (apply s es)
@@ -175,7 +175,7 @@ instance subTypeTree :: Substitutable (Tree Atom (Binding (Maybe Type)) (Tuple O
   ftv typeTree = ftv (extractFromTree typeTree)
 
 -- | Substitutable instance for operator tuples used in the type tree.
-instance subOpTuple :: Substitutable (Tuple Op (Maybe Type)) where
+instance subOpTuple :: Substitutable (Tuple Op Meta) where
   apply s (Tuple op t) = Tuple op (apply s t)
   ftv (Tuple op t) = ftv t
 
@@ -187,6 +187,10 @@ instance subTypedBinding :: Substitutable a => Substitutable (Binding a) where
   apply s (ConstrLit t c) = ConstrLit (apply s t) (map (apply s) c)
 
   ftv = extractFromBinding >>> ftv
+
+instance subMeta :: Substitutable Meta where
+  apply s (Meta meta) = Meta (meta {mtype = apply s meta.mtype})
+  ftv (Meta meta) = ftv meta.mtype
 
 -- +------------------------+
 -- | Type Variable Mappings |
@@ -473,16 +477,16 @@ lookupEnv tvar = do
     Just scheme -> instantiate scheme >>= (pure <<< Just)
 
 -- | Given an indexed expression, add a type constraint using the given type and expression index.
-returnWithConstraint :: IndexedTypeTree -> Type -> Infer (Tuple Type Constraints)
+returnWithConstraint :: TypeTree -> Type -> Infer (Tuple Type Constraints)
 returnWithConstraint expr t = do
   tv <- fresh
   pure $ Tuple tv (constraintSingleMapped (index expr) tv t)
 
 -- TODO: Where can this be used instead of `returnWithConstraint`?
-returnDirect :: IndexedTypeTree -> Type -> Infer (Tuple Type Constraints)
+returnDirect :: TypeTree -> Type -> Infer (Tuple Type Constraints)
 returnDirect expr t = pure $ Tuple t (constraintSingleMapped (index expr) t t)
 
-returnWithTypeError :: IndexedTypeTree -> TypeError -> Infer (Tuple Type Constraints)
+returnWithTypeError :: TypeTree -> TypeError -> Infer (Tuple Type Constraints)
 returnWithTypeError expr typeError = do
   { stopOnError: stopOnError } <- ask
   if stopOnError
@@ -495,18 +499,18 @@ setTypeConstraintFor' :: Index -> Type -> Type -> Constraints
 setTypeConstraintFor' idx t1 t2 = constraintSingleMapped idx t1 t2
 
 -- | Setup a new type constraint for a given expression node.
-setTypeConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
+setTypeConstraintFor :: TypeTree -> Type -> Type -> Constraints
 setTypeConstraintFor expr t1 t2 = constraintSingleMapped (index expr) t1 t2
 
 -- | Setup a new type constraint mapping a type to itself.
-setSingleTypeConstraintFor :: IndexedTypeTree -> Type -> Constraints
+setSingleTypeConstraintFor :: TypeTree -> Type -> Constraints
 setSingleTypeConstraintFor expr t = constraintSingleMapped (index expr) t t
 
 setSingleTypeConstraintFor' :: Index -> Type -> Constraints
 setSingleTypeConstraintFor' idx t = constraintSingleMapped idx t t
 
 -- | Set a constraint not referring to a node.
-setConstraintFor :: IndexedTypeTree -> Type -> Type -> Constraints
+setConstraintFor :: TypeTree -> Type -> Type -> Constraints
 setConstraintFor expr t1 t2 = constraintSingleUnmapped (index expr) t1 t2
 
 setConstraintFor' :: Index -> Type -> Type -> Constraints
@@ -556,9 +560,9 @@ getOpType op = case op of
 
 -- | Given an operator tuple, determine the operator type and put a type constraint on the
 -- | corresponding expression node.
-inferOp :: Tuple Op MIType -> Infer (Tuple Type Constraints)
-inferOp (Tuple (InfixFunc name) (Tuple _ idx)) = do
-  Tuple t c <- infer (Atom (Tuple Nothing idx) (Name name))
+inferOp :: Tuple Op Meta -> Infer (Tuple Type Constraints)
+inferOp (Tuple (InfixFunc name) (Meta meta)) = do
+  Tuple t c <- infer (Atom (Meta $ meta {index = meta.index}) (Name name))
   pure $ Tuple t c
 inferOp opTuple@(Tuple op _) = do
   t <- getOpType op
@@ -566,12 +570,12 @@ inferOp opTuple@(Tuple op _) = do
   pure $ Tuple t c
 
 -- | Return true, if the top-level node of the given expression has a type.
-isTypedExpr :: IndexedTypeTree -> Boolean
-isTypedExpr = extractFromTree >>> fst >>> isJust
+isTypedExpr :: TypeTree -> Boolean
+isTypedExpr = extractFromTree >>> getMetaMType >>> isJust
 
 -- | Traverse the given (partially typed) expression and collect type constraints. For expression
 -- | nodes which are already typed, corresponding constraints are emitted.
-infer :: IndexedTypeTree -> Infer (Tuple Type Constraints)
+infer :: TypeTree -> Infer (Tuple Type Constraints)
 infer expr
   | isTypedExpr expr = do
       -- Perform type inference on the expression as usual.
@@ -587,12 +591,12 @@ infer expr
                          : Nil
       pure $ Tuple t { mapped: cs.mapped, unmapped: newConstraints <> cs.unmapped }
     where
-    getType = extractFromTree >>> fst >>> fromMaybe UnknownType
+    getType = extractFromTree >>> getMetaMType >>> fromMaybe UnknownType
   | otherwise = infer' expr
 
 -- | Traverse the given untyped expression and collect type constraints. This function is only
 -- | called by `infer`, which checks for already present type information.
-infer' :: IndexedTypeTree -> Infer (Tuple Type Constraints)
+infer' :: TypeTree -> Infer (Tuple Type Constraints)
 infer' ex = case ex of
   Atom _ atom@(Bool _) -> returnWithConstraint ex boolType
   Atom _ atom@(Char _) -> returnWithConstraint ex charType
@@ -774,24 +778,24 @@ infer' ex = case ex of
 -- +-----------------------------------+
 
 -- | Return true, if the given top-level binding has a type.
-isTypedBinding :: IndexedTypedBinding -> Boolean
-isTypedBinding = extractFromBinding >>> fst >>> isJust
+isTypedBinding :: TypedBinding -> Boolean
+isTypedBinding = extractFromBinding >>> (\(Meta meta) -> meta.mtype) >>> isJust
 
 -- | Proxy for `makeBindingEnv`. Checks, if the given binding is typed. Whenever the binding is
 -- | typed, call `makeBindingEnv` and overwrite the constraints with a type constraint for the
 -- | current binding node.
-makeBindingEnvPartial :: IndexedTypedBinding -> Infer (Triple Type TVarMappings Constraints)
+makeBindingEnvPartial :: TypedBinding -> Infer (Triple Type TVarMappings Constraints)
 makeBindingEnvPartial binding
   | isTypedBinding binding = case binding of
 
     -- In this case, the mapping also has to be updated to contain the type already set.
-    Lit (Tuple (Just t) idx) (Name name) -> do
+    Lit (Meta { mtype: Just t }) (Name name) -> do
       let c = setSingleTypeConstraintFor' (bindingIndex binding) t
       pure $ Triple t (Tuple name (Forall Nil t) : Nil) c
 
     _ -> do
       Triple _ m c1 <- makeBindingEnv binding
-      let t = (extractFromBinding >>> fst >>> fromMaybe UnknownType) binding
+      let t = (extractFromBinding >>> getMetaMType >>> fromMaybe UnknownType) binding
       let c2 = setSingleTypeConstraintFor' (bindingIndex binding) t
       pure $ Triple t m (c2 <+> c1)
 
@@ -800,7 +804,7 @@ makeBindingEnvPartial binding
 -- | Choose a new type variable for the given binding and add typing information for the node
 -- | index. This function is needed whenever binding environments have to be built: lambda and let
 -- | expressions as well as list comprehensions.
-makeBindingEnv :: IndexedTypedBinding -> Infer (Triple Type TVarMappings Constraints)
+makeBindingEnv :: TypedBinding -> Infer (Triple Type TVarMappings Constraints)
 makeBindingEnv binding = case binding of
   Lit _ atom@(Bool bool) -> do
     let c = setSingleTypeConstraintFor' (bindingIndex binding) boolType
@@ -914,7 +918,7 @@ withEnv mappings m = local (scope mappings) m
 
 -- | Go through list of given bindings and accumulate an corresponding type. Gather environment
 -- | information and setup the type information for every binding tree node.
-makeBindingEnvLambda :: List IndexedTypedBinding
+makeBindingEnvLambda :: List TypedBinding
                      -> Infer (Triple (List Type) TVarMappings Constraints)
 makeBindingEnvLambda bindings = do
   Triple ts ms cs <- unzip3 <$> traverse makeBindingEnvPartial bindings
@@ -926,7 +930,7 @@ makeBindingEnvLambda bindings = do
 
 -- | Associate a binding with a corresponding expression. Therefore, infer the given expression
 -- | and associate its type with the binding.
-associate :: IndexedTypedBinding -> IndexedTypeTree -> Infer (Tuple TVarMappings Constraints)
+associate :: TypedBinding -> TypeTree -> Infer (Tuple TVarMappings Constraints)
 associate binding expr = do
   Triple _ m _ <- makeBindingEnvPartial binding
   Tuple et c1 <- infer expr
@@ -947,7 +951,7 @@ commonFreeTVars tvars t = Set.toUnfoldable $ ftv t `Set.intersection` ftv (map T
 -- | Report an pattern mismatch error, if the given type variable mappings don't match up. The
 -- | first type variable mapping is determined by shape of the binding, while the second type
 -- | variable mapping is determined by the expression scheme.
-checkPattern :: IndexedTypedBinding -> Scheme -> TVarMappings -> TVarMappings -> Infer Unit
+checkPattern :: TypedBinding -> Scheme -> TVarMappings -> TVarMappings -> Infer Unit
 checkPattern binding scheme m1 m2 = if compareTVarMappings m1 m2
   then pure unit
   else do
@@ -960,20 +964,20 @@ compareTVarMappings m1 m2 = (toSet m1) == (toSet m2)
   where toSet m = Set.fromFoldable (map fst m)
 
 -- | Map the given scheme to optionally partially typyed bindings.
-mapSchemeOnTVarMappingsPartial :: IndexedTypedBinding -> Scheme -> Infer (Tuple TVarMappings Constraints)
+mapSchemeOnTVarMappingsPartial :: TypedBinding -> Scheme -> Infer (Tuple TVarMappings Constraints)
 mapSchemeOnTVarMappingsPartial binding scheme
   -- This case is only encountered, when the encountered binding literal is typed. Just use the
   -- given type instead of the inferred type scheme.
   | isTypedBinding binding = mapSchemeOnTVarMappings binding (Forall Nil t)
     where
-    getBindingType = extractFromBinding >>> fst >>> fromMaybe UnknownType
+    getBindingType = extractFromBinding >>> getMetaMType >>> fromMaybe UnknownType
     t = getBindingType binding
   | otherwise = mapSchemeOnTVarMappings binding scheme
 
 -- | Given a binding and a scheme, try to construct a mapping for every type variable inside the
 -- | binding patter to the corresponding polytype. In the process setup type constraints for the
 -- | nodes in the binding tree.
-mapSchemeOnTVarMappings :: IndexedTypedBinding -> Scheme -> Infer (Tuple TVarMappings Constraints)
+mapSchemeOnTVarMappings :: TypedBinding -> Scheme -> Infer (Tuple TVarMappings Constraints)
 mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding of
 
   Lit _ (Name name) -> do
@@ -1046,7 +1050,6 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
       t <- schemeToType scheme
       Ex.throwError $ PatternMismatch binding t
 
-  getBindingType = extractFromBinding >>> fst >>> fromMaybe UnknownType
   expectListType (Forall tvs (TList t)) = Just $ TList t
   expectListType _ = Nothing
   expectTupleType (Forall tvs (TTuple ts)) = Just $ TTuple ts
@@ -1059,7 +1062,7 @@ mapSchemeOnTVarMappings binding scheme@(Forall typeVariables _) = case binding o
 
 -- | Given a list of bindings and corresponding expressions, associate the bindings with the
 -- | expressions and collect the type variable/scheme mappings as well as the constraints.
-associateAll :: List IndexedTypedBinding -> List IndexedTypeTree -> Tuple TVarMappings Constraints
+associateAll :: List TypedBinding -> List TypeTree -> Tuple TVarMappings Constraints
              -> Infer (Tuple TVarMappings Constraints)
 associateAll (b:bs) (e:es) (Tuple ms cs) = do
   Tuple m c <- associate b e
@@ -1067,7 +1070,7 @@ associateAll (b:bs) (e:es) (Tuple ms cs) = do
 associateAll _ _ x = pure x
 
 -- | Construct a binding environment to be used in the inference of a let expression.
-makeBindingEnvLet :: List (Tuple IndexedTypedBinding IndexedTypeTree)
+makeBindingEnvLet :: List (Tuple TypedBinding TypeTree)
                   -> Infer (Tuple TVarMappings Constraints)
 makeBindingEnvLet defs = associateAll bindings exprs (Tuple Nil emptyConstraints)
   where
@@ -1081,7 +1084,7 @@ makeBindingEnvLet defs = associateAll bindings exprs (Tuple Nil emptyConstraints
 
 -- | Given a list of qual expressions, infer the types, set the constraints and accumulate a
 -- | binding environment. The environment and constraints are returned.
-makeBindingEnvListComp :: List IndexedQualTree -> Infer (Tuple TVarMappings Constraints)
+makeBindingEnvListComp :: List TypeQual -> Infer (Tuple TVarMappings Constraints)
 makeBindingEnvListComp quals = f quals Nil emptyConstraints
   where f (qual:quals) ms cs = do
           -- Infer the type, set constraints and accumulate binding environment for the current
@@ -1092,7 +1095,7 @@ makeBindingEnvListComp quals = f quals Nil emptyConstraints
         f Nil ms cs = pure (Tuple ms cs)
 
 -- | Set constraints and build binding environment for the given qual expression.
-makeBindingEnvQual :: IndexedQualTree -> Infer (Tuple TVarMappings Constraints)
+makeBindingEnvQual :: TypeQual -> Infer (Tuple TVarMappings Constraints)
 makeBindingEnvQual qual = case qual of
   -- Just associate the binding with the expression.
   Let _ binding expr -> associate binding expr
@@ -1112,7 +1115,7 @@ makeBindingEnvQual qual = case qual of
 -- +----------------------+
 
 -- | If the given expression is non-empty, infer the type, set and return the constraints.
-tryInferRequireEnumType :: Maybe IndexedTypeTree -> Type -> Infer Constraints
+tryInferRequireEnumType :: Maybe TypeTree -> Type -> Infer Constraints
 tryInferRequireEnumType (Just expr) t1 = do
   Tuple t2 c1 <- inferRequireEnumType expr
   let c2 = setSingleTypeConstraintFor expr t2
@@ -1123,7 +1126,7 @@ tryInferRequireEnumType _ t = pure emptyConstraints
 -- | Infer the type of the given expression, then run the constraint solving in order to retrieve
 -- | the expression type. If the type is not an enum type, return with the corresponding type
 -- | error.
-inferRequireEnumType :: IndexedTypeTree -> Infer (Tuple Type Constraints)
+inferRequireEnumType :: TypeTree -> Infer (Tuple Type Constraints)
 inferRequireEnumType expr = do
   Tuple t c <- infer expr
   uni <- solveConstraints c
@@ -1271,11 +1274,12 @@ solver stopOnError { subst: beginningSubst, constraints: constraints } =
 
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
 -- | indices.
-assignTypes :: Unifier -> IndexedTypeTree -> TypeTree
+assignTypes :: Unifier -> TypeTree -> TypeTree
 assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f expr
   where
-  f (Tuple _ idx) = lookupTVar idx
-  fo (Tuple op (Tuple _ idx)) = Tuple op (lookupTVar idx)
+  f (Meta meta) = Meta $ meta { mtype = lookupTVar (meta.index) }
+  -- f' (Tuple _ idx) = lookupTVar idx
+  fo (Tuple op (Meta meta)) = Tuple op (Meta $ meta {mtype = lookupTVar (meta.index)})
   fb = map f
   lookupTVar idx = case Map.lookup idx constraints.mapped of
     Nothing -> Nothing
@@ -1368,7 +1372,7 @@ inferDefinition :: IndexedDefinition -> Infer (Triple Type TVarMappings Constrai
 inferDefinition def@(IndexedDef name bindings expr) = do
   tv <- fresh
   let m = Tuple name (Forall Nil tv) : Nil
-  Tuple t1 c1 <- withEnv m (infer (Lambda (Tuple Nothing (-1)) bindings expr))
+  Tuple t1 c1 <- withEnv m (infer (Lambda (Meta $ emptyMeta' {index = (-1)}) bindings expr))
   let c2 = setConstraintFor expr tv t1
   pure $ Triple tv m (c1 <+> c2)
 
@@ -1416,7 +1420,7 @@ inferExprDebug expr = do
 
 -- | Perform type inference on expression tree and extract top level type.
 inferExprToType :: TypeTree -> Infer Type
-inferExprToType expr = (extractFromTree >>> fromMaybe UnknownType) <$> inferExpr expr
+inferExprToType expr = (extractFromTree >>> \(Meta meta) -> fromMaybe UnknownType meta.mtype) <$> inferExpr expr
 
 -- | Given a list of definitions create a map of definition groups.
 buildDefinitionGroups :: List Definition -> Map.Map String (List Definition)
@@ -1471,18 +1475,26 @@ normalizeTypeTree :: TypeTree -> TypeTree
 normalizeTypeTree expr = evalState (normalizeTypeTree' expr) emptyNormalizationState
 
 -- | Normalize the type in the given operator tuple.
-normalizeOp' :: (Tuple Op MType) -> State NormalizationState (Tuple Op MType)
-normalizeOp' (Tuple op opType) = do
-  opType' <- normalizeMType' opType
-  pure $ Tuple op opType'
+normalizeOp' :: (Tuple Op Meta) -> State NormalizationState (Tuple Op Meta)
+normalizeOp' (Tuple op (Meta meta)) = do
+  opType' <- normalizeMType' meta.mtype
+  pure $ Tuple op (Meta $ meta {mtype = opType'})
 
 -- | Normalize the given typed binding.
 normalizeBinding' :: TypedBinding -> State NormalizationState TypedBinding
-normalizeBinding' = AST.traverseBinding normalizeMType'
+normalizeBinding' = AST.traverseBinding
+  (\(Meta meta) -> do
+    mt <- normalizeMType' meta.mtype
+    pure $ Meta meta {mtype = mt})
 
 -- | Normalize the given typed expression tree.
 normalizeTypeTree' :: TypeTree -> State NormalizationState TypeTree
-normalizeTypeTree' = AST.traverseTree normalizeBinding' normalizeOp' normalizeMType'
+normalizeTypeTree' = AST.traverseTree
+  normalizeBinding'
+  normalizeOp'
+  (\(Meta m) -> do
+    mt' <- normalizeMType' m.mtype
+    pure $ Meta (m {mtype = mt'}))
 
 -- | Normalize the given type. The only interesting part is the type variable case, where all the
 -- | work is done.

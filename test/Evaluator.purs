@@ -2,15 +2,17 @@ module Test.Evaluator where
 
 import Prelude
 import Data.Either (Either(..))
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), fst, snd)
 import Data.StrMap as M
 import Data.List (List(Nil))
 
 -- import Control.Monad.Writer (Writer, tell)
 
+import Control.Monad.Eff.Console (log)
+
 import Parser (definitions, expression, runParserIndent)
 import Evaluator (eval, eval1, runEvalM, defsToEnv,Env)
-import Test.Parser (prelude, parsedPrelude)
+import Test.Parser (prelude, parsedPrelude, class Testable, equals, isValidlyIndexed)
 
 import Test.Utils (Test, tell, padLeft)
 
@@ -19,17 +21,15 @@ tell' = tell
 
 preludeEnv :: Env
 preludeEnv = case runParserIndent definitions prelude of
-  Right env -> defsToEnv env
+  Right (Tuple env _) -> defsToEnv env
   Left _    -> defsToEnv Nil
 
 eval1test :: String -> String -> String -> Test Unit
 eval1test name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
-  (Tuple (Right inExp) (Right expExp)) ->
-    case runEvalM (eval1 M.empty inExp) of
-      (Right eval1Exp) -> 
-        if eval1Exp == expExp
-          then pure unit -- log $ "Eval success (" ++ name ++ ")"
-          else tell'
+  (Tuple (Right (Tuple inExp i)) (Right (Tuple expExp _))) ->
+    case runEvalM i (eval1 M.empty inExp) of
+      (Right (Tuple eval1Exp _))
+        | not (eval1Exp `equals` expExp) -> tell'
              $ "Eval fail (" <> name <> "):\n"
             <> "Input:\n"
             <> padLeft (show inExp) <> "\n"
@@ -37,6 +37,15 @@ eval1test name input expected = case (Tuple (runParserIndent expression input) (
             <> padLeft (show eval1Exp) <> "\n"
             <> "Expected:\n"
             <> padLeft (show expExp)
+        | not (isValidlyIndexed eval1Exp) -> tell'
+             $ "Indexation fail (" <> name <> "):\n"
+            <> "Input:\n"
+            <> padLeft (show inExp) <> "\n"
+            <> "Output:\n"
+            <> padLeft (show eval1Exp) <> "\n"
+            <> "Expected:\n"
+            <> padLeft (show expExp)
+        | otherwise -> log $ "Eval success (" <> name <> ")"
       (Left err) -> tell'
         $ "Eval fail (" <> name <> "):\n"
         <> padLeft (show err)
@@ -44,12 +53,10 @@ eval1test name input expected = case (Tuple (runParserIndent expression input) (
 
 eval1EnvTest :: String -> String -> String -> String -> Test Unit
 eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
-  (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
-    case runEvalM (eval1 (defsToEnv defs) inExp) of
-      (Right eval1Exp) -> 
-        if eval1Exp == expExp
-          then pure unit -- log $ "Eval success (" <> name <> ")"
-          else tell'
+  (Tuple (Tuple (Right (Tuple inExp i)) (Right (Tuple expExp _))) (Right (Tuple defs _))) ->
+    case runEvalM i (eval1 (defsToEnv defs) inExp) of
+      (Right (Tuple eval1Exp _))
+        | not (eval1Exp `equals` expExp) -> tell'
              $ "Eval fail (" <> name <> "):\n"
             <> "Input:\n"
             <> padLeft (show inExp) <> "\n"
@@ -57,6 +64,15 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expre
             <> padLeft (show eval1Exp) <> "\n"
             <> "Expected:\n"
             <> padLeft (show expExp)
+        | not (isValidlyIndexed eval1Exp) -> tell'
+             $ "Indexation fail (" <> name <> "):\n"
+            <> "Input:\n"
+            <> padLeft (show inExp) <> "\n"
+            <> "Output:\n"
+            <> padLeft (show eval1Exp) <> "\n"
+            <> "Expected:\n"
+            <> padLeft (show expExp)
+        | otherwise -> log $ "Eval success (" <> name <> ")"
       (Left err) -> tell'
         $ "Eval fail (" <> name <> "):\n"
         <> padLeft (show err)
@@ -64,10 +80,27 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expre
 
 evalEnvTest :: String -> String -> String -> String -> Test Unit
 evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
-  (Tuple (Tuple (Right inExp) (Right expExp)) (Right defs)) ->
-    let evalExp = eval (defsToEnv defs) inExp in
-      if evalExp == expExp
-        then pure unit -- log $ "Eval success (" ++ name ++ ")"
+  (Tuple (Tuple (Right (Tuple inExp i)) (Right (Tuple expExp _))) (Right (Tuple defs _))) ->
+    let evalExp = fst (eval i (defsToEnv defs) inExp) in
+      if evalExp `equals` expExp
+        then if isValidlyIndexed evalExp
+                then log $ "Eval success (" <> name <> ")"
+                else tell'
+                  $ "Eval fail (" <> name <> "):\n"
+                 <> "Input String:\n"
+                 <> padLeft input <> "\n"
+                 <> "Input Parsed:\n"
+                 <> padLeft (show inExp) <> "\n"
+                 <> "Output:\n"
+                 <> padLeft (show evalExp) <> "\n"
+                 <> "Expected String:\n"
+                 <> padLeft expected <> "\n"
+                 <> "Expected Parsed:\n"
+                 <> padLeft (show expExp) <> "\n"
+                 <> "Definitions String:\n"
+                 <> padLeft env <> "\n"
+                 <> "Definitions Parsed:\n"
+                 <> padLeft (show defs)
         else tell'
              $ "Eval fail (" <> name <> "):\n"
             <> "Input String:\n"
@@ -99,10 +132,25 @@ evalTest n = evalEnvTest n ""
 
 evalPreludeTest :: String -> String -> String -> Test Unit
 evalPreludeTest name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
-  (Tuple (Right inExp) (Right expExp)) ->
-    let evalExp = eval preludeEnv inExp in
-      if evalExp == expExp
-        then pure unit -- log $ "Eval success (" ++ name ++ ")"
+  (Tuple (Right (Tuple inExp i)) (Right (Tuple expExp _))) ->
+    let evalExp = fst (eval i preludeEnv inExp) in
+      if evalExp `equals` expExp
+        then if isValidlyIndexed evalExp
+                then log $ "Eval success (" <> name <> ")"
+                else tell'
+                  $ "Eval fail (" <> name <> "):\n"
+                 <> "Input String:\n"
+                 <> padLeft input <> "\n"
+                 <> "Input Parsed:\n"
+                 <> padLeft (show inExp) <> "\n"
+                 <> "Output:\n"
+                 <> padLeft (show evalExp) <> "\n"
+                 <> "Expected String:\n"
+                 <> padLeft expected <> "\n"
+                 <> "Expected Parsed:\n"
+                 <> padLeft (show expExp) <> "\n"
+                 <> "Definitions from Prelude!\n"
+
         else tell'
              $ "Eval fail (" <> name <> "):\n"
             <> "Input String:\n"
@@ -140,6 +188,7 @@ runTests = do
   eval1test "pattern_matching2" "(\\[a, b, c] -> c) [1, 2, 3]" "3"
   eval1test "pattern_matching3" "(\\(a, b) (c, d, e) -> d) (1, 2) (3, 2*2, 5)" "2*2"
   eval1test "lambda2" "(\\x y -> [0, x, y, x + y]) 1 2" "[0, 1, 2, 1 + 2]"
+  eval1test "lambda3" "(\\a -> a + a) 1" "1 + 1"
   eval1test "string1" "\"as\" ++ \"df\"" "\"asdf\""
   eval1test "string2" "'a' : \"sdf\"" "\"asdf\""
   eval1test "listComp1" "[x | x <-      [1..10]]"      "[x | x <- (1 : [2..10])]"
@@ -262,7 +311,7 @@ runTests = do
   evalPreludeTest "list_comprehension_3" "(\\x -> [ x | let x = 1]) 2"    "[1]"
   evalPreludeTest "list_comprehension_4" "[ x | let x = 1, True, let x = 'a']" "['a']"
   evalPreludeTest "list_comprehension_5" "[ y | y <- [1 .. 10], y < y]"  "[]"
-  evalPreludeTest "list_comprehension_6" "[ [ y | y <- reverse x] | x <- [[1 .. 10]]]" "[[10, 9, 8, 7, 6, 5, 4, 3, 2, 1]]"
+  evalPreludeTest "list_comprehension_6" "[ [ y | y <- reverse x] | x <- [[1 .. 5]]]" "[[5, 4, 3, 2, 1]]"
   evalPreludeTest "list_comprehension_7" "[ x | x <- [1 .. 5], y <- [x .. 5]]" "[1,1,1,1,1, 2,2,2,2, 3,3,3, 4,4, 5]"
   evalPreludeTest "list_comprehension_8" "[x | x <- \"wer misst zu viele gabeln\", elem x \"itzgw\"]" "\"witzig\""
   evalPreludeTest "list_comprehension_9" "[(x, z) | x <- [1 .. 5], z <- [y | y <- [1 .. 5], mod x y == 0] ]" "[(1,1), (2,1), (2,2), (3,1), (3,3), (4,1), (4,2), (4,4), (5,1), (5,5)]"

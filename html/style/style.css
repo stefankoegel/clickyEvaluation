@@ -205,6 +205,10 @@ div.comma {
   color: #3E999F;
 }
 
+.constr {
+  color: #33AA33;
+}
+
 #info {
   text-align: center;
   font-size: 20px;
@@ -339,4 +343,12 @@ div.evalError {
   padding: 3px;
   margin: 0px 0px 10px 0px;
   font-size: medium;
+}
+
+div.clicked {
+  background: green;
+}
+
+div.evaluated {
+  box-shadow: 0 0.1em 0.3em 0 red;
 }

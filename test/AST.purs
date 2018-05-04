@@ -7,8 +7,9 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 
 -- import Control.Monad.Writer (Writer, tell)
+import Control.Monad.Eff.Console (log)
 
-import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, MType, toOpTuple)
+import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, emptyMeta, Meta)
 
 import Test.Utils (tell, Test)
 
@@ -21,7 +22,7 @@ tell' = tell
 test :: forall a. (Show a, Eq a) => String -> a -> a -> Test Unit
 test name input expected = case input == expected of
   false -> tell' $ "AST fail (" <> name <> "): " <> show input <> " should be " <> show expected
-  true  -> pure unit
+  true  -> log $ "Test success (" <> name <> ")"
 
 runTests :: Test Unit
 runTests = do
@@ -57,46 +58,46 @@ runTests = do
 
 
 atom :: TypeTree
-atom = Atom Nothing (Name "x")
+atom = Atom emptyMeta (Name "x")
 
 list :: TypeTree
-list = List Nothing $ toList [atom, atom]
+list = List emptyMeta $ toList [atom, atom]
 
 ntuple :: TypeTree
-ntuple = NTuple Nothing $ toList [atom, atom]
+ntuple = NTuple emptyMeta $ toList [atom, atom]
 
 binary :: TypeTree
-binary = Binary Nothing (toOpTuple Add) atom atom
+binary = Binary emptyMeta (Tuple Add emptyMeta) atom atom
 
 unary :: TypeTree
-unary = Unary Nothing (toOpTuple Sub) atom
+unary = Unary emptyMeta (Tuple Sub emptyMeta) atom
 
 sectl :: TypeTree
-sectl = SectL Nothing atom (toOpTuple Add)
+sectl = SectL emptyMeta atom (Tuple Add emptyMeta)
 
 sectr :: TypeTree
-sectr = SectR Nothing (toOpTuple Add) atom
+sectr = SectR emptyMeta (Tuple Add emptyMeta) atom
 
 prefixop :: TypeTree
-prefixop = PrefixOp Nothing (toOpTuple Add)
+prefixop = PrefixOp emptyMeta (Tuple Add emptyMeta)
 
 ifexpr :: TypeTree
-ifexpr = IfExpr Nothing atom atom atom
+ifexpr = IfExpr emptyMeta atom atom atom
 
 arithmseq :: TypeTree
-arithmseq = ArithmSeq Nothing atom (Just atom) (Just atom)
+arithmseq = ArithmSeq emptyMeta atom (Just atom) (Just atom)
 
-binding :: Binding MType
-binding = Lit Nothing (Name "x")
+binding :: Binding Meta
+binding = Lit emptyMeta (Name "x")
 
 letexpr :: TypeTree
-letexpr = LetExpr Nothing (toList [Tuple binding atom]) atom
+letexpr = LetExpr emptyMeta (toList [Tuple binding atom]) atom
 
 lambda :: TypeTree
-lambda = Lambda Nothing (toList [binding]) atom
+lambda = Lambda emptyMeta (toList [binding]) atom
 
 app :: TypeTree
-app = App Nothing atom (toList [atom, atom])
+app = App emptyMeta atom (toList [atom, atom])
 
 listcomp :: TypeTree
-listcomp = ListComp Nothing atom (toList [Gen Nothing binding atom, Let Nothing binding atom, Guard Nothing atom])
+listcomp = ListComp emptyMeta atom (toList [Gen emptyMeta binding atom, Let emptyMeta binding atom, Guard emptyMeta atom])

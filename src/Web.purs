@@ -3,7 +3,7 @@ module Web where
 import Prelude
 import Data.Foldable (class Foldable, intercalate)
 import Data.Unfoldable (fromMaybe)
-import Data.List (List(Nil, Cons), snoc, fromFoldable, (:))
+import Data.List (List(Nil, Cons), snoc, fromFoldable, (:), singleton)
 import Data.Set (intersection, size)
 import Data.Set as Set
 import Data.Maybe (Maybe(..), maybe, isJust)
@@ -17,8 +17,10 @@ import Control.Monad.Eff.Console (CONSOLE)
 import Control.Monad.Eff.JQuery as J
 import DOM (DOM)
 
-import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding,
-            Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError)
+import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding, Meta(..), Index,
+            Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError, getMetaMType)
+
+import AST as AST
 
 
 data RoseTree a = Node a (List (RoseTree a))
@@ -27,7 +29,30 @@ type Div = RoseTree { content :: String, classes :: (List String), zipper :: May
 
 type DivHole = TypeTree -> (TypeTree -> TypeTree) -> Div
 
-type OpTuple = Tuple Op MType
+type OpTuple = Tuple Op Meta
+
+-- Tells, which nodes are to be marked as clicked or evaluated, if any.
+type Highlight = { clicked :: Maybe Index, evaluated :: Maybe Index }
+
+emptyHighlight      = { clicked: Nothing, evaluated: Nothing }
+clickHighlight i    = { clicked: Just i,  evaluated: Nothing }
+evalHighlight  i    = { clicked: Nothing, evaluated: Just i }
+clevHighlight  i j  = { clicked: Just i,  evaluated: Just j }
+
+-- Given a Highlight value and the Meta information of a node, generated additional classes to highlight the node
+highlight' :: Highlight -> Meta -> List String
+highlight' { clicked: mi, evaluated: mj } (Meta m) = case Tuple (cmp mi) (cmp mj) of
+  Tuple (Just true) (Just true) -> "clicked" : "evaluated" : Nil
+  Tuple (Just true) _           -> singleton "clicked"
+  Tuple _           (Just true) -> singleton "evaluated"
+  _                             -> Nil
+ where
+   cmp :: Maybe Int -> Maybe Boolean
+   cmp = map (\i -> m.index == i)
+
+highlight :: Highlight -> Meta -> Div -> Div
+highlight hl meta (Node a chs) = Node (a { classes = a.classes <> highlight' hl meta }) chs
+
 
 nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
 nodeHole content classes children expr hole =
@@ -73,58 +98,61 @@ zipList :: forall a b z. ((a -> z) -> a -> b) -> (List a -> z) -> List a -> List
 zipList zipp hole Nil = Nil
 zipList zipp hole (Cons a as) = Cons (zipp (\x -> hole $ Cons x as) a) (zipList zipp (hole <<< Cons a) as)
 
-exprToDiv:: TypeTree -> Div
-exprToDiv = go id
+exprToDiv :: Highlight -> TypeTree -> Div
+exprToDiv hl = go id
   where
+    h :: Meta -> Div -> Div
+    h = highlight hl
+
     go :: (TypeTree -> TypeTree) -> TypeTree -> Div
-    go hole      (Atom t a)            = atom t a
-    go hole expr@(List t ls)           = case toString ls of
-                                           Nothing  -> list t (zipList go (hole <<< List Nothing) ls) expr hole
-                                           Just str -> typedNode ("\"" <> str <> "\"") ["list", "string"] [] t
-    go hole expr@(NTuple t ls)         = ntuple t (zipList go (hole <<< NTuple Nothing) ls) expr hole
-    go hole expr@(Binary binType opTuple e1 e2) = binary binType opTuple
-                                           (go (\e1 -> hole $ Binary Nothing opTuple e1 e2) e1)
-                                           (go (\e2 -> hole $ Binary Nothing opTuple e1 e2) e2)
+    go hole      (Atom meta a)            = h meta $ atom (getMetaMType meta) a
+    go hole expr@(List meta ls)           = case toString ls of
+                                           Nothing  -> h meta $ list (getMetaMType meta) (zipList go (hole <<< List meta) ls) expr hole
+                                           Just str -> h meta $ typedNode ("\"" <> str <> "\"") ["list", "string"] [] (getMetaMType meta)
+    go hole expr@(NTuple meta ls)         = h meta $ ntuple (getMetaMType meta) (zipList go (hole <<< NTuple meta) ls) expr hole
+    go hole expr@(Binary meta opTuple e1 e2) = h meta $ binary (getMetaMType meta) opTuple
+                                           (go (\e1 -> hole $ Binary meta opTuple e1 e2) e1)
+                                           (go (\e2 -> hole $ Binary meta opTuple e1 e2) e2)
                                            expr hole
-    go hole expr@(Unary t opTuple e)   = unary t opTuple (go (hole <<< Unary Nothing opTuple) e) expr hole
-    go hole expr@(SectL t e opTuple)   = sectl t (go (\e -> hole $ SectL Nothing e opTuple) e) opTuple expr hole
-    go hole expr@(SectR t opTuple e)   = sectr t opTuple (go (hole <<< SectR Nothing opTuple) e) expr hole
-    go hole      (PrefixOp t opTuple)  = prefixOp t opTuple
-    go hole expr@(IfExpr t ce te ee)   = ifexpr t
-                                           (go (\ce -> hole $ IfExpr Nothing ce te ee) ce)
-                                           (go (\te -> hole $ IfExpr Nothing ce te ee) te)
-                                           (go (\ee -> hole $ IfExpr Nothing ce te ee) ee)
+    go hole expr@(Unary meta opTuple e)   = h meta $ unary (getMetaMType meta) opTuple (go (hole <<< Unary meta opTuple) e) expr hole
+    go hole expr@(SectL meta e opTuple)   = h meta $ sectl (getMetaMType meta) (go (\e -> hole $ SectL meta e opTuple) e) opTuple expr hole
+    go hole expr@(SectR meta opTuple e)   = h meta $ sectr (getMetaMType meta) opTuple (go (hole <<< SectR meta opTuple) e) expr hole
+    go hole      (PrefixOp meta opTuple)  = h meta $ prefixOp (getMetaMType meta) opTuple
+    go hole expr@(IfExpr meta ce te ee)   = h meta $ ifexpr (getMetaMType meta)
+                                           (go (\ce -> hole $ IfExpr meta ce te ee) ce)
+                                           (go (\te -> hole $ IfExpr meta ce te ee) te)
+                                           (go (\ee -> hole $ IfExpr meta ce te ee) ee)
                                            expr hole
-    go hole expr@(LetExpr t bes body)  = letexpr t
+    go hole expr@(LetExpr meta bes body)  = h meta $ letexpr (getMetaMType meta)
                                            (zipList
                                               (\listHole (Tuple b e) -> Tuple (binding b) (go (\x -> listHole $ Tuple b x) e))
-                                              (\xs -> hole $ LetExpr Nothing xs body)
+                                              (\xs -> hole $ LetExpr meta xs body)
                                               bes)
-                                           (go (\x -> hole $ LetExpr Nothing bes x) body)
+                                           (go (\x -> hole $ LetExpr meta bes x) body)
                                            expr hole
-    go hole expr@(Lambda t binds body) = lambda t (binding <$> binds) (go (hole <<< Lambda Nothing binds) body) expr hole
+    go hole expr@(Lambda meta binds body) = h meta $ lambda (getMetaMType meta) (binding <$> binds) (go (hole <<< Lambda meta binds) body) expr hole
 
-    go hole expr@(ArithmSeq t start next end)
-                                       = arithmseq t
-                                           (go (\x -> hole $ ArithmSeq Nothing x next end) start)
-                                           (go (\x -> hole $ ArithmSeq Nothing start (Just x) end) <$> next)
-                                           (go (\x -> hole $ ArithmSeq Nothing start next (Just x)) <$> end)
+    go hole expr@(ArithmSeq meta start next end)
+                                       = h meta $ arithmseq (getMetaMType meta)
+                                           (go (\x -> hole $ ArithmSeq meta x next end) start)
+                                           (go (\x -> hole $ ArithmSeq meta start (Just x) end) <$> next)
+                                           (go (\x -> hole $ ArithmSeq meta start next (Just x)) <$> end)
                                            expr hole
 
-    go hole expr@(ListComp t e qs)     = listcomp t
-                                           (go (\x -> hole $ ListComp Nothing x qs) e)
-                                           (zipList qualToDiv (\xs -> hole $ ListComp Nothing e xs) qs)
+    go hole expr@(ListComp meta e qs)     = h meta $ listcomp (getMetaMType meta)
+                                           (go (\x -> hole $ ListComp meta x qs) e)
+                                           (zipList qualToDiv (\xs -> hole $ ListComp meta e xs) qs)
                                            expr hole
       where
         qualToDiv :: (TypeQual -> TypeTree) -> TypeQual -> Div
-        qualToDiv hole (Guard t e) = guardQual t           (go (\x -> hole $ Guard Nothing x) e)
-        qualToDiv hole (Let t b e) = letQual t (binding b) (go (\x -> hole $ Let Nothing b x) e)
-        qualToDiv hole (Gen t b e) = genQual t (binding b) (go (\x -> hole $ Gen Nothing b x) e)
+        qualToDiv hole (Guard meta e) = h meta $ guardQual (getMetaMType meta)           (go (\x -> hole $ Guard meta x) e)
+        qualToDiv hole (Let meta b e) = h meta $ letQual (getMetaMType meta) (binding b) (go (\x -> hole $ Let meta b x) e)
+        qualToDiv hole (Gen meta b e) = h meta $ genQual (getMetaMType meta) (binding b) (go (\x -> hole $ Gen meta b x) e)
 
-    go hole expr@(App t func args) = app t (go funcHole func) argsDivs expr hole
+    go hole expr@(App meta func args) = h meta $ app (getMetaMType meta) (go funcHole func) argsDivs expr hole
       where
-        funcHole func = hole $ App Nothing func args
-        argsDivs = zipList go (hole <<< App Nothing func) args
+        funcHole func = hole $ App meta func args
+        argsDivs = zipList go (hole <<< App meta func) args
 
 guardQual :: MType -> Div -> Div
 guardQual t guard = typedNode "" ["guard"] [guard] t
@@ -145,7 +173,10 @@ atom t (AInt n) = typedNode (show n) ["atom", "num"] [] t
 atom t (Bool b) = typedNode (if b then "True" else "False") ["atom", "bool"] [] t
 atom t (Char c) = typedNode ("'" <> c <> "'") ["atom", "char"] [] t
 atom t (Name n) = typedNode n ["atom", "name"] [] t
-atom t (Constr n) = typedNode n ["atom", "name", "dataConstructor"] [] t
+atom t (Constr n) = typedNode n ["constr", "name"] [] t
+
+constr :: MType -> String -> Div
+constr t n = typedNode n ["constr", "name"] [] t
 
 interleave :: forall a. a -> List a -> List a
 interleave _ Nil          = Nil
@@ -170,7 +201,7 @@ unpackOp :: OpTuple -> Op
 unpackOp (Tuple op _) = op
 
 opToDiv :: OpTuple -> Div
-opToDiv (Tuple op t) = typedNode (pPrintOp op) ["op"] [] t
+opToDiv (Tuple op (Meta meta)) = typedNode (pPrintOp op) ["op"] [] meta.mtype
 
 binary :: MType -> OpTuple -> Div -> Div -> DivHole
 binary binType op d1 d2 = typedNodeHole "" ["binary"] [d1, opToDiv op, d2] binType
@@ -245,19 +276,19 @@ arithmseq t start mnext mend = typedNodeHole "" ["arithmseq", "list"] ([open, st
     close     = node "]" ["brace", "right"] []
 
 binding :: TypedBinding -> Div
-binding (Lit t a)         = typedNode "" ["binding", "lit"] [atom t a] t
-binding (ConsLit t b1 b2) = typedNode "" ["binding", "conslit"] (listify "(" ":" ")" (binding b1 : binding b2 : Nil)) t
-binding (ListLit t ls)    = typedNode "" ["binding", "listlit"] (listify "[" "," "]" (binding <$> ls)) t
-binding (NTupleLit t ls)   = typedNode "" ["binding", "tuplelit"] (listify "(" "," ")" (binding <$> ls)) t
-binding (ConstrLit t constr) = case constr of
+binding (Lit t a)         = typedNode "" ["binding", "lit"] [atom (getMetaMType t) a] (getMetaMType t)
+binding (ConsLit t b1 b2) = typedNode "" ["binding", "conslit"] (listify "(" ":" ")" (binding b1 : binding b2 : Nil)) (getMetaMType t)
+binding (ListLit t ls)    = typedNode "" ["binding", "listlit"] (listify "[" "," "]" (binding <$> ls)) (getMetaMType t)
+binding (NTupleLit t ls)   = typedNode "" ["binding", "tuplelit"] (listify "(" "," ")" (binding <$> ls)) (getMetaMType t)
+binding (ConstrLit t c) = case c of
   PrefixDataConstr name _ ls -> typedNode ""
                                   ["binding", "constrlit"]
-                                  (atom t (Name name) : (binding <$> ls))
-                                  t
+                                  (node "(" ["brace","left"] [] : constr (getMetaMType t) name : (binding <$> ls) <> singleton (node ")" ["brace", "right"] []))
+                                  (getMetaMType t)
   InfixDataConstr name _ _ b1 b2 -> typedNode ""
                                       ["binding", "constrlit"]
-                                      [binding b1, atom t (Name name), binding b2]
-                                      t
+                                      [binding b1, constr (getMetaMType t) name, binding b2]
+                                      (getMetaMType t)
 
 type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit)
 
