@@ -10,17 +10,19 @@
   </head>
   <body>
 
-    <!-- <script type="text/javascript" src="libs/ace.js" charset="utf-8"></script> -->
-    <!-- <script type="text/javascript" src="libs/theme-tomorrow.js" charset="utf-8"></script> -->
-    <!-- <script type="text/javascript" src="libs/mode-haskell.js" charset="utf-8"></script> -->
-    <!-- <script> -->
-    <!--   jQuery(function() { -->
-    <!--     // ace editor setup -->
-    <!--     var editor = ace.edit("definitions"); -->
-    <!--     editor.setTheme("ace/theme/tomorrow"); -->
-    <!--     editor.getSession().setMode("ace/mode/haskell"); -->
-    <!--     editor.getSession().setTabSize(8); -->
-    <!--     editor.setShowPrintMargin(false); -->
+    <script type="text/javascript" src="libs/ace.js" charset="utf-8"></script>
+    <script type="text/javascript" src="libs/theme-tomorrow.js" charset="utf-8"></script>
+    <script type="text/javascript" src="libs/mode-haskell.js" charset="utf-8"></script>
+    <script>
+    jQuery(function() {
+        // ace editor setup
+        var editor = ace.edit("definitions");
+        editor.setTheme("ace/theme/tomorrow");
+        editor.getSession().setMode("ace/mode/haskell");
+        editor.getSession().setTabSize(8);
+        editor.setShowPrintMargin(false);
+    });
+    </script>
 
     <!--     // bootstrapSwitch for types -->
     <!--     $.fn.bootstrapSwitch.defaults.size = 'mini'; -->
@@ -74,10 +76,15 @@
     </div>
 
     <script>
+    function ce() {
+        const prelude = ace.edit("definitions").getValue();
+        PS.Main.makeCEwithDefsAndHistory($("#input").val())(prelude)(".output")(".historyBox")();
+        console.log($("definitions").val());
+    }
     (function() {
         var timer;
         var parseInput = function() {
-            PS.Main.makeCEwithHistory($("#input").val())(".output")(".historyBox")();
+            ce();
         }
 
         $("#input").on("keypress", function() {
@@ -86,109 +93,109 @@
         });
     })();
 
-    $(function() { PS.Main.makeCEwithHistory($("#input").val())(".output")(".historyBox")(); });
+    $(function() { ce(); });
     </script>
 
-    <!-- <h3>Definitions</h3> -->
-<!--     <div class="ace" id="definitions"> -->
-<!-- and (True:xs)  = and xs -->
-<!-- and (False:xs) = False -->
-<!-- and []         = True -->
+    <h3>Definitions</h3>
+    <div class="ace" id="definitions">
+and (True:xs)  = and xs
+and (False:xs) = False
+and []         = True
 
-<!-- or (False:xs) = or xs -->
-<!-- or (True:xs)  = True -->
-<!-- or []         = False -->
+or (False:xs) = or xs
+or (True:xs)  = True
+or []         = False
 
-<!-- all p = and . map p -->
-<!-- any p = or . map p -->
+all p = and . map p
+any p = or . map p
 
-<!-- head (x:xs) = x -->
-<!-- tail (x:xs) = xs -->
+head (x:xs) = x
+tail (x:xs) = xs
 
-<!-- take 0 xs     = [] -->
-<!-- take n (x:xs) = x : take (n - 1) xs -->
+take 0 xs     = []
+take n (x:xs) = x : take (n - 1) xs
 
-<!-- drop 0 xs     = xs -->
-<!-- drop n (x:xs) = drop (n - 1) xs -->
+drop 0 xs     = xs
+drop n (x:xs) = drop (n - 1) xs
 
-<!-- elem e []     = False -->
-<!-- elem e (x:xs) = if e == x then True else elem e xs -->
+elem e []     = False
+elem e (x:xs) = if e == x then True else elem e xs
 
-<!-- max a b = if a >= b then a else b -->
-<!-- min a b = if a <= b then a else b -->
+max a b = if a >= b then a else b
+min a b = if a <= b then a else b
 
-<!-- maximum (x:xs) = foldl max x xs -->
-<!-- minimum (x:xs) = foldl min x xs -->
+maximum (x:xs) = foldl max x xs
+minimum (x:xs) = foldl min x xs
 
-<!-- length []     = 0 -->
-<!-- length (x:xs) = 1 + length xs -->
+length []     = 0
+length (x:xs) = 1 + length xs
 
-<!-- zip (x:xs) (y:ys) = (x, y) : zip xs ys -->
-<!-- zip []      _     = [] -->
-<!-- zip _       []    = [] -->
+zip (x:xs) (y:ys) = (x, y) : zip xs ys
+zip []      _     = []
+zip _       []    = []
 
-<!-- zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys -->
-<!-- zipWith _ []     _      = [] -->
-<!-- zipWith _ _      []     = [] -->
+zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys
+zipWith _ []     _      = []
+zipWith _ _      []     = []
 
-<!-- unzip []          = ([], []) -->
-<!-- unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs -->
+unzip []          = ([], [])
+unzip ((a, b):xs) = (\(as, bs) -> (a:as, b:bs)) $ unzip xs
 
-<!-- fst (x,_) = x -->
-<!-- snd (_,y) = y -->
+fst (x,_) = x
+snd (_,y) = y
 
-<!-- curry f a b = f (a, b) -->
-<!-- uncurry f (a, b) = f a b -->
+curry f a b = f (a, b)
+uncurry f (a, b) = f a b
 
-<!-- repeat x = x : repeat x -->
+repeat x = x : repeat x
 
-<!-- replicate 0 _ = [] -->
-<!-- replicate n x = x : replicate (n - 1) x -->
+replicate 0 _ = []
+replicate n x = x : replicate (n - 1) x
 
-<!-- enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else [] -->
+enumFromTo a b = if a <= b then a : enumFromTo (a + 1) b else []
 
-<!-- sum (x:xs) = x + sum xs -->
-<!-- sum [] = 0 -->
+sum (x:xs) = x + sum xs
+sum [] = 0
 
-<!-- product (x:xs) = x * product xs -->
-<!-- product [] = 1 -->
+product (x:xs) = x * product xs
+product [] = 1
 
-<!-- reverse []     = [] -->
-<!-- reverse (x:xs) = reverse xs ++ [x] -->
+reverse []     = []
+reverse (x:xs) = reverse xs ++ [x]
 
-<!-- concat = foldr (++) [] -->
+concat = foldr (++) []
 
-<!-- map f []     = [] -->
-<!-- map f (x:xs) = f x : map f xs -->
+map f []     = []
+map f (x:xs) = f x : map f xs
 
-<!-- not True  = False -->
-<!-- not False = True -->
+not True  = False
+not False = True
 
-<!-- filter p (x:xs) = if p x then x : filter p xs else filter p xs -->
-<!-- filter p []     = [] -->
+filter p (x:xs) = if p x then x : filter p xs else filter p xs
+filter p []     = []
 
-<!-- foldr f ini []     = ini -->
-<!-- foldr f ini (x:xs) = f x (foldr f ini xs) -->
+foldr f ini []     = ini
+foldr f ini (x:xs) = f x (foldr f ini xs)
 
-<!-- foldl f acc []     = acc -->
-<!-- foldl f acc (x:xs) = foldl f (f acc x) xs -->
+foldl f acc []     = acc
+foldl f acc (x:xs) = foldl f (f acc x) xs
 
-<!-- scanl f b []     = [b] -->
-<!-- scanl f b (x:xs) = b : scanl f (f b x) xs -->
+scanl f b []     = [b]
+scanl f b (x:xs) = b : scanl f (f b x) xs
 
-<!-- iterate f x = x : iterate f (f x) -->
+iterate f x = x : iterate f (f x)
 
-<!-- id x = x -->
+id x = x
 
-<!-- const x _ = x -->
+const x _ = x
 
-<!-- flip f x y = f y x -->
+flip f x y = f y x
 
-<!-- even n = (n `mod` 2) == 0 -->
-<!-- odd n = (n `mod` 2) == 1 -->
+even n = (n `mod` 2) == 0
+odd n = (n `mod` 2) == 1
 
-<!-- fix f = f (fix f) -->
-<!-- </div> -->
+fix f = f (fix f)
+</div>
 
   </body>
 </html>
