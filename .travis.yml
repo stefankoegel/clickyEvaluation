@@ -5,5 +5,5 @@ node_js:
 install:
   - npm install
 script:
-  - travis_wait 200 npm run build
-  - travis_wait 400 npm run test
+  - travis_wait npm run build
+  - travis_wait npm run test
