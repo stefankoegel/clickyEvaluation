@@ -1,6 +1,7 @@
 module Main where
 
 import AST as AST
+import AST (Tree (..), QualTree (..))
 import Parser as Parser
 import Evaluator as Eval
 import Web as Web
@@ -15,10 +16,12 @@ import Data.StrMap (empty)
 import Data.Array (cons)
 import Data.Traversable (for)
 import Data.Tuple (Tuple (..), fst, snd, uncurry)
+import Data.Foldable (foldr)
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.Eff.JQuery as J
+import Control.Alternative ((<|>))
 
 main :: forall eff. Eff (console :: CONSOLE | eff) Unit
 main = log "hello"
@@ -75,6 +78,32 @@ eval1' :: Int -> Eval.Env -> AST.TypeTree -> Tuple AST.TypeTree Int
 eval1' nextIdx env expr = case eval1 nextIdx env expr of
   Left _               -> Tuple expr nextIdx
   Right exprAndNextIdx -> exprAndNextIdx
+
+
+-- Index of the left-most-outer-most evaluable expression
+lmom :: Eval.Env -> AST.TypeTree -> Maybe Int
+lmom env expr = case eval1 0 env expr of
+  Right _ -> pure (AST.index expr)
+  Left  _ -> case expr of
+    Atom   _ _  -> Nothing
+    List   _ ts -> foldr (<|>) Nothing (map (lmom env) ts)
+    NTuple _ ts -> foldr (<|>) Nothing (map (lmom env) ts)
+    Binary _ _ l r -> lmom env l <|> lmom env r
+    Unary  _ _ t   -> lmom env t
+    SectL  _ t _   -> lmom env t
+    SectR  _ _ t   -> lmom env t
+    PrefixOp _ _   -> Nothing
+    IfExpr _ c t e -> lmom env c <|> lmom env t <|> lmom env e
+    ArithmSeq _ x ms me -> lmom env x <|> (ms >>= lmom env) <|> (me >>= lmom env)
+    LetExpr _ ds e -> foldr (\(Tuple _ e) i -> lmom env e <|> i) Nothing ds <|> lmom env e
+    Lambda _ _ e -> lmom env e
+    App _ f as -> lmom env f <|> foldr (<|>) Nothing (map (lmom env) as)
+    ListComp _ e qs -> lmom env e <|> foldr (<|>) Nothing (map (lmom' env) qs)
+ where
+  lmom' :: Eval.Env -> AST.TypeQual -> Maybe Int
+  lmom' env (Gen _ _ e) = lmom env e
+  lmom' env (Let _ _ e) = lmom env e
+  lmom' env (Guard _ e) = lmom env e
 
 makeCallback :: Int
              -> Eval.Env
