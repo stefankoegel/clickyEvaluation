@@ -1,6 +1,7 @@
 module Main where
 
 import AST as AST
+import AST (Tree (..), QualTree (..))
 import Parser as Parser
 import Evaluator as Eval
 import Web as Web
@@ -15,10 +16,13 @@ import Data.StrMap (empty)
 import Data.Array (cons)
 import Data.Traversable (for)
 import Data.Tuple (Tuple (..), fst, snd, uncurry)
+import Data.Foldable (foldr)
+import Data.List ((:), List(..))
 
 import Control.Monad.Eff (Eff)
 import Control.Monad.Eff.Console (CONSOLE, log)
 import Control.Monad.Eff.JQuery as J
+import Control.Alternative ((<|>))
 
 main :: forall eff. Eff (console :: CONSOLE | eff) Unit
 main = log "hello"
@@ -29,8 +33,13 @@ makeCE input selector = do
   container <- J.select selector
   doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = preludeEnv
-    showExprIn (Tuple Web.emptyHighlight expr) nextIdx env [] container Nothing
-    pure unit
+    showExprIn
+      (Tuple (maybeToList $ Tuple "nexteval" <$> lmom env expr) expr)
+      nextIdx
+      env
+      []
+      container
+      Nothing
 
 makeCEwithDefs :: forall eff. String -> String -> String -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
 makeCEwithDefs input defs selector = do
@@ -38,7 +47,13 @@ makeCEwithDefs input defs selector = do
   container <- J.select selector
   doWithJust (parseExpr input) \(Tuple expr nextIdx)-> do
     let env = stringToEnv defs
-    showExprIn (Tuple Web.emptyHighlight expr) nextIdx env [] container Nothing
+    showExprIn
+      (Tuple (maybeToList $ Tuple "nexteval" <$> lmom env expr) expr)
+      nextIdx
+      env
+      []
+      container
+      Nothing
 
 makeCEwithHistory :: forall eff. String -> String -> String -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
 makeCEwithHistory input selector histSelector = do
@@ -47,7 +62,13 @@ makeCEwithHistory input selector histSelector = do
   histContainer <- J.select histSelector
   doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = preludeEnv
-    showExprIn (Tuple Web.emptyHighlight expr) nextIdx env [] container (Just histContainer)
+    showExprIn
+      (Tuple (maybeToList $ Tuple "nexteval" <$> lmom env expr) expr)
+      nextIdx
+      env
+      []
+      container
+      (Just histContainer)
 
 makeCEwithDefsAndHistory :: forall eff. String -> String -> String -> String -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
 makeCEwithDefsAndHistory  input defs selector histSelector = do
@@ -56,7 +77,13 @@ makeCEwithDefsAndHistory  input defs selector histSelector = do
   histContainer <- J.select histSelector
   doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
     let env = stringToEnv defs
-    showExprIn (Tuple Web.emptyHighlight expr) nextIdx env [] container (Just histContainer)
+    showExprIn
+      (Tuple (maybeToList $ Tuple "nexteval" <$> lmom env expr) expr)
+      nextIdx
+      env
+      []
+      container
+      (Just histContainer)
 
 -- | Try to parse the given expression and report parser errors.
 parseExpr :: forall eff. String -> Eff (dom :: DOM, console :: CONSOLE | eff) (Maybe (Tuple AST.TypeTree Int))
@@ -76,6 +103,36 @@ eval1' nextIdx env expr = case eval1 nextIdx env expr of
   Left _               -> Tuple expr nextIdx
   Right exprAndNextIdx -> exprAndNextIdx
 
+
+-- Index of the left-most-outer-most evaluable expression
+lmom :: Eval.Env -> AST.TypeTree -> Maybe Int
+lmom env expr = case eval1 0 env expr of
+  Right _ -> pure (AST.index expr)
+  Left  _ -> case expr of
+    Atom   _ _  -> Nothing
+    List   _ ts -> foldr (<|>) Nothing (map (lmom env) ts)
+    NTuple _ ts -> foldr (<|>) Nothing (map (lmom env) ts)
+    Binary _ _ l r -> lmom env l <|> lmom env r
+    Unary  _ _ t   -> lmom env t
+    SectL  _ t _   -> lmom env t
+    SectR  _ _ t   -> lmom env t
+    PrefixOp _ _   -> Nothing
+    IfExpr _ c t e -> lmom env c <|> lmom env t <|> lmom env e
+    ArithmSeq _ x ms me -> lmom env x <|> (ms >>= lmom env) <|> (me >>= lmom env)
+    LetExpr _ ds e -> foldr (\(Tuple _ e) i -> lmom env e <|> i) Nothing ds <|> lmom env e
+    Lambda _ _ e -> lmom env e
+    App _ f as -> lmom env f <|> foldr (<|>) Nothing (map (lmom env) as)
+    ListComp _ e qs -> lmom env e <|> foldr (<|>) Nothing (map (lmom' env) qs)
+ where
+  lmom' :: Eval.Env -> AST.TypeQual -> Maybe Int
+  lmom' env (Gen _ _ e) = lmom env e
+  lmom' env (Let _ _ e) = lmom env e
+  lmom' env (Guard _ e) = lmom env e
+
+maybeToList :: forall a. Maybe a -> List a
+maybeToList Nothing  = Nil
+maybeToList (Just x) = x:Nil
+
 makeCallback :: Int
              -> Eval.Env
              -> Array (Tuple Web.Highlight AST.TypeTree)
@@ -90,20 +147,25 @@ makeCallback nextIdx env history container histContainer currHighlight expr hole
       evalExpr  = fst evaluated
       nextIdx'  = snd evaluated
   case getType event of
-    "click"     -> if fst evaluated /= expr
+    "click"     -> if evalExpr /= expr
                    then showExprIn
-                     (Tuple (Web.evalHighlight (AST.index evalExpr)) (hole evalExpr))
+                     (Tuple
+                      ( Tuple "evaluated" (AST.index evalExpr)
+                      : (maybeToList $ Tuple "nexteval" <$> lmom env (hole evalExpr)))
+                      (hole evalExpr))
                      nextIdx'
                      env
-                     (cons (Tuple (currHighlight {clicked = Just (AST.index expr)}) (hole expr)) history)
+                     (cons
+                      (Tuple
+                        (Tuple "clicked" (AST.index expr) : currHighlight)
+                        (hole expr))
+                      history)
                      container
                      histContainer
                    else pure unit
     "mouseover" -> do
                      log $ show expr
-                     log
-                      $ "clicked = " <> show currHighlight.clicked
-                      <> ", eval'ed = " <> show currHighlight.evaluated
+                     log $ show currHighlight
                      case eval1 nextIdx env expr of
                        Right (Tuple expr' _) -> do -- index can be ignored here (I guess...)
                          log $ show expr'

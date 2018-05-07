@@ -1,7 +1,7 @@
 module Web where
 
 import Prelude
-import Data.Foldable (class Foldable, intercalate)
+import Data.Foldable (class Foldable, intercalate, foldr)
 import Data.Unfoldable (fromMaybe)
 import Data.List (List(Nil, Cons), snoc, fromFoldable, (:), singleton)
 import Data.Set (intersection, size)
@@ -32,23 +32,16 @@ type DivHole = TypeTree -> (TypeTree -> TypeTree) -> Div
 type OpTuple = Tuple Op Meta
 
 -- Tells, which nodes are to be marked as clicked or evaluated, if any.
-type Highlight = { clicked :: Maybe Index, evaluated :: Maybe Index }
+type Highlight = List (Tuple String Index)
 
-emptyHighlight      = { clicked: Nothing, evaluated: Nothing }
-clickHighlight i    = { clicked: Just i,  evaluated: Nothing }
-evalHighlight  i    = { clicked: Nothing, evaluated: Just i }
-clevHighlight  i j  = { clicked: Just i,  evaluated: Just j }
 
 -- Given a Highlight value and the Meta information of a node, generated additional classes to highlight the node
+
 highlight' :: Highlight -> Meta -> List String
-highlight' { clicked: mi, evaluated: mj } (Meta m) = case Tuple (cmp mi) (cmp mj) of
-  Tuple (Just true) (Just true) -> "clicked" : "evaluated" : Nil
-  Tuple (Just true) _           -> singleton "clicked"
-  Tuple _           (Just true) -> singleton "evaluated"
-  _                             -> Nil
- where
-   cmp :: Maybe Int -> Maybe Boolean
-   cmp = map (\i -> m.index == i)
+highlight' hl (Meta m) = foldr f Nil hl
+  where
+    f (Tuple c i) acc | i == m.index = Cons c acc
+    f _           acc                = acc
 
 highlight :: Highlight -> Meta -> Div -> Div
 highlight hl meta (Node a chs) = Node (a { classes = a.classes <> highlight' hl meta }) chs
