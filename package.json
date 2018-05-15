@@ -11,10 +11,10 @@
   },
   "scripts": {
     "postinstall": "pulp --version && bower --version && bower update",
-    "build": "pulp --version && pulp build --to html/libs/Main.js",
     "build_components": "psc \"bower_components/*/src/**/*.purs\" \"src/**/*.purs\" \"test/**/*.purs\"",
-    "repl": "pulp psci",
+    "build": "pulp --version && pulp build --to html/libs/Main.js",
     "test": "pulp --version && pulp test",
+    "repl": "pulp psci",
     "watch": "pulp -w test"
   }
 }
