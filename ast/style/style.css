@@ -1,0 +1,367 @@
+body {
+  background: #ddd;
+  overflow-x: hidden;
+}
+
+h3 {
+  text-align: center;
+  font-family: 'Helvetica Neue', 'Verdana', 'Ubuntu', sans-serif;
+  font-size: 22px;
+  color: #333;
+}
+
+#definitions {
+  max-width: 90%;
+}
+
+#definitions {
+  height: 600px;
+  border-radius: 10px;
+  box-shadow: 3px 3px 10px 0 #333;
+  margin: 10px;
+  padding: 10px;
+}
+
+#definitions, div.clickable, button {
+  font-family: monospace;
+  font-size: 15px;
+  border: none;
+  background: #fff;
+  padding: 10px;
+  margin: 5px;
+  border-radius: 4px;
+  box-shadow: 3px 3px 10px 0 #333;
+  transition: background .25s ease-in-out;
+}
+
+#inputBar {
+  max-width: 90%;
+  font-family: monospace;
+  font-size: 15px;
+  border: none;
+  background: #ddd;
+  margin: 5px;
+  border-radius: 4px;
+  box-shadow: 3px 3px 10px 0 #333;
+  transition: background .25s ease-in-out;
+  display: block;
+  margin: 0px auto 50px auto;
+  padding: 0px;
+}
+
+#input{
+  width: 100%;
+  height: 2.3em;
+  border-top-right-radius: 4px;
+  border-top-left-radius: 4px;
+  font-family: monospace;
+  font-size: 15px;
+  transition: background .25s ease-in-out;
+  padding: 0px;
+  margin: 0px;
+  border: 0px;
+  background-color: white;
+  box-sizing: border-box;
+  padding-left: 10px;
+}
+
+
+
+button.delete {
+  background: #d99;
+  box-shadow: 3px 3px 10px 0 #733;
+}
+
+button.delete:hover {
+  background: #fbb;
+  transition: background .25s ease-in-out;
+}
+
+button.restore {
+  background: #9d9;
+  box-shadow: 3px 3px 10px 0 #373;
+}
+
+button.restore:hover {
+  background: #bfb;
+  transition: background .25s ease-in-out;
+}
+
+#input:hover, #definitions:hover, .clickable.mouseOver{
+  background: #fff;
+  transition: background .25s ease-in-out;
+}
+
+#definitions, #output-container, #history-container, #info {
+  font-family: monospace;
+  font-size: 15px;
+  display: block;
+  margin: 0px auto 50px auto;
+}
+
+#output-container {
+  margin: 0px auto 0px auto;
+}
+
+#output-container, #history-container {
+  text-align: center;
+  cursor: default;
+
+}
+
+div.scroll {
+  max-height: 600px;
+  max-width: 90%;
+  overflow-y: auto;
+  display: inline-block;
+  box-shadow: 3px 3px 10px 0 #333;
+  border: #888 1px solid;
+  border-radius: 5px;
+}
+
+.output, .historyBox {
+  display: inline-block;
+  font-weight: bold;
+  padding: 10px;
+  margin: 5px;
+}
+
+div.historyBox {
+  background: none;
+  border: none;
+  box-shadow: none;
+  display: block;
+  text-align: center;
+}
+
+div.historyBox > div.history-element {
+  background: none;
+  border: none;
+  box-shadow: none;
+  display: block;
+  text-align: center;
+}
+
+
+.clickyevaluation {
+  font-family: monospace;
+  font-size: 30px;
+}
+
+.clickyevaluation div {
+  display: inline-block;
+
+  border: none;
+  border-radius: 0.3em;
+  box-shadow: 0 0.1em 0.3em 0 #333;
+
+  background: #ceefff;
+
+  padding: 0.3em;
+  margin: 0 0.2em 0 0.1em;
+
+  width: auto;
+
+  cursor: pointer; 
+}
+
+div.highlight {
+  background: #fff;
+  transition: background .25s ease-in-out;
+}
+
+div.brace, div.separator, div.num, div.op, div.name, div.empty, div.keyword, div.char, div.comma, div.binding {
+  box-shadow: none;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+div.left {
+  margin-right: -0.05em;
+}
+
+div.right {
+  margin-left: -0.1em;
+}
+
+div.comma {
+  margin-left: -0.2em;
+}
+
+.keyword {
+  color: #8959A8;
+}
+
+.num, .bool, .empty {
+  color: #F5871F;
+}
+
+.char, .string {
+  color: #718C00;
+}
+
+.op {
+  color: #3E999F;
+}
+
+.constr {
+  color: #33AA33;
+}
+
+#info {
+  text-align: center;
+  font-size: 20px;
+  color: red;
+}
+
+#info p {
+  background: #ddd;
+  padding: 10px;
+  margin-left: 10%;
+  margin-right: 10%;
+  border-radius: 10px;
+  box-shadow: 3px 3px 10px 0 #333;
+}
+
+.syntaxError {
+  position: absolute;
+  background: #fbb;
+}
+
+.subtypes {
+  margin-left: 100px;
+}
+
+
+#typ-container {
+  display: inline-block;
+  text-align: left;
+}
+
+#topLevelOutput-container {
+  text-align: center;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+#svg-container {
+  position: relative;
+  pointer-events: none;
+}
+
+.vertical{
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.frame {
+  overflow-x: auto;
+  text-align: center;
+}
+
+.tooltip-outer {
+  position: absolute;
+  width: 0px;
+  margin: 0px !important;
+  z-index: 2;
+  visibility: hidden;
+}
+
+.tooltip-inner {
+  color: white;
+  -webkit-border-radius: 3px;
+  -moz-border-radius: 3px;
+  border-radius: 3px;
+  background-color: #000;
+  background-color: hsla(0, 0%, 20%,1);
+  line-height: 1.2;
+  padding: 1px 3px 1px 3px;
+  margin: 0px !important;
+}
+
+.typeContainer {
+  font-family: monospace;
+  font-size: 10pt;
+  background: #accddd;
+  color: rgb(68, 68, 68);
+  text-align: left;
+
+  border-top-right-radius: 4px;
+  border-top-left-radius: 4px;
+  box-shadow: 0px 2px 5px 0 #333;
+
+  display: block !important;
+  margin-bottom: -4px !important;
+  padding: 4px 4px 8px 4px;
+}
+
+.hasTypeContainer {
+  margin-left: 5px !important;
+  margin-right: 5px !important;
+  width: auto;
+  display: block !important;
+}
+
+.hasTypeError {
+  color: #ffffffee;
+  background: #ee4455;
+}
+
+.hasTypeError:hover {
+  background: #cc4455 !important;
+}
+
+
+.typeContainer:hover {
+  background: #9bbccc;
+}
+
+.type-arr{
+  font-family: "Courier New Bold", "Courier New", monospace;
+}
+
+.type {
+  padding: 3px;
+  text-align: left;
+  font-size: medium;
+  width: 100%;
+  padding-left: 1.3em;
+  margin-left: -1em !important;
+}
+
+.funcContainer {
+  border-style: solid !important;
+}
+
+div.evalError {
+  background: #bbb;
+  display: block;
+  color: red;
+  border-radius: 5px;
+  box-shadow: 2px 2px 5px 0 #333;
+  padding: 3px;
+  margin: 0px 0px 10px 0px;
+  font-size: medium;
+}
+
+div.clicked {
+  background: white;
+}
+
+div.evaluated {
+  background: #67ed53;
+}
+
+div.nexteval {
+  box-shadow: 0 0.1em 0.3em 0 yellow;
+}
+
+div.evaluated.clicked {
+/* Permalink - use to edit and share this gradient: http://colorzilla.com/gradient-editor/#67ed53+0,ffffff+64 */
+  background: #67ed53; /* Old browsers */
+  background: -moz-radial-gradient(center, ellipse cover, #67ed53 0%, #ffffff 64%); /* FF3.6-15 */
+  background: -webkit-radial-gradient(center, ellipse cover, #67ed53 0%,#ffffff 64%); /* Chrome10-25,Safari5.1-6 */
+  background: radial-gradient(ellipse at center, #67ed53 0%,#ffffff 64%); /* W3C, IE10+, FF16+, Chrome26+, Opera12+, Safari7+ */
+  filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#67ed53', endColorstr='#ffffff',GradientType=1 ); /* IE6-9 fallback on horizontal gradient */
+}

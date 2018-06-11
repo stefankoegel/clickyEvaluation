@@ -4,81 +4,75 @@
     <title>Clicky Evaluation</title>
     <meta charset="utf8">
     <link rel="stylesheet" href="style/style.css" charset="utf-8">
+    <link rel="stylesheet" href="style/gui.css" charset="utf-8">
     <link rel="stylesheet" href="style/showType.css" charset="utf-8" id="showTypeStylesheet">
-    <link href="style/bootstrap-switch.min.css" rel="stylesheet">
     <script src="libs/jquery-1.11.2.min.js"></script>
-    <script src="libs/bootstrap-switch.min.js"></script>
   </head>
   <body>
-  <a href="https://github.com/stefankoegel/clickyEvaluation"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/a6677b08c955af8400f44c6298f40e7d19cc5b2d/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f677261795f3664366436642e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png"></a>
 
     <script type="text/javascript" src="libs/ace.js" charset="utf-8"></script>
     <script type="text/javascript" src="libs/theme-tomorrow.js" charset="utf-8"></script>
     <script type="text/javascript" src="libs/mode-haskell.js" charset="utf-8"></script>
     <script>
-      jQuery(function() {
+    jQuery(function() {
         // ace editor setup
         var editor = ace.edit("definitions");
         editor.setTheme("ace/theme/tomorrow");
         editor.getSession().setMode("ace/mode/haskell");
         editor.getSession().setTabSize(8);
         editor.setShowPrintMargin(false);
-
-        // bootstrapSwitch for types
-        $.fn.bootstrapSwitch.defaults.size = 'mini';
-        var checkbox = $("#typecheckbox")
-        checkbox.bootstrapSwitch();
-        checkbox.on('switchChange.bootstrapSwitch', function (event, state) {
-          var styleLink = $("#showTypeStylesheet");
-          if(state){
-            styleLink.attr({"href":"style/showType.css"});
-          }
-          else{
-            styleLink.attr({"href":"style/hideType.css"});
-          }
-        });
-
-        // bootstrapSwitch for history
-        var historycheckbox = $("#historycheckbox")
-        historycheckbox.bootstrapSwitch();
-        historycheckbox.on('switchChange.bootstrapSwitch', function (event, state) {
-          if(state) {
-            historycheckbox.prop('checked', true);
-          } else {
-            historycheckbox.prop('checked', false);
-          }
-        });
-      });
+    });
     </script>
-    <script charset="utf-8" src="libs/Main.js"></script>
 
-    <h3><a href="ast/index.html">Check out ClickyEvaluation with Algebraic Data Types here!</a></h3>
+    <script charset="utf-8" src="libs/Main.js"></script>
 
     <div id="info"></div>
 
     <h3>Expression</h3>
 
     <div id="inputBar">
-          <input type="text" id="input"  value="sum (map (^2) [1,2,3,4])">
-      <div id="options">
-        <input type="checkbox" id="typecheckbox" checked="checked"/> Show types &nbsp;&nbsp;|&nbsp;&nbsp;
-        <input type="checkbox" id="historycheckbox" checked="checked"/> Show history <br/>
-      </div>
+      <input type="text" id="input"  value="flatten (Branch (Branch (Leaf 1) (Leaf 2)) (Leaf 3))"/>
     </div>
 
   <div class="frame">
     <div id="topLevelOutput-container">
-        <div id="output-container">
+        <div class="output clickyevaluation">
         </div>
     </div>
   </div>
 
 <h3> History </h3>
-    <div id="history-container">
+    <div class="historyBox clickyevaluation">
     </div>
+
+    <script>
+    function ce() {
+        const prelude = ace.edit("definitions").getValue();
+        console.log(prelude);
+        PS.Main.makeCEwithDefsAndHistory($("#input").val())(prelude)(".output")(".historyBox")();
+    }
+    (function() {
+        var timer;
+        var parseInput = function() {
+            ce();
+        }
+
+        $("#input").on("keypress", function() {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(parseInput, 500);
+        });
+    })();
+
+    $(function() { ce(); });
+    </script>
 
     <h3>Definitions</h3>
     <div class="ace" id="definitions">
+data Tree a = Leaf a | Branch (Tree a) (Tree a)
+
+flatten (Leaf x) = [x]
+flatten (Branch l r) = flatten l ++ flatten r
+
 and (True:xs)  = and xs
 and (False:xs) = False
 and []         = True
