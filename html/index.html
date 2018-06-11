@@ -24,32 +24,6 @@
     });
     </script>
 
-    <!--     // bootstrapSwitch for types -->
-    <!--     $.fn.bootstrapSwitch.defaults.size = 'mini'; -->
-    <!--     var checkbox = $("#typecheckbox") -->
-    <!--     checkbox.bootstrapSwitch(); -->
-    <!--     checkbox.on('switchChange.bootstrapSwitch', function (event, state) { -->
-    <!--       var styleLink = $("#showTypeStylesheet"); -->
-    <!--       if(state){ -->
-    <!--         styleLink.attr({"href":"style/showType.css"}); -->
-    <!--       } -->
-    <!--       else{ -->
-    <!--         styleLink.attr({"href":"style/hideType.css"}); -->
-    <!--       } -->
-    <!--     }); -->
-
-    <!--     // bootstrapSwitch for history -->
-    <!--     var historycheckbox = $("#historycheckbox") -->
-    <!--     historycheckbox.bootstrapSwitch(); -->
-    <!--     historycheckbox.on('switchChange.bootstrapSwitch', function (event, state) { -->
-    <!--       if(state) { -->
-    <!--         historycheckbox.prop('checked', true); -->
-    <!--       } else { -->
-    <!--         historycheckbox.prop('checked', false); -->
-    <!--       } -->
-    <!--     }); -->
-    <!--   }); -->
-    <!-- </script> -->
     <script charset="utf-8" src="libs/Main.js"></script>
 
     <div id="info"></div>
@@ -58,10 +32,6 @@
 
     <div id="inputBar">
       <input type="text" id="input"  value="sum (map (^2) [1,2,3,4])"/>
-      <ul class="options">
-        <li><input type="checkbox" id="typecheckbox"/> Show types</li>
-        <li><input type="checkbox" id="historycheckbox"/> Show history</li>
-      </ul>
     </div>
 
   <div class="frame">
@@ -78,8 +48,8 @@
     <script>
     function ce() {
         const prelude = ace.edit("definitions").getValue();
+        console.log(prelude);
         PS.Main.makeCEwithDefsAndHistory($("#input").val())(prelude)(".output")(".historyBox")();
-        console.log($("definitions").val());
     }
     (function() {
         var timer;
