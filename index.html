@@ -17,12 +17,31 @@
     <script type="text/javascript" src="libs/mode-haskell.js" charset="utf-8"></script>
     <script>
       jQuery(function() {
+        // Get URL parameters if there are any.
+        // Taken from Reza Baradaran on Stack Overflow (https://stackoverflow.com/a/25359264)
+        function urlParam(name){
+            var results = new RegExp('[\?&]' + name + '=([^&#]*)').exec(window.location.href);
+            if (results==null){
+               return null;
+            }
+            else{
+               return decodeURIComponent(results[1]) || 0;
+            }
+        }
+        if(urlParam("expr")) {
+          document.getElementById("input").value = urlParam("expr");
+        }
+
         // ace editor setup
         var editor = ace.edit("definitions");
         editor.setTheme("ace/theme/tomorrow");
         editor.getSession().setMode("ace/mode/haskell");
         editor.getSession().setTabSize(8);
         editor.setShowPrintMargin(false);
+
+        if(urlParam("addToDefinitions")) {
+          editor.setValue(urlParam("addToDefinitions") + editor.getValue());
+        }
 
         // bootstrapSwitch for types
         $.fn.bootstrapSwitch.defaults.size = 'mini';
