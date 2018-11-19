@@ -11,7 +11,7 @@
   },
   "scripts": {
     "postinstall": "pulp --version && bower --version && bower update",
-    "build_components": "psc \"bower_components/*/src/**/*.purs\" \"src/**/*.purs\" \"test/**/*.purs\"",
+    "build_components": "psc \"bower_components/*/src/**/*.purs\"",
     "build": "pulp --version && pulp build --to html/libs/Main.js",
     "test": "pulp --version && pulp test",
     "repl": "pulp psci",
