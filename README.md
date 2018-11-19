@@ -35,17 +35,16 @@ The projects name is a play on *lazy evaluation* and *clicking* to evaluate an e
 * Most of the simple Prelude functions on lists `head, map, foldr, scanr, filter, all, ...`
 * Types for Bool, Char, Int, List, Tupel and Prelude functions
 * Type inference for user defined functions and expressions
+* ADTs
+* Listcomprehensions
 
 ## Missing Features
 
-Everything not on the above list. Especially:
 * Guards
 * `case`, `where`, `let`
 * Multi-line expressions, significant whitespace
 * Floating point numbers
-* ADTs
 * Comments
-* List comprehensions
 * Type classes
 
 ## Building
