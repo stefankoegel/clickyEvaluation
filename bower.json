@@ -15,17 +15,17 @@
     "html/dist/*"
   ],
   "dependencies": {
-    "purescript-arrays": "^3.0.0",
-    "purescript-dom": "3.7.x",
-    "purescript-jquery": "^3.0.0",
-    "purescript-lists": "^3.0.0",
-    "purescript-maps": "^2.0.0",
-    "purescript-parsing": "^3.0.0",
-    "purescript-sets": "^2.0.0",
-    "purescript-transformers": "^2.0.0",
-    "purescript-node-process": "^3.0.0"
+    "purescript-arrays": ">=3.0.0",
+    "purescript-dom": ">=3.7",
+    "purescript-jquery": ">=3.0.0",
+    "purescript-lists": ">=3.0.0",
+    "purescript-maps": ">=2.0.0",
+    "purescript-parsing": ">=3.0.0",
+    "purescript-sets": ">=2.0.0",
+    "purescript-transformers": ">=2.0.0",
+    "purescript-node-process": ">=3.0.0"
   },
   "devDependencies": {
-    "purescript-psci-support": "^2.0.0"
+    "purescript-psci-support": ">=2.0.0"
   }
 }

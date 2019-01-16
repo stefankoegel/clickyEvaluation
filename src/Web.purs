@@ -47,7 +47,7 @@ highlight :: Highlight -> Meta -> Div -> Div
 highlight hl meta (Node a chs) = Node (a { classes = a.classes <> highlight' hl meta }) chs
 
 
-nodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
+nodeHole :: forall f1 f2. Foldable f1 => Foldable f2 => String -> f1 String -> f2 Div -> TypeTree -> (TypeTree -> TypeTree) -> Div
 nodeHole content classes children expr hole =
   Node
     { content: content
@@ -57,7 +57,7 @@ nodeHole content classes children expr hole =
     }
     (fromFoldable children)
 
-typedNodeHole :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> MType -> TypeTree -> (TypeTree -> TypeTree) -> Div
+typedNodeHole :: forall f1 f2. Foldable f1 => Foldable f2 => String -> f1 String -> f2 Div -> MType -> TypeTree -> (TypeTree -> TypeTree) -> Div
 typedNodeHole content classes children exprType expr hole =
   Node
     { content: content
@@ -67,7 +67,7 @@ typedNodeHole content classes children exprType expr hole =
     }
     (fromFoldable children)
 
-node :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> Div
+node :: forall f1 f2. Foldable f1 => Foldable f2 => String -> f1 String -> f2 Div -> Div
 node content classes children =
   Node
     { content: content
@@ -77,7 +77,7 @@ node content classes children =
     }
     (fromFoldable children)
 
-typedNode :: forall f1 f2. (Foldable f1, Foldable f2) => String -> f1 String -> f2 Div -> MType -> Div
+typedNode :: forall f1 f2. Foldable f1 => Foldable f2 => String -> f1 String -> f2 Div -> MType -> Div
 typedNode content classes children exprType =
   Node
     { content: content
@@ -296,7 +296,7 @@ addTypeTooltip (Just (TypeError typeError)) div = J.setAttr "title" (prettyPrint
 addTypeTooltip mType div = J.setAttr "title" (" :: " <> maybe "" prettyPrintType mType) div
 
 -- | Return true, if the first list of classes contains a class from the second list.
-oneOfClasses :: forall f1 f2. (Foldable f1, Foldable f2) => f1 String -> f2 String -> Boolean
+oneOfClasses :: forall f1 f2.  Foldable f1 => Foldable f2 => f1 String -> f2 String -> Boolean
 oneOfClasses cs1 cs2 = size (set1 `intersection` set2) > 0
   where
   set1 = Set.fromFoldable cs1

@@ -73,13 +73,15 @@ fresh = do
   modify (\i -> i + 1)
   pure i
 
-freshMeta :: forall m mt s. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => IndexingParserT s mt m Meta
+freshMeta :: forall m mt s. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
+          => IndexingParserT s mt m Meta
 freshMeta = AST.idxMeta <$> lift (lift fresh)
 
-curr :: forall m mt s. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => IndexingParserT s mt m Int
+curr :: forall m mt s. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
+     => IndexingParserT s mt m Int
 curr = lift (lift get)
 
-putNew :: forall m mt s. (Monad m, MonadTrans mt, Monad (mt (IndexingT m)))
+putNew :: forall m mt s. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
        => Int -> IndexingParserT s mt m Unit
 putNew i = lift (lift (put i))
 ---------------------------------------------------------
@@ -95,7 +97,7 @@ skipSpaces :: forall m. (Monad m) => ParserT String m Unit
 skipSpaces = void $ many $ oneOf [' ', '\t']
 
 --skips whitespaces and linebreaks
-skipWhite :: forall m. (Monad m) => ParserT String m Unit 
+skipWhite :: forall m. (Monad m) => ParserT String m Unit
 skipWhite = void $ many $ oneOf ['\n', '\r', '\f', ' ', '\t']
 
 --lexeme parser (skips trailing whitespaces and linebreaks)
@@ -123,9 +125,9 @@ symbol = oneOf
 
 integer :: forall m. (Monad m) => ParserT String m Int
 integer = convert <$> many1 digit
-  where 
+  where
     convert :: List Char -> Int
-    convert = foldl (\acc x -> acc * 10 + table x) 0 
+    convert = foldl (\acc x -> acc * 10 + table x) 0
 
     table '0' = 0
     table '1' = 1
@@ -144,7 +146,7 @@ boolean = string "True"  *> pure true
       <|> string "False" *> pure false
 
 charLiteral :: forall m. (Monad m) => ParserT String m Char
-charLiteral = do 
+charLiteral = do
   char '\''
   c <- character'
   char '\''
@@ -230,7 +232,8 @@ atom = int <|> variable <|> bool <|> constructor <|> character
 ---------------------------------------------------------
 
 -- | Table for operator parsers and their AST representation. Sorted by precedence.
-infixOperators :: forall m mt. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => Array (Array (Tuple3 (ParserT String (mt (IndexingT m)) String) (String -> Op) Assoc))
+infixOperators :: forall m mt. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
+               => Array (Array (Tuple3 (ParserT String (mt (IndexingT m)) String) (String -> Op) Assoc))
 infixOperators =
   [ [ (tuple3 (PC.try infixConstructor) InfixConstr AssocLeft)
     , (tuple3 (PC.try infixFunc) InfixFunc AssocLeft)
@@ -259,7 +262,8 @@ infixFunc :: forall m. (Monad m) => ParserT String m String
 infixFunc = char '`' *> name <* char '`'
 
 -- | Table of operators (math, boolean, ...)
-operatorTable :: forall m mt. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => OperatorTable (mt (IndexingT m)) String TypeTree
+operatorTable :: forall m mt. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
+              => OperatorTable (mt (IndexingT m)) String TypeTree
 operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
   where
     infixTable :: OperatorTable (mt (IndexingT m)) String TypeTree
@@ -276,7 +280,7 @@ operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
 
     unaryMinus :: Operator (mt (IndexingT m)) String TypeTree
     unaryMinus = Prefix $ spaced minusParse
-      where 
+      where
         minusParse = do
           string "-"
           meta <- freshMeta
@@ -289,7 +293,8 @@ operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
 spaced :: forall m a. (Monad m) => ParserT String m a -> ParserT String m a
 spaced p = PC.try $ PC.between skipSpaces skipSpaces p
 
-opParser :: forall m mt. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => ParserT String (mt (IndexingT m)) Op
+opParser :: forall m mt. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
+         => ParserT String (mt (IndexingT m)) Op
 opParser = PC.choice $ (\x -> (uncurry3 (\p op _ -> op <$> p)) <$> x) $ concat $ (\x -> Array.toUnfoldable <$> x) $ Array.toUnfoldable infixOperators
 
 -- | Parse a base expression (atoms) or an arbitrary expression inside brackets
@@ -427,7 +432,8 @@ listComp expr = do
           pure $ Guard meta expr'
 
 -- | Parser for strings ("example")
-charList :: forall m mt. (Monad m, MonadTrans mt, Monad (mt (IndexingT m))) => IndexingParserT String mt m TypeTree
+charList :: forall m mt. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
+         => IndexingParserT String mt m TypeTree
 charList = do
   char '"'
   chrs <- many character'
@@ -465,9 +471,9 @@ letExpr expr = do
 
     bindingBlock :: IndentParser String TypeTree -> IndentParser String (List (Tuple (Binding Meta) TypeTree))
     bindingBlock expr = curly <|> (PC.try layout) <|> (PC.try iblock)
-      where 
-        curly  = PC.between (ilexe $ char '{') (ilexe $ char '}') iblock 
-        iblock = (bindingItem expr) `PC.sepBy1` (ilexe $ char ';')  
+      where
+        curly  = PC.between (ilexe $ char '{') (ilexe $ char '}') iblock
+        iblock = (bindingItem expr) `PC.sepBy1` (ilexe $ char ';')
         layout = block1 (PC.try $ bindingItem expr >>= \x -> PC.notFollowedBy (ilexe $ char ';') *> pure x)
 
 -- | Parse an arbitrary expression
@@ -597,7 +603,7 @@ definitions = do
   defs <- many $ (PC.try typeDefinition') <|> (pure <$> definition)
   pure $ concat defs
 
-  
+
 
 parseDefs :: String -> Either ParseError (Tuple (List Definition) Int)
 parseDefs = runParserIndent $ definitions
