@@ -12,10 +12,8 @@ import Data.Traversable (for, for_)
 import Data.Array as Arr
 import Data.String as Str
 
-import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Console (CONSOLE)
-import Control.Monad.Eff.JQuery as J
-import DOM (DOM)
+import Effect (Effect)
+import JQuery as J
 
 import AST (Atom(..), Binding(..), MType, Op, QualTree(..), Tree(..), TypeTree, TypedBinding, Meta(..), Index,
             Type(..), TypeQual, DataConstr(..), pPrintOp, prettyPrintType, prettyPrintTypeError, getMetaMType)
@@ -92,7 +90,7 @@ zipList zipp hole Nil = Nil
 zipList zipp hole (Cons a as) = Cons (zipp (\x -> hole $ Cons x as) a) (zipList zipp (hole <<< Cons a) as)
 
 exprToDiv :: Highlight -> TypeTree -> Div
-exprToDiv hl = go id
+exprToDiv hl = go identity
   where
     h :: Meta -> Div -> Div
     h = highlight hl
@@ -283,15 +281,15 @@ binding (ConstrLit t c) = case c of
                                       [binding b1, constr (getMetaMType t) name, binding b2]
                                       (getMetaMType t)
 
-type Callback = forall eff. TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit)
+type Callback = TypeTree -> (TypeTree -> TypeTree) -> (J.JQueryEvent -> J.JQuery -> Effect Unit)
 
 -- | Create a type div with the pretty printed type as content.
-createTypeDiv :: forall eff. MType -> Eff (dom :: DOM , console :: CONSOLE| eff) J.JQuery
+createTypeDiv :: MType -> Effect J.JQuery
 createTypeDiv (Just (TypeError typeError)) = makeDiv (prettyPrintTypeError typeError) ["typeContainer", "hasTypeError"]
 createTypeDiv mType = makeDiv (" :: " <> maybe "" prettyPrintType mType) ["typeContainer"]
 
 -- | Add a type tooltip to the given div.
-addTypeTooltip :: forall eff. MType -> J.JQuery -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
+addTypeTooltip :: MType -> J.JQuery -> Effect Unit
 addTypeTooltip (Just (TypeError typeError)) div = J.setAttr "title" (prettyPrintTypeError typeError) div
 addTypeTooltip mType div = J.setAttr "title" (" :: " <> maybe "" prettyPrintType mType) div
 
@@ -316,7 +314,7 @@ isTypeError :: MType -> Boolean
 isTypeError (Just (TypeError _)) = true
 isTypeError _ = false
 
-divToJQuery :: forall eff. Boolean -> Callback -> Div -> Eff (dom :: DOM, console :: CONSOLE | eff) J.JQuery
+divToJQuery :: Boolean -> Callback -> Div -> Effect J.JQuery
 divToJQuery isTopLevelDiv callback (Node { content: content, classes: classes, zipper: zipper, exprType: exprType } children) = do
   let needsContainer = needsTypeContainer classes exprType || isTopLevelDiv || isTypeError exprType
   let isTyped = isJust exprType
@@ -364,7 +362,7 @@ toString ls = Str.fromCharArray <$> go [] ls
 
 type Class = String
 
-makeDiv :: forall f eff. Foldable f => String -> f Class -> Eff (dom :: DOM , console :: CONSOLE| eff) J.JQuery
+makeDiv :: Foldable f => String -> f Class -> Effect J.JQuery
 makeDiv text classes = do
   d <- J.create "<div></div>"
   J.setText text d

@@ -103,7 +103,7 @@ data Tree a b o m =
   | App       m (Tree a b o m) (List (Tree a b o m))
   | ListComp  m (Tree a b o m) (List (QualTree b (Tree a b o m) m))
 
-  
+
 -- | ONLY FOR TEST PURPOSES
 -- | compare two TypeTree values on equality ignoring the meta information
 eq' :: TypeTree -> TypeTree -> Boolean
@@ -153,12 +153,12 @@ eq'QualTree _ _ = false
 
 eq'Def :: Definition -> Definition -> Boolean
 eq'Def (Def s bs e) (Def s' bs' e') = s == s' && and (zipWith eq'Binding bs bs') && eq' e e'
-  
+
 toOpTuple :: Op -> Tuple Op Meta
 toOpTuple op = Tuple op emptyMeta
 
 
-{- 
+{-
 exprToTypeTree :: Expr -> TypeTree
 exprToTypeTree (Atom _ atom) = Atom emptyMeta atom
 exprToTypeTree (List _ exprs) = List emptyMeta (map exprToTypeTree exprs)
@@ -375,7 +375,7 @@ idxMeta i = Meta {index: i, mtype: Nothing}
 freshIdx :: State Index Index
 freshIdx = do
   i <- get
-  modify (\i -> i + 1)
+  _ <- modify (\i -> i + 1)
   pure i
 
 freshMeta :: State Index Meta
@@ -598,7 +598,7 @@ data ADTDef
 
 -- Translates an ADT definition into a list of Definitions
 --
--- e.g: 
+-- e.g:
 --
 -- the definition
 --

@@ -264,7 +264,7 @@ infixFunc = char '`' *> name <* char '`'
 -- | Table of operators (math, boolean, ...)
 operatorTable :: forall m mt. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
               => OperatorTable (mt (IndexingT m)) String TypeTree
-operatorTable = maybe [] id (modifyAt 3 (flip snoc unaryMinus) infixTable)
+operatorTable = maybe [] identity (modifyAt 3 (flip snoc unaryMinus) infixTable)
   where
     infixTable :: OperatorTable (mt (IndexingT m)) String TypeTree
     infixTable =

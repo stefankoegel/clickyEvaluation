@@ -9,7 +9,6 @@ import TypeChecker as TypeChecker
 import JSHelpers (ctrlKeyPressed, getType)
 
 import Prelude
-import DOM (DOM)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), maybe)
 import Data.Map (empty)
@@ -21,15 +20,15 @@ import Data.List ((:), List(..))
 
 import Partial.Unsafe (unsafePartial)
 
-import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Console (CONSOLE, log)
-import Control.Monad.Eff.JQuery as J
+import Effect (Effect)
+import Effect.Console (log)
+import JQuery as J
 import Control.Alternative ((<|>))
 
-main :: forall eff. Eff (console :: CONSOLE | eff) Unit
+main :: Effect Unit
 main = log "hello"
 
-makeCE :: forall eff. String -> String -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
+makeCE :: String -> String -> Effect Unit
 makeCE input selector = do
   clearInfo
   container <- J.select selector
@@ -43,7 +42,7 @@ makeCE input selector = do
       container
       Nothing
 
-makeCEwithDefs :: forall eff. String -> String -> String -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
+makeCEwithDefs :: String -> String -> String -> Effect Unit
 makeCEwithDefs input defs selector = do
   clearInfo
   container <- J.select selector
@@ -57,7 +56,7 @@ makeCEwithDefs input defs selector = do
       container
       Nothing
 
-makeCEwithHistory :: forall eff. String -> String -> String -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
+makeCEwithHistory :: String -> String -> String -> Effect Unit
 makeCEwithHistory input selector histSelector = do
   clearInfo
   container <- J.select selector
@@ -72,7 +71,7 @@ makeCEwithHistory input selector histSelector = do
       container
       (Just histContainer)
 
-makeCEwithDefsAndHistory :: forall eff. String -> String -> String -> String -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
+makeCEwithDefsAndHistory :: String -> String -> String -> String -> Effect Unit
 makeCEwithDefsAndHistory  input defs selector histSelector = do
   clearInfo
   container <- J.select selector
@@ -88,7 +87,7 @@ makeCEwithDefsAndHistory  input defs selector histSelector = do
       (Just histContainer)
 
 -- | Try to parse the given expression and report parser errors.
-parseExpr :: forall eff. String -> Eff (dom :: DOM, console :: CONSOLE | eff) (Maybe (Tuple AST.TypeTree Int))
+parseExpr :: String -> Effect (Maybe (Tuple AST.TypeTree Int))
 parseExpr input = case Parser.parseExpr input of
   Left error -> do
     showError "Parser" (show error)
@@ -177,15 +176,15 @@ makeCallback nextIdx env history container histContainer currHighlight expr hole
     _           -> pure unit
   pure unit
 
-exprToJQuery :: forall eff. Web.Callback -> Tuple Web.Highlight AST.TypeTree -> Eff (dom :: DOM , console :: CONSOLE| eff) J.JQuery
+exprToJQuery :: Web.Callback -> Tuple Web.Highlight AST.TypeTree -> Effect J.JQuery
 exprToJQuery callback = uncurry Web.exprToDiv >>> Web.divToJQuery true callback
 
 -- | Clear the contents of info div.
-clearInfo :: forall eff. Eff (dom :: DOM, console :: CONSOLE | eff) Unit
+clearInfo :: Effect Unit
 clearInfo = void $ J.select "#info" >>= J.clear
 
 -- | Create an info div and display an error inside.
-showError :: forall eff. String -> String -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
+showError :: String -> String -> Effect Unit
 showError origin msg = do
   info <- do
     paragraph <- J.create "<p></p>"
@@ -198,9 +197,7 @@ showError origin msg = do
 
 -- | Execute the given function if the given maybe (wrapped inside an effect) is a `Just x` value
 -- | using `x` as the argument. If the maybe is `Nothing` don't do anything.
-doWithJust :: forall a eff. Eff (dom :: DOM, console :: CONSOLE | eff) (Maybe a)
-         -> (a -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit)
-         -> Eff (dom :: DOM, console :: CONSOLE | eff) Unit
+doWithJust :: Effect (Maybe a) -> (a -> Effect Unit) -> Effect Unit
 doWithJust mMaybe f = do
   mValue <- mMaybe
   case mValue of
@@ -217,8 +214,7 @@ buildTypeEnvironment env =
 
 -- | Type check an expression using a given typed environment.
 -- | Construct a div tree from the given typed expression.
-typeCheckExpression :: forall eff. Partial => TypeChecker.TypeEnv -> AST.TypeTree
-                 -> Eff (dom :: DOM, console :: CONSOLE | eff) (Maybe AST.TypeTree)
+typeCheckExpression :: Partial => TypeChecker.TypeEnv -> AST.TypeTree -> Effect (Maybe AST.TypeTree)
 typeCheckExpression typedEnv expr = do
   case TypeChecker.runInferWith typedEnv false (TypeChecker.inferExpr expr) of
     Left typeError -> do
@@ -228,13 +224,13 @@ typeCheckExpression typedEnv expr = do
       pure $ Just typedExpr
 
 -- | Construct a div tree from the given typed expression.
-buildDivTreeFromExpression :: forall eff. (Tuple Web.Highlight AST.TypeTree)
+buildDivTreeFromExpression :: (Tuple Web.Highlight AST.TypeTree)
                            -> Int
                            -> Eval.Env
                            -> Array (Tuple Web.Highlight AST.TypeTree)
                            -> J.JQuery
                            -> Maybe J.JQuery
-                           -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
+                           -> Effect Unit
 buildDivTreeFromExpression typedExpr nextIdx env history container histContainer = do
     content <- exprToJQuery
       (makeCallback nextIdx env history container histContainer (fst typedExpr))
@@ -256,13 +252,13 @@ buildDivTreeFromExpression typedExpr nextIdx env history container histContainer
 
 -- | Show the given expression inside a given environment after the types of the environment as
 -- | well as the expression have been inferred.
-showExprIn :: forall eff. (Tuple Web.Highlight AST.TypeTree)
+showExprIn :: (Tuple Web.Highlight AST.TypeTree)
            -> Int
            -> Eval.Env
            -> Array (Tuple Web.Highlight AST.TypeTree)
            -> J.JQuery
            -> Maybe J.JQuery
-           -> Eff (dom :: DOM , console :: CONSOLE| eff) Unit
+           -> Effect Unit
 showExprIn expr nextIdx env history container histContainer = do
   let tree = snd expr
   let highlight = fst expr

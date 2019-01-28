@@ -12,8 +12,8 @@ module IndentParser (
     -- | Any chain using these combinators must used with 'withPos'
     indentAp, (<+/>), indentNoAp, (<-/>), indentMany, (<*/>), indentOp, (<?/>), OptionalT(..), Optional
 ) where
-      
-import Prelude (class Monad, Unit, id, ap, const, ($), flip, unit, (==), bind, (<=), (>>=))
+
+import Prelude (class Monad, Unit, identity, ap, const, ($), flip, unit, (==), bind, (<=), (>>=), discard)
 import Data.List (List(..), many)
 import Data.Maybe (Maybe(..))
 import Data.Identity (Identity(..))
@@ -36,21 +36,21 @@ import Text.Parsing.Parser.String (string, oneOf)
 
 -- A module to construct indentation aware parsers. Many programming
 -- language have indentation based syntax rules e.g. python and Haskell.
--- This module exports combinators to create such parsers. 
--- 
+-- This module exports combinators to create such parsers.
+--
 -- The input source can be thought of as a list of tokens. Abstractly
 -- each token occurs at a line and a column and has a width. The column
 -- number of a token measures is indentation. If t1 and t2 are two tokens
 -- then we say that indentation of t1 is more than t2 if the column
 -- number of occurrence of t1 is greater than that of t2.
--- 
+--
 -- Currently this module supports two kind of indentation based syntactic
 -- structures which we now describe:
--- 
+--
 -- [Block] --A block of indentation /c/ is a sequence of tokens with
 -- indentation at least /c/.  Examples for a block is a where clause of
 -- Haskell with no explicit braces.
--- 
+--
 -- [Line fold] A line fold starting at line /l/ and indentation /c/ is a
 -- sequence of tokens that start at line /l/ and possibly continue to
 -- subsequent lines as long as the indentation is greater than /c/. Such
@@ -81,7 +81,7 @@ put' p = lift (put p)
 sourceColumn :: Position -> Int
 sourceColumn (Position {line: _, column: c}) = c
 
-sourceLine :: Position -> Int 
+sourceLine :: Position -> Int
 sourceLine (Position {line: l, column: _}) = l
 
 setSourceLine :: Position -> Int -> Position
@@ -92,7 +92,7 @@ biAp f c v1 v2 = c (f v1) (f v2)
 
 -- | @ many1 @ should prabably be inside Text.Parsing.Parser.Combinators
 many1 :: forall s m a. (Monad m) => ParserT s m a -> ParserT s m (List a)
-many1 p = lift2 Cons p (many p) 
+many1 p = lift2 Cons p (many p)
 
 symbol :: forall m. (Monad m) => String -> ParserT String m String
 symbol name = (many $ oneOf [' ','\t']) *> (string name)
@@ -106,7 +106,7 @@ withBlock :: forall m a b c s. (Monad m) => (a -> List b -> c) -> IndentParserT 
 withBlock f a p = withPos $ do
     r1 <- a
     r  <- optionMaybe $ indented *> block p
-    case r of 
+    case r of
       Nothing -> pure (f r1 Nil)
       Just r2 -> pure (f r1 r2)
 
@@ -202,16 +202,16 @@ infixl 12 indentOp as <?/>
 
 -- | parses with surrounding brackets
 indentBrackets :: forall m a. (Monad m) => IndentParserT String m a -> IndentParserT String m a
-indentBrackets p = withPos $ pure id <-/> symbol "[" <+/> p <-/> symbol "]"
+indentBrackets p = withPos $ pure identity <-/> symbol "[" <+/> p <-/> symbol "]"
 
 -- | parses with surrounding angle brackets
 indentAngles :: forall m a. (Monad m) => IndentParserT String m a -> IndentParserT String m a
-indentAngles p = withPos $ pure id <-/> symbol "<" <+/> p <-/> symbol ">"
+indentAngles p = withPos $ pure identity <-/> symbol "<" <+/> p <-/> symbol ">"
 
 -- | parses with surrounding braces
 indentBraces :: forall m a. (Monad m) => IndentParserT String m a -> IndentParserT String m a
-indentBraces p = withPos $ pure id <-/> symbol "{" <+/> p <-/> symbol "}"
+indentBraces p = withPos $ pure identity <-/> symbol "{" <+/> p <-/> symbol "}"
 
--- | parses with surrounding parentheses 
+-- | parses with surrounding parentheses
 indentParens :: forall m a. (Monad m) => IndentParserT String m a -> IndentParserT String m a
-indentParens p = withPos $ pure id <-/> symbol "(" <+/> p <-/> symbol ")"
+indentParens p = withPos $ pure identity <-/> symbol "(" <+/> p <-/> symbol ")"
