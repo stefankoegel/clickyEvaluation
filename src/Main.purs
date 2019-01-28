@@ -12,7 +12,7 @@ import Prelude
 import DOM (DOM)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), maybe)
-import Data.StrMap (empty)
+import Data.Map (empty)
 import Data.Array (cons)
 import Data.Traversable (for)
 import Data.Tuple (Tuple (..), fst, snd, uncurry)
