@@ -20,7 +20,7 @@ import Partial.Unsafe (unsafeCrashWith)
 import Prelude (
   class Eq, class Show, Unit,
   ($), (+), (-), (<$>), (<<<), (<>), (==), (>), (>>=), (>>>), (&&),
-  bind, const, div, flip, id, map, mod, negate, not, otherwise, pure, show, unit)
+  bind, const, discard, div, flip, identity, map, mod, negate, not, otherwise, pure, show, unit)
 
 import AST
 import AST as AST
@@ -91,7 +91,7 @@ type Subst = Map.Map TVar Type
 ppSubst :: Subst -> String
 ppSubst subst = "Substitutions:\n" <>
   (map ppTVAndType >>> intercalate ",\n")
-  (Map.toList subst)
+  (Map.toUnfoldable subst)
   where ppTVAndType (Tuple tv t) = "\t" <> tv <> " ~ " <> prettyPrintType t
 
 -- | The empty substition.
@@ -145,7 +145,7 @@ instance listSub :: (Substitutable a) => Substitutable (List a) where
 
 instance subTypeEnv :: Substitutable TypeEnv where
   apply s (TypeEnv env) =  TypeEnv $ map (apply s) env
-  ftv (TypeEnv env) = ftv $ snd $ unzip $ Map.toList env
+  ftv (TypeEnv env) = ftv $ snd $ unzip $ Map.toUnfoldable env
 
 instance subQualTree :: (Substitutable a, Substitutable b, Substitutable c) => Substitutable (QualTree a b c) where
   apply s (Gen a b c) = Gen (apply s a) (apply s b) (apply s c)
@@ -229,7 +229,7 @@ instance showTypeEnv :: Show TypeEnv where
 ppTypeEnv :: TypeEnv -> String
 ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
   (map ppTVAndScheme >>> intercalate ",\n")
-  (Map.toList env)
+  (Map.toUnfoldable env)
   where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " :: " <> ppScheme scheme
 
 -- | Create an empty type environment.
@@ -320,13 +320,13 @@ type Constraints = {
 -- | Convert the given set of constraints into a list of constraints.
 toConstraintList :: Constraints -> List Constraint
 toConstraintList constraints =
-  (Map.toList >>> map snd) constraints.mapped <>
+  (Map.toUnfoldable >>> map snd) constraints.mapped <>
   map snd constraints.unmapped
 
 toConstraintAndIndexLists :: Constraints -> Tuple (List Index) (List Constraint)
 toConstraintAndIndexLists constraints =
   unzip constraints.unmapped <>
-  unzip (Map.toList constraints.mapped)
+  unzip (Map.toUnfoldable constraints.mapped)
 
 -- | Construct an empty constraint map.
 emptyConstraints :: Constraints
@@ -393,7 +393,7 @@ ppConstraints :: Constraints -> String
 ppConstraints constraints = "Constraints:\n" <>
   "  determining the type:\n" <>
     (map ppTuple >>> intercalate ",\n")
-    (Map.toList constraints.mapped) <> "\n" <>
+    (Map.toUnfoldable constraints.mapped) <> "\n" <>
   "  other:\n" <>
     (map ppTuple >>> intercalate ",\n")
     constraints.unmapped
@@ -1275,7 +1275,7 @@ solver stopOnError { subst: beginningSubst, constraints: constraints } =
 -- | Go through tree and assign every tree node its type. In order to do this we rely on the node
 -- | indices.
 assignTypes :: Unifier -> TypeTree -> TypeTree
-assignTypes { subst: subst, constraints: constraints } expr = treeMap id fb fo f expr
+assignTypes { subst: subst, constraints: constraints } expr = treeMap identity fb fo f expr
   where
   f (Meta meta) = Meta $ meta { mtype = lookupTVar (meta.index) }
   -- f' (Tuple _ idx) = lookupTVar idx
@@ -1310,7 +1310,7 @@ makeIndexedDefinitionGroups = map makeIndexedDefinitionGroup <<< buildDefinition
 -- | Given a list of definitions, infer the definition types and create a typed evaluation
 -- | environment.
 tryInferEnvironment :: List Definition -> Either TypeError TypeEnv
-tryInferEnvironment defs = accumulateMappings emptyTypeEnv (Map.toList indexedGroups)
+tryInferEnvironment defs = accumulateMappings emptyTypeEnv (Map.toUnfoldable indexedGroups)
   where
   indexedGroups = makeIndexedDefinitionGroups defs
 
