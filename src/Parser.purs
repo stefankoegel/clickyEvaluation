@@ -1,7 +1,7 @@
 module Parser where
 
 import Prelude
-import Data.String as String
+import Data.String.CodeUnits as String
 import Data.Foldable (foldl)
 import Data.Traversable (for)
 import Data.List (List(..), many, concat, elemIndex, length)
@@ -70,7 +70,7 @@ type IndentParser s a = IndentParserT s Indexing a
 fresh :: forall m. (Monad m) => IndexingT m Int
 fresh = do
   i <- get
-  modify (\i -> i + 1)
+  _ <- modify (\i -> i + 1)
   pure i
 
 freshMeta :: forall m mt s. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
@@ -147,9 +147,9 @@ boolean = string "True"  *> pure true
 
 charLiteral :: forall m. (Monad m) => ParserT String m Char
 charLiteral = do
-  char '\''
+  _ <- char '\''
   c <- character'
-  char '\''
+  _ <- char '\''
   pure c
 
 -- | Parser for characters at the start of variables
@@ -282,7 +282,7 @@ operatorTable = maybe [] identity (modifyAt 3 (flip snoc unaryMinus) infixTable)
     unaryMinus = Prefix $ spaced minusParse
       where
         minusParse = do
-          string "-"
+          _ <- string "-"
           meta <- freshMeta
           meta' <- freshMeta -- TODO one id wasted, if the first case matches
           pure $ \e -> case e of
@@ -330,11 +330,11 @@ applicationOrSingleExpression expr = do
 -- | Parse an if_then_else construct - layout sensitive
 ifThenElse :: IndentParser String TypeTree -> IndentParser String TypeTree
 ifThenElse expr = do
-  ilexe $ string "if" *> PC.lookAhead (oneOf [' ', '\t', '\n', '('])
+  _ <- ilexe $ string "if" *> PC.lookAhead (oneOf [' ', '\t', '\n', '('])
   testExpr <- indent expr
-  indent $ string "then"
+  _ <- indent $ string "then"
   thenExpr <- indent expr
-  indent $ string "else"
+  _ <- indent $ string "else"
   elseExpr <- indent expr
   meta <- freshMeta
   pure $ IfExpr meta testExpr thenExpr elseExpr
@@ -342,12 +342,12 @@ ifThenElse expr = do
 -- | Parser for tuples or bracketed expressions - layout sensitive
 tuplesOrBrackets :: IndentParser String TypeTree -> IndentParser String TypeTree
 tuplesOrBrackets expr = do
-  ilexe $ char '('
+  _ <- ilexe $ char '('
   e <- indent expr
   mes <- PC.optionMaybe $ PC.try $ do
-    indent $ char ','
+    _ <- indent $ char ','
     (indent expr) `PC.sepBy1` (PC.try $ indent $ char ',')
-  indent $ char ')'
+  _ <- indent $ char ')'
   case mes of
     Nothing -> pure e
     Just es -> do
@@ -357,12 +357,12 @@ tuplesOrBrackets expr = do
 -- | Parser for operator sections - layout sensitive
 section :: IndentParser String TypeTree -> IndentParser String TypeTree
 section expr = do
-  ilexe $ char '('
+  _ <- ilexe $ char '('
   me1 <- PC.optionMaybe (indent $ syntax expr)
   op <- Tuple <$> opParser <*> freshMeta
   skipWhite
   me2 <- PC.optionMaybe (indent $ syntax expr)
-  indent $ char ')'
+  _ <- indent $ char ')'
   case me1 of
     Nothing -> do
       meta <- freshMeta
@@ -379,33 +379,33 @@ section expr = do
 -- | Parser for lists - layout sensitive
 list :: IndentParser String TypeTree -> IndentParser String TypeTree
 list expr = do
-  ilexe $ char '['
+  _ <- ilexe $ char '['
   exprs <- (indent expr) `PC.sepBy` (PC.try $ indent $ char ',')
-  indent $ char ']'
+  _ <- indent $ char ']'
   meta <- freshMeta
   pure $ List meta exprs
 
 -- | Parser for Arithmetic Sequences - layout sensitive
 arithmeticSequence :: IndentParser String TypeTree -> IndentParser String TypeTree
 arithmeticSequence expr = do
-  ilexe $ char '['
+  _ <- ilexe $ char '['
   start <- indent expr
   step  <- PC.optionMaybe $ (indent $ char ',') *> (indent expr)
-  indent $ string ".."
+  _ <- indent $ string ".."
   end   <- PC.optionMaybe $ indent expr
-  indent $ char ']'
+  _ <- indent $ char ']'
   meta <- freshMeta
   pure $ ArithmSeq meta start step end
 
 -- | Parser for list comprehensions - layout sensitive
 listComp :: IndentParser String TypeTree -> IndentParser String TypeTree
 listComp expr = do
-  ilexe $ char '['
+  _ <- ilexe $ char '['
   start <- indent expr
   PC.try $ (char '|') *> PC.notFollowedBy (char '|')
   skipWhite
   quals <- (indent $ qual expr) `PC.sepBy1` (PC.try $ indent $ char ',')
-  indent $ char ']'
+  _ <- indent $ char ']'
   meta <- freshMeta
   pure $ ListComp meta start quals
   where
@@ -414,15 +414,15 @@ listComp expr = do
     qual expr = (PC.try parseLet) <|> (PC.try parseGen) <|> parseGuard
       where
         parseLet = do
-          ilexe $ string "let"
+          _ <- ilexe $ string "let"
           b <- indent binding
-          indent $ char '='
+          _ <- indent $ char '='
           e <- indent expr
           meta <- freshMeta
           pure $ Let meta b e
         parseGen = do
           b <- ilexe binding
-          indent $ string "<-"
+          _ <- indent $ string "<-"
           e <- indent expr
           meta <- freshMeta
           pure $ Gen meta b e
@@ -435,9 +435,9 @@ listComp expr = do
 charList :: forall m mt. Monad m => MonadTrans mt => Monad (mt (IndexingT m))
          => IndexingParserT String mt m TypeTree
 charList = do
-  char '"'
+  _ <- char '"'
   chrs <- many character'
-  char '"'
+  _ <- char '"'
   List
     <$> freshMeta
     <*> for chrs (\chr -> Atom <$> freshMeta <*> pure (String.singleton >>> Char $ chr))
@@ -445,9 +445,9 @@ charList = do
 -- | Parse a lambda expression - layout sensitive
 lambda :: IndentParser String TypeTree -> IndentParser String TypeTree
 lambda expr = do
-  ilexe $ char '\\'
+  _ <- ilexe $ char '\\'
   binds <- many1 $ indent binding
-  indent $ string "->"
+  _ <- indent $ string "->"
   body <- indent expr
   meta <- freshMeta
   pure $ Lambda meta binds body
@@ -455,9 +455,9 @@ lambda expr = do
 -- Parser for let expressions - layout sensitive
 letExpr :: IndentParser String TypeTree -> IndentParser String TypeTree
 letExpr expr = do
-  ilexe $ string "let"
+  _ <- ilexe $ string "let"
   binds <- indent $ bindingBlock expr
-  indent $ string "in"
+  _ <- indent $ string "in"
   body  <- indent $ withPos expr
   meta <- freshMeta
   pure $ LetExpr meta binds body
@@ -465,7 +465,7 @@ letExpr expr = do
     bindingItem :: IndentParser String TypeTree -> IndentParser String (Tuple (Binding Meta) TypeTree)
     bindingItem expr = do
       b <- ilexe binding
-      indent $ char '='
+      _ <- indent $ char '='
       e <- indent $ withPos expr
       pure $ Tuple b e
 
@@ -479,7 +479,7 @@ letExpr expr = do
 -- | Parse an arbitrary expression
 expression :: IndentParser String TypeTree
 expression = do
-  whiteSpace
+  _ <- whiteSpace
   fix $ \expr -> buildExprParser operatorTable (syntax expr)
 
 runParserIndent :: forall a. IndentParser String a -> String -> Either ParseError (Tuple a Int)
@@ -524,7 +524,7 @@ parseExpr = runParserIndent expression
 
 binding :: IndentParser String (Binding Meta)
 binding = do
-  whiteSpace
+  _ <- whiteSpace
   fix $ \bnd -> do
     la <- lookAhead
     case la of
@@ -556,7 +556,7 @@ bndList bnd = PC.sepBy
 bndConses :: FixedIndentParser String (Binding Meta)
 bndConses bnd = PC.chainr1
   (PC.try <<< ilexe <<< bndInfixes $ bnd)
-  (do PC.try <<< indent <<< char $ ':'
+  (do _ <- PC.try <<< indent <<< char $ ':'
       ConsLit <$> freshMeta)
 
 bndInfixes :: FixedIndentParser String (Binding Meta)
@@ -583,7 +583,7 @@ definition :: IndentParser String Definition
 definition = do
   defName <- ilexe name
   binds   <- many $ indent binding
-  indent $ char '='
+  _ <- indent $ char '='
   body    <- indent expression
   pure $ Def defName binds body
 
@@ -670,7 +670,7 @@ typeExpr t = PC.between
 
 types :: IndentParser String Type
 types = do
-  whiteSpace
+  _ <- whiteSpace
   fix $ \t -> (indent <<< type1) t `PC.chainr1` ((indent <<< string) "->" *> pure TypArr)
 
 typeTuple :: IndentParser String Type -> IndentParser String Type
@@ -718,10 +718,10 @@ types1 t = do
 
 typeDefinition :: IndentParser String ADTDef
 typeDefinition = do
-  ilexe $ string "data"
+  _ <- ilexe $ string "data"
   n <- indent upperCaseName
   tvs <- many $ indent name
-  conss <- (do PC.try (indent $ char '=')
+  conss <- (do _ <- PC.try (indent $ char '=')
                indent dataConstructorDefinition `PC.sepBy` (PC.try $ indent $ char '|'))
            <|> pure Nil
   pure $ ADTDef n tvs conss
@@ -747,6 +747,6 @@ infixDataConstrtructorDefinition = do
 
 infixConstructor :: forall m. (Monad m) => ParserT String m String
 infixConstructor = do
-  char ':'
+  _ <- char ':'
   syms <- many1 symbol
   pure $ String.fromCharArray $ Array.fromFoldable $ Cons ':' syms

@@ -13,7 +13,7 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, fromJust, isJust, maybe)
 import Data.Set as Set
-import Data.String as String
+import Data.String.CodeUnits as String
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(Tuple), snd, fst)
 import Partial.Unsafe (unsafeCrashWith)

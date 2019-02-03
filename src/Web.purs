@@ -10,7 +10,7 @@ import Data.Maybe (Maybe(..), maybe, isJust)
 import Data.Tuple (Tuple(..))
 import Data.Traversable (for, for_)
 import Data.Array as Arr
-import Data.String as Str
+import Data.String.CodeUnits as Str
 
 import Effect (Effect)
 import JQuery as J
@@ -336,7 +336,7 @@ divToJQuery isTopLevelDiv callback (Node { content: content, classes: classes, z
   --   then addTypeTooltip exprType div
   --   else pure unit
 
-  for children (divToJQuery false callback >=> flip J.append div)
+  _ <- for children (divToJQuery false callback >=> flip J.append div)
   case zipper of
     Nothing                -> pure unit
     Just (Tuple expr hole) -> do
@@ -362,7 +362,7 @@ toString ls = Str.fromCharArray <$> go [] ls
 
 type Class = String
 
-makeDiv :: Foldable f => String -> f Class -> Effect J.JQuery
+makeDiv :: forall f. Foldable f => String -> f Class -> Effect J.JQuery
 makeDiv text classes = do
   d <- J.create "<div></div>"
   J.setText text d

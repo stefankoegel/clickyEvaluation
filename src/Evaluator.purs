@@ -12,8 +12,8 @@ import Data.Traversable (traverse)
 import Data.Identity (Identity)
 import Data.Either (Either(..), either)
 import Data.Monoid (class Monoid)
-import Data.String (toChar)
-import Data.String (singleton) as String
+import Data.String.CodeUnits (toChar)
+import Data.String.CodeUnits (singleton) as String
 import Data.Char (fromCharCode)
 import Data.Enum (fromEnum)
 import Control.Comonad (extract)
@@ -98,7 +98,7 @@ defsToEnv :: (List Definition) -> Env
 defsToEnv = foldl insertDef Map.empty
 
 envToDefs :: Env -> (List Definition)
-envToDefs env = concat $ map tupleToDef $ Map.toList env
+envToDefs env = concat $ map tupleToDef $ Map.toUnfoldable env
   where
     tupleToDef (Tuple name defs) = map
                                     (\(Tuple bin expr) -> Def name bin expr)
@@ -646,7 +646,7 @@ removeOverlapping :: Binding Meta -> Map TypeTree -> Map TypeTree
 removeOverlapping bind = removeOverlapping' (boundNames bind)
   where
     removeOverlapping' :: List String -> Map TypeTree -> Map TypeTree
-    removeOverlapping' Nil         = id
+    removeOverlapping' Nil         = identity
     removeOverlapping' (Cons s ss) = removeOverlapping' ss <<< delete s
 
 freshIndices :: TypeTree -> Evaluator TypeTree
