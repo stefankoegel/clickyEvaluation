@@ -90,7 +90,7 @@ type Subst = Map.Map TVar Type
 -- | ```
 ppSubst :: Subst -> String
 ppSubst subst = "Substitutions:\n" <>
-  (map ppTVAndType >>> intercalate ",\n")
+  ((map ppTVAndType :: Array (Tuple TVar Type) -> Array String) >>> intercalate ",\n")
   (Map.toUnfoldable subst)
   where ppTVAndType (Tuple tv t) = "\t" <> tv <> " ~ " <> prettyPrintType t
 
@@ -228,7 +228,7 @@ instance showTypeEnv :: Show TypeEnv where
 -- | ```
 ppTypeEnv :: TypeEnv -> String
 ppTypeEnv (TypeEnv env) = "Type environment:\n" <>
-  (map ppTVAndScheme >>> intercalate ",\n")
+  ((map ppTVAndScheme :: Array (Tuple TVar Scheme) -> Array String) >>> intercalate ",\n")
   (Map.toUnfoldable env)
   where ppTVAndScheme (Tuple tv scheme) = "\t" <> tv <> " :: " <> ppScheme scheme
 
@@ -392,7 +392,7 @@ ppConstraint (ConstraintError typeError) = prettyPrintType typeError
 ppConstraints :: Constraints -> String
 ppConstraints constraints = "Constraints:\n" <>
   "  determining the type:\n" <>
-    (map ppTuple >>> intercalate ",\n")
+    ((map ppTuple :: Array (Tuple Index Constraint) -> Array String) >>> intercalate ",\n")
     (Map.toUnfoldable constraints.mapped) <> "\n" <>
   "  other:\n" <>
     (map ppTuple >>> intercalate ",\n")
