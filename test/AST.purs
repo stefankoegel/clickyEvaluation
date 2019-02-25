@@ -7,24 +7,25 @@ import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 
 -- import Control.Monad.Writer (Writer, tell)
-import Control.Monad.Eff.Console (log)
+import Effect (Effect)
+import Effect.Console (log)
 
 import AST (Tree(..), Atom(..), Binding(..), Op(..), QualTree(..), TypeTree, emptyMeta, Meta)
 
-import Test.Utils (tell, Test)
+import Test.Utils (tell)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
 
-tell' :: String -> Test Unit
+tell' :: String -> Effect Unit
 tell' = tell
 
-test :: forall a. (Show a, Eq a) => String -> a -> a -> Test Unit
+test :: forall a. Show a => Eq a => String -> a -> a -> Effect Unit
 test name input expected = case input == expected of
   false -> tell' $ "AST fail (" <> name <> "): " <> show input <> " should be " <> show expected
   true  -> log $ "Test success (" <> name <> ")"
 
-runTests :: Test Unit
+runTests :: Effect Unit
 runTests = do
 --   test "idFoldTree_atom" (idFoldTree atom) atom
 --   test "idFoldTree_list" (idFoldTree list) list
@@ -41,20 +42,20 @@ runTests = do
 --   test "idFoldTree_app" (idFoldTree app) app
 --   test "idFoldTree_listcomp" (idFoldTree listcomp) listcomp
 
-  test "map_atom" (map id atom) atom
-  test "map_list" (map id list) list
-  test "map_ntuple" (map id ntuple) ntuple
-  test "map_binary" (map id binary) binary
-  test "map_unary" (map id unary) unary
-  test "map_sectl" (map id sectl) sectl
-  test "map_sectr" (map id sectr) sectr
-  test "map_prefixop" (map id prefixop) prefixop
-  test "map_ifexpr" (map id ifexpr) ifexpr
-  test "map_arithmseq" (map id arithmseq) arithmseq
-  test "map_letexpr" (map id letexpr) letexpr
-  test "map_lambda" (map id lambda) lambda
-  test "map_app" (map id app) app
-  test "map_listcomp" (map id listcomp) listcomp
+  test "map_atom" (map identity atom) atom
+  test "map_list" (map identity list) list
+  test "map_ntuple" (map identity ntuple) ntuple
+  test "map_binary" (map identity binary) binary
+  test "map_unary" (map identity unary) unary
+  test "map_sectl" (map identity sectl) sectl
+  test "map_sectr" (map identity sectr) sectr
+  test "map_prefixop" (map identity prefixop) prefixop
+  test "map_ifexpr" (map identity ifexpr) ifexpr
+  test "map_arithmseq" (map identity arithmseq) arithmseq
+  test "map_letexpr" (map identity letexpr) letexpr
+  test "map_lambda" (map identity lambda) lambda
+  test "map_app" (map identity app) app
+  test "map_listcomp" (map identity listcomp) listcomp
 
 
 atom :: TypeTree

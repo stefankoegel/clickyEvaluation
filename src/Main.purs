@@ -13,7 +13,7 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), maybe)
 import Data.Map (empty)
 import Data.Array (cons)
-import Data.Traversable (for)
+import Data.Traversable (for_)
 import Data.Tuple (Tuple (..), fst, snd, uncurry)
 import Data.Foldable (foldr)
 import Data.List ((:), List(..))
@@ -197,7 +197,7 @@ showError origin msg = do
 
 -- | Execute the given function if the given maybe (wrapped inside an effect) is a `Just x` value
 -- | using `x` as the argument. If the maybe is `Nothing` don't do anything.
-doWithJust :: Effect (Maybe a) -> (a -> Effect Unit) -> Effect Unit
+doWithJust :: forall a. Effect (Maybe a) -> (a -> Effect Unit) -> Effect Unit
 doWithJust mMaybe f = do
   mValue <- mMaybe
   case mValue of
@@ -241,7 +241,7 @@ buildDivTreeFromExpression typedExpr nextIdx env history container histContainer
       Nothing -> pure unit
       Just histContainer -> do
         J.clear histContainer
-        for history $ \typedExpr -> do
+        for_ history $ \typedExpr -> do
           histExpr <- exprToJQuery (\_ _ _ _ -> pure unit) typedExpr
           histDiv <- J.create "<div></div>"
           J.addClass "history-element" histDiv

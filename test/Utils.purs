@@ -2,17 +2,13 @@ module Test.Utils where
 
 import Prelude
 
-import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Console (CONSOLE)
+import Effect (Effect)
 import Data.String (Pattern(..), split) as String
 import Data.Foldable (intercalate)
 
-foreign import data WRITERLOG :: !
-foreign import resetLog :: Test Unit
-foreign import getLog :: Test (Array String)
-foreign import tell :: String -> Test Unit
-
-type Test a = forall eff. Eff (writerlog :: WRITERLOG, console :: CONSOLE | eff) a
+foreign import resetLog :: Effect Unit
+foreign import getLog :: Effect (Array String)
+foreign import tell :: String -> Effect Unit
 
 unlines :: Array String -> String
 unlines = intercalate "\n"
@@ -23,8 +19,8 @@ lines = String.split (String.Pattern "\n")
 padLeft :: String -> String
 padLeft = lines >>> map (\x -> "  " <> x) >>> unlines
 
-withWriterLog :: forall a. Test a -> Test (Array String)
+withWriterLog :: forall a. Effect a -> Effect (Array String)
 withWriterLog tests = do
   resetLog
-  tests
+  _ <- tests
   getLog

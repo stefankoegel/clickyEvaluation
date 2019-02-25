@@ -19,7 +19,7 @@ import Data.Enum (fromEnum)
 import Control.Comonad (extract)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.State (State, runState)
-import Control.Monad.State.Trans (StateT, get, modify, put, runStateT, execStateT)
+import Control.Monad.State.Trans (StateT, get, modify_, put, runStateT, execStateT)
 import Control.Monad.State.Class (class MonadState)
 import Control.Monad.Except.Trans (ExceptT, throwError, runExceptT)
 
@@ -92,7 +92,7 @@ type Matcher = StateT Int (ExceptT MatchingError Identity)
 runMatcherM :: forall a. Int -> Matcher a -> Either MatchingError (Tuple a Int)
 runMatcherM idx = extract <<< runExceptT <<< flip runStateT idx
 
-type Env = Map (List (Tuple (List (Binding Meta)) TypeTree))
+type Env = Map String (List (Tuple (List (Binding Meta)) TypeTree))
 
 defsToEnv :: (List Definition) -> Env
 defsToEnv = foldl insertDef Map.empty
@@ -138,7 +138,7 @@ eval nextIdx env expr = runState (evalToBinding env expr (Lit AST.emptyMeta (Nam
 freshMeta :: forall m. (MonadState Int m) => m Meta
 freshMeta = do
   i <- get
-  modify (\i -> i + 1)
+  modify_ (\i -> i + 1)
   pure $ AST.idxMeta i
 
 -- | Evaluates an expression until it matches a given binding in a given environment.
@@ -277,13 +277,13 @@ intFromStepTo start Nothing (Just end) = case start > end of
       Just nstart -> Quat (Just start) (Just nstart) Nothing (Just end)
       Nothing     -> Quat (Just start) Nothing Nothing Nothing
 
-intFromStepTo start (Just step) (Just end) = case (start <= step && start > end) || (start > step && start < end) of
-  true  -> Quat Nothing Nothing Nothing Nothing
-  false -> if start == end || (abs step) > (abs end)
-    then Quat (Just start) Nothing Nothing Nothing
-    else case clampStep start step of
-      Nothing    -> Quat (Just start) (Just step) Nothing (Just step)
-      Just nstep -> Quat (Just start) (Just step) (Just nstep) (Just end)
+intFromStepTo start (Just next) (Just end) = go
+  where
+    d = next - start
+    go |          start == end = Quat (Just start) Nothing     Nothing           Nothing
+       | d > 0 && start >= end = Quat Nothing      Nothing     Nothing           Nothing
+       | d < 0 && start <= end = Quat Nothing      Nothing     Nothing           Nothing
+       | otherwise             = Quat (Just start) (Just next) (Just $ next + d) (Just end)
 
 abs :: Int -> Int
 abs x = if x < 0 then -x else x
@@ -328,7 +328,7 @@ intToAChar quat = case temp of
 
     intToChar' :: Int -> Char
     intToChar' i = if c >= (top :: Char) then top else if c <= (bottom :: Char) then bottom else c
-      where c = fromCharCode i
+      where c = fromMaybe 'X' (fromCharCode i)
 
 unsafeTypeTreeToInt :: TypeTree -> Int
 unsafeTypeTreeToInt (Atom _ (AInt i))   = i
@@ -443,10 +443,10 @@ evalListComp env expr (Cons q qs) = case q of
   _ -> throwError $ CannotEvaluate (ListComp AST.emptyMeta expr (Cons q qs))
 
 -- replaces expressions in List-Comprehension-Qualifiers and considers overlapping bindings
-replaceQualifiers :: List TypeQual -> StateT (Map TypeTree) Evaluator (List TypeQual)
+replaceQualifiers :: List TypeQual -> StateT (Map String TypeTree) Evaluator (List TypeQual)
 replaceQualifiers = traverse replaceQual
   where
-    replaceQual :: TypeQual -> StateT (Map TypeTree) Evaluator TypeQual
+    replaceQual :: TypeQual -> StateT (Map String TypeTree) Evaluator TypeQual
     replaceQual qual = case qual of
       Gen _ b e -> scope b e >>= \e' -> Gen <$> lift freshMeta <*> pure b <*> pure e'
       Let _ b e -> scope b e >>= \e' -> Let <$> lift freshMeta <*> pure b <*> pure e'
@@ -455,11 +455,11 @@ replaceQualifiers = traverse replaceQual
         e'  <- lift $ replace' sub e
         Guard <$> lift freshMeta <*> pure e'
 
-scope :: Binding Meta -> TypeTree -> StateT (Map TypeTree) Evaluator TypeTree
+scope :: Binding Meta -> TypeTree -> StateT (Map String TypeTree) Evaluator TypeTree
 scope b e = do
   sub <- get
   e'  <- lift $ replace' sub e
-  modify (removeOverlapping b)
+  modify_ (removeOverlapping b)
   pure e'
 
 ------------------------------------------------------------------------------------------
@@ -483,7 +483,7 @@ evalLetTypeTree (Cons (Tuple b e) rest) expr = do
           expr' <- replace' r' expr
           LetExpr <$> freshMeta <*> pure rest' <*> pure expr'
 
-replaceBindings :: Bindings -> StateT (Map TypeTree) Evaluator Bindings
+replaceBindings :: Bindings -> StateT (Map String TypeTree) Evaluator Bindings
 replaceBindings = traverse $ \(Tuple bin expr) -> do
   expr' <- scope bin expr
   pure $ Tuple bin expr'
@@ -585,10 +585,10 @@ checkStrictness bs es | whnf es   = MatchingError bs es
                       | otherwise = StrictnessError bs es
 
 
-matchls' :: Env -> (List (Binding Meta)) -> (List TypeTree) -> Matcher (Map TypeTree)
+matchls' :: Env -> (List (Binding Meta)) -> (List TypeTree) -> Matcher (Map String TypeTree)
 matchls' env bs es = execStateT (zipWithA m bs es) Map.empty
  where
-   m :: Binding Meta -> TypeTree -> StateT (Map TypeTree) Matcher Unit
+   m :: Binding Meta -> TypeTree -> StateT (Map String TypeTree) Matcher Unit
    m b t = do
      i <- lift get
      let bndAndIdx = runState (evalToBinding env t b) i
@@ -598,8 +598,8 @@ matchls' env bs es = execStateT (zipWithA m bs es) Map.empty
      match' b t'
 
 
-match' :: Binding Meta -> TypeTree -> StateT (Map TypeTree) Matcher Unit
-match' (Lit _ (Name name)) e                   = modify (Map.insert name e)
+match' :: Binding Meta -> TypeTree -> StateT (Map String TypeTree) Matcher Unit
+match' (Lit _ (Name name)) e                   = modify_ (Map.insert name e)
 match' (Lit meta ba)       (Atom meta' ea)     = case ba == ea of
                                                  true  -> pure unit
                                                  false -> throwError $ MatchingError (Lit meta ba) (Atom meta' ea)
@@ -642,10 +642,10 @@ match' b@(ConstrLit _ _) e = throwError $ checkStrictness b e
 
 
 -- removes every entry in Map that is inside the binding
-removeOverlapping :: Binding Meta -> Map TypeTree -> Map TypeTree
+removeOverlapping :: Binding Meta -> Map String TypeTree -> Map String TypeTree
 removeOverlapping bind = removeOverlapping' (boundNames bind)
   where
-    removeOverlapping' :: List String -> Map TypeTree -> Map TypeTree
+    removeOverlapping' :: List String -> Map String TypeTree -> Map String TypeTree
     removeOverlapping' Nil         = identity
     removeOverlapping' (Cons s ss) = removeOverlapping' ss <<< delete s
 
@@ -655,7 +655,7 @@ freshIndices = AST.traverseTree
   (\(Tuple o _) -> Tuple o <$> freshMeta)
   (\_ -> freshMeta)
 
-replace' :: Map TypeTree -> TypeTree -> Evaluator TypeTree
+replace' :: Map String TypeTree -> TypeTree -> Evaluator TypeTree
 replace' subs = go
   where
   go tt = case tt of
@@ -687,7 +687,7 @@ replace' subs = go
       LetExpr <$> freshMeta <*> pure binds' <*> pure expr'
     e                     -> freshIndices e
 
-avoidCapture :: Map TypeTree -> (List (Binding Meta)) -> Evaluator Unit
+avoidCapture :: Map String TypeTree -> (List (Binding Meta)) -> Evaluator Unit
 avoidCapture subs binds = case intersect (concatMap freeVariables $ Map.values subs) (boundNames' binds) of
   Nil      -> pure unit
   captures -> throwError $ NameCaptureError captures

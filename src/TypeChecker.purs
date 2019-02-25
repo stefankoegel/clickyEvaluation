@@ -1448,7 +1448,7 @@ indexList n = [n `mod` 26]
 -- | Example: map getNthName (700..703) => ["zy","zz","aaa","aab"]
 getNthName :: Int -> String
 getNthName = indexList >>> Array.reverse >>> toCharArray >>> String.fromCharArray
-  where toCharArray = map (((+) 97) >>> Char.fromCharCode)
+  where toCharArray = map (((+) 97) >>> Char.fromCharCode >>> fromMaybe 'X')
 
 -- | The state used when normalizing types and type trees.
 type NormalizationState =

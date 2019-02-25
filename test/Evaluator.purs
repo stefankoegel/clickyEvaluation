@@ -3,20 +3,21 @@ module Test.Evaluator where
 import Prelude
 import Data.Either (Either(..))
 import Data.Tuple (Tuple(..), fst, snd)
-import Data.StrMap as M
+import Data.Map as M
 import Data.List (List(Nil))
 
 -- import Control.Monad.Writer (Writer, tell)
 
-import Control.Monad.Eff.Console (log)
+import Effect (Effect)
+import Effect.Console (log)
 
 import Parser (definitions, expression, runParserIndent)
 import Evaluator (eval, eval1, runEvalM, defsToEnv,Env)
 import Test.Parser (prelude, parsedPrelude, class Testable, equals, isValidlyIndexed)
 
-import Test.Utils (Test, tell, padLeft)
+import Test.Utils (tell, padLeft)
 
-tell' :: String -> Test Unit
+tell' :: String -> Effect Unit
 tell' = tell
 
 preludeEnv :: Env
@@ -24,7 +25,7 @@ preludeEnv = case runParserIndent definitions prelude of
   Right (Tuple env _) -> defsToEnv env
   Left _    -> defsToEnv Nil
 
-eval1test :: String -> String -> String -> Test Unit
+eval1test :: String -> String -> String -> Effect Unit
 eval1test name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
   (Tuple (Right (Tuple inExp i)) (Right (Tuple expExp _))) ->
     case runEvalM i (eval1 M.empty inExp) of
@@ -51,7 +52,7 @@ eval1test name input expected = case (Tuple (runParserIndent expression input) (
         <> padLeft (show err)
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
-eval1EnvTest :: String -> String -> String -> String -> Test Unit
+eval1EnvTest :: String -> String -> String -> String -> Effect Unit
 eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right (Tuple inExp i)) (Right (Tuple expExp _))) (Right (Tuple defs _))) ->
     case runEvalM i (eval1 (defsToEnv defs) inExp) of
@@ -78,7 +79,7 @@ eval1EnvTest name env input expected = case (Tuple (Tuple (runParserIndent expre
         <> padLeft (show err)
   _ -> tell' $ "Parse fail (" <> name <> ")"
 
-evalEnvTest :: String -> String -> String -> String -> Test Unit
+evalEnvTest :: String -> String -> String -> String -> Effect Unit
 evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expression input) (runParserIndent expression expected)) (runParserIndent definitions env)) of
   (Tuple (Tuple (Right (Tuple inExp i)) (Right (Tuple expExp _))) (Right (Tuple defs _))) ->
     let evalExp = fst (eval i (defsToEnv defs) inExp) in
@@ -126,11 +127,11 @@ evalEnvTest name env input expected = case (Tuple (Tuple (runParserIndent expres
     <> "Definitions:\n"
     <> padLeft (show pd)
 
-evalTest :: String -> String -> String -> Test Unit
+evalTest :: String -> String -> String -> Effect Unit
 evalTest n = evalEnvTest n ""
 
 
-evalPreludeTest :: String -> String -> String -> Test Unit
+evalPreludeTest :: String -> String -> String -> Effect Unit
 evalPreludeTest name input expected = case (Tuple (runParserIndent expression input) (runParserIndent expression expected)) of
   (Tuple (Right (Tuple inExp i)) (Right (Tuple expExp _))) ->
     let evalExp = fst (eval i preludeEnv inExp) in
@@ -173,7 +174,7 @@ evalPreludeTest name input expected = case (Tuple (runParserIndent expression in
     <> padLeft (show pe) <> "\n"
 
 
-runTests :: Test Unit
+runTests :: Effect Unit
 runTests = do
   eval1test "add" "1+1" "2"
   eval1test "power" "2^10" "1024"
@@ -292,7 +293,8 @@ runTests = do
   evalPreludeTest "arithmetic_sequences_3" "length [ 7 * 7, 8 * 8 .. 42 * 42]" "115"
   evalPreludeTest "arithmetic_sequences_5" "sum $ take 100 [500 ..]" "54950"
   evalPreludeTest "arithmetic_sequences_6" "[1, -1 .. 0]" "[1]"
-  evalPreludeTest "! arithmetic_sequences_7" "sum [10, 9 .. -10]" "0"
+  evalPreludeTest "arithmetic_sequences_7a" "[10, 9 .. -10]" "[10,9,8,7,6,5,4,3,2,1,0,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10]"
+  evalPreludeTest "arithmetic_sequences_7b" "sum [10, 9 .. -10]" "0"
   evalPreludeTest "arithmetic_sequences_8" "[True .. False]" "[]"
   evalPreludeTest "arithmetic_sequences_9" "[True, False ..]" "[True, False]"
   evalPreludeTest "arithmetic_sequences_11" "[False, True ..]" "[False, True]"
@@ -328,7 +330,7 @@ runTests = do
 
   testsADT
 
-testsADT :: Test Unit
+testsADT :: Effect Unit
 testsADT = do
 {-
   eval1test "constr-1"
