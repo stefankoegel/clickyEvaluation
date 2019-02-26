@@ -7,7 +7,7 @@ import TypeChecker (Scheme(..), TVarMappings, boolType, charType, intType,
 import Parser (parseExpr, parseDefs)
 import Test.Parser (parsedPrelude)
 
-import Prelude (Unit, bind, map, pure, show, unit, ($), (==), (<>), (>>=), (<$>))
+import Prelude (Unit, bind, map, pure, show, unit, ($), (==), (<>), (>>=), (<$>), discard)
 -- import Control.Monad.Writer (Writer, tell)
 import Data.Array as Array
 import Data.Either (Either(..))
@@ -19,14 +19,15 @@ import Text.Parsing.Parser (ParseError, parseErrorMessage)
 
 import Control.Semigroupoid ((>>>), (<<<))
 
-import Control.Monad.Eff.Console (log)
+import Effect (Effect)
+import Effect.Console (log)
 
-import Test.Utils (Test, tell)
+import Test.Utils (tell)
 
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
 
-tell' :: String -> Test Unit
+tell' :: String -> Effect Unit
 tell' = tell
 
 metaType :: Type -> Meta
@@ -68,20 +69,20 @@ intList :: Type
 intList = TList $ TypCon "Int"
 
 -- | Report a parse error.
-reportParseError :: String -> ParseError -> Test Unit
+reportParseError :: String -> ParseError -> Effect Unit
 reportParseError testName parseError = tell' $ "Parse error for test case "
   <> testName <> ": "
   <> parseErrorMessage parseError
   <> "\nNote that this is not a failing test but rather an error in the test definition."
 
 -- | Report a type error.
-reportTypeError :: String -> TypeError -> Test Unit
+reportTypeError :: String -> TypeError -> Effect Unit
 reportTypeError testName typeError = tell' $ "Type inference failed in test case `"
   <> testName <> "`:\n"
   <> "Encountered type error: "
   <> prettyPrintTypeError typeError
 
-reportTypeErrorWithNote :: String -> TypeError -> String -> Test Unit
+reportTypeErrorWithNote :: String -> TypeError -> String -> Effect Unit
 reportTypeErrorWithNote testName typeError note =
   tell' $ "Type inference failed in test case `"
     <> testName <> "`:\n"
@@ -91,14 +92,14 @@ reportTypeErrorWithNote testName typeError note =
     <> note
 
 -- | Compare the given two types and report an error if they are not equal.
-compareTypes :: String -> Type -> Type -> Test Unit
+compareTypes :: String -> Type -> Type -> Effect Unit
 compareTypes testName expected actual = if expected == actual
   then log $ "Test success (" <> testName <> ")"
   else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
                "Expected type: " <> prettyPrintType expected <> "\n" <>
                "Actual type: " <> prettyPrintType actual
 
-compareTypesWithNote :: String -> Type -> Type -> String -> Test Unit
+compareTypesWithNote :: String -> Type -> Type -> String -> Effect Unit
 compareTypesWithNote testName expected actual note = if expected == actual
   then log $ "Test success (" <> testName <> ")"
   else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
@@ -107,7 +108,7 @@ compareTypesWithNote testName expected actual note = if expected == actual
                "Additional note: \n" <> note
 
 -- | Compare the given type errors and report an error if they are not equal.
-compareTypeError :: String -> TypeError -> TypeError -> Test Unit
+compareTypeError :: String -> TypeError -> TypeError -> Effect Unit
 compareTypeError testName expected actual = if expected == actual
   then log $ "Test success (" <> testName <> ")"
   else tell' $ "Type inference failed in test case `" <> testName <> "`:\n" <>
@@ -115,7 +116,7 @@ compareTypeError testName expected actual = if expected == actual
                "Actual type error: " <> prettyPrintTypeError actual <> "\n"
 
 -- | Try to infer the type of a given expression and compare the result with the expected type.
-testInferExpr :: Partial => String -> String -> Type -> Test Unit
+testInferExpr :: Partial => String -> String -> Type -> Effect Unit
 testInferExpr name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
   Right (Tuple expression _) -> case TC.runInfer true (TC.inferExprToType expression) of
@@ -123,7 +124,7 @@ testInferExpr name expressionString expected = case parseExpr expressionString o
     Right t -> compareTypes name expected t
 
 -- | Try to infer the type of a given expression and expect a type error to occur.
-testInferExprFail :: Partial => String -> String -> TypeError -> Test Unit
+testInferExprFail :: Partial => String -> String -> TypeError -> Effect Unit
 testInferExprFail name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
   Right (Tuple expression _) -> case TC.runInfer true (TC.inferExprToType expression) of
@@ -132,7 +133,7 @@ testInferExprFail name expressionString expected = case parseExpr expressionStri
                        "Found type: " <> prettyPrintType t <> "\n"
     Left typeError -> compareTypeError name expected typeError
 
-testInferDef :: Partial => String -> String -> Type -> Test Unit
+testInferDef :: Partial => String -> String -> Type -> Effect Unit
 testInferDef name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
   Right (Tuple (def:_) _) -> case TC.runInfer true (inferAndConvertToType def) of
@@ -143,7 +144,7 @@ testInferDef name definitionString expected = case parseDefs definitionString of
   where
   inferAndConvertToType def = TC.schemeOfDefinition def >>= TC.schemeToType
 
-testInferDefFail :: Partial => String -> String -> TypeError -> Test Unit
+testInferDefFail :: Partial => String -> String -> TypeError -> Effect Unit
 testInferDefFail name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
   Right (Tuple (def:_) _) -> case TC.runInfer true (inferAndConvertToType def) of
@@ -160,7 +161,7 @@ testInferDefFail name definitionString expected = case parseDefs definitionStrin
   where
   inferAndConvertToType def = TC.schemeOfDefinition def >>= TC.schemeToType
 
-testInferDefGroup :: Partial => String -> String -> Type -> Test Unit
+testInferDefGroup :: Partial => String -> String -> Type -> Effect Unit
 testInferDefGroup name definitionString expected = case parseDefs definitionString of
   Left parseError -> reportParseError name parseError
   Right (Tuple definitions _) -> case TC.runInfer true (inferAndConvertToType definitions) of
@@ -170,7 +171,7 @@ testInferDefGroup name definitionString expected = case parseDefs definitionStri
   inferAndConvertToType defs = TC.schemeOfDefinitionGroup defs >>= TC.schemeToType
 
 -- | Infer the type of the given expression in the context of the prelude.
-testInferExprWithPrelude :: Partial => String -> String -> Type -> Test Unit
+testInferExprWithPrelude :: Partial => String -> String -> Type -> Effect Unit
 testInferExprWithPrelude name expressionString expected = case parseExpr expressionString of
   Left parseError -> reportParseError name parseError
   Right (Tuple expression _) -> case TC.tryInferTypeInContext parsedPrelude expression of
@@ -179,7 +180,7 @@ testInferExprWithPrelude name expressionString expected = case parseExpr express
     
 
 -- | Infer the type of the given expression in the context of a custom prelude.
-testInferExprWithCustomPrelude :: Partial => String -> String -> String -> Type -> Test Unit
+testInferExprWithCustomPrelude :: Partial => String -> String -> String -> Type -> Effect Unit
 testInferExprWithCustomPrelude name prelude expressionString expected =
   case parseDefs prelude of
     Left parseError -> reportParseError name parseError
@@ -196,12 +197,12 @@ testInferExprWithCustomPrelude name prelude expressionString expected =
 
 -- | Test type inference on expression trees, given an expression string as well as the expected
 -- | resulting typed tree.
-testInferTT' :: Partial => String -> String -> TypeTree -> Test Unit
+testInferTT' :: Partial => String -> String -> TypeTree -> Effect Unit
 testInferTT' name unparsedTree expectedTypeTree = case parseExpr unparsedTree of
   Left parseError -> reportParseError name parseError
   Right (Tuple expression _) -> testInferTT name expression expectedTypeTree
 
-testInferTTWithCustomPrelude' :: Partial => String -> String -> String -> TypeTree -> Test Unit
+testInferTTWithCustomPrelude' :: Partial => String -> String -> String -> TypeTree -> Effect Unit
 testInferTTWithCustomPrelude' name prelude unparsedTree expectedTypeTree =
   case parseDefs prelude of
     Left parseError               -> reportParseError name parseError
@@ -211,7 +212,7 @@ testInferTTWithCustomPrelude' name prelude unparsedTree expectedTypeTree =
 
 -- | Test type inference on expression trees. Here not only the expected type of the whole
 -- | expression is checked, but also the type of every subexpression.
-testInferTT :: Partial => String -> TypeTree -> TypeTree -> Test Unit
+testInferTT :: Partial => String -> TypeTree -> TypeTree -> Effect Unit
 testInferTT name untypedTree expectedTypedTree =
   case TC.tryInferExprInContext parsedPrelude untypedTree of
     Left typeError -> reportTypeError name typeError
@@ -223,7 +224,7 @@ testInferTT name untypedTree expectedTypedTree =
  where
    expectedTypedTree' = makeIndexedTree expectedTypedTree
 
-testInferTTWithCustomPrelude :: Partial => String -> List Definition -> TypeTree -> TypeTree -> Test Unit
+testInferTTWithCustomPrelude :: Partial => String -> List Definition -> TypeTree -> TypeTree -> Effect Unit
 testInferTTWithCustomPrelude name parsedPrelude untypedTree expectedTypedTree =
   case TC.tryInferExprInContext parsedPrelude untypedTree of
     Left typeError -> reportTypeError name typeError
@@ -235,7 +236,7 @@ testInferTTWithCustomPrelude name parsedPrelude untypedTree expectedTypedTree =
  where
   expectedTypedTree' = makeIndexedTree expectedTypedTree
 
-testInferTTFail :: Partial => String -> TypeTree -> TypeError -> Test Unit
+testInferTTFail :: Partial => String -> TypeTree -> TypeError -> Effect Unit
 testInferTTFail name expr expectedError =
   case TC.tryInferExprInContext parsedPrelude expr of
     Left typeError -> compareTypeError name expectedError typeError
@@ -245,7 +246,7 @@ testInferTTFail name expr expectedError =
               "Found type tree: " <> show typedExpr <> "\n"
 
 -- | Test type tree normalization.
-testNormalizeTT :: String -> TypeTree -> TypeTree -> Test Unit
+testNormalizeTT :: String -> TypeTree -> TypeTree -> Effect Unit
 testNormalizeTT name tt normalizedTT = if (TC.normalizeTypeTree tt) == normalizedTT
   then log $ "Test success (" <> name <> ")"
   else tell' $ "Type tree normalization failed in test case `" <> name <> "`:\n" <>
@@ -254,7 +255,7 @@ testNormalizeTT name tt normalizedTT = if (TC.normalizeTypeTree tt) == normalize
 
 -- | Test the function `mapSchemeOnTVarMappings`.
 testMapSchemeOnTVarMappings :: Partial => String -> Scheme -> TypedBinding
-                            -> TVarMappings -> Test Unit
+                            -> TVarMappings -> Effect Unit
 testMapSchemeOnTVarMappings name scheme binding expected =
   case TC.runInfer true (fst <$> TC.mapSchemeOnTVarMappings binding scheme) of
     Left typeError -> reportTypeError name typeError
@@ -267,7 +268,7 @@ testMapSchemeOnTVarMappings name scheme binding expected =
 
 -- | Test the function `mapSchemeOnTVarMappings`.
 testMapSchemeOnTVarMappings' :: Partial => String -> String -> Scheme -> TypedBinding
-                            -> TVarMappings -> Test Unit
+                            -> TVarMappings -> Effect Unit
 testMapSchemeOnTVarMappings' name prelude scheme binding expected =
   case parseDefs prelude of
     Left parseError               -> reportParseError name parseError
@@ -294,7 +295,7 @@ listOne = List (Meta (emptyMeta' {mtype = Just $ typConList "Int"}))
 untypedListOne :: TypeTree
 untypedListOne = List emptyMeta (Atom emptyMeta (AInt 1) : Nil)
 
-partiallyTypedExprTests :: Partial => Test Unit
+partiallyTypedExprTests :: Partial => Effect Unit
 partiallyTypedExprTests = do
   -- Test that ((2 :: Int) + 4) is typed correctly.
   testInferTT "Partially typed"
@@ -395,7 +396,7 @@ partiallyTypedExprTests = do
     )
     (UnificationFail intType charType)
 
-runTests :: Partial => Test Unit
+runTests :: Partial => Effect Unit
 runTests = do
   -- +--------------------------------------------------+
   -- | Test the inferred types of arbitrary expressions |
@@ -873,7 +874,7 @@ myComplex idx a b =
     (metaIndex idx)
     (InfixDataConstr ":+" LEFTASSOC 9 a b)
 
-adtTests :: Partial => Test Unit
+adtTests :: Partial => Effect Unit
 adtTests = do
   testInferTTWithCustomPrelude' "adt-params-3-1"
     adtPrelude

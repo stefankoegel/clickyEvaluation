@@ -4,7 +4,7 @@ import Prelude
 import Control.Monad.State (State, evalState, runState, get, modify, put)
 import Data.Bifunctor (bimap, rmap)
 import Data.Foldable (intercalate, foldr, and)
-import Data.List (List(..), fold, (:), zipWith)
+import Data.List (List(..), fold, (:), zipWith, length)
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (traverse, for)
 import Data.Bitraversable (bisequence)
@@ -108,7 +108,7 @@ data Tree a b o m =
 -- | compare two TypeTree values on equality ignoring the meta information
 eq' :: TypeTree -> TypeTree -> Boolean
 eq' (Atom _ a) (Atom _ b) = a == b
-eq' (List _ as) (List _ bs) = and $ zipWith eq' as bs
+eq' (List _ as) (List _ bs) = length as == length bs && (and $ zipWith eq' as bs)
 eq' (NTuple _ as) (NTuple _ bs) = and $ zipWith eq' as bs
 eq' (Binary _ o l r) (Binary _ o' l' r') = eq'Op o o' && eq' l l' && eq' r r'
 eq' (Unary _ o e) (Unary _ o' e') = eq'Op o o' && eq' e e'

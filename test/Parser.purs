@@ -6,7 +6,8 @@ import Data.List (List(..), singleton, (:), many, zipWith, nub, length)
 import Data.Array ((..))
 import Data.Array (length, zip, toUnfoldable, replicate) as Array
 import Data.Tuple (Tuple(..), snd)
-import Data.String (toCharArray, null) as String
+import Data.String (null)
+import Data.String.CodeUnits (toCharArray)
 import Data.Maybe (Maybe(..))
 import Data.Foldable (intercalate, for_, and, all)
 
@@ -14,9 +15,10 @@ import Text.Parsing.Parser (ParseState(..), parseErrorPosition, parseErrorMessag
 
 import Control.Monad.Writer (Writer, tell, execWriter) as W
 import Control.Monad.State (get)
-import Control.Monad.Eff.Console (log)
+import Effect (Effect)
+import Effect.Console (log)
 
-import Test.Utils (Test, tell, padLeft)
+import Test.Utils (tell, padLeft)
 import JSHelpers (unsafeUndef)
 
 import AST
@@ -82,13 +84,13 @@ isValidlyIndexed tree = length indices > 0 && (all (\x -> x >= 0) indices) && (l
 toList :: forall a. Array a -> List a
 toList = Array.toUnfoldable
 
-tell' :: String -> Test Unit
+tell' :: String -> Effect Unit
 tell' = tell
 
 padLeft' :: forall a. (Show a) => a -> String
 padLeft' = show >>> padLeft
 
-		
+
 class (Show a) <= Testable a where
   equals :: a -> a -> Boolean
   
@@ -120,7 +122,7 @@ instance testableADTDef :: Testable ADTDef where
   equals = eq
 
 instance testableList :: (Testable a) => Testable (List a) where
-  equals as bs = and $ zipWith equals as bs
+  equals as bs = length as == length bs && (and $ zipWith equals as bs)
 
 test' :: forall a. (Testable a)
       => (a -> Boolean)
@@ -128,7 +130,7 @@ test' :: forall a. (Testable a)
       -> IndentParser String a
       -> String
       -> a
-      -> Test Unit
+      -> Effect Unit
 test' predicate name p input expected = case runParserIndent p input of
   Left parseError -> tell' $
     "Parse fail (" <> name <> "): "
@@ -163,7 +165,7 @@ rejectTest :: forall a . (Show a)
                       => String
                       -> IndentParser String a
                       -> String
-                      -> Test Unit
+                      -> Effect Unit
 rejectTest name parser input = case runParserIndent (parser <* inputIsEmpty) input of
   Left parserError -> log $ "rejectTest passed (" <> name <> ")"
   Right result ->
@@ -178,7 +180,7 @@ rejectTests :: forall a . (Show a)
                        => String
                        -> IndentParser String a
                        -> Array String
-                       -> Test Unit
+                       -> Effect Unit
 rejectTests name parser inputs = do
   for_ ((1 .. Array.length inputs) `Array.zip` inputs) $ \(Tuple idx iput) ->
     rejectTest (name <> "-" <> show idx) parser iput
@@ -186,7 +188,7 @@ rejectTests name parser inputs = do
 inputIsEmpty :: IndentParser String Unit
 inputIsEmpty = do
   ParseState s _ _ <- get
-  when (not (String.null s)) (fail $ "Leftover input:\n" <> padLeft s)
+  when (not (null s)) (fail $ "Leftover input:\n" <> padLeft s)
 
 aint :: Int -> TypeTree
 aint i = Atom emptyMeta $ AInt i
@@ -197,7 +199,7 @@ abool = Atom emptyMeta <<< Bool
 aname :: String -> TypeTree
 aname s = Atom emptyMeta $ Name s
 
-runTests :: Test Unit
+runTests :: Effect Unit
 runTests = do
   test "0" int "0" (AInt 0)
   test "1" int "1" (AInt 1)
@@ -684,7 +686,7 @@ parsedPrelude = toList [
   ]
 
 stringToList :: String -> List Char
-stringToList = Array.toUnfoldable <<< String.toCharArray
+stringToList = Array.toUnfoldable <<< toCharArray
 
 type MType = Maybe Type
 
@@ -706,7 +708,7 @@ ebin o l r = Binary emptyMeta (Tuple o emptyMeta) l r
 def :: String -> Array (Binding Meta) -> TypeTree -> Definition
 def n bs e = Def n (toList bs) e
 
-testConstructorsExpression :: Test Unit
+testConstructorsExpression :: Effect Unit
 testConstructorsExpression = do
   testTypeTree "simple-expr-1" expression
     "Foo"
@@ -773,7 +775,7 @@ testConstructorsExpression = do
         (eapp (econstr "Foo") [eint 2])])
 
 
-testConstructorsDefinition :: Test Unit
+testConstructorsDefinition :: Effect Unit
 testConstructorsDefinition = do
   test "definition-1" definition
     "foo (Bar a b) = Foo a b"
@@ -819,7 +821,7 @@ infixDataConstr op l r = ConstrLit emptyMeta (InfixDataConstr op LEFTASSOC 9 l r
 litcons :: Binding Meta -> Binding Meta -> Binding Meta
 litcons = ConsLit emptyMeta
 
-testConstructorsBinding :: Test Unit
+testConstructorsBinding :: Effect Unit
 testConstructorsBinding = do
   test "binding-simple-0" binding
     "_"
@@ -1016,7 +1018,7 @@ testConstructorsBinding = do
 
 
 
-testTypes :: Test Unit
+testTypes :: Effect Unit
 testTypes = do
   test "types1" types
     "a"
@@ -1192,7 +1194,7 @@ testTypes = do
     , "(Foo a b"
     ]
 
-testTypeDefinition :: Test Unit
+testTypeDefinition :: Effect Unit
 testTypeDefinition = do
   test "definition1" typeDefinition
     ("data Tree a\n"
@@ -1278,7 +1280,7 @@ testTypeDefinition = do
     , "data\nFoo\na = Foo a"
     ]
 
-testSymbol :: Test Unit
+testSymbol :: Effect Unit
 testSymbol = do
   test "symbol" symbol
     "!"
@@ -1288,7 +1290,7 @@ testSymbol = do
     "!#$%&*+./<>=?@\\^|-~°"
     (stringToList "!#$%&*+./<>=?@\\^|-~°")
 
-testInfixDataConstrtructorDefinition :: Test Unit
+testInfixDataConstrtructorDefinition :: Effect Unit
 testInfixDataConstrtructorDefinition = do
   test "infixConstructor1" infixDataConstrtructorDefinition
     "a :+ b"
@@ -1298,7 +1300,7 @@ testInfixDataConstrtructorDefinition = do
     "a :::::: b"
     (InfixDataConstr "::::::" LEFTASSOC 9 (TypVar "a") (TypVar "b"))
 
-testDataConstrtructorDefinition :: Test Unit
+testDataConstrtructorDefinition :: Effect Unit
 testDataConstrtructorDefinition = do
   test "nil" dataConstructorDefinition
     "Nil"
@@ -1312,7 +1314,7 @@ testDataConstrtructorDefinition = do
         , TypVar "b"]))
 
 
-testInfixConstructor :: Test Unit
+testInfixConstructor :: Effect Unit
 testInfixConstructor = do
   test "infixConstructor1" infixConstructor
     ":+"
