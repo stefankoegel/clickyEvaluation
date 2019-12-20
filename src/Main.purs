@@ -86,6 +86,20 @@ makeCEwithDefsAndHistory  input defs selector histSelector = do
       container
       (Just histContainer)
 
+makeCEwithEnvAndHistory :: String -> Eval.Env -> String -> String -> Effect Unit
+makeCEwithEnvAndHistory input env selector histSelector = do
+  clearInfo
+  container <- J.select selector
+  histContainer <- J.select histSelector
+  doWithJust (parseExpr input) \(Tuple expr nextIdx) -> do
+    showExprIn
+      (Tuple (maybeToList $ Tuple "nexteval" <$> lmom env expr) expr)
+      nextIdx
+      env
+      []
+      container
+      (Just histContainer)
+
 -- | Try to parse the given expression and report parser errors.
 parseExpr :: String -> Effect (Maybe (Tuple AST.TypeTree Int))
 parseExpr input = case Parser.parseExpr input of

@@ -46,10 +46,16 @@
     </div>
 
     <script>
+    let cachedPrelude = "";
+    let cachedEnv = null;
+
     function ce() {
         const prelude = ace.edit("definitions").getValue();
-        console.log(prelude);
-        PS.Main.makeCEwithDefsAndHistory($("#input").val())(prelude)(".output")(".historyBox")();
+        if(prelude != cachedPrelude) {
+          cachedEnv = PS.Main.stringToEnv(prelude);
+          cachedPrelude = prelude;
+        }
+        PS.Main.makeCEwithEnvAndHistory($("#input").val())(cachedEnv)(".output")(".historyBox")();
     }
     (function() {
         var timer;
@@ -57,7 +63,7 @@
             ce();
         }
 
-        $("#input").on("keypress", function() {
+        $("#input").on("keyup", function() {
             window.clearTimeout(timer);
             timer = window.setTimeout(parseInput, 500);
         });
